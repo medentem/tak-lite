@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:padding="16dp">
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnPoint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Point"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnLine"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Line"
+        app:layout_constraintStart_toEndOf="@id/btnPoint"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnArea"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Area"
+        app:layout_constraintStart_toEndOf="@id/btnLine"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnClear"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Clear"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnColorGreen"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:backgroundTint="@android:color/holo_green_dark"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/btnPoint" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnColorYellow"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:backgroundTint="@android:color/holo_orange_dark"
+        app:layout_constraintStart_toEndOf="@id/btnColorGreen"
+        app:layout_constraintTop_toBottomOf="@id/btnPoint" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnColorRed"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:backgroundTint="@android:color/holo_red_dark"
+        app:layout_constraintStart_toEndOf="@id/btnColorYellow"
+        app:layout_constraintTop_toBottomOf="@id/btnPoint" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnColorBlack"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:backgroundTint="@android:color/black"
+        app:layout_constraintStart_toEndOf="@id/btnColorRed"
+        app:layout_constraintTop_toBottomOf="@id/btnPoint" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnShapeCircle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Circle"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/btnColorGreen" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnShapeExclamation"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Exclamation"
+        app:layout_constraintStart_toEndOf="@id/btnShapeCircle"
+        app:layout_constraintTop_toBottomOf="@id/btnColorGreen" />
+
+</androidx.constraintlayout.widget.ConstraintLayout> 
