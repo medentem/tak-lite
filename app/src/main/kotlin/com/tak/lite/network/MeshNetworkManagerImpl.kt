@@ -236,4 +236,34 @@ class MeshNetworkManagerImpl @Inject constructor(
             }
         }
     }
+
+    fun selectChannel(channelId: String) {
+        // TODO: Implement channel selection logic
+        Log.d(TAG, "Selected channel: $channelId")
+    }
+
+    fun setPTTState(isPressed: Boolean) {
+        // TODO: Implement PTT state handling
+        Log.d(TAG, "PTT state changed: $isPressed")
+    }
+
+    fun setVolume(volume: Int) {
+        // TODO: Implement volume control
+        Log.d(TAG, "Volume set to: $volume")
+    }
+
+    fun setMute(isMuted: Boolean) {
+        // TODO: Implement mute control
+        Log.d(TAG, "Mute state set to: $isMuted")
+    }
+
+    fun createChannel(name: String) {
+        // TODO: Implement channel creation
+        Log.d(TAG, "Creating channel: $name")
+    }
+
+    fun deleteChannel(channelId: String) {
+        // TODO: Implement channel deletion
+        Log.d(TAG, "Deleting channel: $channelId")
+    }
 } 

@@ -3,6 +3,7 @@ package com.tak.lite.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tak.lite.data.model.AudioChannel
+import com.tak.lite.data.model.AudioSettings
 import com.tak.lite.network.MeshNetworkManagerImpl
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -69,10 +70,4 @@ class AudioViewModel @Inject constructor(
             meshNetworkManager.deleteChannel(channelId)
         }
     }
-}
-
-data class AudioSettings(
-    val volume: Int = 50,
-    val isMuted: Boolean = false,
-    val isPTTHeld: Boolean = false
-) 
+} 

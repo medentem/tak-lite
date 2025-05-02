@@ -13,13 +13,15 @@ import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.LatLng
 import com.tak.lite.R
-import com.tak.lite.data.model.AnnotationColor
-import com.tak.lite.data.model.AnnotationShape
 import com.tak.lite.data.model.AnnotationType
-import com.tak.lite.data.model.MapAnnotation
+import com.tak.lite.model.AnnotationColor
+import com.tak.lite.model.MapAnnotation
+import com.tak.lite.model.PointShape
+import com.tak.lite.model.LatLngSerializable
 import com.tak.lite.databinding.AnnotationControlsBinding
 import com.tak.lite.databinding.FragmentAnnotationBinding
 import com.tak.lite.viewmodel.AnnotationViewModel
+import com.tak.lite.viewmodel.AnnotationUiState
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -36,7 +38,7 @@ class AnnotationFragment : Fragment(), OnMapReadyCallback {
     private var annotationOverlayView: AnnotationOverlayView? = null
     private var currentType: AnnotationType = AnnotationType.POINT
     private var currentColor: AnnotationColor = AnnotationColor.GREEN
-    private var currentShape: AnnotationShape = AnnotationShape.CIRCLE
+    private var currentShape: PointShape = PointShape.CIRCLE
     private var isDrawing = false
     private var startPoint: LatLng? = null
 
@@ -74,8 +76,8 @@ class AnnotationFragment : Fragment(), OnMapReadyCallback {
             btnColorRed.setOnClickListener { currentColor = AnnotationColor.RED }
             btnColorBlack.setOnClickListener { currentColor = AnnotationColor.BLACK }
 
-            btnShapeCircle.setOnClickListener { currentShape = AnnotationShape.CIRCLE }
-            btnShapeExclamation.setOnClickListener { currentShape = AnnotationShape.EXCLAMATION }
+            btnShapeCircle.setOnClickListener { currentShape = PointShape.CIRCLE }
+            btnShapeExclamation.setOnClickListener { currentShape = PointShape.EXCLAMATION }
         }
     }
 
@@ -87,8 +89,11 @@ class AnnotationFragment : Fragment(), OnMapReadyCallback {
         }
     }
 
-    private fun updateUI(state: AnnotationViewModel.AnnotationUiState) {
+    private fun updateUI(state: AnnotationUiState) {
         annotationOverlayView?.updateAnnotations(state.annotations)
+        currentColor = state.selectedColor
+        currentShape = state.selectedShape
+        isDrawing = state.isDrawing
     }
 
     override fun onMapReady(googleMap: GoogleMap) {
@@ -100,31 +105,30 @@ class AnnotationFragment : Fragment(), OnMapReadyCallback {
     private fun setupMapInteraction() {
         map?.setOnMapClickListener { latLng ->
             when (currentType) {
-                AnnotationType.POINT -> {
-                    viewModel.addPointOfInterest(latLng)
-                }
+                AnnotationType.POINT -> viewModel.addPointOfInterest(latLng)
                 AnnotationType.LINE -> {
                     if (!isDrawing) {
-                        startPoint = latLng
                         isDrawing = true
+                        startPoint = latLng
                     } else {
+                        isDrawing = false
                         startPoint?.let { start ->
                             viewModel.addLine(listOf(start, latLng))
-                            isDrawing = false
-                            startPoint = null
                         }
+                        startPoint = null
                     }
                 }
                 AnnotationType.AREA -> {
                     if (!isDrawing) {
-                        startPoint = latLng
                         isDrawing = true
+                        startPoint = latLng
                     } else {
+                        isDrawing = false
                         startPoint?.let { start ->
-                            viewModel.addArea(start, 100.0) // Default radius of 100 meters
-                            isDrawing = false
-                            startPoint = null
+                            val radius = calculateDistance(start, latLng)
+                            viewModel.addArea(start, radius)
                         }
+                        startPoint = null
                     }
                 }
             }
@@ -132,12 +136,23 @@ class AnnotationFragment : Fragment(), OnMapReadyCallback {
     }
 
     private fun setupOverlayView() {
-        map?.let { googleMap ->
-            annotationOverlayView = AnnotationOverlayView(requireContext()).apply {
-                setProjection(googleMap.projection)
-            }
-            binding.root.addView(annotationOverlayView)
+        annotationOverlayView = AnnotationOverlayView(requireContext())
+        binding.root.addView(annotationOverlayView)
+        map?.setOnCameraMoveListener {
+            annotationOverlayView?.setProjection(map?.projection!!)
         }
+    }
+
+    private fun calculateDistance(start: LatLng, end: LatLng): Double {
+        val results = FloatArray(1)
+        android.location.Location.distanceBetween(
+            start.latitude,
+            start.longitude,
+            end.latitude,
+            end.longitude,
+            results
+        )
+        return results[0].toDouble()
     }
 
     override fun onDestroyView() {

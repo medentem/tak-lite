@@ -3,10 +3,10 @@ package com.tak.lite.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.android.gms.maps.model.LatLng
-import com.tak.lite.data.model.AnnotationColor
-import com.tak.lite.data.model.LatLngSerializable
-import com.tak.lite.data.model.MapAnnotation
-import com.tak.lite.data.model.PointShape
+import com.tak.lite.model.AnnotationColor
+import com.tak.lite.model.LatLngSerializable
+import com.tak.lite.model.MapAnnotation
+import com.tak.lite.model.PointShape
 import com.tak.lite.repository.AnnotationRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow

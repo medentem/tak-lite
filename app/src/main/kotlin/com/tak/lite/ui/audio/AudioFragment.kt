@@ -6,6 +6,9 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.EditText
+import android.widget.SeekBar
+import android.widget.SeekBar.OnSeekBarChangeListener
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
@@ -16,22 +19,28 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import com.tak.lite.R
 import com.tak.lite.data.model.AudioChannel
+import com.tak.lite.data.model.AudioSettings
 import com.tak.lite.databinding.AudioControlsBinding
 import com.tak.lite.network.MeshNetworkManagerImpl
 import com.tak.lite.util.PermissionManager
+import com.tak.lite.viewmodel.AudioViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import android.app.AlertDialog
+import android.content.DialogInterface
+import androidx.lifecycle.ViewModelProvider
 
 @AndroidEntryPoint
 class AudioFragment : Fragment() {
 
     private var _binding: AudioControlsBinding? = null
     private val binding get() = _binding!!
-
-    private val viewModel: AudioViewModel by viewModels()
-    private lateinit var channelAdapter: ChannelAdapter
+    private lateinit var viewModel: AudioViewModel
+    private lateinit var layoutManager: LinearLayoutManager
+    private lateinit var adapter: ChannelAdapter
+    private var isPttEnabled = false
 
     @Inject
     lateinit var permissionManager: PermissionManager
@@ -58,9 +67,12 @@ class AudioFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        viewModel = ViewModelProvider(this)[AudioViewModel::class.java]
+        
         checkPermissions()
+        setupVolumeControls()
         setupChannelList()
-        setupControls()
+        setupPttButton()
         observeViewModel()
     }
 
@@ -86,8 +98,21 @@ class AudioFragment : Fragment() {
         }.show()
     }
 
+    private fun setupVolumeControls() {
+        binding.volumeSlider.addOnChangeListener { _, value, fromUser ->
+            if (fromUser) {
+                viewModel.setVolume(value.toInt())
+            }
+        }
+        
+        binding.muteButton.setOnClickListener {
+            viewModel.toggleMute()
+        }
+    }
+
     private fun setupChannelList() {
-        channelAdapter = ChannelAdapter(
+        layoutManager = LinearLayoutManager(context)
+        adapter = ChannelAdapter(
             onChannelSelected = { channel ->
                 viewModel.selectChannel(channel.id)
             },
@@ -95,55 +120,33 @@ class AudioFragment : Fragment() {
                 showDeleteChannelDialog(channel)
             }
         )
-
+        
         binding.channelList.apply {
-            layoutManager = LinearLayoutManager(context)
-            adapter = channelAdapter
+            this.layoutManager = layoutManager
+            this.adapter = this@AudioFragment.adapter
+        }
+
+        binding.addChannelButton.setOnClickListener {
+            showAddChannelDialog()
         }
     }
 
-    private fun setupControls() {
-        binding.apply {
-            // PTT Button
-            pttButton.setOnTouchListener { _, event ->
-                when (event.action) {
-                    android.view.MotionEvent.ACTION_DOWN -> {
-                        if (permissionManager.hasRequiredPermissions()) {
-                            viewModel.setPTTState(true)
-                        } else {
-                            requestPermissions()
-                        }
-                        true
-                    }
-                    android.view.MotionEvent.ACTION_UP -> {
-                        viewModel.setPTTState(false)
-                        true
-                    }
-                    else -> false
-                }
-            }
-
-            // Volume Slider
-            volumeSlider.addOnChangeListener { _, value, _ ->
-                viewModel.setVolume(value.toInt())
-            }
-
-            // Mute Button
-            muteButton.setOnClickListener {
-                viewModel.toggleMute()
-            }
-
-            // Add Channel Button
-            addChannelButton.setOnClickListener {
-                showAddChannelDialog()
-            }
+    private fun setupPttButton() {
+        binding.pttButton.setOnClickListener {
+            isPttEnabled = !isPttEnabled
+            viewModel.setPTTState(isPttEnabled)
+            updatePttButton()
         }
+    }
+
+    private fun updatePttButton() {
+        binding.pttButton.isSelected = isPttEnabled
     }
 
     private fun observeViewModel() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewModel.channels.collectLatest { channels ->
-                channelAdapter.submitList(channels)
+                adapter.submitList(channels)
             }
         }
 
@@ -161,72 +164,41 @@ class AudioFragment : Fragment() {
     }
 
     private fun updateUI(settings: AudioSettings) {
-        binding.apply {
-            volumeSlider.value = settings.volume.toFloat()
-            muteButton.text = if (settings.isMuted) "Unmute" else "Mute"
-            pttButton.isActivated = settings.isPTTHeld
-        }
+        binding.volumeSlider.value = settings.volume.toFloat()
+        binding.muteButton.text = if (settings.isMuted) "Unmute" else "Mute"
+        binding.connectionStatus.text = if (settings.isPTTHeld) "PTT Active" else "PTT Inactive"
     }
 
     private fun updateConnectionState(state: MeshNetworkManagerImpl.ConnectionState) {
-        when (state) {
-            MeshNetworkManagerImpl.ConnectionState.CONNECTED -> {
-                binding.connectionStatus.text = "Connected"
-                binding.connectionStatus.setTextColor(
-                    ContextCompat.getColor(requireContext(), android.R.color.holo_green_dark)
-                )
-            }
-            MeshNetworkManagerImpl.ConnectionState.CONNECTING -> {
-                binding.connectionStatus.text = "Connecting..."
-                binding.connectionStatus.setTextColor(
-                    ContextCompat.getColor(requireContext(), android.R.color.holo_orange_dark)
-                )
-            }
-            MeshNetworkManagerImpl.ConnectionState.DISCONNECTED -> {
-                binding.connectionStatus.text = "Disconnected"
-                binding.connectionStatus.setTextColor(
-                    ContextCompat.getColor(requireContext(), android.R.color.holo_red_dark)
-                )
-            }
-            MeshNetworkManagerImpl.ConnectionState.ERROR -> {
-                binding.connectionStatus.text = "Error"
-                binding.connectionStatus.setTextColor(
-                    ContextCompat.getColor(requireContext(), android.R.color.holo_red_dark)
-                )
-                showConnectionError()
-            }
+        binding.connectionStatus.text = when (state) {
+            MeshNetworkManagerImpl.ConnectionState.CONNECTED -> "Connected"
+            MeshNetworkManagerImpl.ConnectionState.CONNECTING -> "Connecting..."
+            MeshNetworkManagerImpl.ConnectionState.DISCONNECTED -> "Disconnected"
+            else -> "Unknown"
         }
-    }
-
-    private fun showConnectionError() {
-        Snackbar.make(
-            binding.root,
-            "Connection error occurred. Attempting to reconnect...",
-            Snackbar.LENGTH_LONG
-        ).show()
-    }
-
-    private fun showAddChannelDialog() {
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Add Channel")
-            .setView(R.layout.dialog_add_channel)
-            .setPositiveButton("Add") { dialog, _ ->
-                val input = (dialog as MaterialAlertDialogBuilder)
-                    .findViewById<android.widget.EditText>(R.id.channelNameInput)
-                input?.text?.toString()?.let { name ->
-                    viewModel.createChannel(name)
-                }
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
     }
 
     private fun showDeleteChannelDialog(channel: AudioChannel) {
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Delete Channel")
-            .setMessage("Are you sure you want to delete ${channel.name}?")
+            .setMessage("Are you sure you want to delete channel '${channel.name}'?")
             .setPositiveButton("Delete") { _, _ ->
                 viewModel.deleteChannel(channel.id)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showAddChannelDialog() {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_add_channel, null)
+        val channelNameInput = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.channelNameInput)
+
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Add Channel")
+            .setView(dialogView)
+            .setPositiveButton("Add") { _, _ ->
+                val name = channelNameInput.text?.toString() ?: return@setPositiveButton
+                viewModel.createChannel(name)
             }
             .setNegativeButton("Cancel", null)
             .show()
