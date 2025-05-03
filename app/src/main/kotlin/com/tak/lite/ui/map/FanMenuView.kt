@@ -65,8 +65,8 @@ class FanMenuView @JvmOverloads constructor(
         val angleStep = menuFanAngle / (options.size)
         for ((i, option) in options.withIndex()) {
             val angle = menuStartAngle + (i + 0.5) * angleStep // Center of sector
-            val x = center.x + menuRadius * cos(angle).toFloat()
-            val y = center.y + menuRadius * sin(angle).toFloat()
+            val x = center.x + (menuRadius + iconRadius) * cos(angle).toFloat()
+            val y = center.y + (menuRadius + iconRadius) * sin(angle).toFloat()
             val isSelected = i == selectedIndex
             // Draw dividing lines (sector boundaries)
             if (i > 0) {
@@ -208,12 +208,12 @@ class FanMenuView @JvmOverloads constructor(
         this.options = options
         this.listener = listener
         this.selectedIndex = null
-        val minFanAngle = Math.PI // 180 degrees
+        val minFanAngle = Math.PI / 2 // 90 degrees
         val maxFanAngle = 2 * Math.PI // 360 degrees
-        val minRadius = 200f
-        val maxRadius = 400f // You can adjust this as needed
+        val minRadius = 300f
+        val maxRadius = 500f // You can adjust this as needed
         val minAngleBetween = Math.PI / 8 // 22.5 degrees between items minimum
-        val iconSpacing = iconRadius * 2 * 1.3 // 30% extra spacing for more padding
+        val iconSpacing = iconRadius * 2 * 2.1 // 220% extra spacing for more padding
         val n = options.size
         var requiredFanAngle = minFanAngle
         var requiredRadius = minRadius
