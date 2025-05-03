@@ -300,9 +300,23 @@ class FanMenuView @JvmOverloads constructor(
     }
 
     private fun drawLineStyleIcon(canvas: Canvas, x: Float, y: Float, style: com.tak.lite.model.LineStyle, highlight: Boolean) {
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        // Draw background circle
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = if (highlight) Color.YELLOW else Color.WHITE
-            style = Paint.Style.STROKE
+            this.style = Paint.Style.FILL
+        }
+        canvas.drawCircle(x, y, iconRadius, bgPaint)
+        // Draw border
+        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (highlight) Color.WHITE else Color.DKGRAY
+            this.style = Paint.Style.STROKE
+            strokeWidth = 4f
+        }
+        canvas.drawCircle(x, y, iconRadius, borderPaint)
+        // Draw the line style
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.BLACK
+            this.style = Paint.Style.STROKE
             strokeWidth = 8f
         }
         val yLine = y
@@ -312,7 +326,7 @@ class FanMenuView @JvmOverloads constructor(
             paint.pathEffect = android.graphics.DashPathEffect(floatArrayOf(20f, 15f), 0f)
         }
         canvas.drawLine(xStart, yLine, xEnd, yLine, paint)
-        // Optionally, draw a small label
+        // Draw label
         val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.BLACK
             textSize = 28f

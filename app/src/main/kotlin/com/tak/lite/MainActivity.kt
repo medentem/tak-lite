@@ -378,6 +378,8 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
                     is com.tak.lite.ui.map.FanMenuView.Option.Delete -> {
                         deletePoi(option.id)
                     }
+                    is com.tak.lite.ui.map.FanMenuView.Option.LineStyle -> { /* no-op for POI */ }
+                    else -> {}
                 }
                 fanMenuView.visibility = View.GONE
                 editingPoiId = null
@@ -442,9 +444,8 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private fun updateLineStyle(line: com.tak.lite.model.MapAnnotation.Line, newStyle: com.tak.lite.model.LineStyle) {
         annotationViewModel.removeAnnotation(line.id)
-        annotationViewModel.addLine(line.points.map { it.toGoogleLatLng() })
-        // Set style for next addLine call
         annotationViewModel.setCurrentLineStyle(newStyle)
+        annotationViewModel.addLine(line.points.map { it.toGoogleLatLng() })
     }
 
     private fun updateLineColor(line: com.tak.lite.model.MapAnnotation.Line, newColor: com.tak.lite.model.AnnotationColor) {
