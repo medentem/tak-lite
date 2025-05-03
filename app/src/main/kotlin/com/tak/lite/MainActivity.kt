@@ -101,7 +101,6 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
                     is MeshNetworkUiState.Connected -> {
                         // Update UI to show connected state
                         binding.pttButton.isEnabled = true
-                        // TODO: Update map with peer locations
                     }
                     is MeshNetworkUiState.Disconnected -> {
                         // Update UI to show disconnected state
