@@ -25,16 +25,63 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/lineToolButton"
+    <LinearLayout
+        android:id="@+id/lineToolButtonContainer"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center"
         android:layout_marginEnd="16dp"
         android:layout_marginBottom="80dp"
-        android:contentDescription="Line Tool"
-        android:src="@drawable/ic_menu"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent" />
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/lineToolConfirmButton"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:src="@drawable/ic_check"
+            android:contentDescription="Confirm Line"
+            android:layout_marginBottom="8dp"
+            android:visibility="gone"
+            app:backgroundTint="@android:color/holo_green_dark" />
+
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/lineToolCancelButton"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:src="@drawable/ic_cancel"
+            android:contentDescription="Cancel Line"
+            android:layout_marginBottom="8dp"
+            android:visibility="gone"
+            app:backgroundTint="@android:color/holo_red_dark" />
+
+        <FrameLayout
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_gravity="center"
+            android:background="@drawable/bg_fab_circle">
+
+            <ImageView
+                android:id="@+id/lineToolButton"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/ic_line_tool"
+                android:contentDescription="Line Tool"
+                android:padding="12dp"
+                android:scaleType="centerInside" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/lineToolLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Add Line"
+            android:textSize="12sp"
+            android:textColor="#888888"
+            android:layout_marginTop="2dp"
+            android:gravity="center" />
+    </LinearLayout>
 
     <com.tak.lite.ui.map.AnnotationOverlayView
         android:id="@+id/annotationOverlayView"
