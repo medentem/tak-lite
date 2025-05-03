@@ -51,6 +51,9 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
     private var userLocationMarker: Marker? = null
     private val peerMarkers = mutableMapOf<String, Marker>()
     private var editingPoiId: String? = null
+    private var isLineDrawingMode = false
+    private var lineStartPoint: LatLng? = null
+    private var tempLine: com.google.android.gms.maps.model.Polyline? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -82,6 +85,9 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
                 editingPoiId = poiId
                 showPoiEditMenu(screenPosition, poiId)
             }
+            override fun onLineLongPressed(lineId: String, screenPosition: PointF) {
+                showLineEditMenu(screenPosition, lineId)
+            }
         }
         lifecycleScope.launch {
             annotationViewModel.uiState.collect { state ->
@@ -99,6 +105,14 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
                     com.google.android.gms.maps.GoogleMap.MAP_TYPE_NORMAL
                 }
             }
+        }
+
+        // Setup Line Tool button
+        binding.lineToolButton.setOnClickListener {
+            isLineDrawingMode = true
+            lineStartPoint = null
+            tempLine?.remove()
+            Toast.makeText(this, "Line tool selected. Tap two points on the map to draw a line.", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -160,6 +174,37 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
         setupMapLongPress()
         setupAnnotationOverlay()
         observePeerLocations()
+        // Add map click listener for line drawing
+        map.setOnMapClickListener { latLng ->
+            if (isLineDrawingMode) {
+                if (lineStartPoint == null) {
+                    lineStartPoint = latLng
+                    tempLine?.remove()
+                    annotationOverlayView.setTempLineDots(lineStartPoint, null)
+                } else {
+                    // Draw temp line for feedback
+                    tempLine?.remove()
+                    annotationOverlayView.setTempLineDots(lineStartPoint, latLng)
+                    tempLine = map.addPolyline(
+                        com.google.android.gms.maps.model.PolylineOptions()
+                            .add(lineStartPoint, latLng)
+                            .color(android.graphics.Color.RED)
+                            .width(8f)
+                    )
+                    // Add the line annotation
+                    annotationViewModel.addLine(listOf(lineStartPoint!!, latLng))
+                    Toast.makeText(this, "Line added!", Toast.LENGTH_SHORT).show()
+                    // Reset
+                    isLineDrawingMode = false
+                    lineStartPoint = null
+                    // Remove temp line and dots after a short delay
+                    android.os.Handler(mainLooper).postDelayed({
+                        tempLine?.remove()
+                        annotationOverlayView.setTempLineDots(null, null)
+                    }, 1000)
+                }
+            }
+        }
     }
 
     private fun checkAndRequestPermissions() {
@@ -363,6 +408,49 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private fun deletePoi(poiId: String) {
         annotationViewModel.removeAnnotation(poiId)
+    }
+
+    private fun showLineEditMenu(center: PointF, lineId: String) {
+        val line = annotationViewModel.uiState.value.annotations.filterIsInstance<com.tak.lite.model.MapAnnotation.Line>().find { it.id == lineId } ?: return
+        val options = listOf(
+            com.tak.lite.ui.map.FanMenuView.Option.LineStyle(
+                if (line.style == com.tak.lite.model.LineStyle.SOLID) com.tak.lite.model.LineStyle.DASHED else com.tak.lite.model.LineStyle.SOLID
+            ),
+            com.tak.lite.ui.map.FanMenuView.Option.Color(com.tak.lite.model.AnnotationColor.GREEN),
+            com.tak.lite.ui.map.FanMenuView.Option.Color(com.tak.lite.model.AnnotationColor.YELLOW),
+            com.tak.lite.ui.map.FanMenuView.Option.Color(com.tak.lite.model.AnnotationColor.RED),
+            com.tak.lite.ui.map.FanMenuView.Option.Color(com.tak.lite.model.AnnotationColor.BLACK),
+            com.tak.lite.ui.map.FanMenuView.Option.Delete(lineId)
+        )
+        val screenSize = PointF(binding.root.width.toFloat(), binding.root.height.toFloat())
+        fanMenuView.showAt(center, options, object : com.tak.lite.ui.map.FanMenuView.OnOptionSelectedListener {
+            override fun onOptionSelected(option: com.tak.lite.ui.map.FanMenuView.Option) {
+                when (option) {
+                    is com.tak.lite.ui.map.FanMenuView.Option.LineStyle -> updateLineStyle(line, option.style)
+                    is com.tak.lite.ui.map.FanMenuView.Option.Color -> updateLineColor(line, option.color)
+                    is com.tak.lite.ui.map.FanMenuView.Option.Delete -> deletePoi(option.id)
+                }
+                fanMenuView.visibility = View.GONE
+            }
+            override fun onMenuDismissed() {
+                fanMenuView.visibility = View.GONE
+            }
+        }, screenSize)
+        fanMenuView.visibility = View.VISIBLE
+    }
+
+    private fun updateLineStyle(line: com.tak.lite.model.MapAnnotation.Line, newStyle: com.tak.lite.model.LineStyle) {
+        annotationViewModel.removeAnnotation(line.id)
+        annotationViewModel.addLine(line.points.map { it.toGoogleLatLng() })
+        // Set style for next addLine call
+        annotationViewModel.setCurrentLineStyle(newStyle)
+    }
+
+    private fun updateLineColor(line: com.tak.lite.model.MapAnnotation.Line, newColor: com.tak.lite.model.AnnotationColor) {
+        annotationViewModel.removeAnnotation(line.id)
+        // Set color for next addLine call
+        annotationViewModel.setCurrentColor(newColor)
+        annotationViewModel.addLine(line.points.map { it.toGoogleLatLng() })
     }
 
     override fun onRequestPermissionsResult(

@@ -18,6 +18,7 @@ import com.tak.lite.model.AnnotationColor
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PointShape
 import com.tak.lite.model.LatLngSerializable
+import com.tak.lite.model.LineStyle
 import com.tak.lite.databinding.AnnotationControlsBinding
 import com.tak.lite.databinding.FragmentAnnotationBinding
 import com.tak.lite.viewmodel.AnnotationViewModel
@@ -41,6 +42,8 @@ class AnnotationFragment : Fragment(), OnMapReadyCallback {
     private var currentShape: PointShape = PointShape.CIRCLE
     private var isDrawing = false
     private var startPoint: LatLng? = null
+    private var currentLineStyle: LineStyle = LineStyle.SOLID
+    private var currentArrowHead: Boolean = true
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -78,6 +81,15 @@ class AnnotationFragment : Fragment(), OnMapReadyCallback {
 
             btnShapeCircle.setOnClickListener { currentShape = PointShape.CIRCLE }
             btnShapeExclamation.setOnClickListener { currentShape = PointShape.EXCLAMATION }
+
+            btnLineStyle.setOnClickListener {
+                currentLineStyle = if (currentLineStyle == LineStyle.SOLID) LineStyle.DASHED else LineStyle.SOLID
+                btnLineStyle.text = if (currentLineStyle == LineStyle.SOLID) "Dashed Line" else "Solid Line"
+            }
+            btnArrowHead.setOnClickListener {
+                currentArrowHead = !currentArrowHead
+                btnArrowHead.text = if (currentArrowHead) "Arrow Head" else "No Arrow"
+            }
         }
     }
 
@@ -113,6 +125,8 @@ class AnnotationFragment : Fragment(), OnMapReadyCallback {
                     } else {
                         isDrawing = false
                         startPoint?.let { start ->
+                            viewModel.setCurrentLineStyle(currentLineStyle)
+                            viewModel.setCurrentArrowHead(currentArrowHead)
                             viewModel.addLine(listOf(start, latLng))
                         }
                         startPoint = null

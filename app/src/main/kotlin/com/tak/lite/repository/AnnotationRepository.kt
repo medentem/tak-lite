@@ -17,7 +17,14 @@ class AnnotationRepository @Inject constructor(
     
     init {
         meshProtocol.setAnnotationCallback { annotation ->
-            _annotations.value = _annotations.value + annotation
+            when (annotation) {
+                is MapAnnotation.Deletion -> {
+                    _annotations.value = _annotations.value.filter { it.id != annotation.id }
+                }
+                else -> {
+                    _annotations.value = _annotations.value + annotation
+                }
+            }
         }
     }
     
@@ -28,6 +35,12 @@ class AnnotationRepository @Inject constructor(
     
     fun removeAnnotation(annotationId: String) {
         _annotations.value = _annotations.value.filter { it.id != annotationId }
+        // Transmit deletion over mesh network
+        val deletion = MapAnnotation.Deletion(
+            id = annotationId,
+            creatorId = "local" // TODO: Replace with actual user ID
+        )
+        meshProtocol.sendAnnotation(deletion)
     }
     
     fun clearAnnotations() {

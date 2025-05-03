@@ -26,6 +26,7 @@ class FanMenuView @JvmOverloads constructor(
         data class Shape(val shape: PointShape) : Option()
         data class Color(val color: AnnotationColor) : Option()
         data class Delete(val id: String) : Option()
+        data class LineStyle(val style: com.tak.lite.model.LineStyle) : Option()
     }
 
     interface OnOptionSelectedListener {
@@ -41,8 +42,8 @@ class FanMenuView @JvmOverloads constructor(
     var menuFanAngle: Double = 1.5 * Math.PI
     var menuStartAngle: Double = 5 * Math.PI / 4
     var screenSize: PointF = PointF(0f, 0f)
-    private val iconRadius = 40f
-    private val centerHoleRadius = 90f
+    private val iconRadius = 60f
+    private val centerHoleRadius = 135f
     private val clearPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.TRANSPARENT
         style = Paint.Style.FILL
@@ -137,6 +138,7 @@ class FanMenuView @JvmOverloads constructor(
                 is Option.Shape -> drawShapeIcon(canvas, x, y, option.shape, isSelected)
                 is Option.Color -> drawColorIcon(canvas, x, y, option.color, isSelected)
                 is Option.Delete -> drawDeleteIcon(canvas, x, y, isSelected)
+                is Option.LineStyle -> drawLineStyleIcon(canvas, x, y, option.style, isSelected)
             }
         }
     }
@@ -157,8 +159,37 @@ class FanMenuView @JvmOverloads constructor(
                 canvas.drawCircle(x, y, iconRadius / 2, shapePaint)
             }
             PointShape.EXCLAMATION -> {
-                canvas.drawLine(x, y - 10, x, y + 10, shapePaint)
-                canvas.drawCircle(x, y + 15, 3f, shapePaint)
+                // Draw filled black triangle
+                val half = iconRadius / 2f
+                val height = (half * Math.sqrt(3.0)).toFloat()
+                val path = android.graphics.Path()
+                path.moveTo(x, y - height / 2) // Top
+                path.lineTo(x - half, y + height / 2) // Bottom left
+                path.lineTo(x + half, y + height / 2) // Bottom right
+                path.close()
+                val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.BLACK
+                    style = Paint.Style.FILL
+                }
+                canvas.drawPath(path, fillPaint)
+                // Draw thinner white exclamation mark inside triangle
+                val exMarkWidth = iconRadius * 0.10f
+                val exMarkTop = y - height / 6
+                val exMarkBottom = y + height / 6
+                val exMarkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.WHITE
+                    style = Paint.Style.STROKE
+                    strokeWidth = exMarkWidth
+                    strokeCap = Paint.Cap.ROUND
+                }
+                canvas.drawLine(x, exMarkTop, x, exMarkBottom, exMarkPaint)
+                val dotRadius = exMarkWidth * 0.6f
+                val dotCenterY = exMarkBottom + dotRadius * 2.0f
+                val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.WHITE
+                    style = Paint.Style.FILL
+                }
+                canvas.drawCircle(x, dotCenterY, dotRadius, dotPaint)
             }
             PointShape.SQUARE -> {
                 val half = iconRadius / 2
@@ -266,6 +297,33 @@ class FanMenuView @JvmOverloads constructor(
         for (ribX in ribXs) {
             canvas.drawLine(ribX, ribTop, ribX, ribBottom, ribPaint)
         }
+    }
+
+    private fun drawLineStyleIcon(canvas: Canvas, x: Float, y: Float, style: com.tak.lite.model.LineStyle, highlight: Boolean) {
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (highlight) Color.YELLOW else Color.WHITE
+            style = Paint.Style.STROKE
+            strokeWidth = 8f
+        }
+        val yLine = y
+        val xStart = x - iconRadius * 0.7f
+        val xEnd = x + iconRadius * 0.7f
+        if (style == com.tak.lite.model.LineStyle.DASHED) {
+            paint.pathEffect = android.graphics.DashPathEffect(floatArrayOf(20f, 15f), 0f)
+        }
+        canvas.drawLine(xStart, yLine, xEnd, yLine, paint)
+        // Optionally, draw a small label
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.BLACK
+            textSize = 28f
+            textAlign = Paint.Align.CENTER
+        }
+        canvas.drawText(
+            if (style == com.tak.lite.model.LineStyle.SOLID) "Solid" else "Dashed",
+            x,
+            y + iconRadius * 0.8f,
+            textPaint
+        )
     }
 
     // Returns Triple<ring, idxInRing, itemsInRing>

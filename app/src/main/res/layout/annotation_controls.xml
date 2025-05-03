@@ -85,4 +85,20 @@
         app:layout_constraintStart_toEndOf="@id/btnShapeCircle"
         app:layout_constraintTop_toBottomOf="@id/btnColorGreen" />
 
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnLineStyle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Dashed Line"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/btnShapeCircle" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnArrowHead"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Arrow Head"
+        app:layout_constraintStart_toEndOf="@id/btnLineStyle"
+        app:layout_constraintTop_toBottomOf="@id/btnShapeCircle" />
+
 </androidx.constraintlayout.widget.ConstraintLayout> 

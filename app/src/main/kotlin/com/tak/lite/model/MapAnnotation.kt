@@ -30,7 +30,9 @@ sealed class MapAnnotation {
         override val creatorId: String,
         override val timestamp: Long = System.currentTimeMillis(),
         override val color: AnnotationColor,
-        val points: List<LatLngSerializable>
+        val points: List<LatLngSerializable>,
+        val style: LineStyle = LineStyle.SOLID,
+        val arrowHead: Boolean = true
     ) : MapAnnotation()
     
     @Serializable
@@ -42,6 +44,15 @@ sealed class MapAnnotation {
         override val color: AnnotationColor,
         val center: LatLngSerializable,
         val radius: Double // in meters
+    ) : MapAnnotation()
+    
+    @Serializable
+    @SerialName("deletion")
+    data class Deletion(
+        override val id: String,
+        override val creatorId: String,
+        override val timestamp: Long = System.currentTimeMillis(),
+        override val color: AnnotationColor = AnnotationColor.RED // Not used, but required by base class
     ) : MapAnnotation()
 }
 
@@ -59,6 +70,12 @@ enum class PointShape {
     @SerialName("exclamation") EXCLAMATION,
     @SerialName("square") SQUARE,
     @SerialName("triangle") TRIANGLE
+}
+
+@Serializable
+enum class LineStyle {
+    @SerialName("solid") SOLID,
+    @SerialName("dashed") DASHED
 }
 
 @Serializable

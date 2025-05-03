@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.android.gms.maps.model.LatLng
 import com.tak.lite.model.AnnotationColor
 import com.tak.lite.model.LatLngSerializable
+import com.tak.lite.model.LineStyle
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PointShape
 import com.tak.lite.repository.AnnotationRepository
@@ -25,6 +26,8 @@ class AnnotationViewModel @Inject constructor(
     
     private var currentColor: AnnotationColor = AnnotationColor.RED
     private var currentShape: PointShape = PointShape.CIRCLE
+    private var currentLineStyle: LineStyle = LineStyle.SOLID
+    private var currentArrowHead: Boolean = true
     
     init {
         viewModelScope.launch {
@@ -44,6 +47,14 @@ class AnnotationViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(selectedShape = shape)
     }
     
+    fun setCurrentLineStyle(style: LineStyle) {
+        currentLineStyle = style
+    }
+    
+    fun setCurrentArrowHead(arrow: Boolean) {
+        currentArrowHead = arrow
+    }
+    
     fun addPointOfInterest(position: LatLng) {
         viewModelScope.launch {
             val annotation = MapAnnotation.PointOfInterest(
@@ -61,7 +72,9 @@ class AnnotationViewModel @Inject constructor(
             val annotation = MapAnnotation.Line(
                 creatorId = "local", // TODO: Replace with actual user ID
                 color = currentColor,
-                points = points.map { LatLngSerializable.fromGoogleLatLng(it) }
+                points = points.map { LatLngSerializable.fromGoogleLatLng(it) },
+                style = currentLineStyle,
+                arrowHead = currentArrowHead
             )
             annotationRepository.addAnnotation(annotation)
         }

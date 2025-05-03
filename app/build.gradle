@@ -48,7 +48,6 @@ android {
         useBuildCache true
         arguments {
             arg("dagger.formatGeneratedSource", "enabled")
-            arg("dagger.gradle.incremental", "enabled")
         }
     }
 }

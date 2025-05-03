@@ -19,11 +19,12 @@ fun MapAnnotation.Area.toGoogleLatLng(): LatLng {
 }
 
 // Extension function to get annotation type
-val MapAnnotation.type: AnnotationType
+val MapAnnotation.type: AnnotationType?
     get() = when (this) {
         is MapAnnotation.PointOfInterest -> AnnotationType.POINT
         is MapAnnotation.Line -> AnnotationType.LINE
         is MapAnnotation.Area -> AnnotationType.AREA
+        is MapAnnotation.Deletion -> null
     }
 
 enum class AnnotationType {
