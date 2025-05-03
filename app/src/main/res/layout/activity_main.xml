@@ -57,6 +57,7 @@
             app:backgroundTint="@android:color/holo_red_dark" />
 
         <FrameLayout
+            android:id="@+id/lineToolButtonFrame"
             android:layout_width="56dp"
             android:layout_height="56dp"
             android:layout_gravity="center"

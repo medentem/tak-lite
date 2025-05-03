@@ -54,6 +54,11 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
     private var isLineDrawingMode = false
     private var lineStartPoint: LatLng? = null
     private var tempLine: com.google.android.gms.maps.model.Polyline? = null
+    private lateinit var lineToolConfirmButton: FloatingActionButton
+    private lateinit var lineToolCancelButton: FloatingActionButton
+    private var tempLinePoints: MutableList<LatLng> = mutableListOf()
+    private lateinit var lineToolButtonFrame: View
+    private lateinit var lineToolLabel: View
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -107,13 +112,30 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
             }
         }
 
-        // Setup Line Tool button
+        // Setup Line Tool buttons
+        lineToolConfirmButton = findViewById(R.id.lineToolConfirmButton)
+        lineToolCancelButton = findViewById(R.id.lineToolCancelButton)
+        lineToolButtonFrame = findViewById(R.id.lineToolButtonFrame)
+        lineToolLabel = findViewById(R.id.lineToolLabel)
         binding.lineToolButton.setOnClickListener {
             isLineDrawingMode = true
-            lineStartPoint = null
-            tempLine?.remove()
-            Toast.makeText(this, "Line tool selected. Tap two points on the map to draw a line.", Toast.LENGTH_SHORT).show()
+            tempLinePoints.clear()
+            annotationOverlayView.setTempLinePoints(emptyList())
+            lineToolButtonFrame.visibility = View.GONE
+            lineToolLabel.visibility = View.GONE
+            lineToolCancelButton.visibility = View.VISIBLE
+            lineToolConfirmButton.visibility = View.VISIBLE
+            updateLineToolConfirmState()
         }
+        lineToolCancelButton.setOnClickListener {
+            finishLineDrawing(cancel = true)
+        }
+        lineToolConfirmButton.setOnClickListener {
+            finishLineDrawing(cancel = false)
+        }
+        // Initially hide confirm/cancel
+        lineToolCancelButton.visibility = View.GONE
+        lineToolConfirmButton.visibility = View.GONE
     }
 
     private fun observeMeshNetworkState() {
@@ -174,35 +196,11 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
         setupMapLongPress()
         setupAnnotationOverlay()
         observePeerLocations()
-        // Add map click listener for line drawing
         map.setOnMapClickListener { latLng ->
             if (isLineDrawingMode) {
-                if (lineStartPoint == null) {
-                    lineStartPoint = latLng
-                    tempLine?.remove()
-                    annotationOverlayView.setTempLineDots(lineStartPoint, null)
-                } else {
-                    // Draw temp line for feedback
-                    tempLine?.remove()
-                    annotationOverlayView.setTempLineDots(lineStartPoint, latLng)
-                    tempLine = map.addPolyline(
-                        com.google.android.gms.maps.model.PolylineOptions()
-                            .add(lineStartPoint, latLng)
-                            .color(android.graphics.Color.RED)
-                            .width(8f)
-                    )
-                    // Add the line annotation
-                    annotationViewModel.addLine(listOf(lineStartPoint!!, latLng))
-                    Toast.makeText(this, "Line added!", Toast.LENGTH_SHORT).show()
-                    // Reset
-                    isLineDrawingMode = false
-                    lineStartPoint = null
-                    // Remove temp line and dots after a short delay
-                    android.os.Handler(mainLooper).postDelayed({
-                        tempLine?.remove()
-                        annotationOverlayView.setTempLineDots(null, null)
-                    }, 1000)
-                }
+                tempLinePoints.add(latLng)
+                annotationOverlayView.setTempLinePoints(tempLinePoints)
+                updateLineToolConfirmState()
             }
         }
     }
@@ -453,6 +451,30 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
         // Set color for next addLine call
         annotationViewModel.setCurrentColor(newColor)
         annotationViewModel.addLine(line.points.map { it.toGoogleLatLng() })
+    }
+
+    private fun updateLineToolConfirmState() {
+        if (tempLinePoints.size >= 2) {
+            lineToolConfirmButton.isEnabled = true
+            lineToolConfirmButton.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#388E3C")) // Green
+        } else {
+            lineToolConfirmButton.isEnabled = false
+            lineToolConfirmButton.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#888888")) // Gray
+        }
+    }
+
+    private fun finishLineDrawing(cancel: Boolean) {
+        if (!cancel && tempLinePoints.size >= 2) {
+            annotationViewModel.addLine(tempLinePoints.toList())
+            Toast.makeText(this, "Line added!", Toast.LENGTH_SHORT).show()
+        }
+        isLineDrawingMode = false
+        tempLinePoints.clear()
+        annotationOverlayView.setTempLinePoints(emptyList())
+        lineToolButtonFrame.visibility = View.VISIBLE
+        lineToolLabel.visibility = View.VISIBLE
+        lineToolCancelButton.visibility = View.GONE
+        lineToolConfirmButton.visibility = View.GONE
     }
 
     override fun onRequestPermissionsResult(
