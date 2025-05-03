@@ -37,9 +37,11 @@ class FanMenuView @JvmOverloads constructor(
     var options: List<Option> = emptyList()
     var listener: OnOptionSelectedListener? = null
     private var selectedIndex: Int? = null
-    private val radius = 120f
+    var menuRadius: Float = 200f
+    var menuFanAngle: Double = 1.5 * Math.PI
+    var menuStartAngle: Double = 5 * Math.PI / 4
+    var screenSize: PointF = PointF(0f, 0f)
     private val iconRadius = 40f
-    private val fanAngle = Math.PI // 180 degrees
     private val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.argb(128, 0, 0, 0)
         style = Paint.Style.FILL
@@ -55,22 +57,24 @@ class FanMenuView @JvmOverloads constructor(
         if (options.isEmpty()) return
         // Draw fan background
         canvas.drawArc(
-            center.x - radius - iconRadius, center.y - radius - iconRadius,
-            center.x + radius + iconRadius, center.y + radius + iconRadius,
-            180f, 180f, true, backgroundPaint
+            center.x - menuRadius - iconRadius, center.y - menuRadius - iconRadius,
+            center.x + menuRadius + iconRadius, center.y + menuRadius + iconRadius,
+            Math.toDegrees(menuStartAngle).toFloat(), Math.toDegrees(menuFanAngle).toFloat(), true, backgroundPaint
         )
         // Draw dividing lines and options
-        val angleStep = fanAngle / (options.size - 1).coerceAtLeast(1)
+        val angleStep = menuFanAngle / (options.size)
         for ((i, option) in options.withIndex()) {
-            val angle = Math.PI + i * angleStep
-            val x = center.x + radius * cos(angle).toFloat()
-            val y = center.y + radius * sin(angle).toFloat()
+            val angle = menuStartAngle + (i + 0.5) * angleStep // Center of sector
+            val x = center.x + menuRadius * cos(angle).toFloat()
+            val y = center.y + menuRadius * sin(angle).toFloat()
             val isSelected = i == selectedIndex
-            // Draw dividing lines
+            // Draw dividing lines (sector boundaries)
             if (i > 0) {
-                canvas.drawLine(center.x, center.y, x, y, paint)
+                val boundaryAngle = menuStartAngle + i * angleStep
+                val bx = center.x + menuRadius * cos(boundaryAngle).toFloat()
+                val by = center.y + menuRadius * sin(boundaryAngle).toFloat()
+                canvas.drawLine(center.x, center.y, bx, by, paint)
             }
-            // Draw option icon
             when (option) {
                 is Option.Shape -> drawShapeIcon(canvas, x, y, option.shape, isSelected)
                 is Option.Color -> drawColorIcon(canvas, x, y, option.color, isSelected)
@@ -181,30 +185,62 @@ class FanMenuView @JvmOverloads constructor(
         val dx = x - center.x
         val dy = y - center.y
         val distance = hypot(dx.toDouble(), dy.toDouble())
-        if (distance > radius + iconRadius) return null
+        if (distance > menuRadius + iconRadius) return null
         val angle = (atan2(dy.toDouble(), dx.toDouble()) + 2 * Math.PI) % (2 * Math.PI)
-        if (angle < Math.PI) return null // Only in the fan (bottom half)
-        val angleInFan = angle - Math.PI
-        val angleStep = fanAngle / (options.size - 1).coerceAtLeast(1)
-
-        // Check if touch is close to any option's icon center
-        for ((i, _) in options.withIndex()) {
-            val optionAngle = Math.PI + i * angleStep
-            val optionX = center.x + radius * cos(optionAngle).toFloat()
-            val optionY = center.y + radius * sin(optionAngle).toFloat()
-            val optionDist = hypot((x - optionX).toDouble(), (y - optionY).toDouble())
-            if (optionDist < iconRadius * 1.5) { // 1.5x icon radius for easier touch
-                return i
-            }
+        val startAngle = menuStartAngle
+        val fanAngle = menuFanAngle
+        val endAngle = (startAngle + fanAngle) % (2 * Math.PI)
+        val inFan = if (startAngle < endAngle) {
+            angle >= startAngle && angle <= endAngle
+        } else {
+            angle >= startAngle || angle <= endAngle
         }
-        return null
+        if (!inFan) return null
+        val angleStep = fanAngle / (options.size)
+        // Find which sector the angle falls into
+        var sector = ((angle - startAngle + 2 * Math.PI) % (2 * Math.PI)) / angleStep
+        val idx = sector.toInt().coerceIn(0, options.size - 1)
+        return idx
     }
 
-    fun showAt(center: PointF, options: List<Option>, listener: OnOptionSelectedListener) {
+    fun showAt(center: PointF, options: List<Option>, listener: OnOptionSelectedListener, screenSize: PointF? = null) {
         this.center = center
         this.options = options
         this.listener = listener
         this.selectedIndex = null
+        val minFanAngle = Math.PI // 180 degrees
+        val maxFanAngle = 2 * Math.PI // 360 degrees
+        val minRadius = 200f
+        val maxRadius = 400f // You can adjust this as needed
+        val minAngleBetween = Math.PI / 8 // 22.5 degrees between items minimum
+        val iconSpacing = iconRadius * 2 * 1.3 // 30% extra spacing for more padding
+        val n = options.size
+        var requiredFanAngle = minFanAngle
+        var requiredRadius = minRadius
+        if (n > 1) {
+            // Calculate the minimum angle needed to avoid overlap at minRadius
+            val angleBetween = Math.max(minAngleBetween, 2 * Math.asin(iconSpacing / (2 * minRadius)))
+            val totalAngleNeeded = angleBetween * (n - 1)
+            if (totalAngleNeeded <= maxFanAngle) {
+                requiredFanAngle = Math.max(minFanAngle, totalAngleNeeded)
+                requiredRadius = minRadius
+            } else {
+                // Use full circle, increase radius to fit all items
+                requiredFanAngle = maxFanAngle
+                // Calculate the radius needed to fit all items in a full circle
+                val neededRadius = (iconSpacing / (2 * Math.sin(Math.PI / n))).toFloat()
+                requiredRadius = neededRadius.coerceAtLeast(minRadius).coerceAtMost(maxRadius)
+            }
+        }
+        menuFanAngle = requiredFanAngle
+        menuRadius = requiredRadius
+        if (screenSize != null) {
+            this.screenSize = screenSize
+            val dx = (screenSize.x / 2) - center.x
+            val dy = (screenSize.y / 2) - center.y
+            val angleToCenter = atan2(dy, dx)
+            menuStartAngle = angleToCenter - menuFanAngle / 2
+        }
         visibility = VISIBLE
         invalidate()
     }
