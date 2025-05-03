@@ -61,8 +61,22 @@ class FanMenuView @JvmOverloads constructor(
             center.x + menuRadius + iconRadius, center.y + menuRadius + iconRadius,
             Math.toDegrees(menuStartAngle).toFloat(), Math.toDegrees(menuFanAngle).toFloat(), true, backgroundPaint
         )
-        // Draw dividing lines and options
+        // Draw selected sector background if any
         val angleStep = menuFanAngle / (options.size)
+        selectedIndex?.let { selIdx ->
+            val sectorStart = menuStartAngle + selIdx * angleStep
+            val sectorSweep = angleStep
+            val highlightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.argb(180, 255, 255, 255) // Light, semi-transparent
+                style = Paint.Style.FILL
+            }
+            canvas.drawArc(
+                center.x - menuRadius - iconRadius, center.y - menuRadius - iconRadius,
+                center.x + menuRadius + iconRadius, center.y + menuRadius + iconRadius,
+                Math.toDegrees(sectorStart).toFloat(), Math.toDegrees(sectorSweep).toFloat(), true, highlightPaint
+            )
+        }
+        // Draw dividing lines and options
         for ((i, option) in options.withIndex()) {
             val angle = menuStartAngle + (i + 0.5) * angleStep // Center of sector
             val x = center.x + (menuRadius + iconRadius) * cos(angle).toFloat()
@@ -197,8 +211,8 @@ class FanMenuView @JvmOverloads constructor(
         }
         if (!inFan) return null
         val angleStep = fanAngle / (options.size)
-        // Find which sector the angle falls into
         var sector = ((angle - startAngle + 2 * Math.PI) % (2 * Math.PI)) / angleStep
+        if (sector >= options.size) sector = (options.size - 1).toDouble()
         val idx = sector.toInt().coerceIn(0, options.size - 1)
         return idx
     }

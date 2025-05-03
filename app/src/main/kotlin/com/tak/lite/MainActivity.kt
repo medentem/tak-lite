@@ -33,6 +33,7 @@ import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.maps.model.MarkerOptions
+import com.google.android.gms.location.Priority
 
 @AndroidEntryPoint
 class MainActivity : AppCompatActivity(), OnMapReadyCallback {
@@ -80,6 +81,8 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
             override fun onPoiLongPressed(poiId: String, screenPosition: PointF) {
                 editingPoiId = poiId
                 showPoiEditMenu(screenPosition, poiId)
+            }
+        }
         lifecycleScope.launch {
             annotationViewModel.uiState.collect { state ->
                 annotationOverlayView.updateAnnotations(state.annotations)
@@ -184,6 +187,7 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
             ) == PackageManager.PERMISSION_GRANTED
         ) {
             map.isMyLocationEnabled = true
+            map.uiSettings.isMyLocationButtonEnabled = true
             startLocationUpdates()
         }
     }
@@ -207,24 +211,23 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     private fun showFanMenu(center: PointF) {
-        // Step 1: Show shape options
         val shapeOptions = listOf(
             com.tak.lite.ui.map.FanMenuView.Option.Shape(PointShape.CIRCLE),
             com.tak.lite.ui.map.FanMenuView.Option.Shape(PointShape.EXCLAMATION),
             com.tak.lite.ui.map.FanMenuView.Option.Shape(PointShape.SQUARE),
             com.tak.lite.ui.map.FanMenuView.Option.Shape(PointShape.TRIANGLE)
         )
+        val screenSize = PointF(binding.root.width.toFloat(), binding.root.height.toFloat())
         fanMenuView.showAt(center, shapeOptions, object : com.tak.lite.ui.map.FanMenuView.OnOptionSelectedListener {
             override fun onOptionSelected(option: com.tak.lite.ui.map.FanMenuView.Option) {
                 if (option is com.tak.lite.ui.map.FanMenuView.Option.Shape) {
-                    // Step 2: Show color options
                     showColorMenu(center, option.shape)
                 }
             }
             override fun onMenuDismissed() {
                 fanMenuView.visibility = View.GONE
             }
-        })
+        }, screenSize)
         fanMenuView.visibility = View.VISIBLE
     }
 
@@ -235,6 +238,7 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
             com.tak.lite.ui.map.FanMenuView.Option.Color(AnnotationColor.RED),
             com.tak.lite.ui.map.FanMenuView.Option.Color(AnnotationColor.BLACK)
         )
+        val screenSize = PointF(binding.root.width.toFloat(), binding.root.height.toFloat())
         fanMenuView.showAt(center, colorOptions, object : com.tak.lite.ui.map.FanMenuView.OnOptionSelectedListener {
             override fun onOptionSelected(option: com.tak.lite.ui.map.FanMenuView.Option) {
                 if (option is com.tak.lite.ui.map.FanMenuView.Option.Color) {
@@ -244,7 +248,7 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
             override fun onMenuDismissed() {
                 fanMenuView.visibility = View.GONE
             }
-        })
+        }, screenSize)
         fanMenuView.visibility = View.VISIBLE
     }
 
@@ -258,25 +262,26 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     private fun startLocationUpdates() {
-        val request = LocationRequest.create().apply {
-            interval = 5000
-            fastestInterval = 2000
-            priority = LocationRequest.PRIORITY_HIGH_ACCURACY
-        }
-        fusedLocationClient.requestLocationUpdates(request, object : LocationCallback() {
-            override fun onLocationResult(result: LocationResult) {
-                val location = result.lastLocation ?: return
-                val latLng = LatLng(location.latitude, location.longitude)
-                // Update user marker
-                if (userLocationMarker == null) {
-                    userLocationMarker = map.addMarker(MarkerOptions().position(latLng).title("You"))
-                } else {
-                    userLocationMarker?.position = latLng
+        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 5000)
+            .setMinUpdateIntervalMillis(2000)
+            .build()
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            fusedLocationClient.requestLocationUpdates(request, object : LocationCallback() {
+                override fun onLocationResult(result: LocationResult) {
+                    val location = result.lastLocation ?: return
+                    val latLng = LatLng(location.latitude, location.longitude)
+                    // Update user marker
+                    if (userLocationMarker == null) {
+                        userLocationMarker = map.addMarker(MarkerOptions().position(latLng).title("You"))
+                    } else {
+                        userLocationMarker?.position = latLng
+                    }
+                    // Send to mesh
+                    viewModel.sendLocationUpdate(location.latitude, location.longitude)
                 }
-                // Send to mesh
-                viewModel.sendLocationUpdate(location.latitude, location.longitude)
-            }
-        }, mainLooper)
+            }, mainLooper)
+        }
     }
 
     private fun observePeerLocations() {
@@ -293,7 +298,10 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
                     if (peerMarkers.containsKey(id)) {
                         peerMarkers[id]?.position = latLng
                     } else {
-                        peerMarkers[id] = map.addMarker(MarkerOptions().position(latLng).title("Peer: $id"))
+                        val marker = map.addMarker(MarkerOptions().position(latLng).title("Peer: $id"))
+                        if (marker != null) {
+                            peerMarkers[id] = marker
+                        }
                     }
                 }
             }
@@ -312,6 +320,7 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
             com.tak.lite.ui.map.FanMenuView.Option.Color(AnnotationColor.BLACK),
             com.tak.lite.ui.map.FanMenuView.Option.Delete(poiId)
         )
+        val screenSize = PointF(binding.root.width.toFloat(), binding.root.height.toFloat())
         fanMenuView.showAt(center, options, object : com.tak.lite.ui.map.FanMenuView.OnOptionSelectedListener {
             override fun onOptionSelected(option: com.tak.lite.ui.map.FanMenuView.Option) {
                 when (option) {
@@ -332,7 +341,7 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
                 fanMenuView.visibility = View.GONE
                 editingPoiId = null
             }
-        })
+        }, screenSize)
         fanMenuView.visibility = View.VISIBLE
     }
 
@@ -370,4 +379,20 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
             }
         }
     }
-} 
+
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+        if (::fanMenuView.isInitialized && fanMenuView.visibility == View.VISIBLE) {
+            // Offset event coordinates if needed (if fanMenuView is not full screen)
+            val location = IntArray(2)
+            fanMenuView.getLocationOnScreen(location)
+            val offsetX = location[0]
+            val offsetY = location[1]
+            val event = android.view.MotionEvent.obtain(ev)
+            event.offsetLocation(-offsetX.toFloat(), -offsetY.toFloat())
+            val handled = fanMenuView.dispatchTouchEvent(event)
+            event.recycle()
+            return handled
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+}
