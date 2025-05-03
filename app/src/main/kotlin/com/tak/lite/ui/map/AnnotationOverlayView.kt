@@ -2,6 +2,8 @@ package com.tak.lite.ui.map
 
 import android.content.Context
 import android.graphics.*
+import android.os.Handler
+import android.os.Looper
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
@@ -40,6 +42,8 @@ class AnnotationOverlayView @JvmOverloads constructor(
         fun onPoiLongPressed(poiId: String, screenPosition: PointF)
     }
     var poiLongPressListener: OnPoiLongPressListener? = null
+    private var longPressHandler: Handler? = null
+    private var longPressRunnable: Runnable? = null
     private var longPressStartTime: Long = 0
     private var longPressCandidate: MapAnnotation.PointOfInterest? = null
     private var longPressDownPos: PointF? = null
@@ -91,6 +95,9 @@ class AnnotationOverlayView @JvmOverloads constructor(
                         drawArea(canvas, centerPoint, annotation)
                     }
                 }
+                is MapAnnotation.Deletion -> {
+                    // Do nothing for deletions
+                }
             }
         }
     }
@@ -100,25 +107,47 @@ class AnnotationOverlayView @JvmOverloads constructor(
         
         when (annotation.shape) {
             PointShape.CIRCLE -> {
-                canvas.drawCircle(point.x, point.y, 20f, paint)
+                canvas.drawCircle(point.x, point.y, 30f, paint)
             }
             PointShape.EXCLAMATION -> {
-                // Draw exclamation mark
-                canvas.drawLine(
-                    point.x,
-                    point.y - 20f,
-                    point.x,
-                    point.y + 20f,
-                    paint
-                )
-                canvas.drawCircle(point.x, point.y + 25f, 5f, paint)
+                // Draw filled triangle with selected color
+                val half = 30f
+                val height = (half * Math.sqrt(3.0)).toFloat()
+                val path = android.graphics.Path()
+                path.moveTo(point.x, point.y - height / 2) // Top
+                path.lineTo(point.x - half, point.y + height / 2) // Bottom left
+                path.lineTo(point.x + half, point.y + height / 2) // Bottom right
+                path.close()
+                val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = annotation.color.toColor()
+                    style = Paint.Style.FILL
+                }
+                canvas.drawPath(path, fillPaint)
+                // Draw thinner white exclamation mark inside triangle
+                val exMarkWidth = 6f
+                val exMarkTop = point.y - height / 6
+                val exMarkBottom = point.y + height / 6
+                val exMarkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.WHITE
+                    style = Paint.Style.STROKE
+                    strokeWidth = exMarkWidth
+                    strokeCap = Paint.Cap.ROUND
+                }
+                canvas.drawLine(point.x, exMarkTop, point.x, exMarkBottom, exMarkPaint)
+                val dotRadius = exMarkWidth * 0.6f
+                val dotCenterY = exMarkBottom + dotRadius * 2.0f
+                val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.WHITE
+                    style = Paint.Style.FILL
+                }
+                canvas.drawCircle(point.x, dotCenterY, dotRadius, dotPaint)
             }
             PointShape.SQUARE -> {
-                val half = 20f
+                val half = 30f
                 canvas.drawRect(point.x - half, point.y - half, point.x + half, point.y + half, paint)
             }
             PointShape.TRIANGLE -> {
-                val half = 20f
+                val half = 30f
                 val height = (half * Math.sqrt(3.0)).toFloat()
                 val path = android.graphics.Path()
                 path.moveTo(point.x, point.y - height / 2) // Top
@@ -152,7 +181,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
     private fun AnnotationColor.toColor(): Int {
         return when (this) {
             AnnotationColor.GREEN -> Color.GREEN
-            AnnotationColor.YELLOW -> Color.YELLOW
+            AnnotationColor.YELLOW -> Color.parseColor("#FBC02D")
             AnnotationColor.RED -> Color.RED
             AnnotationColor.BLACK -> Color.BLACK
         }
@@ -173,7 +202,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
             is MapAnnotation.PointOfInterest -> this.position.toGoogleLatLng()
             is MapAnnotation.Line -> this.points.first().toGoogleLatLng()
             is MapAnnotation.Area -> this.center.toGoogleLatLng()
-            else -> throw IllegalArgumentException("Unsupported annotation type")
+            is MapAnnotation.Deletion -> throw IllegalArgumentException("Deletion has no LatLng")
         }
     }
 
@@ -182,7 +211,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
             is MapAnnotation.PointOfInterest -> listOf(this.position.toGoogleLatLng())
             is MapAnnotation.Line -> this.points.map { it.toGoogleLatLng() }
             is MapAnnotation.Area -> listOf(this.center.toGoogleLatLng())
-            else -> throw IllegalArgumentException("Unsupported annotation type")
+            is MapAnnotation.Deletion -> emptyList()
         }
     }
 
@@ -191,7 +220,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
             is MapAnnotation.PointOfInterest -> AnnotationType.POINT
             is MapAnnotation.Line -> AnnotationType.LINE
             is MapAnnotation.Area -> AnnotationType.AREA
-            else -> throw IllegalArgumentException("Unsupported annotation type")
+            is MapAnnotation.Deletion -> throw IllegalArgumentException("Deletion has no AnnotationType")
         }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -199,32 +228,34 @@ class AnnotationOverlayView @JvmOverloads constructor(
             MotionEvent.ACTION_DOWN -> {
                 val poi = findPoiAt(event.x, event.y)
                 if (poi != null) {
-                    longPressStartTime = System.currentTimeMillis()
                     longPressCandidate = poi
                     longPressDownPos = PointF(event.x, event.y)
+                    longPressHandler = Handler(Looper.getMainLooper())
+                    longPressRunnable = Runnable {
+                        poiLongPressListener?.onPoiLongPressed(poi.id, longPressDownPos!!)
+                        longPressCandidate = null
+                    }
+                    longPressHandler?.postDelayed(longPressRunnable!!, 500)
+                    return true // Intercept only if touching a POI
                 } else {
                     longPressCandidate = null
+                    return false // Let the map handle the event
                 }
             }
             MotionEvent.ACTION_MOVE -> {
-                // Cancel if moved too far
                 longPressDownPos?.let { down ->
                     if (Math.hypot((event.x - down.x).toDouble(), (event.y - down.y).toDouble()) > 40) {
+                        longPressHandler?.removeCallbacks(longPressRunnable!!)
                         longPressCandidate = null
                     }
                 }
             }
-            MotionEvent.ACTION_UP -> {
-                if (longPressCandidate != null && System.currentTimeMillis() - longPressStartTime > 500) {
-                    poiLongPressListener?.onPoiLongPressed(longPressCandidate!!.id, longPressDownPos!!)
-                }
-                longPressCandidate = null
-            }
-            MotionEvent.ACTION_CANCEL -> {
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                longPressHandler?.removeCallbacks(longPressRunnable!!)
                 longPressCandidate = null
             }
         }
-        return true
+        return longPressCandidate != null // Only consume if interacting with a POI
     }
 
     private fun findPoiAt(x: Float, y: Float): MapAnnotation.PointOfInterest? {
