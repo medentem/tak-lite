@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import com.google.android.gms.maps.model.LatLng
 
 @HiltViewModel
 class MeshNetworkViewModel @Inject constructor(
@@ -20,6 +21,9 @@ class MeshNetworkViewModel @Inject constructor(
     
     private val _uiState = MutableStateFlow<MeshNetworkUiState>(MeshNetworkUiState.Initial)
     val uiState: StateFlow<MeshNetworkUiState> = _uiState.asStateFlow()
+    
+    private val _peerLocations = MutableStateFlow<Map<String, LatLng>>(emptyMap())
+    val peerLocations: StateFlow<Map<String, LatLng>> = _peerLocations.asStateFlow()
     
     init {
         viewModelScope.launch {
@@ -34,6 +38,11 @@ class MeshNetworkViewModel @Inject constructor(
                 }
             }.collect { newState ->
                 _uiState.value = newState
+            }
+        }
+        viewModelScope.launch {
+            meshNetworkRepository.peerLocations.collect { locations ->
+                _peerLocations.value = locations
             }
         }
     }

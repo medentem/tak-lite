@@ -9,6 +9,7 @@ import java.net.*
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.coroutines.CoroutineContext
+import com.google.android.gms.maps.model.LatLng
 
 class MeshNetworkProtocol(
     private val coroutineContext: CoroutineContext = Dispatchers.IO
@@ -27,6 +28,9 @@ class MeshNetworkProtocol(
     private val peers = mutableMapOf<String, MeshPeer>()
     private var peerUpdateCallback: ((List<MeshPeer>) -> Unit)? = null
     private var annotationCallback: ((MapAnnotation) -> Unit)? = null
+    
+    private val peerLocations = mutableMapOf<String, LatLng>()
+    private var peerLocationCallback: ((Map<String, LatLng>) -> Unit)? = null
     
     private val json = Json { ignoreUnknownKeys = true }
     
@@ -49,27 +53,19 @@ class MeshNetworkProtocol(
     
     private fun startDiscoveryListener() {
         listenerJob = CoroutineScope(coroutineContext).launch {
-            try {
-                broadcastSocket = DatagramSocket(DISCOVERY_PORT).apply {
-                    broadcast = true
-                    reuseAddress = true
+            val socket = DatagramSocket(DISCOVERY_PORT + 1).apply {
+                broadcast = true
+                reuseAddress = true
+            }
+            val buffer = ByteArray(1024)
+            val packet = DatagramPacket(buffer, buffer.size)
+            while (isActive) {
+                try {
+                    socket.receive(packet)
+                    handleLocationPacket(packet)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error receiving location packet: ${e.message}")
                 }
-                
-                val buffer = ByteArray(1024)
-                val packet = DatagramPacket(buffer, buffer.size)
-                
-                while (isActive) {
-                    try {
-                        broadcastSocket?.receive(packet)
-                        handleDiscoveryPacket(packet)
-                    } catch (e: SocketTimeoutException) {
-                        // Continue listening
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error receiving discovery packet: ${e.message}")
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error setting up discovery listener: ${e.message}")
             }
         }
     }
@@ -147,6 +143,21 @@ class MeshNetworkProtocol(
         }
     }
     
+    private fun handleLocationPacket(packet: DatagramPacket) {
+        try {
+            if (packet.length == 16) {
+                val buf = ByteBuffer.wrap(packet.data, 0, 16).order(ByteOrder.LITTLE_ENDIAN)
+                val lat = buf.double
+                val lng = buf.double
+                val peerId = "${packet.address.hostAddress}:${packet.port}"
+                peerLocations[peerId] = LatLng(lat, lng)
+                peerLocationCallback?.invoke(peerLocations.toMap())
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error parsing location packet: ${e.message}")
+        }
+    }
+    
     private fun cleanupOldPeers() {
         val now = System.currentTimeMillis()
         peers.entries.removeIf { (_, peer) ->
@@ -158,6 +169,12 @@ class MeshNetworkProtocol(
         annotationCallback = callback
     }
     
+    fun setPeerLocationCallback(callback: (Map<String, LatLng>) -> Unit) {
+        peerLocationCallback = callback
+    }
+    
+    fun getPeerLocations(): Map<String, LatLng> = peerLocations.toMap()
+    
     fun stopDiscovery() {
         discoveryJob?.cancel()
         listenerJob?.cancel()
@@ -166,6 +183,8 @@ class MeshNetworkProtocol(
         peers.clear()
         peerUpdateCallback = null
         annotationCallback = null
+        peerLocations.clear()
+        peerLocationCallback = null
     }
     
     fun sendLocationUpdate(latitude: Double, longitude: Double) {

@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.google.android.gms.maps.model.LatLng
 
 @Singleton
 class MeshNetworkRepository @Inject constructor(
@@ -17,6 +18,9 @@ class MeshNetworkRepository @Inject constructor(
     
     val connectedPeers: Flow<List<MeshPeer>>
         get() = meshNetworkService.peers
+    
+    val peerLocations: Flow<Map<String, LatLng>>
+        get() = meshNetworkService.peerLocations
     
     fun sendLocationUpdate(latitude: Double, longitude: Double) {
         meshNetworkService.sendLocationUpdate(latitude, longitude)

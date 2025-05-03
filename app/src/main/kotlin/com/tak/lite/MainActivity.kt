@@ -26,6 +26,13 @@ import android.view.View
 import com.tak.lite.model.AnnotationColor
 import com.tak.lite.ui.map.AnnotationOverlayView
 import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.maps.model.Marker
+import com.google.android.gms.maps.model.MarkerOptions
 
 @AndroidEntryPoint
 class MainActivity : AppCompatActivity(), OnMapReadyCallback {
@@ -39,6 +46,9 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
     private var isSatellite = false
     private lateinit var fanMenuView: com.tak.lite.ui.map.FanMenuView
     private var pendingPoiLatLng: LatLng? = null
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
+    private var userLocationMarker: Marker? = null
+    private val peerMarkers = mutableMapOf<String, Marker>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,6 +59,9 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
         val mapFragment = supportFragmentManager
             .findFragmentById(R.id.map) as SupportMapFragment
         mapFragment.getMapAsync(this)
+
+        // Location client
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
 
         // Reference FanMenuView
         fanMenuView = findViewById(R.id.fanMenuView)
@@ -139,6 +152,7 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
         checkAndRequestPermissions()
         setupMapLongPress()
         setupAnnotationOverlay()
+        observePeerLocations()
     }
 
     private fun checkAndRequestPermissions() {
@@ -166,7 +180,7 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
             ) == PackageManager.PERMISSION_GRANTED
         ) {
             map.isMyLocationEnabled = true
-            // TODO: Setup location updates and mesh network integration
+            startLocationUpdates()
         }
     }
 
@@ -237,6 +251,49 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
         annotationViewModel.addPointOfInterest(latLng)
         fanMenuView.visibility = View.GONE
         pendingPoiLatLng = null
+    }
+
+    private fun startLocationUpdates() {
+        val request = LocationRequest.create().apply {
+            interval = 5000
+            fastestInterval = 2000
+            priority = LocationRequest.PRIORITY_HIGH_ACCURACY
+        }
+        fusedLocationClient.requestLocationUpdates(request, object : LocationCallback() {
+            override fun onLocationResult(result: LocationResult) {
+                val location = result.lastLocation ?: return
+                val latLng = LatLng(location.latitude, location.longitude)
+                // Update user marker
+                if (userLocationMarker == null) {
+                    userLocationMarker = map.addMarker(MarkerOptions().position(latLng).title("You"))
+                } else {
+                    userLocationMarker?.position = latLng
+                }
+                // Send to mesh
+                viewModel.sendLocationUpdate(location.latitude, location.longitude)
+            }
+        }, mainLooper)
+    }
+
+    private fun observePeerLocations() {
+        lifecycleScope.launch {
+            viewModel.peerLocations.collect { peerLocs ->
+                // Remove markers for peers no longer present
+                val toRemove = peerMarkers.keys - peerLocs.keys
+                for (id in toRemove) {
+                    peerMarkers[id]?.remove()
+                    peerMarkers.remove(id)
+                }
+                // Add/update markers for current peers
+                for ((id, latLng) in peerLocs) {
+                    if (peerMarkers.containsKey(id)) {
+                        peerMarkers[id]?.position = latLng
+                    } else {
+                        peerMarkers[id] = map.addMarker(MarkerOptions().position(latLng).title("Peer: $id"))
+                    }
+                }
+            }
+        }
     }
 
     override fun onRequestPermissionsResult(

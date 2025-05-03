@@ -14,6 +14,7 @@ import java.net.InetAddress
 import java.net.NetworkInterface
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.google.android.gms.maps.model.LatLng
 
 @Singleton
 class MeshNetworkService @Inject constructor(
@@ -28,6 +29,9 @@ class MeshNetworkService @Inject constructor(
     
     private val _peers = MutableStateFlow<List<MeshPeer>>(emptyList())
     val peers: StateFlow<List<MeshPeer>> = _peers
+    
+    private val _peerLocations = MutableStateFlow<Map<String, LatLng>>(emptyMap())
+    val peerLocations: StateFlow<Map<String, LatLng>> = _peerLocations
     
     private var meshNetworkCallback: ConnectivityManager.NetworkCallback? = null
     
@@ -78,6 +82,9 @@ class MeshNetworkService @Inject constructor(
     private fun startPeerDiscovery() {
         meshProtocol.startDiscovery { discoveredPeers ->
             _peers.value = discoveredPeers
+        }
+        meshProtocol.setPeerLocationCallback { locations ->
+            _peerLocations.value = locations
         }
     }
     
