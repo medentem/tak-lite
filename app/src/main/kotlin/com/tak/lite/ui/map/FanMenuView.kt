@@ -181,7 +181,7 @@ class FanMenuView @JvmOverloads constructor(
         val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             this.color = when (color) {
                 AnnotationColor.GREEN -> Color.parseColor("#4CAF50")
-                AnnotationColor.YELLOW -> Color.parseColor("#FFEB3B")
+                AnnotationColor.YELLOW -> Color.parseColor("#FBC02D")
                 AnnotationColor.RED -> Color.parseColor("#F44336")
                 AnnotationColor.BLACK -> Color.BLACK
             }
@@ -197,19 +197,75 @@ class FanMenuView @JvmOverloads constructor(
     }
 
     private fun drawDeleteIcon(canvas: Canvas, x: Float, y: Float, highlight: Boolean) {
-        val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = if (highlight) Color.RED else Color.LTGRAY
+        // Draw background circle
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (highlight) Color.RED else Color.WHITE
             style = Paint.Style.FILL
         }
-        canvas.drawCircle(x, y, iconRadius, iconPaint)
-        val xPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.WHITE
+        canvas.drawCircle(x, y, iconRadius, bgPaint)
+        // Draw circle border for contrast
+        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (highlight) Color.WHITE else Color.DKGRAY
             style = Paint.Style.STROKE
-            strokeWidth = 6f
+            strokeWidth = 3f
         }
-        val size = iconRadius / 1.5f
-        canvas.drawLine(x - size, y - size, x + size, y + size, xPaint)
-        canvas.drawLine(x - size, y + size, x + size, y - size, xPaint)
+        canvas.drawCircle(x, y, iconRadius, borderPaint)
+        // Trash can outline paint
+        val outlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#23234B") // dark blue/black
+            style = Paint.Style.STROKE
+            strokeWidth = iconRadius * 0.18f
+            strokeCap = Paint.Cap.ROUND
+            strokeJoin = Paint.Join.ROUND
+        }
+        // Dimensions
+        val canWidth = iconRadius * 1.1f
+        val canHeight = iconRadius * 1.25f
+        val canTop = y - canHeight * 0.35f
+        val canBottom = y + canHeight * 0.45f
+        val canLeft = x - canWidth / 2.1f
+        val canRight = x + canWidth / 2.1f
+        // Draw can body (trapezoid)
+        val bodyPath = android.graphics.Path().apply {
+            moveTo(canLeft + outlinePaint.strokeWidth/2, canTop + iconRadius * 0.18f)
+            lineTo(canRight - outlinePaint.strokeWidth/2, canTop + iconRadius * 0.18f)
+            lineTo(canRight - iconRadius * 0.10f, canBottom - outlinePaint.strokeWidth/2)
+            lineTo(canLeft + iconRadius * 0.10f, canBottom - outlinePaint.strokeWidth/2)
+            close()
+        }
+        canvas.drawPath(bodyPath, outlinePaint)
+        // Draw lid (rectangle with rounded corners)
+        val lidHeight = iconRadius * 0.22f
+        val lidRect = android.graphics.RectF(
+            canLeft + iconRadius * 0.05f,
+            canTop,
+            canRight - iconRadius * 0.05f,
+            canTop + lidHeight
+        )
+        canvas.drawRoundRect(lidRect, lidHeight/2, lidHeight/2, outlinePaint)
+        // Draw handle (semicircle)
+        val handleRadius = iconRadius * 0.28f
+        val handleCenterY = canTop + lidHeight/2
+        val handleRect = android.graphics.RectF(
+            x - handleRadius,
+            handleCenterY - handleRadius,
+            x + handleRadius,
+            handleCenterY + handleRadius
+        )
+        canvas.drawArc(handleRect, 180f, 180f, false, outlinePaint)
+        // Draw ribs (3 vertical lines)
+        val ribPaint = Paint(outlinePaint)
+        ribPaint.strokeWidth = iconRadius * 0.10f
+        val ribTop = canTop + lidHeight + iconRadius * 0.10f
+        val ribBottom = canBottom - iconRadius * 0.10f
+        val ribXs = listOf(
+            x - canWidth * 0.20f,
+            x,
+            x + canWidth * 0.20f
+        )
+        for (ribX in ribXs) {
+            canvas.drawLine(ribX, ribTop, ribX, ribBottom, ribPaint)
+        }
     }
 
     // Returns Triple<ring, idxInRing, itemsInRing>
