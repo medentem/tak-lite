@@ -33,7 +33,6 @@ class AnnotationOverlayView @JvmOverloads constructor(
     
     private var projection: Projection? = null
     private var annotations: List<MapAnnotation> = emptyList()
-    private var points: List<PointF> = emptyList()
     private var currentZoom: Float = 0f
     
     fun setProjection(projection: Projection) {
@@ -43,13 +42,6 @@ class AnnotationOverlayView @JvmOverloads constructor(
     
     fun updateAnnotations(annotations: List<MapAnnotation>) {
         this.annotations = annotations
-        this.points = annotations.map { annotation ->
-            val point = PointF()
-            projection?.toScreenLocation(annotation.toGoogleLatLng())?.let { screenLocation ->
-                point.set(screenLocation.x.toFloat(), screenLocation.y.toFloat())
-            }
-            point
-        }
         invalidate()
     }
     
@@ -62,17 +54,26 @@ class AnnotationOverlayView @JvmOverloads constructor(
         super.onDraw(canvas)
         if (projection == null) return
 
-        annotations.forEachIndexed { index, annotation ->
-            val point = points.getOrNull(index) ?: return@forEachIndexed
-            
+        annotations.forEach { annotation ->
+            val point = annotation.toGoogleLatLng().let { latLng ->
+                projection?.toScreenLocation(latLng)
+            }
+            if (point == null) return@forEach
+            val pointF = PointF(point.x.toFloat(), point.y.toFloat())
             when (annotation) {
                 is MapAnnotation.PointOfInterest -> {
-                    drawPoint(canvas, point, annotation)
+                    drawPoint(canvas, pointF, annotation)
                 }
                 is MapAnnotation.Line -> {
-                    val nextPoint = points.getOrNull(index + 1)
-                    if (nextPoint != null) {
-                        drawLine(canvas, point, nextPoint, annotation)
+                    // Draw lines between all points
+                    val latLngs = annotation.points.map { it.toGoogleLatLng() }
+                    if (latLngs.size >= 2) {
+                        val screenPoints = latLngs.mapNotNull { projection?.toScreenLocation(it) }
+                        for (i in 0 until screenPoints.size - 1) {
+                            val p1 = PointF(screenPoints[i].x.toFloat(), screenPoints[i].y.toFloat())
+                            val p2 = PointF(screenPoints[i + 1].x.toFloat(), screenPoints[i + 1].y.toFloat())
+                            drawLine(canvas, p1, p2, annotation)
+                        }
                     }
                 }
                 is MapAnnotation.Area -> {
@@ -102,6 +103,20 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     paint
                 )
                 canvas.drawCircle(point.x, point.y + 25f, 5f, paint)
+            }
+            PointShape.SQUARE -> {
+                val half = 20f
+                canvas.drawRect(point.x - half, point.y - half, point.x + half, point.y + half, paint)
+            }
+            PointShape.TRIANGLE -> {
+                val half = 20f
+                val height = (half * Math.sqrt(3.0)).toFloat()
+                val path = android.graphics.Path()
+                path.moveTo(point.x, point.y - height / 2) // Top
+                path.lineTo(point.x - half, point.y + height / 2) // Bottom left
+                path.lineTo(point.x + half, point.y + height / 2) // Bottom right
+                path.close()
+                canvas.drawPath(path, paint)
             }
         }
     }

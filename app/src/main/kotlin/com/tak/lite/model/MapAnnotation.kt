@@ -56,7 +56,9 @@ enum class AnnotationColor {
 @Serializable
 enum class PointShape {
     @SerialName("circle") CIRCLE,
-    @SerialName("exclamation") EXCLAMATION
+    @SerialName("exclamation") EXCLAMATION,
+    @SerialName("square") SQUARE,
+    @SerialName("triangle") TRIANGLE
 }
 
 @Serializable
