@@ -429,6 +429,7 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
                     is com.tak.lite.ui.map.FanMenuView.Option.LineStyle -> updateLineStyle(line, option.style)
                     is com.tak.lite.ui.map.FanMenuView.Option.Color -> updateLineColor(line, option.color)
                     is com.tak.lite.ui.map.FanMenuView.Option.Delete -> deletePoi(option.id)
+                    else -> {}
                 }
                 fanMenuView.visibility = View.GONE
             }
