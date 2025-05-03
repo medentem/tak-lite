@@ -42,6 +42,12 @@ class FanMenuView @JvmOverloads constructor(
     var menuStartAngle: Double = 5 * Math.PI / 4
     var screenSize: PointF = PointF(0f, 0f)
     private val iconRadius = 40f
+    private val centerHoleRadius = 90f
+    private val clearPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.TRANSPARENT
+        style = Paint.Style.FILL
+        xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.CLEAR)
+    }
     private val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.argb(128, 0, 0, 0)
         style = Paint.Style.FILL
@@ -51,45 +57,83 @@ class FanMenuView @JvmOverloads constructor(
         style = Paint.Style.STROKE
         strokeWidth = 4f
     }
+    // Two-ring fan menu configuration
+    private val maxItemsInnerRing = 6
+    private val ringSpacing = iconRadius * 2.5f
+    private var numInner = 0
+    private var numOuter = 0
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         if (options.isEmpty()) return
-        // Draw fan background
-        canvas.drawArc(
-            center.x - menuRadius - iconRadius, center.y - menuRadius - iconRadius,
-            center.x + menuRadius + iconRadius, center.y + menuRadius + iconRadius,
-            Math.toDegrees(menuStartAngle).toFloat(), Math.toDegrees(menuFanAngle).toFloat(), true, backgroundPaint
-        )
+        // Draw fan background for both rings
+        for (ring in 0 until getRingCount()) {
+            val radius = menuRadius + ring * ringSpacing
+            canvas.drawArc(
+                center.x - radius - iconRadius, center.y - radius - iconRadius,
+                center.x + radius + iconRadius, center.y + radius + iconRadius,
+                Math.toDegrees(menuStartAngle).toFloat(), Math.toDegrees(menuFanAngle).toFloat(), true, backgroundPaint
+            )
+        }
+        // Draw empty center (hole)
+        canvas.drawCircle(center.x, center.y, centerHoleRadius, clearPaint)
         // Draw selected sector background if any
-        val angleStep = menuFanAngle / (options.size)
         selectedIndex?.let { selIdx ->
-            val sectorStart = menuStartAngle + selIdx * angleStep
+            val (ring, idxInRing, itemsInRing) = getRingAndIndex(selIdx)
+            val angleStep = menuFanAngle / itemsInRing
+            val sectorStart = menuStartAngle + idxInRing * angleStep
             val sectorSweep = angleStep
+            val outerRadius = menuRadius + ring * ringSpacing
             val highlightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = Color.argb(180, 255, 255, 255) // Light, semi-transparent
                 style = Paint.Style.FILL
             }
-            canvas.drawArc(
-                center.x - menuRadius - iconRadius, center.y - menuRadius - iconRadius,
-                center.x + menuRadius + iconRadius, center.y + menuRadius + iconRadius,
-                Math.toDegrees(sectorStart).toFloat(), Math.toDegrees(sectorSweep).toFloat(), true, highlightPaint
-            )
+            if (ring == 0) {
+                // Inner ring: highlight full sector
+                canvas.drawArc(
+                    center.x - outerRadius - iconRadius, center.y - outerRadius - iconRadius,
+                    center.x + outerRadius + iconRadius, center.y + outerRadius + iconRadius,
+                    Math.toDegrees(sectorStart).toFloat(), Math.toDegrees(sectorSweep).toFloat(), true, highlightPaint
+                )
+            } else {
+                // Outer ring: highlight only the donut sector
+                val innerRadius = menuRadius + (ring - 1) * ringSpacing
+                val path = android.graphics.Path()
+                val startAngleDeg = Math.toDegrees(sectorStart).toFloat()
+                val sweepAngleDeg = Math.toDegrees(sectorSweep).toFloat()
+                // Outer arc
+                path.arcTo(
+                    center.x - outerRadius - iconRadius, center.y - outerRadius - iconRadius,
+                    center.x + outerRadius + iconRadius, center.y + outerRadius + iconRadius,
+                    startAngleDeg, sweepAngleDeg, false
+                )
+                // Inner arc (reverse)
+                path.arcTo(
+                    center.x - innerRadius - iconRadius, center.y - innerRadius - iconRadius,
+                    center.x + innerRadius + iconRadius, center.y + innerRadius + iconRadius,
+                    startAngleDeg + sweepAngleDeg, -sweepAngleDeg, false
+                )
+                path.close()
+                canvas.drawPath(path, highlightPaint)
+            }
         }
-        // Draw dividing lines and options
-        for ((i, option) in options.withIndex()) {
-            val angle = menuStartAngle + (i + 0.5) * angleStep // Center of sector
-            val x = center.x + (menuRadius + iconRadius) * cos(angle).toFloat()
-            val y = center.y + (menuRadius + iconRadius) * sin(angle).toFloat()
+        // Draw dividing lines and options for both rings
+        for (i in options.indices) {
+            val (ring, idxInRing, itemsInRing) = getRingAndIndex(i)
+            val angleStep = menuFanAngle / itemsInRing
+            val angle = menuStartAngle + (idxInRing + 0.5) * angleStep // Center of sector
+            val radius = menuRadius + ring * ringSpacing
+            val x = center.x + (radius + iconRadius) * cos(angle).toFloat()
+            val y = center.y + (radius + iconRadius) * sin(angle).toFloat()
             val isSelected = i == selectedIndex
             // Draw dividing lines (sector boundaries)
-            if (i > 0) {
-                val boundaryAngle = menuStartAngle + i * angleStep
-                val bx = center.x + menuRadius * cos(boundaryAngle).toFloat()
-                val by = center.y + menuRadius * sin(boundaryAngle).toFloat()
+            if (idxInRing > 0) {
+                val boundaryAngle = menuStartAngle + idxInRing * angleStep
+                val bx = center.x + radius * cos(boundaryAngle).toFloat()
+                val by = center.y + radius * sin(boundaryAngle).toFloat()
                 canvas.drawLine(center.x, center.y, bx, by, paint)
             }
-            when (option) {
+            when (val option = options[i]) {
                 is Option.Shape -> drawShapeIcon(canvas, x, y, option.shape, isSelected)
                 is Option.Color -> drawColorIcon(canvas, x, y, option.color, isSelected)
                 is Option.Delete -> drawDeleteIcon(canvas, x, y, isSelected)
@@ -168,6 +212,19 @@ class FanMenuView @JvmOverloads constructor(
         canvas.drawLine(x - size, y + size, x + size, y - size, xPaint)
     }
 
+    // Returns Triple<ring, idxInRing, itemsInRing>
+    private fun getRingAndIndex(i: Int): Triple<Int, Int, Int> {
+        return if (i < numInner) {
+            Triple(0, i, numInner)
+        } else {
+            Triple(1, i - numInner, numOuter)
+        }
+    }
+
+    private fun getRingCount(): Int {
+        return if (numOuter > 0) 2 else 1
+    }
+
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.action) {
             MotionEvent.ACTION_MOVE, MotionEvent.ACTION_DOWN -> {
@@ -199,9 +256,17 @@ class FanMenuView @JvmOverloads constructor(
         val dx = x - center.x
         val dy = y - center.y
         val distance = hypot(dx.toDouble(), dy.toDouble())
-        if (distance > menuRadius + iconRadius) return null
+        if (distance < centerHoleRadius) return null
+        // Determine which ring
+        val ring = when {
+            distance < menuRadius + iconRadius -> 0
+            distance < menuRadius + ringSpacing + iconRadius && numOuter > 0 -> 1
+            else -> return null
+        }
+        val (itemsInRing, offset) = if (ring == 0) Pair(numInner, 0) else Pair(numOuter, numInner)
+        if (itemsInRing == 0) return null
         val angle = (atan2(dy.toDouble(), dx.toDouble()) + 2 * Math.PI) % (2 * Math.PI)
-        val startAngle = menuStartAngle
+        val startAngle = (menuStartAngle + 2 * Math.PI) % (2 * Math.PI)
         val fanAngle = menuFanAngle
         val endAngle = (startAngle + fanAngle) % (2 * Math.PI)
         val inFan = if (startAngle < endAngle) {
@@ -210,25 +275,27 @@ class FanMenuView @JvmOverloads constructor(
             angle >= startAngle || angle <= endAngle
         }
         if (!inFan) return null
-        val angleStep = fanAngle / (options.size)
+        val angleStep = fanAngle / itemsInRing
         var sector = ((angle - startAngle + 2 * Math.PI) % (2 * Math.PI)) / angleStep
-        if (sector >= options.size) sector = (options.size - 1).toDouble()
-        val idx = sector.toInt().coerceIn(0, options.size - 1)
-        return idx
+        if (sector >= itemsInRing) sector = (itemsInRing - 1).toDouble()
+        val idxInRing = sector.toInt().coerceIn(0, itemsInRing - 1)
+        return offset + idxInRing
     }
 
     fun showAt(center: PointF, options: List<Option>, listener: OnOptionSelectedListener, screenSize: PointF? = null) {
-        this.center = center
         this.options = options
         this.listener = listener
         this.selectedIndex = null
+        numInner = minOf(options.size, maxItemsInnerRing)
+        numOuter = options.size - numInner
+        this.center = center
         val minFanAngle = Math.PI / 2 // 90 degrees
         val maxFanAngle = 2 * Math.PI // 360 degrees
         val minRadius = 300f
         val maxRadius = 500f // You can adjust this as needed
         val minAngleBetween = Math.PI / 8 // 22.5 degrees between items minimum
         val iconSpacing = iconRadius * 2 * 2.1 // 220% extra spacing for more padding
-        val n = options.size
+        val n = numInner
         var requiredFanAngle = minFanAngle
         var requiredRadius = minRadius
         if (n > 1) {
@@ -248,19 +315,80 @@ class FanMenuView @JvmOverloads constructor(
         }
         menuFanAngle = requiredFanAngle
         menuRadius = requiredRadius
+        // Default: fan out to the right
+        var bestStartAngle = 0.0
         if (screenSize != null) {
-            this.screenSize = screenSize
-            val dx = (screenSize.x / 2) - center.x
-            val dy = (screenSize.y / 2) - center.y
-            val angleToCenter = atan2(dy, dx)
-            menuStartAngle = angleToCenter - menuFanAngle / 2
+            // Try several candidate start angles and pick the one that keeps the most of the arc visible
+            val candidateAngles = listOf(
+                0.0, // right
+                Math.PI / 4, // down-right
+                Math.PI / 2, // down
+                3 * Math.PI / 4, // down-left
+                Math.PI, // left
+                5 * Math.PI / 4, // up-left
+                3 * Math.PI / 2, // up
+                7 * Math.PI / 4 // up-right
+            )
+            var maxVisible = -1f
+            for (angle in candidateAngles) {
+                val visible = computeVisibleArcFraction(center, menuRadius, angle, menuFanAngle, screenSize)
+                if (visible > maxVisible) {
+                    maxVisible = visible
+                    bestStartAngle = angle
+                }
+            }
         }
+        menuStartAngle = bestStartAngle
+        // Normalize menuStartAngle to [0, 2PI)
+        menuStartAngle = (menuStartAngle + 2 * Math.PI) % (2 * Math.PI)
         visibility = VISIBLE
         invalidate()
+    }
+
+    /**
+     * Returns the fraction of the arc that is visible within the screen bounds for a given start angle.
+     */
+    private fun computeVisibleArcFraction(center: PointF, radius: Float, startAngle: Double, fanAngle: Double, screenSize: PointF): Float {
+        val steps = 32
+        var visible = 0
+        for (i in 0..steps) {
+            val theta = startAngle + fanAngle * i / steps
+            val x = center.x + (radius + iconRadius) * Math.cos(theta).toFloat()
+            val y = center.y + (radius + iconRadius) * Math.sin(theta).toFloat()
+            if (x >= 0 && x <= screenSize.x && y >= 0 && y <= screenSize.y) {
+                visible++
+            }
+        }
+        return visible.toFloat() / (steps + 1)
     }
 
     fun dismiss() {
         visibility = GONE
         listener?.onMenuDismissed()
+    }
+
+    /**
+     * Calculates the required menu radius for the given options, using the same logic as showAt.
+     */
+    fun calculateMenuRadius(options: List<Option>): Float {
+        val maxItemsInnerRing = 6
+        val iconRadius = 40f
+        val ringSpacing = iconRadius * 2.5f
+        val minRadius = 300f
+        val maxRadius = 500f
+        val iconSpacing = iconRadius * 2 * 2.1 // 220% extra spacing for more padding
+        val n = minOf(options.size, maxItemsInnerRing)
+        var requiredRadius = minRadius
+        if (n > 1) {
+            val angleBetween = Math.max(Math.PI / 8, 2 * Math.asin(iconSpacing / (2 * minRadius)))
+            val totalAngleNeeded = angleBetween * (n - 1)
+            if (totalAngleNeeded <= 2 * Math.PI) {
+                requiredRadius = minRadius
+            } else {
+                val neededRadius = (iconSpacing / (2 * Math.sin(Math.PI / n))).toFloat()
+                requiredRadius = neededRadius.coerceAtLeast(minRadius).coerceAtMost(maxRadius)
+            }
+        }
+        return requiredRadius
     }
 } 
