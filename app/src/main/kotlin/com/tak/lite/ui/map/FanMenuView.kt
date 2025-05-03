@@ -25,6 +25,7 @@ class FanMenuView @JvmOverloads constructor(
     sealed class Option {
         data class Shape(val shape: PointShape) : Option()
         data class Color(val color: AnnotationColor) : Option()
+        data class Delete(val id: String) : Option()
     }
 
     interface OnOptionSelectedListener {
@@ -73,6 +74,7 @@ class FanMenuView @JvmOverloads constructor(
             when (option) {
                 is Option.Shape -> drawShapeIcon(canvas, x, y, option.shape, isSelected)
                 is Option.Color -> drawColorIcon(canvas, x, y, option.color, isSelected)
+                is Option.Delete -> drawDeleteIcon(canvas, x, y, isSelected)
             }
         }
     }
@@ -130,6 +132,22 @@ class FanMenuView @JvmOverloads constructor(
         }
         canvas.drawCircle(x, y, iconRadius, fillPaint)
         canvas.drawCircle(x, y, iconRadius, borderPaint)
+    }
+
+    private fun drawDeleteIcon(canvas: Canvas, x: Float, y: Float, highlight: Boolean) {
+        val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (highlight) Color.RED else Color.LTGRAY
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(x, y, iconRadius, iconPaint)
+        val xPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            style = Paint.Style.STROKE
+            strokeWidth = 6f
+        }
+        val size = iconRadius / 1.5f
+        canvas.drawLine(x - size, y - size, x + size, y + size, xPaint)
+        canvas.drawLine(x - size, y + size, x + size, y - size, xPaint)
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {

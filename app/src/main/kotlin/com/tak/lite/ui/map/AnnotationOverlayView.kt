@@ -3,6 +3,7 @@ package com.tak.lite.ui.map
 import android.content.Context
 import android.graphics.*
 import android.util.AttributeSet
+import android.view.MotionEvent
 import android.view.View
 import com.google.android.gms.maps.Projection
 import com.google.android.gms.maps.model.LatLng
@@ -34,6 +35,14 @@ class AnnotationOverlayView @JvmOverloads constructor(
     private var projection: Projection? = null
     private var annotations: List<MapAnnotation> = emptyList()
     private var currentZoom: Float = 0f
+    
+    interface OnPoiLongPressListener {
+        fun onPoiLongPressed(poiId: String, screenPosition: PointF)
+    }
+    var poiLongPressListener: OnPoiLongPressListener? = null
+    private var longPressStartTime: Long = 0
+    private var longPressCandidate: MapAnnotation.PointOfInterest? = null
+    private var longPressDownPos: PointF? = null
     
     fun setProjection(projection: Projection) {
         this.projection = projection
@@ -184,4 +193,51 @@ class AnnotationOverlayView @JvmOverloads constructor(
             is MapAnnotation.Area -> AnnotationType.AREA
             else -> throw IllegalArgumentException("Unsupported annotation type")
         }
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        when (event.action) {
+            MotionEvent.ACTION_DOWN -> {
+                val poi = findPoiAt(event.x, event.y)
+                if (poi != null) {
+                    longPressStartTime = System.currentTimeMillis()
+                    longPressCandidate = poi
+                    longPressDownPos = PointF(event.x, event.y)
+                } else {
+                    longPressCandidate = null
+                }
+            }
+            MotionEvent.ACTION_MOVE -> {
+                // Cancel if moved too far
+                longPressDownPos?.let { down ->
+                    if (Math.hypot((event.x - down.x).toDouble(), (event.y - down.y).toDouble()) > 40) {
+                        longPressCandidate = null
+                    }
+                }
+            }
+            MotionEvent.ACTION_UP -> {
+                if (longPressCandidate != null && System.currentTimeMillis() - longPressStartTime > 500) {
+                    poiLongPressListener?.onPoiLongPressed(longPressCandidate!!.id, longPressDownPos!!)
+                }
+                longPressCandidate = null
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                longPressCandidate = null
+            }
+        }
+        return true
+    }
+
+    private fun findPoiAt(x: Float, y: Float): MapAnnotation.PointOfInterest? {
+        // Only check POIs
+        val pois = annotations.filterIsInstance<MapAnnotation.PointOfInterest>()
+        for (poi in pois) {
+            val point = projection?.toScreenLocation(poi.position.toGoogleLatLng()) ?: continue
+            val dx = x - point.x
+            val dy = y - point.y
+            if (Math.hypot(dx.toDouble(), dy.toDouble()) < 40) {
+                return poi
+            }
+        }
+        return null
+    }
 } 

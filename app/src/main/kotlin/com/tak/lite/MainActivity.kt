@@ -49,6 +49,7 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private var userLocationMarker: Marker? = null
     private val peerMarkers = mutableMapOf<String, Marker>()
+    private var editingPoiId: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -75,6 +76,10 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
 
         // Setup AnnotationOverlayView
         annotationOverlayView = findViewById(R.id.annotationOverlayView)
+        annotationOverlayView.poiLongPressListener = object : AnnotationOverlayView.OnPoiLongPressListener {
+            override fun onPoiLongPressed(poiId: String, screenPosition: PointF) {
+                editingPoiId = poiId
+                showPoiEditMenu(screenPosition, poiId)
         lifecycleScope.launch {
             annotationViewModel.uiState.collect { state ->
                 annotationOverlayView.updateAnnotations(state.annotations)
@@ -293,6 +298,62 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
                 }
             }
         }
+    }
+
+    private fun showPoiEditMenu(center: PointF, poiId: String) {
+        val options = listOf(
+            com.tak.lite.ui.map.FanMenuView.Option.Shape(PointShape.CIRCLE),
+            com.tak.lite.ui.map.FanMenuView.Option.Shape(PointShape.EXCLAMATION),
+            com.tak.lite.ui.map.FanMenuView.Option.Shape(PointShape.SQUARE),
+            com.tak.lite.ui.map.FanMenuView.Option.Shape(PointShape.TRIANGLE),
+            com.tak.lite.ui.map.FanMenuView.Option.Color(AnnotationColor.GREEN),
+            com.tak.lite.ui.map.FanMenuView.Option.Color(AnnotationColor.YELLOW),
+            com.tak.lite.ui.map.FanMenuView.Option.Color(AnnotationColor.RED),
+            com.tak.lite.ui.map.FanMenuView.Option.Color(AnnotationColor.BLACK),
+            com.tak.lite.ui.map.FanMenuView.Option.Delete(poiId)
+        )
+        fanMenuView.showAt(center, options, object : com.tak.lite.ui.map.FanMenuView.OnOptionSelectedListener {
+            override fun onOptionSelected(option: com.tak.lite.ui.map.FanMenuView.Option) {
+                when (option) {
+                    is com.tak.lite.ui.map.FanMenuView.Option.Shape -> {
+                        editingPoiId?.let { updatePoiShape(it, option.shape) }
+                    }
+                    is com.tak.lite.ui.map.FanMenuView.Option.Color -> {
+                        editingPoiId?.let { updatePoiColor(it, option.color) }
+                    }
+                    is com.tak.lite.ui.map.FanMenuView.Option.Delete -> {
+                        deletePoi(option.id)
+                    }
+                }
+                fanMenuView.visibility = View.GONE
+                editingPoiId = null
+            }
+            override fun onMenuDismissed() {
+                fanMenuView.visibility = View.GONE
+                editingPoiId = null
+            }
+        })
+        fanMenuView.visibility = View.VISIBLE
+    }
+
+    private fun updatePoiShape(poiId: String, shape: PointShape) {
+        val poi = annotationViewModel.uiState.value.annotations.filterIsInstance<com.tak.lite.model.MapAnnotation.PointOfInterest>().find { it.id == poiId } ?: return
+        annotationViewModel.setCurrentColor(poi.color)
+        annotationViewModel.setCurrentShape(shape)
+        annotationViewModel.removeAnnotation(poiId)
+        annotationViewModel.addPointOfInterest(poi.position.toGoogleLatLng())
+    }
+
+    private fun updatePoiColor(poiId: String, color: AnnotationColor) {
+        val poi = annotationViewModel.uiState.value.annotations.filterIsInstance<com.tak.lite.model.MapAnnotation.PointOfInterest>().find { it.id == poiId } ?: return
+        annotationViewModel.setCurrentColor(color)
+        annotationViewModel.setCurrentShape(poi.shape)
+        annotationViewModel.removeAnnotation(poiId)
+        annotationViewModel.addPointOfInterest(poi.position.toGoogleLatLng())
+    }
+
+    private fun deletePoi(poiId: String) {
+        annotationViewModel.removeAnnotation(poiId)
     }
 
     override fun onRequestPermissionsResult(
