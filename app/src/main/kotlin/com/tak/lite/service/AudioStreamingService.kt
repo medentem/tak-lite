@@ -50,6 +50,21 @@ class AudioStreamingService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, _startId: Int): Int {
+        val isMuted = intent?.getBooleanExtra("isMuted", false) ?: false
+        val volume = intent?.getIntExtra("volume", 50) ?: 50
+        val selectedChannelId = intent?.getStringExtra("selectedChannelId")
+        val isPTTHeld = intent?.getBooleanExtra("isPTTHeld", false) ?: false
+        val settings = AudioSettings(
+            isMuted = isMuted,
+            volume = volume,
+            selectedChannelId = selectedChannelId,
+            isPTTHeld = isPTTHeld
+        )
+        if (isPTTHeld) {
+            startStreaming(settings)
+        } else {
+            stopStreaming()
+        }
         return START_STICKY
     }
 

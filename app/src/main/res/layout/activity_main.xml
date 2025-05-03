@@ -25,4 +25,27 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
+    <com.tak.lite.ui.map.AnnotationOverlayView
+        android:id="@+id/annotationOverlayView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="visible" />
+
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/mapTypeToggleButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginBottom="16dp"
+        android:contentDescription="Toggle Map Type"
+        android:src="@android:drawable/ic_menu_mapmode"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <com.tak.lite.ui.map.FanMenuView
+        android:id="@+id/fanMenuView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
 </androidx.constraintlayout.widget.ConstraintLayout> 

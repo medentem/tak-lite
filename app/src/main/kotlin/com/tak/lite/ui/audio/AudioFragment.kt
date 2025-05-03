@@ -132,15 +132,66 @@ class AudioFragment : Fragment() {
     }
 
     private fun setupPttButton() {
-        binding.pttButton.setOnClickListener {
-            isPttEnabled = !isPttEnabled
-            viewModel.setPTTState(isPttEnabled)
-            updatePttButton()
+        binding.pttButton.setOnTouchListener { _, event ->
+            when (event.action) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    if (!permissionManager.hasRequiredPermissions()) {
+                        showErrorSnackbar("Audio permissions are required to transmit.")
+                        return@setOnTouchListener true
+                    }
+                    if (viewModel.connectionState.value != MeshNetworkManagerImpl.ConnectionState.CONNECTED) {
+                        showErrorSnackbar("Mesh network is not connected.")
+                        return@setOnTouchListener true
+                    }
+                    isPttEnabled = true
+                    viewModel.setPTTState(true)
+                    updatePttButton()
+                    startAudioStreamingService()
+                    true
+                }
+                android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
+                    isPttEnabled = false
+                    viewModel.setPTTState(false)
+                    updatePttButton()
+                    stopAudioStreamingService()
+                    true
+                }
+                else -> false
+            }
         }
+    }
+
+    private fun startAudioStreamingService() {
+        val context = requireContext().applicationContext
+        val settings = viewModel.settings.value.copy(isPTTHeld = true)
+        val intent = android.content.Intent(context, com.tak.lite.service.AudioStreamingService::class.java)
+        intent.putExtra("isMuted", settings.isMuted)
+        intent.putExtra("volume", settings.volume)
+        intent.putExtra("selectedChannelId", settings.selectedChannelId)
+        intent.putExtra("isPTTHeld", true)
+        context.startService(intent)
+    }
+
+    private fun stopAudioStreamingService() {
+        val context = requireContext().applicationContext
+        val intent = android.content.Intent(context, com.tak.lite.service.AudioStreamingService::class.java)
+        context.stopService(intent)
     }
 
     private fun updatePttButton() {
         binding.pttButton.isSelected = isPttEnabled
+        if (isPttEnabled) {
+            binding.pttButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(android.graphics.Color.RED))
+            binding.connectionStatus.text = "Transmitting..."
+        } else {
+            binding.pttButton.setBackgroundTintList(null)
+            // Restore connection status based on actual state
+            updateConnectionState(viewModel.connectionState.value)
+        }
+    }
+
+    private fun showErrorSnackbar(message: String) {
+        Snackbar.make(binding.root, message, Snackbar.LENGTH_SHORT).show()
     }
 
     private fun observeViewModel() {
