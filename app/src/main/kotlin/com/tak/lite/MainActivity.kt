@@ -34,6 +34,16 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.maps.model.MarkerOptions
 import com.google.android.gms.location.Priority
+import android.widget.ImageButton
+import android.view.Gravity
+import android.view.ViewGroup
+import android.widget.FrameLayout
+import com.tak.lite.viewmodel.AudioViewModel
+import com.tak.lite.ui.audio.TalkGroupAdapter
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.tak.lite.data.model.AudioChannel
 
 @AndroidEntryPoint
 class MainActivity : AppCompatActivity(), OnMapReadyCallback {
@@ -59,6 +69,8 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
     private var tempLinePoints: MutableList<LatLng> = mutableListOf()
     private lateinit var lineToolButtonFrame: View
     private lateinit var lineToolLabel: View
+    private val peerIdToNickname = mutableMapOf<String, String?>()
+    private val audioViewModel: AudioViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -136,6 +148,66 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
         // Initially hide confirm/cancel
         lineToolCancelButton.visibility = View.GONE
         lineToolConfirmButton.visibility = View.GONE
+
+        // Add nickname button listener
+        binding.nicknameButton.setOnClickListener {
+            showNicknameDialog()
+        }
+
+        // Add groupAudioButton logic
+        val groupAudioButton = findViewById<ImageButton>(R.id.groupAudioButton)
+        groupAudioButton.setOnClickListener {
+            val rootView = findViewById<ViewGroup>(android.R.id.content)
+            val overlayTag = "TalkGroupOverlay"
+            if (rootView.findViewWithTag<View>(overlayTag) == null) {
+                val overlay = layoutInflater.inflate(R.layout.talk_group_overlay, rootView, false)
+                overlay.tag = overlayTag
+                val overlayWidth = resources.getDimensionPixelSize(R.dimen.talk_group_overlay_width)
+                val params = FrameLayout.LayoutParams(overlayWidth, FrameLayout.LayoutParams.MATCH_PARENT)
+                params.gravity = Gravity.END
+                overlay.layoutParams = params
+                overlay.translationX = overlayWidth.toFloat()
+                rootView.addView(overlay)
+                overlay.animate().translationX(0f).setDuration(300).start()
+                overlay.findViewById<View>(R.id.closeTalkGroupOverlayButton)?.setOnClickListener {
+                    overlay.animate().translationX(overlayWidth.toFloat()).setDuration(300).withEndAction {
+                        rootView.removeView(overlay)
+                    }.start()
+                }
+                // Setup TalkGroupAdapter and channel list
+                val talkGroupList = overlay.findViewById<RecyclerView>(R.id.talkGroupList)
+                val talkGroupAdapter = TalkGroupAdapter(
+                    onGroupSelected = { channel ->
+                        audioViewModel.selectChannel(channel.id)
+                        // Optionally close overlay after selection
+                        overlay.animate().translationX(overlayWidth.toFloat()).setDuration(300).withEndAction {
+                            rootView.removeView(overlay)
+                        }.start()
+                    },
+                    getUserName = { userId ->
+                        // Use nickname if available from peerIdToNickname
+                        peerIdToNickname[userId] ?: userId
+                    },
+                    getIsActive = { channel ->
+                        audioViewModel.settings.value.selectedChannelId == channel.id
+                    }
+                )
+                talkGroupList.layoutManager = LinearLayoutManager(this)
+                talkGroupList.adapter = talkGroupAdapter
+                // Observe channels and update adapter
+                lifecycleScope.launch {
+                    audioViewModel.channels.collectLatest { channels ->
+                        talkGroupAdapter.submitList(channels)
+                    }
+                }
+                // Add Group button
+                overlay.findViewById<View>(R.id.addTalkGroupButton)?.setOnClickListener {
+                    showAddChannelDialog()
+                }
+                // Optional: clicking outside overlay closes it (if overlay is not full width)
+                overlay.setOnClickListener { /* consume clicks */ }
+            }
+        }
     }
 
     private fun observeMeshNetworkState() {
@@ -145,11 +217,17 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
                     is MeshNetworkUiState.Connected -> {
                         // Update UI to show connected state
                         binding.pttButton.isEnabled = true
+                        // Update peerIdToNickname map
+                        peerIdToNickname.clear()
+                        for (peer in state.peers) {
+                            peerIdToNickname[peer.id] = peer.nickname
+                        }
                     }
                     is MeshNetworkUiState.Disconnected -> {
                         // Update UI to show disconnected state
                         binding.pttButton.isEnabled = false
                         Toast.makeText(this@MainActivity, "Disconnected from mesh network", Toast.LENGTH_SHORT).show()
+                        peerIdToNickname.clear()
                     }
                     is MeshNetworkUiState.Error -> {
                         Toast.makeText(this@MainActivity, state.message, Toast.LENGTH_LONG).show()
@@ -338,10 +416,13 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
                 }
                 // Add/update markers for current peers
                 for ((id, latLng) in peerLocs) {
+                    val nickname = peerIdToNickname[id]
+                    val markerTitle = if (!nickname.isNullOrBlank()) "Peer: $nickname" else "Peer: $id"
                     if (peerMarkers.containsKey(id)) {
                         peerMarkers[id]?.position = latLng
+                        peerMarkers[id]?.title = markerTitle
                     } else {
-                        val marker = map.addMarker(MarkerOptions().position(latLng).title("Peer: $id"))
+                        val marker = map.addMarker(MarkerOptions().position(latLng).title(markerTitle))
                         if (marker != null) {
                             peerMarkers[id] = marker
                         }
@@ -475,6 +556,36 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
         lineToolLabel.visibility = View.VISIBLE
         lineToolCancelButton.visibility = View.GONE
         lineToolConfirmButton.visibility = View.GONE
+    }
+
+    private fun showNicknameDialog() {
+        val editText = android.widget.EditText(this)
+        editText.hint = "Enter your nickname"
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Set Nickname")
+            .setView(editText)
+            .setPositiveButton("OK") { _, _ ->
+                val nickname = editText.text.toString().trim()
+                if (nickname.isNotEmpty()) {
+                    viewModel.setLocalNickname(nickname)
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showAddChannelDialog() {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_add_channel, null)
+        val channelNameInput = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.channelNameInput)
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Add Channel")
+            .setView(dialogView)
+            .setPositiveButton("Add") { _, _ ->
+                val name = channelNameInput.text?.toString() ?: return@setPositiveButton
+                audioViewModel.createChannel(name)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     override fun onRequestPermissionsResult(
