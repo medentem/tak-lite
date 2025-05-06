@@ -29,7 +29,7 @@ class AnnotationRepository @Inject constructor(
     }
     
     fun addAnnotation(annotation: MapAnnotation) {
-        _annotations.value = _annotations.value + annotation
+        _annotations.value = _annotations.value.filter { it.id != annotation.id } + annotation
         meshProtocol.sendAnnotation(annotation)
     }
     

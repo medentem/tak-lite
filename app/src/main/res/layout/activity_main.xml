@@ -13,6 +13,12 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
+    <com.tak.lite.ui.map.AnnotationOverlayView
+        android:id="@+id/annotationOverlayView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="visible" />
+
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/pttButton"
         android:layout_width="wrap_content"
@@ -94,12 +100,6 @@
             android:layout_marginTop="2dp"
             android:gravity="center" />
     </LinearLayout>
-
-    <com.tak.lite.ui.map.AnnotationOverlayView
-        android:id="@+id/annotationOverlayView"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:visibility="visible" />
 
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/mapTypeToggleButton"

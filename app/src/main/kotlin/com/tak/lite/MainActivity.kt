@@ -128,6 +128,8 @@ class MainActivity : AppCompatActivity() {
     private var waveformJob: Job? = null
     private var amplitudes: MutableList<Int> = mutableListOf()
     private var amplitudeReceiver: BroadcastReceiver? = null
+    private var lastOverlayProjection: org.maplibre.android.maps.Projection? = null
+    private var lastOverlayAnnotations: List<com.tak.lite.model.MapAnnotation> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -174,6 +176,10 @@ class MainActivity : AppCompatActivity() {
                     map.locationComponent.cameraMode = CameraMode.NONE
                 }
             }
+            // Add performant overlay sync on camera move
+            map.addOnCameraMoveListener {
+                syncAnnotationOverlayView()
+            }
         }
 
         // Location client
@@ -203,7 +209,7 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             annotationViewModel.uiState.collect { state ->
                 renderAllAnnotations()
-                annotationOverlayView.updateAnnotations(state.annotations)
+                syncAnnotationOverlayView()
             }
         }
 
@@ -226,7 +232,7 @@ class MainActivity : AppCompatActivity() {
         binding.lineToolButton.setOnClickListener {
             isLineDrawingMode = true
             tempLinePoints.clear()
-            annotationOverlayView.setTempLinePoints(emptyList())
+            annotationOverlayView.setTempLinePoints(null)
             lineToolButtonFrame.visibility = View.GONE
             lineToolLabel.visibility = View.GONE
             lineToolCancelButton.visibility = View.VISIBLE
@@ -559,6 +565,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showFanMenu(center: PointF) {
+        // Always clear temp line state when entering POI mode
+        annotationOverlayView.setTempLinePoints(null)
         val shapeOptions = listOf(
             com.tak.lite.ui.map.FanMenuView.Option.Shape(PointShape.CIRCLE),
             com.tak.lite.ui.map.FanMenuView.Option.Shape(PointShape.EXCLAMATION),
@@ -811,6 +819,7 @@ class MainActivity : AppCompatActivity() {
                     is com.tak.lite.ui.map.FanMenuView.Option.LineStyle -> { /* no-op for POI */ }
                     else -> {}
                 }
+                annotationOverlayView.setTempLinePoints(null)
                 fanMenuView.visibility = View.GONE
                 editingPoiId = null
             }
@@ -859,6 +868,7 @@ class MainActivity : AppCompatActivity() {
                     is com.tak.lite.ui.map.FanMenuView.Option.Delete -> deletePoi(option.id)
                     else -> {}
                 }
+                annotationOverlayView.setTempLinePoints(null)
                 fanMenuView.visibility = View.GONE
             }
             override fun onMenuDismissed() {
@@ -893,7 +903,7 @@ class MainActivity : AppCompatActivity() {
         }
         isLineDrawingMode = false
         tempLinePoints.clear()
-        annotationOverlayView.setTempLinePoints(emptyList())
+        annotationOverlayView.setTempLinePoints(null)
         lineToolButtonFrame.visibility = View.VISIBLE
         lineToolLabel.visibility = View.VISIBLE
         lineToolCancelButton.visibility = View.GONE
@@ -1190,6 +1200,7 @@ class MainActivity : AppCompatActivity() {
             setupAnnotationOverlay()
             renderAllAnnotations() // <-- Ensure overlays are re-rendered after style is set
             setupMap() // <-- Call setupMap() here, after style is loaded
+            syncAnnotationOverlayView() // <-- Add performant overlay sync after style load
         }
     }
 
@@ -1230,5 +1241,25 @@ class MainActivity : AppCompatActivity() {
         val lon = prefs.getFloat("last_lon", 0f).toDouble()
         val zoom = prefs.getFloat("last_zoom", DEFAULT_US_ZOOM.toFloat())
         return Triple(lat, lon, zoom)
+    }
+
+    private fun syncAnnotationOverlayView() {
+        val currentProjection = mapLibreMap?.projection
+        val currentAnnotations = annotationViewModel.uiState.value.annotations
+
+        var changed = false
+        if (currentProjection != lastOverlayProjection) {
+            annotationOverlayView.setProjection(currentProjection)
+            lastOverlayProjection = currentProjection
+            changed = true
+        }
+        // Always update annotations to ensure overlay is up to date
+        annotationOverlayView.updateAnnotations(currentAnnotations)
+        lastOverlayAnnotations = currentAnnotations
+        changed = true
+        if (changed) {
+            annotationOverlayView.visibility = View.VISIBLE
+            annotationOverlayView.invalidate()
+        }
     }
 }
