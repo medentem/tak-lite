@@ -281,19 +281,21 @@ class MeshNetworkProtocol(
             }
         }
         if (peers.isEmpty()) {
-            try {
-                val socket = createBoundSocket()
-                val packet = DatagramPacket(
-                    data,
-                    data.size,
-                    InetAddress.getByName("255.255.255.255"),
-                    port
-                )
-                socket.broadcast = true
-                socket.send(packet)
-                socket.close()
-            } catch (e: Exception) {
-                Log.e(TAG, "Error sending data to broadcast: ", e)
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val socket = createBoundSocket()
+                    val packet = DatagramPacket(
+                        data,
+                        data.size,
+                        InetAddress.getByName("255.255.255.255"),
+                        port
+                    )
+                    socket.broadcast = true
+                    socket.send(packet)
+                    socket.close()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error sending data to broadcast: ", e)
+                }
             }
         }
     }
