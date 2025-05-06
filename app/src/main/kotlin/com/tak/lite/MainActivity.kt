@@ -64,6 +64,10 @@ import org.maplibre.android.location.modes.CameraMode
 import org.maplibre.android.location.modes.RenderMode
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.location.LocationManager
+import android.location.LocationListener
+import android.os.Handler
+import android.os.Looper
 
 @AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
@@ -106,6 +110,11 @@ class MainActivity : AppCompatActivity() {
     private val MAPTILER_SATELLITE_URL = "https://api.maptiler.com/tiles/satellite/{z}/{x}/{y}.jpg?key=9a9utbz4AJhoM1tK6uL0"
     private val MAPTILER_ATTRIBUTION = "© MapTiler © OpenStreetMap contributors"
     private val OSM_ATTRIBUTION = "© OpenStreetMap contributors"
+    private var fallbackLocationManager: LocationManager? = null
+    private var fallbackLocationListener: LocationListener? = null
+    private var fallbackHandler: Handler? = null
+    private var fallbackRunnable: Runnable? = null
+    private var receivedFirstLocation = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -132,6 +141,11 @@ class MainActivity : AppCompatActivity() {
                     true // consume event
                 } else {
                     false
+                }
+            }
+            map.addOnCameraMoveStartedListener { reason ->
+                if (reason == 1) { // 1 means gesture in MapLibre
+                    map.locationComponent.cameraMode = CameraMode.NONE
                 }
             }
         }
@@ -207,12 +221,10 @@ class MainActivity : AppCompatActivity() {
         val zoomToLocationButton = findViewById<com.google.android.material.floatingactionbutton.FloatingActionButton>(R.id.zoomToLocationButton)
         zoomToLocationButton.setOnClickListener {
             val map = mapLibreMap
-            val userMarker = userLocationMarker
             val lastLocation = lastSentLocation
-            if (map != null && userMarker != null) {
-                val position = userMarker.position
-                map.animateCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(position, 17.0))
-            } else if (map != null && lastLocation != null) {
+            Log.d("ZoomButton", "map=$map, lastLocation=$lastLocation")
+            if (map != null && lastLocation != null) {
+                map.locationComponent.cameraMode = CameraMode.TRACKING
                 map.animateCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(lastLocation, 17.0))
             } else {
                 Toast.makeText(this, "User location not available yet", Toast.LENGTH_SHORT).show()
@@ -402,8 +414,6 @@ class MainActivity : AppCompatActivity() {
 
         if (permissionsToRequest.isNotEmpty()) {
             ActivityCompat.requestPermissions(this, permissionsToRequest, PERMISSIONS_REQUEST_CODE)
-        } else {
-            setupMap()
         }
     }
 
@@ -413,16 +423,43 @@ class MainActivity : AppCompatActivity() {
                 Manifest.permission.ACCESS_FINE_LOCATION
             ) == PackageManager.PERMISSION_GRANTED
         ) {
-            val mapboxMap = mapLibreMap ?: return
-            val style = mapboxMap.style ?: return
+            val mapboxMap = mapLibreMap ?: run {
+                Log.d("LocationDebug", "MapLibreMap is null in setupMap")
+                return
+            }
+            val style = mapboxMap.style ?: run {
+                Log.d("LocationDebug", "MapLibreMap style is null in setupMap")
+                return
+            }
             val locationComponent = mapboxMap.locationComponent
             locationComponent.activateLocationComponent(
                 LocationComponentActivationOptions.builder(this, style).build()
             )
             locationComponent.isLocationComponentEnabled = true
-            locationComponent.cameraMode = CameraMode.TRACKING
+            locationComponent.cameraMode = CameraMode.NONE // Default: allow free pan/zoom
             locationComponent.renderMode = RenderMode.COMPASS
+
+            // Provider enabled check
+            val locationManager = getSystemService(LOCATION_SERVICE) as LocationManager
+            val gpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+            val networkEnabled = locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+            Log.d("LocationDebug", "GPS enabled: $gpsEnabled, Network enabled: $networkEnabled")
+
+            // Last known location fetch
+            fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                if (location != null) {
+                    Log.d("LocationDebug", "Last known location: ${location.latitude}, ${location.longitude}, accuracy: ${location.accuracy}")
+                    handleLocation(location)
+                } else {
+                    Log.d("LocationDebug", "No last known location available")
+                }
+            }.addOnFailureListener { e ->
+                Log.e("LocationDebug", "Failed to get last known location: ${e.message}")
+            }
+
             startLocationUpdates()
+        } else {
+            Log.d("LocationDebug", "Location permission not granted in setupMap")
         }
     }
 
@@ -497,66 +534,146 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startLocationUpdates() {
+        receivedFirstLocation = false
         val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 5000)
             .setMinUpdateIntervalMillis(2000)
             .build()
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
             ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            Log.d("LocationDebug", "Requesting location updates from FusedLocationProviderClient")
             fusedLocationClient.requestLocationUpdates(request, object : LocationCallback() {
                 override fun onLocationResult(result: LocationResult) {
-                    val location = result.lastLocation ?: return
-                    val latLng = LatLng(location.latitude, location.longitude)
-                    val accuracy = location.accuracy
-                    val speed = location.speed // meters/second
-                    val now = System.currentTimeMillis()
-
-                    // Always update lastSentLocation so the zoom button works
-                    lastSentLocation = latLng
-
-                    // Update user marker
-                    val marker = userLocationMarker
-                    if (marker == null) {
-                        userLocationMarker = mapLibreMap?.addMarker(MarkerOptions().position(latLng).title("You"))
-                    } else {
-                        mapLibreMap?.removeMarker(marker)
-                        userLocationMarker = mapLibreMap?.addMarker(MarkerOptions().position(latLng).title("You"))
-                    }
-
-                    // Auto-zoom to user location the first time it loads
-                    if (!hasZoomedToUserLocation && mapLibreMap != null) {
-                        mapLibreMap?.animateCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(latLng, 17.0))
-                        hasZoomedToUserLocation = true
-                    }
-
-                    // Only send to mesh if accuracy is good enough
-                    if (accuracy > ACCURACY_THRESHOLD_METERS) return
-
-                    // Adjust threshold based on speed
-                    val dynamicThreshold = when {
-                        speed < 2.0f -> BASE_LOCATION_UPDATE_THRESHOLD_METERS // walking
-                        speed < 5.0f -> 2.0 // running
-                        else -> 1.0 // vehicle
-                    }
-
-                    // Check if accuracy improved significantly
-                    val accuracyImproved = lastSentAccuracy?.let { it - accuracy > ACCURACY_IMPROVEMENT_THRESHOLD_METERS } ?: false
-
-                    // Check if enough time has passed
-                    val timeElapsed = lastSentTime?.let { now - it } ?: Long.MAX_VALUE
-                    val timeExceeded = timeElapsed > MIN_TIME_BETWEEN_UPDATES_MS
-
-                    // Only send to mesh if moved more than threshold, accuracy improved, or time exceeded
-                    val shouldSend = lastSentLocation?.let {
-                        distanceBetween(it, latLng) > dynamicThreshold || accuracyImproved || timeExceeded
-                    } ?: true
-                    if (shouldSend) {
-                        viewModel.sendLocationUpdate(location.latitude, location.longitude)
-                        lastSentAccuracy = accuracy
-                        lastSentTime = now
-                    }
+                    Log.d("LocationDebug", "onLocationResult called from FusedLocationProviderClient")
+                    handleLocation(result.lastLocation)
                 }
             }, mainLooper)
+
+            // Start fallback timer (10 seconds)
+            fallbackHandler = Handler(Looper.getMainLooper())
+            fallbackRunnable = Runnable {
+                if (!receivedFirstLocation) {
+                    Log.d("LocationDebug", "FusedLocationProviderClient did not deliver location, starting LocationManager fallback.")
+                    startFallbackLocationManager()
+                }
+            }
+            fallbackHandler?.postDelayed(fallbackRunnable!!, 10_000)
+        } else {
+            Log.d("LocationDebug", "Location permission not granted in startLocationUpdates")
         }
+    }
+
+    private fun handleLocation(location: android.location.Location?) {
+        if (location == null) {
+            Log.d("LocationDebug", "handleLocation called with null location")
+            return
+        }
+        if (!receivedFirstLocation) {
+            receivedFirstLocation = true
+            // Cancel fallback if it was scheduled
+            fallbackHandler?.removeCallbacks(fallbackRunnable!!)
+            stopFallbackLocationManager()
+            Log.d("LocationDebug", "First location received, fallback canceled")
+        }
+        Log.d("LocationDebug", "Received location: ${location.latitude}, ${location.longitude}, accuracy: ${location.accuracy}")
+        if (location.accuracy > ACCURACY_THRESHOLD_METERS) {
+            Log.d("LocationDebug", "Location filtered out: accuracy ${location.accuracy} > threshold $ACCURACY_THRESHOLD_METERS")
+            return
+        }
+        val latLng = LatLng(location.latitude, location.longitude)
+        val accuracy = location.accuracy
+        val speed = location.speed // meters/second
+        val now = System.currentTimeMillis()
+
+        // Always update lastSentLocation so the zoom button works
+        lastSentLocation = latLng
+        Log.d("LocationDebug", "lastSentLocation updated: $lastSentLocation")
+
+        // Auto-zoom to user location the first time it loads
+        if (!hasZoomedToUserLocation && mapLibreMap != null) {
+            mapLibreMap?.animateCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(latLng, 17.0))
+            hasZoomedToUserLocation = true
+            Log.d("LocationDebug", "Auto-zoomed to user location")
+        }
+
+        // Only send to mesh if accuracy is good enough
+        if (accuracy > ACCURACY_THRESHOLD_METERS) {
+            Log.d("LocationDebug", "Not sending to mesh: accuracy too poor")
+            return
+        }
+
+        // Adjust threshold based on speed
+        val dynamicThreshold = when {
+            speed < 2.0f -> BASE_LOCATION_UPDATE_THRESHOLD_METERS // walking
+            speed < 5.0f -> 2.0 // running
+            else -> 1.0 // vehicle
+        }
+        Log.d("LocationDebug", "dynamicThreshold: $dynamicThreshold, speed: $speed")
+
+        // Check if accuracy improved significantly
+        val accuracyImproved = lastSentAccuracy?.let { it - accuracy > ACCURACY_IMPROVEMENT_THRESHOLD_METERS } ?: false
+        Log.d("LocationDebug", "accuracyImproved: $accuracyImproved")
+
+        // Check if enough time has passed
+        val timeElapsed = lastSentTime?.let { now - it } ?: Long.MAX_VALUE
+        val timeExceeded = timeElapsed > MIN_TIME_BETWEEN_UPDATES_MS
+        Log.d("LocationDebug", "timeElapsed: $timeElapsed, timeExceeded: $timeExceeded")
+
+        // Only send to mesh if moved more than threshold, accuracy improved, or time exceeded
+        val shouldSend = lastSentLocation?.let {
+            distanceBetween(it, latLng) > dynamicThreshold || accuracyImproved || timeExceeded
+        } ?: true
+        Log.d("LocationDebug", "shouldSend: $shouldSend")
+        if (shouldSend) {
+            viewModel.sendLocationUpdate(location.latitude, location.longitude)
+            lastSentAccuracy = accuracy
+            lastSentTime = now
+            Log.d("LocationDebug", "Location sent to mesh: ${location.latitude}, ${location.longitude}")
+        }
+    }
+
+    private fun startFallbackLocationManager() {
+        if (fallbackLocationManager != null) {
+            Log.d("LocationDebug", "Fallback LocationManager already started")
+            return // Already started
+        }
+        fallbackLocationManager = getSystemService(LOCATION_SERVICE) as LocationManager
+        fallbackLocationListener = object : LocationListener {
+            override fun onLocationChanged(location: android.location.Location) {
+                Log.d("LocationDebug", "[Fallback] Received location: ${location.latitude}, ${location.longitude}, accuracy: ${location.accuracy}")
+                handleLocation(location)
+            }
+            override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {
+                Log.d("LocationDebug", "[Fallback] onStatusChanged: provider=$provider, status=$status")
+            }
+            override fun onProviderEnabled(provider: String) {
+                Log.d("LocationDebug", "[Fallback] onProviderEnabled: $provider")
+            }
+            override fun onProviderDisabled(provider: String) {
+                Log.d("LocationDebug", "[Fallback] onProviderDisabled: $provider")
+            }
+        }
+        try {
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                Log.d("LocationDebug", "Requesting location updates from LocationManager (GPS and Network)")
+                fallbackLocationManager?.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5000, 5f, fallbackLocationListener!!)
+                fallbackLocationManager?.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 5000, 5f, fallbackLocationListener!!)
+            } else {
+                Log.d("LocationDebug", "Location permission not granted in startFallbackLocationManager")
+            }
+        } catch (e: Exception) {
+            Log.e("LocationDebug", "Failed to start fallback LocationManager: ${e.message}")
+        }
+    }
+
+    private fun stopFallbackLocationManager() {
+        try {
+            fallbackLocationManager?.removeUpdates(fallbackLocationListener!!)
+        } catch (e: Exception) {
+            // Ignore
+        }
+        fallbackLocationManager = null
+        fallbackLocationListener = null
     }
 
     private fun observePeerLocations() {
@@ -821,6 +938,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         mapView.onDestroy()
+        stopFallbackLocationManager()
     }
 
     // --- New helper to check network connectivity ---
@@ -993,6 +1111,7 @@ class MainActivity : AppCompatActivity() {
             setupMapLongPress()
             setupAnnotationOverlay()
             renderAllAnnotations() // <-- Ensure overlays are re-rendered after style is set
+            setupMap() // <-- Call setupMap() here, after style is loaded
         }
     }
 
