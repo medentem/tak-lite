@@ -113,7 +113,7 @@ class MainActivity : AppCompatActivity() {
     private val linePolylines = mutableMapOf<String, Polyline>()
     private val areaPolygons = mutableMapOf<String, Polygon>()
     private var hasZoomedToUserLocation = false
-    private val MAPTILER_SATELLITE_URL = "https://api.maptiler.com/tiles/satellite/{z}/{x}/{y}.jpg?key=9a9utbz4AJhoM1tK6uL0"
+    private val MAPTILER_SATELLITE_URL = "https://api.maptiler.com/tiles/satellite/{z}/{x}/{y}.jpg?key=${BuildConfig.MAPTILER_API_KEY}"
     private val MAPTILER_ATTRIBUTION = "© MapTiler © OpenStreetMap contributors"
     private val OSM_ATTRIBUTION = "© OpenStreetMap contributors"
     private var fallbackLocationManager: LocationManager? = null
