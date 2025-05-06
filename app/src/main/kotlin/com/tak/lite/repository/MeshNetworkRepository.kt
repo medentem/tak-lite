@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import javax.inject.Inject
 import javax.inject.Singleton
-import com.google.android.gms.maps.model.LatLng
+import org.maplibre.android.geometry.LatLng
 
 @Singleton
 class MeshNetworkRepository @Inject constructor(
@@ -32,5 +32,9 @@ class MeshNetworkRepository @Inject constructor(
     
     fun cleanup() {
         meshNetworkService.cleanup()
+    }
+    
+    fun setLocalNickname(nickname: String) {
+        meshNetworkService.setLocalNickname(nickname)
     }
 } 

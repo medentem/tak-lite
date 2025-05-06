@@ -7,16 +7,14 @@ import android.os.Looper
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
-import com.google.android.gms.maps.Projection
-import com.google.android.gms.maps.model.LatLng
+import org.maplibre.android.maps.Projection
 import com.tak.lite.data.model.AnnotationType
-import com.tak.lite.data.model.toGoogleLatLng
-import com.tak.lite.data.model.toGoogleLatLngs
 import com.tak.lite.data.model.type
 import com.tak.lite.model.AnnotationColor
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PointShape
 import com.tak.lite.model.LineStyle
+import org.maplibre.android.geometry.LatLng
 
 class AnnotationOverlayView @JvmOverloads constructor(
     context: Context,
@@ -40,6 +38,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
     private var currentZoom: Float = 0f
     private var tempStartDot: LatLng? = null
     private var tempEndDot: LatLng? = null
+    private var tempLinePoints: List<LatLng>? = null
     
     interface OnPoiLongPressListener {
         fun onPoiLongPressed(poiId: String, screenPosition: PointF)
@@ -54,7 +53,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
     private var longPressLineCandidate: MapAnnotation.Line? = null
     private var longPressLineDownPos: PointF? = null
     
-    fun setProjection(projection: Projection) {
+    fun setProjection(projection: Projection?) {
         this.projection = projection
         invalidate()
     }
@@ -75,34 +74,44 @@ class AnnotationOverlayView @JvmOverloads constructor(
         invalidate()
     }
     
+    fun setTempLinePoints(points: List<LatLng>?) {
+        tempLinePoints = points
+        invalidate()
+    }
+    
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         if (projection == null) return
 
-        // Draw temporary dots for line drawing
-        tempStartDot?.let { latLng ->
-            projection?.toScreenLocation(latLng)?.let { pt ->
-                val pointF = PointF(pt.x.toFloat(), pt.y.toFloat())
-                val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = Color.RED
-                    style = Paint.Style.FILL
+        // Draw temporary polyline for line drawing
+        tempLinePoints?.let { points ->
+            if (points.size >= 2) {
+                val screenPoints = points.mapNotNull { projection?.toScreenLocation(it) }
+                for (i in 0 until screenPoints.size - 1) {
+                    val p1 = PointF(screenPoints[i].x.toFloat(), screenPoints[i].y.toFloat())
+                    val p2 = PointF(screenPoints[i + 1].x.toFloat(), screenPoints[i + 1].y.toFloat())
+                    val tempPaint = Paint(paint).apply {
+                        color = Color.RED
+                        pathEffect = null
+                    }
+                    canvas.drawLine(p1.x, p1.y, p2.x, p2.y, tempPaint)
                 }
-                canvas.drawCircle(pointF.x, pointF.y, 18f, dotPaint)
             }
-        }
-        tempEndDot?.let { latLng ->
-            projection?.toScreenLocation(latLng)?.let { pt ->
-                val pointF = PointF(pt.x.toFloat(), pt.y.toFloat())
-                val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = Color.RED
-                    style = Paint.Style.FILL
+            // Draw dots at each point
+            points.forEach { latLng ->
+                projection?.toScreenLocation(latLng)?.let { pt ->
+                    val pointF = PointF(pt.x.toFloat(), pt.y.toFloat())
+                    val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        color = Color.RED
+                        style = Paint.Style.FILL
+                    }
+                    canvas.drawCircle(pointF.x, pointF.y, 18f, dotPaint)
                 }
-                canvas.drawCircle(pointF.x, pointF.y, 18f, dotPaint)
             }
         }
 
         annotations.forEach { annotation ->
-            val point = annotation.toGoogleLatLng().let { latLng ->
+            val point = annotation.toMapLibreLatLng().let { latLng ->
                 projection?.toScreenLocation(latLng)
             }
             if (point == null) return@forEach
@@ -113,7 +122,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
                 }
                 is MapAnnotation.Line -> {
                     // Draw lines between all points
-                    val latLngs = annotation.points.map { it.toGoogleLatLng() }
+                    val latLngs = annotation.points.map { it.toMapLibreLatLng() }
                     if (latLngs.size >= 2) {
                         val screenPoints = latLngs.mapNotNull { projection?.toScreenLocation(it) }
                         for (i in 0 until screenPoints.size - 1) {
@@ -124,9 +133,10 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     }
                 }
                 is MapAnnotation.Area -> {
-                    val centerPoint = projection?.toScreenLocation(annotation.center.toGoogleLatLng())
+                    val centerPoint = projection?.toScreenLocation(annotation.center.toMapLibreLatLng())
                     if (centerPoint != null) {
-                        drawArea(canvas, centerPoint, annotation)
+                        val centerPointF = PointF(centerPoint.x.toFloat(), centerPoint.y.toFloat())
+                        drawArea(canvas, centerPointF, annotation)
                     }
                 }
                 is MapAnnotation.Deletion -> {
@@ -231,14 +241,13 @@ class AnnotationOverlayView @JvmOverloads constructor(
         canvas.drawPath(arrowPath, arrowPaint)
     }
     
-    private fun drawArea(canvas: Canvas, center: Point, annotation: MapAnnotation.Area) {
+    private fun drawArea(canvas: Canvas, center: PointF, annotation: MapAnnotation.Area) {
         paint.color = annotation.color.toColor()
         fillPaint.color = annotation.color.toColor()
         
-        val centerPointF = PointF(center.x.toFloat(), center.y.toFloat())
         val radius = annotation.radius * currentZoom
-        canvas.drawCircle(centerPointF.x, centerPointF.y, radius.toFloat(), fillPaint)
-        canvas.drawCircle(centerPointF.x, centerPointF.y, radius.toFloat(), paint)
+        canvas.drawCircle(center.x, center.y, radius.toFloat(), fillPaint)
+        canvas.drawCircle(center.x, center.y, radius.toFloat(), paint)
     }
     
     private fun AnnotationColor.toColor(): Int {
@@ -260,20 +269,20 @@ class AnnotationOverlayView @JvmOverloads constructor(
         return meters * pixelsPerMeter
     }
 
-    private fun MapAnnotation.toGoogleLatLng(): LatLng {
+    private fun MapAnnotation.toMapLibreLatLng(): LatLng {
         return when (this) {
-            is MapAnnotation.PointOfInterest -> this.position.toGoogleLatLng()
-            is MapAnnotation.Line -> this.points.first().toGoogleLatLng()
-            is MapAnnotation.Area -> this.center.toGoogleLatLng()
+            is MapAnnotation.PointOfInterest -> this.position.toMapLibreLatLng()
+            is MapAnnotation.Line -> this.points.first().toMapLibreLatLng()
+            is MapAnnotation.Area -> this.center.toMapLibreLatLng()
             is MapAnnotation.Deletion -> throw IllegalArgumentException("Deletion has no LatLng")
         }
     }
 
-    private fun MapAnnotation.toGoogleLatLngs(): List<LatLng> {
+    private fun MapAnnotation.toMapLibreLatLngs(): List<LatLng> {
         return when (this) {
-            is MapAnnotation.PointOfInterest -> listOf(this.position.toGoogleLatLng())
-            is MapAnnotation.Line -> this.points.map { it.toGoogleLatLng() }
-            is MapAnnotation.Area -> listOf(this.center.toGoogleLatLng())
+            is MapAnnotation.PointOfInterest -> listOf(this.position.toMapLibreLatLng())
+            is MapAnnotation.Line -> this.points.map { it.toMapLibreLatLng() }
+            is MapAnnotation.Area -> listOf(this.center.toMapLibreLatLng())
             is MapAnnotation.Deletion -> emptyList()
         }
     }
@@ -345,7 +354,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
         // Only check POIs
         val pois = annotations.filterIsInstance<MapAnnotation.PointOfInterest>()
         for (poi in pois) {
-            val point = projection?.toScreenLocation(poi.position.toGoogleLatLng()) ?: continue
+            val point = projection?.toScreenLocation(poi.position.toMapLibreLatLng()) ?: continue
             val dx = x - point.x
             val dy = y - point.y
             if (Math.hypot(dx.toDouble(), dy.toDouble()) < 40) {
@@ -360,7 +369,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
         val threshold = 30f // pixels
         val lines = annotations.filterIsInstance<MapAnnotation.Line>()
         for (line in lines) {
-            val latLngs = line.points.map { it.toGoogleLatLng() }
+            val latLngs = line.points.map { it.toMapLibreLatLng() }
             if (latLngs.size >= 2) {
                 val screenPoints = latLngs.mapNotNull { projection?.toScreenLocation(it) }
                 for (i in 0 until screenPoints.size - 1) {

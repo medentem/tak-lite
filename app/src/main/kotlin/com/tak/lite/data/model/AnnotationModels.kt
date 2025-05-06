@@ -1,21 +1,21 @@
 package com.tak.lite.data.model
 
-import com.google.android.gms.maps.model.LatLng
 import com.tak.lite.model.AnnotationColor
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PointShape
+import org.maplibre.android.geometry.LatLng
 
-// Extension functions to convert between MapAnnotation and Google Maps LatLng
-fun MapAnnotation.PointOfInterest.toGoogleLatLng(): LatLng {
-    return position.toGoogleLatLng()
+// Extension functions to convert between MapAnnotation and MapLibre LatLng
+fun MapAnnotation.PointOfInterest.toMapLibreLatLng(): LatLng {
+    return LatLng(position.latitude, position.longitude)
 }
 
-fun MapAnnotation.Line.toGoogleLatLngs(): List<LatLng> {
-    return points.map { it.toGoogleLatLng() }
+fun MapAnnotation.Line.toMapLibreLatLngs(): List<LatLng> {
+    return points.map { LatLng(it.latitude, it.longitude) }
 }
 
-fun MapAnnotation.Area.toGoogleLatLng(): LatLng {
-    return center.toGoogleLatLng()
+fun MapAnnotation.Area.toMapLibreLatLng(): LatLng {
+    return LatLng(center.latitude, center.longitude)
 }
 
 // Extension function to get annotation type

@@ -14,7 +14,7 @@ import java.net.InetAddress
 import java.net.NetworkInterface
 import javax.inject.Inject
 import javax.inject.Singleton
-import com.google.android.gms.maps.model.LatLng
+import org.maplibre.android.geometry.LatLng
 
 @Singleton
 class MeshNetworkService @Inject constructor(
@@ -48,6 +48,7 @@ class MeshNetworkService @Inject constructor(
         meshNetworkCallback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
                 networkScope.launch {
+                    meshProtocol.setNetwork(network)
                     checkMeshNetworkConnection(network)
                 }
             }
@@ -102,6 +103,14 @@ class MeshNetworkService @Inject constructor(
         }
         meshProtocol.stopDiscovery()
     }
+    
+    fun setLocalNickname(nickname: String) {
+        meshProtocol.setLocalNickname(nickname)
+    }
+    
+    fun mergePeerLocations(remote: Map<String, LatLng>) {
+        _peerLocations.value = _peerLocations.value + remote
+    }
 }
 
 sealed class MeshNetworkState {
@@ -113,5 +122,6 @@ sealed class MeshNetworkState {
 data class MeshPeer(
     val id: String,
     val ipAddress: String,
-    val lastSeen: Long
+    val lastSeen: Long,
+    val nickname: String? = null
 ) 

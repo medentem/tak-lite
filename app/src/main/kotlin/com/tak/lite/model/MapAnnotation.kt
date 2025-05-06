@@ -1,6 +1,5 @@
 package com.tak.lite.model
 
-import com.google.android.gms.maps.model.LatLng
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.util.UUID
@@ -83,12 +82,12 @@ data class LatLngSerializable(
     val latitude: Double,
     val longitude: Double
 ) {
-    fun toGoogleLatLng(): com.google.android.gms.maps.model.LatLng {
-        return com.google.android.gms.maps.model.LatLng(latitude, longitude)
+    fun toMapLibreLatLng(): org.maplibre.android.geometry.LatLng {
+        return org.maplibre.android.geometry.LatLng(latitude, longitude)
     }
     
     companion object {
-        fun fromGoogleLatLng(latLng: com.google.android.gms.maps.model.LatLng): LatLngSerializable {
+        fun fromMapLibreLatLng(latLng: org.maplibre.android.geometry.LatLng): LatLngSerializable {
             return LatLngSerializable(latLng.latitude, latLng.longitude)
         }
     }

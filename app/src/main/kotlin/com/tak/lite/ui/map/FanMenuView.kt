@@ -13,7 +13,6 @@ import com.tak.lite.model.AnnotationColor
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
-import kotlin.math.min
 import kotlin.math.sin
 
 class FanMenuView @JvmOverloads constructor(

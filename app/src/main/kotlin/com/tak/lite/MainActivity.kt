@@ -9,9 +9,6 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
-import com.google.android.gms.maps.GoogleMap
-import com.google.android.gms.maps.OnMapReadyCallback
-import com.google.android.gms.maps.SupportMapFragment
 import com.tak.lite.databinding.ActivityMainBinding
 import com.tak.lite.viewmodel.MeshNetworkViewModel
 import com.tak.lite.viewmodel.MeshNetworkUiState
@@ -21,7 +18,6 @@ import kotlinx.coroutines.launch
 import android.graphics.PointF
 import com.tak.lite.model.PointShape
 import com.tak.lite.viewmodel.AnnotationViewModel
-import com.google.android.gms.maps.model.LatLng
 import android.view.View
 import com.tak.lite.model.AnnotationColor
 import com.tak.lite.ui.map.AnnotationOverlayView
@@ -31,8 +27,6 @@ import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
-import com.google.android.gms.maps.model.Marker
-import com.google.android.gms.maps.model.MarkerOptions
 import com.google.android.gms.location.Priority
 import android.widget.ImageButton
 import android.view.Gravity
@@ -44,12 +38,39 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.tak.lite.data.model.AudioChannel
+import com.tak.lite.util.OsmTileUtils
+import android.util.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
+import java.io.File
+import java.io.FileOutputStream
+import java.net.URL
+import org.maplibre.android.maps.MapView
+import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.maps.Style
+import org.maplibre.android.annotations.Marker
+import org.maplibre.android.annotations.MarkerOptions
+import org.maplibre.android.annotations.Polyline
+import org.maplibre.android.annotations.PolylineOptions
+import org.maplibre.android.annotations.Polygon
+import org.maplibre.android.annotations.PolygonOptions
+import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.geometry.LatLngBounds
+import org.maplibre.android.geometry.VisibleRegion
+import org.maplibre.android.location.LocationComponentActivationOptions
+import org.maplibre.android.location.modes.CameraMode
+import org.maplibre.android.location.modes.RenderMode
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 
 @AndroidEntryPoint
-class MainActivity : AppCompatActivity(), OnMapReadyCallback {
+class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
-    private lateinit var map: GoogleMap
+    private lateinit var mapView: MapView
+    private var mapLibreMap: MapLibreMap? = null
     private val PERMISSIONS_REQUEST_CODE = 100
     private val viewModel: MeshNetworkViewModel by viewModels()
     private val annotationViewModel: AnnotationViewModel by viewModels()
@@ -63,7 +84,7 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
     private var editingPoiId: String? = null
     private var isLineDrawingMode = false
     private var lineStartPoint: LatLng? = null
-    private var tempLine: com.google.android.gms.maps.model.Polyline? = null
+    private var tempLine: Polyline? = null
     private lateinit var lineToolConfirmButton: FloatingActionButton
     private lateinit var lineToolCancelButton: FloatingActionButton
     private var tempLinePoints: MutableList<LatLng> = mutableListOf()
@@ -71,16 +92,49 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
     private lateinit var lineToolLabel: View
     private val peerIdToNickname = mutableMapOf<String, String?>()
     private val audioViewModel: AudioViewModel by viewModels()
+    private var lastSentLocation: LatLng? = null
+    private var lastSentAccuracy: Float? = null
+    private var lastSentTime: Long? = null
+    private val BASE_LOCATION_UPDATE_THRESHOLD_METERS = 3.0
+    private val ACCURACY_THRESHOLD_METERS = 20.0f
+    private val ACCURACY_IMPROVEMENT_THRESHOLD_METERS = 5.0f
+    private val MIN_TIME_BETWEEN_UPDATES_MS = 30_000L // 30 seconds
+    private val poiMarkers = mutableMapOf<String, Marker>()
+    private val linePolylines = mutableMapOf<String, Polyline>()
+    private val areaPolygons = mutableMapOf<String, Polygon>()
+    private var hasZoomedToUserLocation = false
+    private val MAPTILER_SATELLITE_URL = "https://api.maptiler.com/tiles/satellite/{z}/{x}/{y}.jpg?key=9a9utbz4AJhoM1tK6uL0"
+    private val MAPTILER_ATTRIBUTION = "© MapTiler © OpenStreetMap contributors"
+    private val OSM_ATTRIBUTION = "© OpenStreetMap contributors"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Initialize map fragment
-        val mapFragment = supportFragmentManager
-            .findFragmentById(R.id.map) as SupportMapFragment
-        mapFragment.getMapAsync(this)
+        // Initialize MapLibre MapView
+        mapView = findViewById(R.id.mapView)
+        mapView.onCreate(savedInstanceState)
+        mapView.getMapAsync { map ->
+            mapLibreMap = map
+            setStyleForCurrentViewport(map)
+            map.addOnCameraIdleListener {
+                setStyleForCurrentViewport(map)
+            }
+            setupMapLongPress()
+            setupAnnotationOverlay()
+            // --- Add map click listener for line tool ---
+            map.addOnMapClickListener { latLng ->
+                if (isLineDrawingMode) {
+                    tempLinePoints.add(latLng)
+                    annotationOverlayView.setTempLinePoints(tempLinePoints)
+                    updateLineToolConfirmState()
+                    true // consume event
+                } else {
+                    false
+                }
+            }
+        }
 
         // Location client
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
@@ -108,19 +162,19 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
         }
         lifecycleScope.launch {
             annotationViewModel.uiState.collect { state ->
+                renderAllAnnotations()
                 annotationOverlayView.updateAnnotations(state.annotations)
             }
         }
 
         // Setup map type toggle button
         binding.mapTypeToggleButton.setOnClickListener {
-            if (::map.isInitialized) {
+            if (mapLibreMap != null) {
                 isSatellite = !isSatellite
-                map.mapType = if (isSatellite) {
-                    com.google.android.gms.maps.GoogleMap.MAP_TYPE_SATELLITE
-                } else {
-                    com.google.android.gms.maps.GoogleMap.MAP_TYPE_NORMAL
-                }
+                setStyleForCurrentViewport(mapLibreMap!!)
+                // Update icon to reflect current mode
+                val iconRes = if (isSatellite) android.R.drawable.ic_menu_mapmode else android.R.drawable.ic_menu_gallery
+                binding.mapTypeToggleButton.setImageResource(iconRes)
             }
         }
 
@@ -148,6 +202,22 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
         // Initially hide confirm/cancel
         lineToolCancelButton.visibility = View.GONE
         lineToolConfirmButton.visibility = View.GONE
+
+        // Setup Zoom to Location button
+        val zoomToLocationButton = findViewById<com.google.android.material.floatingactionbutton.FloatingActionButton>(R.id.zoomToLocationButton)
+        zoomToLocationButton.setOnClickListener {
+            val map = mapLibreMap
+            val userMarker = userLocationMarker
+            val lastLocation = lastSentLocation
+            if (map != null && userMarker != null) {
+                val position = userMarker.position
+                map.animateCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(position, 17.0))
+            } else if (map != null && lastLocation != null) {
+                map.animateCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(lastLocation, 17.0))
+            } else {
+                Toast.makeText(this, "User location not available yet", Toast.LENGTH_SHORT).show()
+            }
+        }
 
         // Add nickname button listener
         binding.nicknameButton.setOnClickListener {
@@ -208,6 +278,57 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
                 overlay.setOnClickListener { /* consume clicks */ }
             }
         }
+
+        // Add download sector button logic
+        binding.downloadSectorButton.setOnClickListener {
+            val projection = mapLibreMap?.projection
+            val visibleRegion: VisibleRegion = projection?.visibleRegion ?: return@setOnClickListener
+            val bounds: LatLngBounds = visibleRegion.latLngBounds
+            val zoom = mapLibreMap?.cameraPosition?.zoom?.toInt() ?: 0
+            val sw = bounds.southWest
+            val ne = bounds.northEast
+            val tileCoords = OsmTileUtils.getTileRange(sw, ne, zoom)
+            if (tileCoords.isEmpty()) {
+                com.google.android.material.snackbar.Snackbar.make(
+                    binding.root,
+                    "No tiles found for the current view. Try zooming in or out.",
+                    com.google.android.material.snackbar.Snackbar.LENGTH_LONG
+                ).show()
+                return@setOnClickListener
+            }
+            val urls = tileCoords.map { (x, y) ->
+                Triple(x, y, "https://tile.openstreetmap.org/$zoom/$x/$y.png")
+            }
+            CoroutineScope(Dispatchers.IO).launch {
+                var successCount = 0
+                var failCount = 0
+                for ((x, y, url) in urls) {
+                    try {
+                        val connection = URL(url).openConnection()
+                        connection.setRequestProperty("User-Agent", "tak-lite/1.0")
+                        val bytes = connection.getInputStream().readBytes()
+                        if (saveTilePng(zoom, x, y, bytes)) {
+                            successCount++
+                        } else {
+                            failCount++
+                        }
+                    } catch (e: Exception) {
+                        Log.e("OfflineTiles", "Failed to download $url", e)
+                        failCount++
+                    }
+                }
+                withContext(Dispatchers.Main) {
+                    com.google.android.material.snackbar.Snackbar.make(
+                        binding.root,
+                        "Downloaded $successCount tiles for offline use. Failed: $failCount.",
+                        com.google.android.material.snackbar.Snackbar.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+
+        // Request location and audio permissions and start map setup
+        checkAndRequestPermissions()
     }
 
     private fun observeMeshNetworkState() {
@@ -268,21 +389,6 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
         // This will be implemented in the audio layer
     }
 
-    override fun onMapReady(googleMap: GoogleMap) {
-        map = googleMap
-        checkAndRequestPermissions()
-        setupMapLongPress()
-        setupAnnotationOverlay()
-        observePeerLocations()
-        map.setOnMapClickListener { latLng ->
-            if (isLineDrawingMode) {
-                tempLinePoints.add(latLng)
-                annotationOverlayView.setTempLinePoints(tempLinePoints)
-                updateLineToolConfirmState()
-            }
-        }
-    }
-
     private fun checkAndRequestPermissions() {
         val permissions = arrayOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
@@ -307,28 +413,36 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
                 Manifest.permission.ACCESS_FINE_LOCATION
             ) == PackageManager.PERMISSION_GRANTED
         ) {
-            map.isMyLocationEnabled = true
-            map.uiSettings.isMyLocationButtonEnabled = true
+            val mapboxMap = mapLibreMap ?: return
+            val style = mapboxMap.style ?: return
+            val locationComponent = mapboxMap.locationComponent
+            locationComponent.activateLocationComponent(
+                LocationComponentActivationOptions.builder(this, style).build()
+            )
+            locationComponent.isLocationComponentEnabled = true
+            locationComponent.cameraMode = CameraMode.TRACKING
+            locationComponent.renderMode = RenderMode.COMPASS
             startLocationUpdates()
         }
     }
 
     private fun setupMapLongPress() {
-        map.setOnMapLongClickListener { latLng ->
-            val projection = map.projection
-            val point = projection.toScreenLocation(latLng)
-            val center = PointF(point.x.toFloat(), point.y.toFloat())
+        mapLibreMap?.addOnMapLongClickListener { latLng ->
+            val projection = mapLibreMap?.projection
+            val point = projection?.toScreenLocation(latLng)
+            val center = PointF(point?.x?.toFloat() ?: 0f, point?.y?.toFloat() ?: 0f)
             pendingPoiLatLng = latLng
             showFanMenu(center)
+            true
         }
     }
 
     private fun setupAnnotationOverlay() {
-        map.setOnCameraMoveListener {
-            annotationOverlayView.setProjection(map.projection)
+        mapLibreMap?.addOnCameraMoveListener {
+            annotationOverlayView.setProjection(mapLibreMap?.projection)
         }
         // Set initial projection
-        annotationOverlayView.setProjection(map.projection)
+        annotationOverlayView.setProjection(mapLibreMap?.projection)
     }
 
     private fun showFanMenu(center: PointF) {
@@ -377,7 +491,7 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
         val latLng = pendingPoiLatLng ?: return
         annotationViewModel.setCurrentShape(shape)
         annotationViewModel.setCurrentColor(color)
-        annotationViewModel.addPointOfInterest(latLng)
+        annotationViewModel.addPointOfInterest(LatLng(latLng.latitude, latLng.longitude))
         fanMenuView.visibility = View.GONE
         pendingPoiLatLng = null
     }
@@ -392,14 +506,54 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
                 override fun onLocationResult(result: LocationResult) {
                     val location = result.lastLocation ?: return
                     val latLng = LatLng(location.latitude, location.longitude)
+                    val accuracy = location.accuracy
+                    val speed = location.speed // meters/second
+                    val now = System.currentTimeMillis()
+
+                    // Always update lastSentLocation so the zoom button works
+                    lastSentLocation = latLng
+
                     // Update user marker
-                    if (userLocationMarker == null) {
-                        userLocationMarker = map.addMarker(MarkerOptions().position(latLng).title("You"))
+                    val marker = userLocationMarker
+                    if (marker == null) {
+                        userLocationMarker = mapLibreMap?.addMarker(MarkerOptions().position(latLng).title("You"))
                     } else {
-                        userLocationMarker?.position = latLng
+                        mapLibreMap?.removeMarker(marker)
+                        userLocationMarker = mapLibreMap?.addMarker(MarkerOptions().position(latLng).title("You"))
                     }
-                    // Send to mesh
-                    viewModel.sendLocationUpdate(location.latitude, location.longitude)
+
+                    // Auto-zoom to user location the first time it loads
+                    if (!hasZoomedToUserLocation && mapLibreMap != null) {
+                        mapLibreMap?.animateCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(latLng, 17.0))
+                        hasZoomedToUserLocation = true
+                    }
+
+                    // Only send to mesh if accuracy is good enough
+                    if (accuracy > ACCURACY_THRESHOLD_METERS) return
+
+                    // Adjust threshold based on speed
+                    val dynamicThreshold = when {
+                        speed < 2.0f -> BASE_LOCATION_UPDATE_THRESHOLD_METERS // walking
+                        speed < 5.0f -> 2.0 // running
+                        else -> 1.0 // vehicle
+                    }
+
+                    // Check if accuracy improved significantly
+                    val accuracyImproved = lastSentAccuracy?.let { it - accuracy > ACCURACY_IMPROVEMENT_THRESHOLD_METERS } ?: false
+
+                    // Check if enough time has passed
+                    val timeElapsed = lastSentTime?.let { now - it } ?: Long.MAX_VALUE
+                    val timeExceeded = timeElapsed > MIN_TIME_BETWEEN_UPDATES_MS
+
+                    // Only send to mesh if moved more than threshold, accuracy improved, or time exceeded
+                    val shouldSend = lastSentLocation?.let {
+                        distanceBetween(it, latLng) > dynamicThreshold || accuracyImproved || timeExceeded
+                    } ?: true
+                    if (shouldSend) {
+                        viewModel.sendLocationUpdate(location.latitude, location.longitude)
+                        lastSentAccuracy = accuracy
+                        lastSentTime = now
+                    }
                 }
             }, mainLooper)
         }
@@ -411,7 +565,7 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
                 // Remove markers for peers no longer present
                 val toRemove = peerMarkers.keys - peerLocs.keys
                 for (id in toRemove) {
-                    peerMarkers[id]?.remove()
+                    peerMarkers[id]?.let { mapLibreMap?.removeMarker(it) }
                     peerMarkers.remove(id)
                 }
                 // Add/update markers for current peers
@@ -419,13 +573,13 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
                     val nickname = peerIdToNickname[id]
                     val markerTitle = if (!nickname.isNullOrBlank()) "Peer: $nickname" else "Peer: $id"
                     if (peerMarkers.containsKey(id)) {
-                        peerMarkers[id]?.position = latLng
-                        peerMarkers[id]?.title = markerTitle
-                    } else {
-                        val marker = map.addMarker(MarkerOptions().position(latLng).title(markerTitle))
-                        if (marker != null) {
-                            peerMarkers[id] = marker
-                        }
+                        peerMarkers[id]?.let { mapLibreMap?.removeMarker(it) }
+                        peerMarkers.remove(id)
+                    }
+                    val mapLibreLatLng = org.maplibre.android.geometry.LatLng(latLng.latitude, latLng.longitude)
+                    val marker = mapLibreMap?.addMarker(MarkerOptions().position(mapLibreLatLng).title(markerTitle))
+                    if (marker != null) {
+                        peerMarkers[id] = marker
                     }
                 }
             }
@@ -472,22 +626,18 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     private fun updatePoiShape(poiId: String, shape: PointShape) {
-        val poi = annotationViewModel.uiState.value.annotations.filterIsInstance<com.tak.lite.model.MapAnnotation.PointOfInterest>().find { it.id == poiId } ?: return
-        annotationViewModel.setCurrentColor(poi.color)
-        annotationViewModel.setCurrentShape(shape)
-        annotationViewModel.removeAnnotation(poiId)
-        annotationViewModel.addPointOfInterest(poi.position.toGoogleLatLng())
+        annotationViewModel.updatePointOfInterest(poiId, newShape = shape)
     }
 
     private fun updatePoiColor(poiId: String, color: AnnotationColor) {
-        val poi = annotationViewModel.uiState.value.annotations.filterIsInstance<com.tak.lite.model.MapAnnotation.PointOfInterest>().find { it.id == poiId } ?: return
-        annotationViewModel.setCurrentColor(color)
-        annotationViewModel.setCurrentShape(poi.shape)
-        annotationViewModel.removeAnnotation(poiId)
-        annotationViewModel.addPointOfInterest(poi.position.toGoogleLatLng())
+        annotationViewModel.updatePointOfInterest(poiId, newColor = color)
     }
 
     private fun deletePoi(poiId: String) {
+        val marker = poiMarkers[poiId]
+        if (marker != null) {
+            mapLibreMap?.removeMarker(marker)
+        }
         annotationViewModel.removeAnnotation(poiId)
     }
 
@@ -522,16 +672,11 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     private fun updateLineStyle(line: com.tak.lite.model.MapAnnotation.Line, newStyle: com.tak.lite.model.LineStyle) {
-        annotationViewModel.removeAnnotation(line.id)
-        annotationViewModel.setCurrentLineStyle(newStyle)
-        annotationViewModel.addLine(line.points.map { it.toGoogleLatLng() })
+        annotationViewModel.updateLine(line.id, newStyle = newStyle)
     }
 
     private fun updateLineColor(line: com.tak.lite.model.MapAnnotation.Line, newColor: com.tak.lite.model.AnnotationColor) {
-        annotationViewModel.removeAnnotation(line.id)
-        // Set color for next addLine call
-        annotationViewModel.setCurrentColor(newColor)
-        annotationViewModel.addLine(line.points.map { it.toGoogleLatLng() })
+        annotationViewModel.updateLine(line.id, newColor = newColor)
     }
 
     private fun updateLineToolConfirmState() {
@@ -616,6 +761,247 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
             event.recycle()
             return handled
         }
+        // --- Forward to annotationOverlayView if visible ---
+        if (::annotationOverlayView.isInitialized && annotationOverlayView.visibility == View.VISIBLE) {
+            val location = IntArray(2)
+            annotationOverlayView.getLocationOnScreen(location)
+            val offsetX = location[0]
+            val offsetY = location[1]
+            val event = android.view.MotionEvent.obtain(ev)
+            event.offsetLocation(-offsetX.toFloat(), -offsetY.toFloat())
+            val handled = annotationOverlayView.dispatchTouchEvent(event)
+            event.recycle()
+            if (handled) return true
+        }
         return super.dispatchTouchEvent(ev)
+    }
+
+    // Helper to calculate distance between two LatLng points in meters
+    private fun distanceBetween(a: LatLng, b: LatLng): Double {
+        val results = FloatArray(1)
+        android.location.Location.distanceBetween(a.latitude, a.longitude, b.latitude, b.longitude, results)
+        return results[0].toDouble()
+    }
+
+    // Helper to save a tile PNG to app storage
+    private suspend fun saveTilePng(zoom: Int, x: Int, y: Int, bytes: ByteArray): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val dir = File(filesDir, "tiles/$zoom/$x")
+            if (!dir.exists()) dir.mkdirs()
+            val file = File(dir, "$y.png")
+            FileOutputStream(file).use { it.write(bytes) }
+            true
+        } catch (e: Exception) {
+            Log.e("OfflineTiles", "Failed to save tile $zoom/$x/$y: ${e.message}")
+            false
+        }
+    }
+
+    // MapView lifecycle methods
+    override fun onStart() {
+        super.onStart()
+        mapView.onStart()
+    }
+    override fun onResume() {
+        super.onResume()
+        mapView.onResume()
+    }
+    override fun onPause() {
+        super.onPause()
+        mapView.onPause()
+    }
+    override fun onStop() {
+        super.onStop()
+        mapView.onStop()
+    }
+    override fun onLowMemory() {
+        super.onLowMemory()
+        mapView.onLowMemory()
+    }
+    override fun onDestroy() {
+        super.onDestroy()
+        mapView.onDestroy()
+    }
+
+    // --- New helper to check network connectivity ---
+    private fun isOnline(): Boolean {
+        val connectivityManager = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
+        val network = connectivityManager.activeNetwork ?: return false
+        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
+
+    // --- New helper to check if offline tiles exist for a given zoom ---
+    private fun hasOfflineTiles(zoom: Int): Boolean {
+        val dir = File(filesDir, "tiles/$zoom")
+        return dir.exists() && dir.listFiles()?.isNotEmpty() == true
+    }
+
+    // --- Helper to get all tile coordinates for the current viewport and zoom ---
+    private fun getVisibleTileCoords(map: MapLibreMap): List<Triple<Int, Int, Int>> {
+        val projection = map.projection
+        val visibleRegion = projection.visibleRegion
+        val bounds = visibleRegion.latLngBounds
+        val zoom = map.cameraPosition.zoom.toInt()
+        return OsmTileUtils.getTileRange(bounds.southWest, bounds.northEast, zoom).map { (x, y) ->
+            Triple(zoom, x, y)
+        }
+    }
+
+    // --- Helper to check if all tiles exist locally ---
+    private fun allOfflineTilesExist(tileCoords: List<Triple<Int, Int, Int>>): Boolean {
+        for ((z, x, y) in tileCoords) {
+            val file = File(filesDir, "tiles/$z/$x/$y.png")
+            if (!file.exists()) return false
+        }
+        return tileCoords.isNotEmpty()
+    }
+
+    // --- Add this function to render all overlays from the current annotation state ---
+    private fun renderAllAnnotations() {
+        // Remove all existing overlays
+        poiMarkers.values.forEach { mapLibreMap?.removeAnnotation(it) }
+        poiMarkers.clear()
+        linePolylines.values.forEach { mapLibreMap?.removeAnnotation(it) }
+        linePolylines.clear()
+        areaPolygons.values.forEach { mapLibreMap?.removeAnnotation(it) }
+        areaPolygons.clear()
+
+        val state = annotationViewModel.uiState.value
+        // Add lines
+        for (line in state.annotations.filterIsInstance<com.tak.lite.model.MapAnnotation.Line>()) {
+            val points = line.points.map { org.maplibre.android.geometry.LatLng(it.latitude, it.longitude) }
+            val polyline = mapLibreMap?.addPolyline(
+                org.maplibre.android.annotations.PolylineOptions()
+                    .addAll(points)
+                    .color(annotationColorToAndroidColor(line.color))
+                    .width(6f)
+            )
+            if (polyline != null) {
+                linePolylines[line.id] = polyline
+            }
+        }
+        // Add areas (as polygons)
+        for (area in state.annotations.filterIsInstance<com.tak.lite.model.MapAnnotation.Area>()) {
+            val center = org.maplibre.android.geometry.LatLng(area.center.latitude, area.center.longitude)
+            val radiusMeters = area.radius
+            val circlePoints = (0..36).map { i ->
+                val angle = Math.toRadians(i * 10.0)
+                val dx = radiusMeters * Math.cos(angle)
+                val dy = radiusMeters * Math.sin(angle)
+                val lat = center.latitude + (dy / 111320.0)
+                val lng = center.longitude + (dx / (111320.0 * Math.cos(Math.toRadians(center.latitude))))
+                org.maplibre.android.geometry.LatLng(lat, lng)
+            }
+            val polygon = mapLibreMap?.addPolygon(org.maplibre.android.annotations.PolygonOptions().addAll(circlePoints).fillColor(0x44FF0000).strokeColor(android.graphics.Color.RED))
+            if (polygon != null) {
+                areaPolygons[area.id] = polygon
+            }
+        }
+    }
+
+    // --- Improved function to set the map style source dynamically ---
+    private fun setStyleForCurrentViewport(map: MapLibreMap) {
+        val tileCoords = getVisibleTileCoords(map)
+        val useOffline = allOfflineTilesExist(tileCoords)
+        val isDeviceOnline = isOnline()
+        val styleJson = when {
+            useOffline -> {
+                // Use offline tiles
+                """
+                {
+                  "version": 8,
+                  "sources": {
+                    "raster-tiles": {
+                      "type": "raster",
+                      "tiles": ["file://${filesDir}/tiles/{z}/{x}/{y}.png"],
+                      "tileSize": 256
+                    }
+                  },
+                  "layers": [
+                    {
+                      "id": "raster-tiles",
+                      "type": "raster",
+                      "source": "raster-tiles"
+                    }
+                  ]
+                }
+                """
+            }
+            isDeviceOnline && isSatellite -> {
+                // Use MapTiler satellite tiles
+                """
+                {
+                  "version": 8,
+                  "sources": {
+                    "satellite-tiles": {
+                      "type": "raster",
+                      "tiles": ["$MAPTILER_SATELLITE_URL"],
+                      "tileSize": 256,
+                      "attribution": "$MAPTILER_ATTRIBUTION"
+                    }
+                  },
+                  "layers": [
+                    {
+                      "id": "satellite-tiles",
+                      "type": "raster",
+                      "source": "satellite-tiles"
+                    }
+                  ]
+                }
+                """
+            }
+            isDeviceOnline -> {
+                // Use online OSM tiles
+                """
+                {
+                  "version": 8,
+                  "sources": {
+                    "raster-tiles": {
+                      "type": "raster",
+                      "tiles": ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+                      "tileSize": 256,
+                      "attribution": "$OSM_ATTRIBUTION"
+                    }
+                  },
+                  "layers": [
+                    {
+                      "id": "raster-tiles",
+                      "type": "raster",
+                      "source": "raster-tiles"
+                    }
+                  ]
+                }
+                """
+            }
+            else -> {
+                // Neither offline nor online available
+                // Show a blank style and notify the user
+                runOnUiThread {
+                    Toast.makeText(this, "No map tiles available (offline tiles missing and no internet)", Toast.LENGTH_LONG).show()
+                }
+                """
+                {
+                  "version": 8,
+                  "sources": {},
+                  "layers": []
+                }
+                """
+            }
+        }
+        map.setStyle(org.maplibre.android.maps.Style.Builder().fromJson(styleJson)) {
+            setupMapLongPress()
+            setupAnnotationOverlay()
+            renderAllAnnotations() // <-- Ensure overlays are re-rendered after style is set
+        }
+    }
+
+    private fun annotationColorToAndroidColor(color: com.tak.lite.model.AnnotationColor): Int {
+        return when (color) {
+            com.tak.lite.model.AnnotationColor.GREEN -> android.graphics.Color.parseColor("#4CAF50")
+            com.tak.lite.model.AnnotationColor.YELLOW -> android.graphics.Color.parseColor("#FBC02D")
+            com.tak.lite.model.AnnotationColor.RED -> android.graphics.Color.parseColor("#F44336")
+            com.tak.lite.model.AnnotationColor.BLACK -> android.graphics.Color.BLACK
+        }
     }
 }

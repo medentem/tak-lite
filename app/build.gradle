@@ -102,6 +102,6 @@ dependencies {
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
 
-    // MaterialArcMenu
-    // implementation 'com.sa90.materialarcmenu:library:2.0.0'
+    // MapLibre GL Android SDK
+    implementation 'org.maplibre.gl:android-sdk:11.8.7'
 }

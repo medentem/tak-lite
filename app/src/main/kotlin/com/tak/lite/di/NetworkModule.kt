@@ -38,7 +38,9 @@ object NetworkProvidesModule {
     fun provideAnnotationRepository(
         meshProtocol: MeshNetworkProtocol
     ): AnnotationRepository {
-        return AnnotationRepository(meshProtocol)
+        val repo = AnnotationRepository(meshProtocol)
+        meshProtocol.setAnnotationProvider { repo.annotations.value }
+        return repo
     }
 }
 

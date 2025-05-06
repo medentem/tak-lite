@@ -26,6 +26,20 @@ class AudioViewModel @Inject constructor(
     private val _connectionState = MutableStateFlow(MeshNetworkManagerImpl.ConnectionState.DISCONNECTED)
     val connectionState: StateFlow<MeshNetworkManagerImpl.ConnectionState> = _connectionState.asStateFlow()
 
+    init {
+        // Observe channels from the network manager
+        viewModelScope.launch {
+            meshNetworkManager.channels.collect { channelList ->
+                _channels.value = channelList
+                // Update selected channel in settings if needed
+                val active = channelList.find { it.isActive }
+                if (active != null && _settings.value.selectedChannelId != active.id) {
+                    _settings.value = _settings.value.copy(selectedChannelId = active.id)
+                }
+            }
+        }
+    }
+
     fun connect() {
         viewModelScope.launch {
             meshNetworkManager.connect()
@@ -35,6 +49,7 @@ class AudioViewModel @Inject constructor(
     fun selectChannel(channelId: String) {
         viewModelScope.launch {
             meshNetworkManager.selectChannel(channelId)
+            _settings.value = _settings.value.copy(selectedChannelId = channelId)
         }
     }
 
@@ -68,6 +83,11 @@ class AudioViewModel @Inject constructor(
     fun deleteChannel(channelId: String) {
         viewModelScope.launch {
             meshNetworkManager.deleteChannel(channelId)
+            // If deleted channel was selected, update settings
+            if (_settings.value.selectedChannelId == channelId) {
+                val first = meshNetworkManager.channels.value.firstOrNull()
+                _settings.value = _settings.value.copy(selectedChannelId = first?.id)
+            }
         }
     }
 } 

@@ -2,6 +2,7 @@ package com.tak.lite.network
 
 import android.content.Context
 import android.util.Log
+import android.content.SharedPreferences
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -13,6 +14,10 @@ import org.webrtc.*
 import java.nio.ByteBuffer
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
+import org.maplibre.android.geometry.LatLng
 
 @Singleton
 class MeshNetworkManagerImpl @Inject constructor(
@@ -35,6 +40,27 @@ class MeshNetworkManagerImpl @Inject constructor(
     private val peerConnections = mutableMapOf<String, PeerConnection>()
     private val dataChannels = mutableMapOf<String, DataChannel>()
     private val audioBuffers = mutableMapOf<String, MutableList<ByteArray>>()
+
+    private val _channels = MutableStateFlow<List<com.tak.lite.data.model.AudioChannel>>(
+        listOf(
+            com.tak.lite.data.model.AudioChannel(
+                id = "all",
+                name = "All",
+                isDefault = true,
+                isActive = true,
+                members = emptyList() // Could be filled with all peer IDs if needed
+            )
+        )
+    )
+    val channels: StateFlow<List<com.tak.lite.data.model.AudioChannel>> = _channels
+    private var selectedChannelId: String = "all"
+
+    private val prefs: SharedPreferences = context.getSharedPreferences("audio_channels_prefs", Context.MODE_PRIVATE)
+    private val json = Json { ignoreUnknownKeys = true }
+
+    private var meshProtocol: MeshNetworkProtocol? = null
+    private var annotationSync: ((List<com.tak.lite.model.MapAnnotation>) -> Unit)? = null
+    private var locationSync: ((Map<String, LatLng>) -> Unit)? = null
 
     private val peerConnectionObserver = object : PeerConnection.Observer {
         override fun onSignalingChange(state: PeerConnection.SignalingState?) {
@@ -100,6 +126,30 @@ class MeshNetworkManagerImpl @Inject constructor(
 
     init {
         initializeWebRTC()
+        // Load channels from SharedPreferences
+        val saved = prefs.getString("channels_json", null)
+        if (saved != null) {
+            try {
+                val loaded = json.decodeFromString<List<com.tak.lite.data.model.AudioChannel>>(saved)
+                if (loaded.isNotEmpty()) {
+                    _channels.value = loaded
+                    selectedChannelId = loaded.find { it.isActive }?.id ?: loaded.first().id
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load channels from prefs", e)
+            }
+        }
+        // Save channels on any change
+        scope.launch {
+            _channels.collect { list ->
+                try {
+                    val encoded = json.encodeToString(list)
+                    prefs.edit().putString("channels_json", encoded).apply()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to save channels to prefs", e)
+                }
+            }
+        }
     }
 
     private fun initializeWebRTC() {
@@ -153,17 +203,17 @@ class MeshNetworkManagerImpl @Inject constructor(
 
     override fun sendAudioData(audioData: ByteArray, channelId: String) {
         if (_connectionState.value != ConnectionState.CONNECTED) return
-
+        val useChannelId = channelId.ifBlank { selectedChannelId }
         scope.launch {
             try {
-                val dataChannel = dataChannels[channelId]
+                val dataChannel = dataChannels[useChannelId]
                 if (dataChannel != null) {
                     val buffer = ByteBuffer.wrap(audioData)
                     dataChannel.send(DataChannel.Buffer(buffer, false))
                 } else {
                     // Fallback to buffering if no data channel is available
                     synchronized(audioBuffers) {
-                        val buffer = audioBuffers.getOrPut(channelId) { mutableListOf() }
+                        val buffer = audioBuffers.getOrPut(useChannelId) { mutableListOf() }
                         buffer.add(audioData)
                     }
                 }
@@ -176,9 +226,9 @@ class MeshNetworkManagerImpl @Inject constructor(
 
     override fun receiveAudioData(channelId: String): ByteArray? {
         if (_connectionState.value != ConnectionState.CONNECTED) return null
-
+        val useChannelId = channelId.ifBlank { selectedChannelId }
         return synchronized(audioBuffers) {
-            val buffer = audioBuffers[channelId] ?: return null
+            val buffer = audioBuffers[useChannelId] ?: return null
             if (buffer.isNotEmpty()) {
                 buffer.removeAt(0)
             } else {
@@ -238,7 +288,8 @@ class MeshNetworkManagerImpl @Inject constructor(
     }
 
     fun selectChannel(channelId: String) {
-        // TODO: Implement channel selection logic
+        selectedChannelId = channelId
+        _channels.value = _channels.value.map { it.copy(isActive = it.id == channelId) }
         Log.d(TAG, "Selected channel: $channelId")
     }
 
@@ -258,12 +309,54 @@ class MeshNetworkManagerImpl @Inject constructor(
     }
 
     fun createChannel(name: String) {
-        // TODO: Implement channel creation
+        val newId = name.lowercase().replace(" ", "_") + System.currentTimeMillis()
+        val newChannel = com.tak.lite.data.model.AudioChannel(
+            id = newId,
+            name = name,
+            isDefault = false,
+            isActive = false,
+            members = emptyList()
+        )
+        _channels.value = _channels.value + newChannel
         Log.d(TAG, "Creating channel: $name")
     }
 
     fun deleteChannel(channelId: String) {
-        // TODO: Implement channel deletion
+        _channels.value = _channels.value.filter { it.id != channelId }
+        if (selectedChannelId == channelId) {
+            selectedChannelId = _channels.value.firstOrNull()?.id ?: "all"
+            selectChannel(selectedChannelId)
+        }
         Log.d(TAG, "Deleting channel: $channelId")
     }
+
+    fun setMeshProtocol(protocol: MeshNetworkProtocol) {
+        meshProtocol = protocol
+        // Listen for state sync
+        protocol.startStateSyncListener { state ->
+            // Merge channels by ID
+            val local = _channels.value.associateBy { it.id }
+            val remote = state.channels.associateBy { it.id }
+            val merged = (local + remote).values.toList()
+            _channels.value = merged
+            // Merge annotations (stub)
+            annotationSync?.invoke(state.annotations)
+            // Merge locations (convert to LatLng)
+            val latLngMap = state.peerLocations.mapValues { it.value.toMapLibreLatLng() }
+            locationSync?.invoke(latLngMap)
+        }
+        // Listen for new peers and send state sync
+        protocol.startDiscovery { peers ->
+            // For each new peer, send state sync
+            val channels = _channels.value
+            val locations = locationSync?.let { emptyMap<String, LatLng>() } ?: emptyMap()
+            val annotations = annotationSync?.let { emptyList<com.tak.lite.model.MapAnnotation>() } ?: emptyList()
+            peers.forEach { peer ->
+                protocol.sendStateSync(peer.ipAddress, channels, locations, annotations)
+            }
+        }
+    }
+
+    fun setAnnotationSyncHandler(handler: (List<com.tak.lite.model.MapAnnotation>) -> Unit) { annotationSync = handler }
+    fun setLocationSyncHandler(handler: (Map<String, LatLng>) -> Unit) { locationSync = handler }
 } 

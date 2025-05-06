@@ -46,4 +46,11 @@ class AnnotationRepository @Inject constructor(
     fun clearAnnotations() {
         _annotations.value = emptyList()
     }
+    
+    fun mergeAnnotations(remote: List<MapAnnotation>) {
+        val local = _annotations.value.associateBy { it.id }
+        val remoteMap = remote.associateBy { it.id }
+        val merged = (local + remoteMap).values.sortedBy { it.timestamp }
+        _annotations.value = merged
+    }
 } 

@@ -68,4 +68,24 @@
         app:layout_constraintBottom_toTopOf="@id/volumeSlider"
         app:layout_constraintEnd_toEndOf="parent" />
 
+    <!-- Group Menu Button -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/groupMenuButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:src="@drawable/ic_menu"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:tint="@android:color/white" />
+
+    <!-- Slide-out Overlay Container for Talk Groups -->
+    <FrameLayout
+        android:id="@+id/talkGroupOverlayContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone"
+        android:background="#80000000"
+        android:elevation="10dp" />
+
 </androidx.constraintlayout.widget.ConstraintLayout> 

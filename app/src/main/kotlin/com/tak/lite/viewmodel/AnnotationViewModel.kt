@@ -2,7 +2,6 @@ package com.tak.lite.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.android.gms.maps.model.LatLng
 import com.tak.lite.model.AnnotationColor
 import com.tak.lite.model.LatLngSerializable
 import com.tak.lite.model.LineStyle
@@ -15,6 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import org.maplibre.android.geometry.LatLng
 
 @HiltViewModel
 class AnnotationViewModel @Inject constructor(
@@ -60,7 +60,7 @@ class AnnotationViewModel @Inject constructor(
             val annotation = MapAnnotation.PointOfInterest(
                 creatorId = "local", // TODO: Replace with actual user ID
                 color = currentColor,
-                position = LatLngSerializable.fromGoogleLatLng(position),
+                position = LatLngSerializable.fromMapLibreLatLng(position),
                 shape = currentShape
             )
             annotationRepository.addAnnotation(annotation)
@@ -72,7 +72,7 @@ class AnnotationViewModel @Inject constructor(
             val annotation = MapAnnotation.Line(
                 creatorId = "local", // TODO: Replace with actual user ID
                 color = currentColor,
-                points = points.map { LatLngSerializable.fromGoogleLatLng(it) },
+                points = points.map { LatLngSerializable.fromMapLibreLatLng(it) },
                 style = currentLineStyle,
                 arrowHead = currentArrowHead
             )
@@ -85,7 +85,7 @@ class AnnotationViewModel @Inject constructor(
             val annotation = MapAnnotation.Area(
                 creatorId = "local", // TODO: Replace with actual user ID
                 color = currentColor,
-                center = LatLngSerializable.fromGoogleLatLng(center),
+                center = LatLngSerializable.fromMapLibreLatLng(center),
                 radius = radius
             )
             annotationRepository.addAnnotation(annotation)
@@ -101,6 +101,30 @@ class AnnotationViewModel @Inject constructor(
     fun clearAnnotations() {
         viewModelScope.launch {
             annotationRepository.clearAnnotations()
+        }
+    }
+    
+    fun updatePointOfInterest(id: String, newShape: PointShape? = null, newColor: AnnotationColor? = null) {
+        viewModelScope.launch {
+            val current = annotationRepository.annotations.value.filterIsInstance<MapAnnotation.PointOfInterest>().find { it.id == id } ?: return@launch
+            val updated = current.copy(
+                shape = newShape ?: current.shape,
+                color = newColor ?: current.color
+            )
+            annotationRepository.removeAnnotation(id)
+            annotationRepository.addAnnotation(updated)
+        }
+    }
+    
+    fun updateLine(id: String, newStyle: LineStyle? = null, newColor: AnnotationColor? = null) {
+        viewModelScope.launch {
+            val current = annotationRepository.annotations.value.filterIsInstance<MapAnnotation.Line>().find { it.id == id } ?: return@launch
+            val updated = current.copy(
+                style = newStyle ?: current.style,
+                color = newColor ?: current.color
+            )
+            annotationRepository.removeAnnotation(id)
+            annotationRepository.addAnnotation(updated)
         }
     }
 }

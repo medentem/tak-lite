@@ -15,6 +15,7 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import com.tak.lite.R
@@ -24,6 +25,7 @@ import com.tak.lite.databinding.AudioControlsBinding
 import com.tak.lite.network.MeshNetworkManagerImpl
 import com.tak.lite.util.PermissionManager
 import com.tak.lite.viewmodel.AudioViewModel
+import com.tak.lite.viewmodel.MeshNetworkViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -56,6 +58,8 @@ class AudioFragment : Fragment() {
         }
     }
 
+    private val meshNetworkViewModel: MeshNetworkViewModel by viewModels({ requireActivity() })
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -74,6 +78,52 @@ class AudioFragment : Fragment() {
         setupChannelList()
         setupPttButton()
         observeViewModel()
+
+        // Group menu button opens the channel overlay
+        binding.groupMenuButton.setOnClickListener {
+            if (binding.talkGroupOverlayContainer.childCount == 0) {
+                val overlayView = LayoutInflater.from(requireContext()).inflate(R.layout.talk_group_overlay, binding.talkGroupOverlayContainer, false)
+                binding.talkGroupOverlayContainer.addView(overlayView)
+                // Close button inside overlay
+                overlayView.findViewById<View>(R.id.closeTalkGroupOverlayButton).setOnClickListener {
+                    binding.talkGroupOverlayContainer.visibility = View.GONE
+                }
+                // Setup TalkGroupAdapter (for channels)
+                val talkGroupList = overlayView.findViewById<RecyclerView>(R.id.talkGroupList)
+                val talkGroupAdapter = TalkGroupAdapter(
+                    onGroupSelected = { channel ->
+                        viewModel.selectChannel(channel.id)
+                        binding.talkGroupOverlayContainer.visibility = View.GONE
+                    },
+                    getUserName = { userId ->
+                        // Use nickname if available
+                        val peers = (meshNetworkViewModel.uiState.value as? com.tak.lite.viewmodel.MeshNetworkUiState.Connected)?.peers ?: emptyList()
+                        peers.find { it.id == userId }?.nickname ?: userId
+                    },
+                    getIsActive = { channel ->
+                        viewModel.settings.value.selectedChannelId == channel.id
+                    }
+                )
+                talkGroupList.layoutManager = LinearLayoutManager(requireContext())
+                talkGroupList.adapter = talkGroupAdapter
+                // Observe channels and update adapter
+                viewLifecycleOwner.lifecycleScope.launch {
+                    viewModel.channels.collectLatest { channels ->
+                        talkGroupAdapter.submitList(channels)
+                    }
+                }
+                // Add Channel button
+                overlayView.findViewById<View>(R.id.addTalkGroupButton).setOnClickListener {
+                    showAddChannelDialog()
+                }
+            }
+            binding.talkGroupOverlayContainer.visibility = View.VISIBLE
+        }
+
+        // Clicking outside overlay content closes the overlay
+        binding.talkGroupOverlayContainer.setOnClickListener {
+            binding.talkGroupOverlayContainer.visibility = View.GONE
+        }
     }
 
     private fun checkPermissions() {

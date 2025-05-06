@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-import com.google.android.gms.maps.model.LatLng
+import org.maplibre.android.geometry.LatLng
 
 @HiltViewModel
 class MeshNetworkViewModel @Inject constructor(
@@ -57,6 +57,10 @@ class MeshNetworkViewModel @Inject constructor(
         viewModelScope.launch {
             meshNetworkRepository.sendAudioData(audioData)
         }
+    }
+    
+    fun setLocalNickname(nickname: String) {
+        meshNetworkRepository.setLocalNickname(nickname)
     }
     
     override fun onCleared() {
