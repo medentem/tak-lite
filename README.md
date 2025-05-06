@@ -5,39 +5,44 @@ A situational awareness Android application designed for use with Doodle Labs me
 ## Features
 
 - Real-time location tracking and sharing
-- Interactive map display with multiple user positions
-- Points of Interest (POI) management
-- Push-to-Talk (PTT) audio communication
+- Interactive map display with multiple user positions (MapLibre GL, OSM, and MapTiler satellite imagery)
+- Points of Interest (POI) management and map annotation (lines, areas)
+- Push-to-Talk (PTT) real-time VOIP audio communication (WebRTC-based)
 - Mesh network integration
+- Offline map tile support
 
 ## Requirements
 
 - Android Studio Arctic Fox or later
 - Android SDK 24 (Android 7.0) or later
-- Google Maps API key
+- MapTiler API key (for satellite imagery)
 - Doodle Labs mesh network device
 
 ## Setup
 
 1. Clone the repository
 2. Open the project in Android Studio
-3. Create a `local.properties` file in the root directory and add your API keys:
+3. Create a `local.properties` file in the root directory and add your API key:
    ```
-   MAPS_API_KEY=your_google_maps_api_key_here
    MAPTILER_API_KEY=your_maptiler_api_key_here
    ```
-   - `MAPS_API_KEY` is required for Google Maps features.
    - `MAPTILER_API_KEY` is required for satellite map (MapTiler) functionality. This key is securely loaded by the build system from `local.properties` and injected into the app at build time.
 4. Sync the project with Gradle files
 5. Build and run the application
 
 ## Dependencies
 
-- Google Maps SDK for Android
-- Google Play Services Location
-- Android Room Database
-- Kotlin Coroutines
-- AndroidX Lifecycle Components
+- MapLibre GL Android SDK (map rendering)
+- OpenStreetMap raster tiles (default map)
+- MapTiler satellite tiles (satellite view)
+- Google Play Services Location (location tracking)
+- Android Room Database (local storage)
+- Kotlin Coroutines (async operations)
+- AndroidX Lifecycle Components (MVVM)
+- Hilt (dependency injection)
+- WebRTC (real-time VOIP audio)
+- Kotlin Serialization (data serialization)
+- WorkManager (background tasks)
 
 ## Network Architecture
 
@@ -45,10 +50,66 @@ The application communicates over a local mesh network using Doodle Labs devices
 
 - Local mesh communication for real-time updates
 - Internet connectivity when available through mesh gateway
-- Peer-to-peer audio communication
+- Peer-to-peer real-time VOIP audio communication (WebRTC)
 - Location data sharing
-- POI synchronization
+- POI and annotation synchronization
+
+## Mesh Networking Layer
+
+TAK Lite is designed to operate in environments with limited or no internet connectivity by leveraging a mesh networking approach:
+
+- **Doodle Labs Mesh Devices**: The app connects to a Doodle Labs mesh radio, which provides a local, self-healing, peer-to-peer network for all connected devices.
+- **Peer Discovery**: Devices on the mesh automatically discover each other using local network broadcast and/or service discovery protocols.
+- **Data Synchronization**: Location, POI, and annotation data are shared directly between peers over the mesh, ensuring real-time situational awareness without a central server.
+- **VOIP over Mesh**: Push-to-talk audio (WebRTC) is transmitted directly between devices using the mesh network, minimizing latency and supporting robust communication even in disconnected or degraded environments.
+- **Gateway Support**: If a mesh node has internet access, it can act as a gateway, allowing the mesh to bridge to external networks as needed.
+- **Resilience**: The mesh network is resilient to node failures and adapts dynamically as devices join or leave the network.
+
+**Further Reading:**
+- [Doodle Labs Mesh Networking Overview](https://doodlelabs.com/technology/mesh-networking/)
+- [Doodle Labs Technical Documentation](https://support.doodlelabs.com/hc/en-us/categories/360002078032-Technical-Documentation)
 
 ## Development Status
 
 This project is currently in active development. Core features are being implemented and tested.
+
+---
+
+## Architecture
+
+- **MVVM Pattern**: The app uses the Model-View-ViewModel (MVVM) architecture for clear separation of concerns and testability.
+- **Dependency Injection**: Hilt is used for dependency injection, ensuring modularity and easier testing.
+- **Room Database**: Local data persistence is handled via Room, with repository and DAO patterns.
+- **Coroutines**: Kotlin Coroutines are used for asynchronous operations, including networking and database access.
+- **WorkManager**: Background tasks (such as data sync) are managed using WorkManager.
+- **Lifecycle Components**: AndroidX ViewModel and LiveData are used for UI state management.
+- **WebRTC**: Real-time VOIP audio is implemented using WebRTC, supporting push-to-talk communication.
+
+## Code Style & Best Practices
+
+- Written in Kotlin, following [Kotlin coding conventions](https://kotlinlang.org/docs/coding-conventions.html)
+- Uses Android KTX extensions for concise code
+- Follows SOLID principles and clean architecture
+- Material Design 3 guidelines for UI/UX
+- Proper error handling and state management
+- Accessibility (a11y) and dark mode support
+
+## Testing
+
+- Unit tests for business logic (ViewModels, repositories, etc.)
+- UI tests for critical user flows
+- Uses mock objects and dependency injection for testability
+- Test coverage is maintained for core features
+
+## Security
+
+- Sensitive API keys are not hardcoded; they are loaded from `local.properties` at build time
+- Proper Android permission handling for location and audio
+- Follows Android security best practices for data storage and network communication
+- Plans for data encryption and secure authentication in future releases
+
+## Documentation
+
+- Public APIs and architecture decisions are documented in-code and in this README
+- Contributions should follow the established code style and architecture
+- Please open issues or pull requests for suggestions or improvements
