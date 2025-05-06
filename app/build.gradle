@@ -6,6 +6,16 @@ plugins {
     id 'org.jetbrains.kotlin.plugin.serialization'
 }
 
+// Load MAPTILER_API_KEY from local.properties after plugins block
+import java.util.Properties
+
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localProperties.load(new FileInputStream(localPropertiesFile))
+}
+def maptileApiKey = localProperties.getProperty("MAPTILER_API_KEY", "")
+
 android {
     namespace "com.tak.lite"
     compileSdk 34
@@ -21,6 +31,7 @@ android {
         manifestPlaceholders = [
                 MAPS_API_KEY: project.findProperty('MAPS_API_KEY') ?: ''
         ]
+        buildConfigField "String", "MAPTILER_API_KEY", "\"${maptileApiKey}\""
     }
     
     buildTypes {
@@ -41,6 +52,7 @@ android {
     
     buildFeatures {
         viewBinding true
+        buildConfig true
     }
 
     kapt {
