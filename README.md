@@ -21,10 +21,13 @@ A situational awareness Android application designed for use with Doodle Labs me
 
 1. Clone the repository
 2. Open the project in Android Studio
-3. Create a `local.properties` file in the root directory and add your Google Maps API key:
+3. Create a `local.properties` file in the root directory and add your API keys:
    ```
-   MAPS_API_KEY=your_api_key_here
+   MAPS_API_KEY=your_google_maps_api_key_here
+   MAPTILER_API_KEY=your_maptiler_api_key_here
    ```
+   - `MAPS_API_KEY` is required for Google Maps features.
+   - `MAPTILER_API_KEY` is required for satellite map (MapTiler) functionality. This key is securely loaded by the build system from `local.properties` and injected into the app at build time.
 4. Sync the project with Gradle files
 5. Build and run the application
 
