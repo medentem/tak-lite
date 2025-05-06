@@ -24,8 +24,12 @@ object OsmTileUtils {
     }
 
     fun getTileRange(sw: LatLng, ne: LatLng, zoom: Int): List<Pair<Int, Int>> {
-        val (xMin, yMax) = latLngToTileXY(sw.latitude, sw.longitude, zoom)
-        val (xMax, yMin) = latLngToTileXY(ne.latitude, ne.longitude, zoom)
+        val (x0, y0) = latLngToTileXY(sw.latitude, sw.longitude, zoom)
+        val (x1, y1) = latLngToTileXY(ne.latitude, ne.longitude, zoom)
+        val xMin = min(x0, x1)
+        val xMax = max(x0, x1)
+        val yMin = min(y0, y1)
+        val yMax = max(y0, y1)
         val xs = xMin..xMax
         val ys = yMin..yMax
         return xs.flatMap { x -> ys.map { y -> Pair(x, y) } }

@@ -43,7 +43,7 @@ import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 import java.io.File
 import java.io.FileOutputStream
 import java.net.URL
@@ -68,6 +68,12 @@ import android.location.LocationManager
 import android.location.LocationListener
 import android.os.Handler
 import android.os.Looper
+import com.tak.lite.ui.audio.WaveformView
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import android.content.IntentFilter
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
 
 @AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
@@ -115,17 +121,37 @@ class MainActivity : AppCompatActivity() {
     private var fallbackHandler: Handler? = null
     private var fallbackRunnable: Runnable? = null
     private var receivedFirstLocation = false
+    private val DEFAULT_US_CENTER = LatLng(39.8283, -98.5795) // Geographic center of contiguous US
+    private val DEFAULT_US_ZOOM = 3.5 // Adjust as needed to show the whole US
+    private lateinit var waveformOverlayContainer: View
+    private lateinit var waveformView: WaveformView
+    private var waveformJob: Job? = null
+    private var amplitudes: MutableList<Int> = mutableListOf()
+    private var amplitudeReceiver: BroadcastReceiver? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // Load nickname from preferences and set in viewModel if exists
+        loadNickname()?.let { viewModel.setLocalNickname(it) }
+
         // Initialize MapLibre MapView
         mapView = findViewById(R.id.mapView)
         mapView.onCreate(savedInstanceState)
         mapView.getMapAsync { map ->
             mapLibreMap = map
+            // Set default view to last known location if available, else US center
+            val lastLoc = loadLastLocation()
+            if (lastLoc != null) {
+                val (lat, lon, zoom) = lastLoc
+                // Zoom out by 2 levels from the saved zoom, but not below 1.0
+                val initialZoom = (zoom - 2.0f).coerceAtLeast(1.0f)
+                map.moveCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(LatLng(lat, lon), initialZoom.toDouble()))
+            } else {
+                map.moveCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(DEFAULT_US_CENTER, DEFAULT_US_ZOOM))
+            }
             setStyleForCurrentViewport(map)
             map.addOnCameraIdleListener {
                 setStyleForCurrentViewport(map)
@@ -221,14 +247,31 @@ class MainActivity : AppCompatActivity() {
         val zoomToLocationButton = findViewById<com.google.android.material.floatingactionbutton.FloatingActionButton>(R.id.zoomToLocationButton)
         zoomToLocationButton.setOnClickListener {
             val map = mapLibreMap
-            val lastLocation = lastSentLocation
-            Log.d("ZoomButton", "map=$map, lastLocation=$lastLocation")
-            if (map != null && lastLocation != null) {
-                map.locationComponent.cameraMode = CameraMode.TRACKING
-                map.animateCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(lastLocation, 17.0))
-            } else {
-                Toast.makeText(this, "User location not available yet", Toast.LENGTH_SHORT).show()
+            if (map == null) {
+                Toast.makeText(this, "Map not ready yet", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
             }
+            // Check permissions
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+                ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(this, "Location permission not granted", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            // Request a fresh location
+            fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+                .addOnSuccessListener { location ->
+                    if (location != null) {
+                        val latLng = org.maplibre.android.geometry.LatLng(location.latitude, location.longitude)
+                        lastSentLocation = latLng
+                        map.locationComponent.cameraMode = CameraMode.TRACKING
+                        map.animateCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(latLng, 17.0))
+                    } else {
+                        Toast.makeText(this, "User location not available yet", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                .addOnFailureListener {
+                    Toast.makeText(this, "Failed to get current location", Toast.LENGTH_SHORT).show()
+                }
         }
 
         // Add nickname button listener
@@ -339,6 +382,24 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // Reference waveform overlay and view
+        waveformOverlayContainer = findViewById(R.id.waveformOverlayContainer)
+        waveformView = findViewById(R.id.waveformView)
+        waveformOverlayContainer.visibility = View.GONE
+        amplitudes = mutableListOf()
+        // Register amplitude receiver
+        amplitudeReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                val amp = intent?.getIntExtra("amplitude", 0) ?: 0
+                Log.d("Waveform", "Received amplitude: $amp")
+                amplitudes.add(amp)
+                if (amplitudes.size > 64) amplitudes.removeAt(0)
+                waveformView.setAmplitudes(amplitudes)
+            }
+        }
+        LocalBroadcastManager.getInstance(this).registerReceiver(amplitudeReceiver!!, IntentFilter("AUDIO_AMPLITUDE"))
+        Log.d("Waveform", "Amplitude receiver registered")
+
         // Request location and audio permissions and start map setup
         checkAndRequestPermissions()
     }
@@ -348,8 +409,6 @@ class MainActivity : AppCompatActivity() {
             viewModel.uiState.collectLatest { state ->
                 when (state) {
                     is MeshNetworkUiState.Connected -> {
-                        // Update UI to show connected state
-                        binding.pttButton.isEnabled = true
                         // Update peerIdToNickname map
                         peerIdToNickname.clear()
                         for (peer in state.peers) {
@@ -357,8 +416,6 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                     is MeshNetworkUiState.Disconnected -> {
-                        // Update UI to show disconnected state
-                        binding.pttButton.isEnabled = false
                         Toast.makeText(this@MainActivity, "Disconnected from mesh network", Toast.LENGTH_SHORT).show()
                         peerIdToNickname.clear()
                     }
@@ -392,13 +449,29 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startAudioTransmission() {
-        // TODO: Implement audio transmission start
-        // This will be implemented in the audio layer
+        // Show waveform overlay
+        waveformOverlayContainer.visibility = View.VISIBLE
+        // Start real audio transmission
+        val intent = Intent(this, com.tak.lite.service.AudioStreamingService::class.java)
+        intent.putExtra("isMuted", false)
+        intent.putExtra("volume", 50)
+        intent.putExtra("selectedChannelId", null as String?)
+        intent.putExtra("isPTTHeld", true)
+        startService(intent)
     }
 
     private fun stopAudioTransmission() {
-        // TODO: Implement audio transmission stop
-        // This will be implemented in the audio layer
+        // Hide waveform overlay
+        waveformOverlayContainer.visibility = View.GONE
+        // Stop updating waveform
+        waveformJob?.cancel()
+        waveformJob = null
+        // Clear waveform
+        amplitudes.clear()
+        waveformView.setAmplitudes(emptyList())
+        // Stop real audio transmission
+        val intent = Intent(this, com.tak.lite.service.AudioStreamingService::class.java)
+        stopService(intent)
     }
 
     private fun checkAndRequestPermissions() {
@@ -414,6 +487,9 @@ class MainActivity : AppCompatActivity() {
 
         if (permissionsToRequest.isNotEmpty()) {
             ActivityCompat.requestPermissions(this, permissionsToRequest, PERMISSIONS_REQUEST_CODE)
+        } else {
+            // Permissions already granted, enable PTT button
+            binding.pttButton.isEnabled = true
         }
     }
 
@@ -587,6 +663,10 @@ class MainActivity : AppCompatActivity() {
         // Always update lastSentLocation so the zoom button works
         lastSentLocation = latLng
         Log.d("LocationDebug", "lastSentLocation updated: $lastSentLocation")
+
+        // Save last location and current zoom
+        val currentZoom = mapLibreMap?.cameraPosition?.zoom?.toFloat() ?: DEFAULT_US_ZOOM.toFloat()
+        saveLastLocation(location.latitude, location.longitude, currentZoom)
 
         // Auto-zoom to user location the first time it loads
         if (!hasZoomedToUserLocation && mapLibreMap != null) {
@@ -823,6 +903,12 @@ class MainActivity : AppCompatActivity() {
     private fun showNicknameDialog() {
         val editText = android.widget.EditText(this)
         editText.hint = "Enter your nickname"
+        // Pre-populate with saved nickname if available
+        val savedNickname = loadNickname()
+        if (!savedNickname.isNullOrEmpty()) {
+            editText.setText(savedNickname)
+            editText.setSelection(savedNickname.length)
+        }
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Set Nickname")
             .setView(editText)
@@ -830,6 +916,7 @@ class MainActivity : AppCompatActivity() {
                 val nickname = editText.text.toString().trim()
                 if (nickname.isNotEmpty()) {
                     viewModel.setLocalNickname(nickname)
+                    saveNickname(nickname)
                 }
             }
             .setNegativeButton("Cancel", null)
@@ -858,6 +945,7 @@ class MainActivity : AppCompatActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == PERMISSIONS_REQUEST_CODE) {
             if (grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+                binding.pttButton.isEnabled = true
                 setupMap()
             } else {
                 Toast.makeText(this, "Permissions required for app functionality", Toast.LENGTH_LONG).show()
@@ -939,6 +1027,7 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
         mapView.onDestroy()
         stopFallbackLocationManager()
+        amplitudeReceiver?.let { LocalBroadcastManager.getInstance(this).unregisterReceiver(it) }
     }
 
     // --- New helper to check network connectivity ---
@@ -980,26 +1069,15 @@ class MainActivity : AppCompatActivity() {
         // Remove all existing overlays
         poiMarkers.values.forEach { mapLibreMap?.removeAnnotation(it) }
         poiMarkers.clear()
-        linePolylines.values.forEach { mapLibreMap?.removeAnnotation(it) }
-        linePolylines.clear()
+        // Remove MapLibre polylines for lines (let AnnotationOverlayView handle lines)
+        // linePolylines.values.forEach { mapLibreMap?.removeAnnotation(it) }
+        // linePolylines.clear()
         areaPolygons.values.forEach { mapLibreMap?.removeAnnotation(it) }
         areaPolygons.clear()
 
         val state = annotationViewModel.uiState.value
-        // Add lines
-        for (line in state.annotations.filterIsInstance<com.tak.lite.model.MapAnnotation.Line>()) {
-            val points = line.points.map { org.maplibre.android.geometry.LatLng(it.latitude, it.longitude) }
-            val polyline = mapLibreMap?.addPolyline(
-                org.maplibre.android.annotations.PolylineOptions()
-                    .addAll(points)
-                    .color(annotationColorToAndroidColor(line.color))
-                    .width(6f)
-            )
-            if (polyline != null) {
-                linePolylines[line.id] = polyline
-            }
-        }
-        // Add areas (as polygons)
+        // Do NOT add MapLibre polylines for lines here
+        // Only add polygons for areas
         for (area in state.annotations.filterIsInstance<com.tak.lite.model.MapAnnotation.Area>()) {
             val center = org.maplibre.android.geometry.LatLng(area.center.latitude, area.center.longitude)
             val radiusMeters = area.radius
@@ -1122,5 +1200,35 @@ class MainActivity : AppCompatActivity() {
             com.tak.lite.model.AnnotationColor.RED -> android.graphics.Color.parseColor("#F44336")
             com.tak.lite.model.AnnotationColor.BLACK -> android.graphics.Color.BLACK
         }
+    }
+
+    private fun saveNickname(nickname: String) {
+        getSharedPreferences("user_prefs", MODE_PRIVATE)
+            .edit()
+            .putString("nickname", nickname)
+            .apply()
+    }
+
+    private fun loadNickname(): String? {
+        return getSharedPreferences("user_prefs", MODE_PRIVATE)
+            .getString("nickname", null)
+    }
+
+    private fun saveLastLocation(lat: Double, lon: Double, zoom: Float) {
+        getSharedPreferences("user_prefs", MODE_PRIVATE)
+            .edit()
+            .putFloat("last_lat", lat.toFloat())
+            .putFloat("last_lon", lon.toFloat())
+            .putFloat("last_zoom", zoom)
+            .apply()
+    }
+
+    private fun loadLastLocation(): Triple<Double, Double, Float>? {
+        val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
+        if (!prefs.contains("last_lat") || !prefs.contains("last_lon") || !prefs.contains("last_zoom")) return null
+        val lat = prefs.getFloat("last_lat", 0f).toDouble()
+        val lon = prefs.getFloat("last_lon", 0f).toDouble()
+        val zoom = prefs.getFloat("last_zoom", DEFAULT_US_ZOOM.toFloat())
+        return Triple(lat, lon, zoom)
     }
 }

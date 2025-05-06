@@ -202,26 +202,8 @@ class MeshNetworkManagerImpl @Inject constructor(
     }
 
     override fun sendAudioData(audioData: ByteArray, channelId: String) {
-        if (_connectionState.value != ConnectionState.CONNECTED) return
-        val useChannelId = channelId.ifBlank { selectedChannelId }
-        scope.launch {
-            try {
-                val dataChannel = dataChannels[useChannelId]
-                if (dataChannel != null) {
-                    val buffer = ByteBuffer.wrap(audioData)
-                    dataChannel.send(DataChannel.Buffer(buffer, false))
-                } else {
-                    // Fallback to buffering if no data channel is available
-                    synchronized(audioBuffers) {
-                        val buffer = audioBuffers.getOrPut(useChannelId) { mutableListOf() }
-                        buffer.add(audioData)
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to send audio data", e)
-                handleError(e)
-            }
-        }
+        // Always broadcast audio data, regardless of connection state or peers
+        meshProtocol?.sendAudioData(audioData)
     }
 
     override fun receiveAudioData(channelId: String): ByteArray? {

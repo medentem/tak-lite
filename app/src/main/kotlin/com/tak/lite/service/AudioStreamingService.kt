@@ -22,6 +22,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.nio.ByteBuffer
 import javax.inject.Inject
+import android.media.audiofx.AcousticEchoCanceler
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import android.util.Log
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.os.Build
+import androidx.core.app.NotificationCompat
 
 @AndroidEntryPoint
 class AudioStreamingService : Service() {
@@ -35,12 +43,19 @@ class AudioStreamingService : Service() {
             AUDIO_FORMAT
         )
         private const val DEFAULT_CHANNEL = "default"
+        private val NOTIFICATION_ID = 1001
+        private val CHANNEL_ID = "audio_streaming"
     }
 
     private var audioRecord: AudioRecord? = null
     private var audioTrack: AudioTrack? = null
     private var isStreaming = false
     private var streamingJob: Job? = null
+    private var echoCanceler: AcousticEchoCanceler? = null
+    private var previousAudioMode: Int? = null
+    private var audioFocusRequested = false
+    private var audioFocusGranted = false
+    private var audioFocusChangeListener: AudioManager.OnAudioFocusChangeListener? = null
 
     @Inject
     lateinit var meshNetworkManager: MeshNetworkManager
@@ -54,6 +69,7 @@ class AudioStreamingService : Service() {
         val volume = intent?.getIntExtra("volume", 50) ?: 50
         val selectedChannelId = intent?.getStringExtra("selectedChannelId")
         val isPTTHeld = intent?.getBooleanExtra("isPTTHeld", false) ?: false
+        Log.d("Waveform", "AudioStreamingService onStartCommand called, isPTTHeld=$isPTTHeld, isMuted=$isMuted, selectedChannelId=$selectedChannelId")
         val settings = AudioSettings(
             isMuted = isMuted,
             volume = volume,
@@ -68,14 +84,60 @@ class AudioStreamingService : Service() {
         return START_STICKY
     }
 
+    private fun startForegroundServiceNotification() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "Audio Streaming",
+                NotificationManager.IMPORTANCE_LOW
+            )
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(channel)
+        }
+        val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("Tak Lite Audio Streaming")
+            .setContentText("Voice chat is active")
+            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+            .setOngoing(true)
+            .build()
+        startForeground(NOTIFICATION_ID, notification)
+    }
+
     fun startStreaming(settings: AudioSettings) {
+        Log.d("Waveform", "startStreaming called, isStreaming=$isStreaming, isPTTHeld=${settings.isPTTHeld}")
         if (isStreaming) return
+        // Start foreground notification
+        startForegroundServiceNotification()
+        val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
+        // Request audio focus
+        audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+            Log.d("Waveform", "Audio focus changed: $focusChange")
+            // Optionally handle focus loss here
+        }
+        val focusResult = audioManager.requestAudioFocus(
+            audioFocusChangeListener,
+            AudioManager.STREAM_VOICE_CALL,
+            AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE
+        )
+        audioFocusRequested = true
+        audioFocusGranted = (focusResult == AudioManager.AUDIOFOCUS_REQUEST_GRANTED)
+        Log.d("Waveform", "Audio focus request result: $focusResult (granted=$audioFocusGranted)")
+        if (!audioFocusGranted) {
+            Log.e("Waveform", "Audio focus not granted, aborting streaming")
+            return
+        }
 
         // Check for audio recording permission
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            Log.d("Waveform", "Audio recording permission NOT granted, aborting streaming")
             // Permission not granted, cannot proceed
             return
         }
+        Log.d("Waveform", "Audio recording permission granted, starting streaming")
+
+        // Set audio mode to communication for best duplex experience
+        previousAudioMode = audioManager.mode
+        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
 
         isStreaming = true
         streamingJob = GlobalScope.launch {
@@ -85,12 +147,18 @@ class AudioStreamingService : Service() {
                 try {
                     // Initialize audio record
                     audioRecord = AudioRecord(
-                        MediaRecorder.AudioSource.MIC,
+                        MediaRecorder.AudioSource.VOICE_COMMUNICATION,
                         SAMPLE_RATE,
                         CHANNEL_CONFIG,
                         AUDIO_FORMAT,
                         BUFFER_SIZE
                     )
+
+                    // Enable echo cancellation if available
+                    if (AcousticEchoCanceler.isAvailable()) {
+                        echoCanceler = AcousticEchoCanceler.create(audioRecord!!.audioSessionId)
+                        echoCanceler?.enabled = true
+                    }
 
                     // Initialize audio track with modern builder pattern
                     val audioAttributes = android.media.AudioAttributes.Builder()
@@ -118,11 +186,19 @@ class AudioStreamingService : Service() {
                         if (settings.isPTTHeld && !settings.isMuted) {
                             // Record and stream audio
                             val readSize = audioRecord?.read(audioData, 0, BUFFER_SIZE) ?: 0
+                            Log.d("Waveform", "AudioRecord readSize: $readSize")
                             if (readSize > 0) {
                                 // Send audio data to mesh network
                                 meshNetworkManager.sendAudioData(audioData.copyOf(readSize), settings.selectedChannelId ?: DEFAULT_CHANNEL)
+                                // Calculate amplitude and broadcast to UI
+                                val amplitude = calculateAmplitude(audioData, readSize)
+                                val intent = Intent("AUDIO_AMPLITUDE")
+                                intent.putExtra("amplitude", amplitude)
+                                LocalBroadcastManager.getInstance(this@AudioStreamingService).sendBroadcast(intent)
+                                Log.d("Waveform", "Broadcasting amplitude: $amplitude")
                             }
                         }
+                        // This approach is correct for streaming long audio: as long as isStreaming is true and the mic is not muted, audio is read, sent, and amplitude is broadcast. If readSize drops to zero, the mic is being cut off or starved by the system or another app.
 
                         // Receive and play audio from mesh network
                         val receivedAudio = meshNetworkManager.receiveAudioData(settings.selectedChannelId ?: DEFAULT_CHANNEL)
@@ -133,26 +209,71 @@ class AudioStreamingService : Service() {
                 } catch (e: SecurityException) {
                     // Handle permission denial during runtime
                     isStreaming = false
+                    Log.e("Waveform", "SecurityException in streaming loop", e)
+                } catch (e: Exception) {
+                    isStreaming = false
+                    Log.e("Waveform", "Exception in streaming loop", e)
                 } finally {
+                    Log.d("Waveform", "Exiting streaming loop, cleaning up AudioRecord/AudioTrack")
                     audioRecord?.stop()
                     audioRecord?.release()
                     audioTrack?.stop()
                     audioTrack?.release()
+                    echoCanceler?.release()
+                    echoCanceler = null
                     audioRecord = null
                     audioTrack = null
+                    // Restore previous audio mode
+                    val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
+                    previousAudioMode?.let { audioManager.mode = it }
+                    // Abandon audio focus
+                    if (audioFocusRequested) {
+                        audioManager.abandonAudioFocus(audioFocusChangeListener)
+                        audioFocusRequested = false
+                        audioFocusGranted = false
+                        Log.d("Waveform", "Audio focus abandoned")
+                    }
                 }
             }
         }
     }
 
     fun stopStreaming() {
+        Log.d("Waveform", "stopStreaming called")
         isStreaming = false
         streamingJob?.cancel()
         streamingJob = null
+        // Abandon audio focus
+        if (audioFocusRequested) {
+            val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
+            audioManager.abandonAudioFocus(audioFocusChangeListener)
+            audioFocusRequested = false
+            audioFocusGranted = false
+            Log.d("Waveform", "Audio focus abandoned")
+        }
+        // Stop foreground notification
+        stopForeground(true)
     }
 
     override fun onDestroy() {
+        Log.d("Waveform", "AudioStreamingService onDestroy called")
         stopStreaming()
         super.onDestroy()
     }
+
+    // Helper to calculate RMS amplitude from PCM 16-bit mono buffer
+    private fun calculateAmplitude(buffer: ByteArray, size: Int): Int {
+        var sum = 0.0
+        var count = 0
+        var i = 0
+        while (i + 1 < size) {
+            val sample = (buffer[i + 1].toInt() shl 8) or (buffer[i].toInt() and 0xFF)
+            sum += sample * sample
+            count++
+            i += 2
+        }
+        val rms = if (count > 0) Math.sqrt(sum / count) else 0.0
+        return rms.toInt().coerceAtMost(32767)
+    }
+
 } 

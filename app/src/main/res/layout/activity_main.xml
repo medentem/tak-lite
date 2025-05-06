@@ -71,7 +71,8 @@
             android:layout_width="56dp"
             android:layout_height="56dp"
             android:layout_gravity="center"
-            android:background="@drawable/bg_fab_circle">
+            android:background="@drawable/bg_fab_circle"
+            android:backgroundTint="#0DCDBA">
 
             <ImageView
                 android:id="@+id/lineToolButton"
@@ -133,7 +134,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="16dp"
-        android:layout_marginBottom="160dp"
+        android:layout_marginBottom="96dp"
         android:contentDescription="Download Visible Map Sector"
         android:src="@android:drawable/ic_menu_save"
         app:layout_constraintBottom_toBottomOf="parent"
@@ -144,12 +145,30 @@
         android:layout_width="56dp"
         android:layout_height="56dp"
         android:layout_marginStart="16dp"
-        android:layout_marginBottom="96dp"
+        android:layout_marginBottom="176dp"
         android:background="@drawable/bg_fab_circle"
+        android:backgroundTint="#0DCDBA"
         android:contentDescription="Show Audio Channels"
+        android:elevation="16dp"
         android:src="@drawable/ic_group"
         app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <FrameLayout
+        android:id="@+id/waveformOverlayContainer"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:layout_gravity="bottom"
+        android:background="#CC222222"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        android:elevation="16dp" />
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <com.tak.lite.ui.audio.WaveformView
+            android:id="@+id/waveformView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+    </FrameLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout> 
