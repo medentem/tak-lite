@@ -43,6 +43,7 @@ class FanMenuView @JvmOverloads constructor(
     var screenSize: PointF = PointF(0f, 0f)
     private val iconRadius = 60f
     private val centerHoleRadius = 135f
+    private var isTransitioning = false
     private val clearPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.TRANSPARENT
         style = Paint.Style.FILL
@@ -354,77 +355,144 @@ class FanMenuView @JvmOverloads constructor(
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.action) {
-            MotionEvent.ACTION_MOVE, MotionEvent.ACTION_DOWN -> {
-                val idx = getOptionIndexAt(event.x, event.y)
-                if (idx != selectedIndex) {
-                    selectedIndex = idx
-                    invalidate()
+            MotionEvent.ACTION_DOWN -> {
+                // Request that our parent view not intercept touch events
+                parent?.requestDisallowInterceptTouchEvent(true)
+                
+                val distance = hypot(event.x - center.x, event.y - center.y)
+                if (distance < centerHoleRadius) {
+                    // Touched the center hole
+                    if (!isTransitioning) {
+                        listener?.onMenuDismissed()
+                    }
+                    return true
                 }
-            }
-            MotionEvent.ACTION_UP -> {
-                selectedIndex?.let {
-                    listener?.onOptionSelected(options[it])
-                } ?: run {
-                    listener?.onMenuDismissed()
+                
+                // Check if touch is within the menu's radius range
+                val maxRadius = menuRadius + (if (numOuter > 0) ringSpacing else 0f) + iconRadius
+                if (distance > maxRadius) {
+                    if (!isTransitioning) {
+                        listener?.onMenuDismissed()
+                    }
+                    return true // Dismiss menu for touches outside the menu radius
                 }
-                selectedIndex = null
+                
+                updateSelectedItem(event.x, event.y)
                 return true
             }
-            MotionEvent.ACTION_CANCEL -> {
-                listener?.onMenuDismissed()
+            MotionEvent.ACTION_MOVE -> {
+                updateSelectedItem(event.x, event.y)
+                return true
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                // Allow parent to intercept touch events again
+                parent?.requestDisallowInterceptTouchEvent(false)
+                
+                if (event.action == MotionEvent.ACTION_UP) {
+                    selectedIndex?.let { index ->
+                        if (index in options.indices) {
+                            isTransitioning = true
+                            listener?.onOptionSelected(options[index])
+                        }
+                    }
+                }
                 selectedIndex = null
+                invalidate()
                 return true
             }
         }
-        return true
+        return super.onTouchEvent(event)
     }
 
-    private fun getOptionIndexAt(x: Float, y: Float): Int? {
-        val dx = x - center.x
-        val dy = y - center.y
-        val distance = hypot(dx.toDouble(), dy.toDouble())
-        if (distance < centerHoleRadius) return null
-        // Determine which ring
-        val ring = when {
-            distance < menuRadius + iconRadius -> 0
-            distance < menuRadius + ringSpacing + iconRadius && numOuter > 0 -> 1
-            else -> return null
+    private fun updateSelectedItem(x: Float, y: Float) {
+        val distance = hypot(x - center.x, y - center.y)
+        
+        // Check if touch is within the menu's radius range
+        val maxRadius = menuRadius + (if (numOuter > 0) ringSpacing else 0f) + iconRadius
+        if (distance > maxRadius) {
+            selectedIndex = null
+            invalidate()
+            return
         }
-        val (itemsInRing, offset) = if (ring == 0) Pair(numInner, 0) else Pair(numOuter, numInner)
-        if (itemsInRing == 0) return null
-        val angle = (atan2(dy.toDouble(), dx.toDouble()) + 2 * Math.PI) % (2 * Math.PI)
+        
+        // Find which option was selected
+        val angle = atan2(y - center.y, x - center.x)
+        val normalizedAngle = (angle + 2 * Math.PI) % (2 * Math.PI)
         val startAngle = (menuStartAngle + 2 * Math.PI) % (2 * Math.PI)
-        val fanAngle = menuFanAngle
-        val endAngle = (startAngle + fanAngle) % (2 * Math.PI)
+        val endAngle = (startAngle + menuFanAngle) % (2 * Math.PI)
+        
+        // Check if the touch is within the fan menu's angle range
         val inFan = if (startAngle < endAngle) {
-            angle >= startAngle && angle <= endAngle
+            normalizedAngle >= startAngle && normalizedAngle <= endAngle
         } else {
-            angle >= startAngle || angle <= endAngle
+            normalizedAngle >= startAngle || normalizedAngle <= endAngle
         }
-        if (!inFan) return null
-        val angleStep = fanAngle / itemsInRing
-        var sector = ((angle - startAngle + 2 * Math.PI) % (2 * Math.PI)) / angleStep
-        if (sector >= itemsInRing) sector = (itemsInRing - 1).toDouble()
-        val idxInRing = sector.toInt().coerceIn(0, itemsInRing - 1)
-        return offset + idxInRing
+        
+        if (!inFan) {
+            selectedIndex = null
+            invalidate()
+            return
+        }
+        
+        // Determine which ring was touched
+        val ring = when {
+            distance < menuRadius + iconRadius -> 0 // Inner ring
+            distance < menuRadius + ringSpacing + iconRadius && numOuter > 0 -> 1 // Outer ring
+            else -> return // Between rings or outside
+        }
+        
+        // Calculate the angle step for the appropriate ring
+        val itemsInRing = if (ring == 0) numInner else numOuter
+        val angleStep = menuFanAngle / itemsInRing
+        
+        // Calculate the relative angle within the ring
+        val relativeAngle = if (normalizedAngle < startAngle) {
+            normalizedAngle + 2 * Math.PI - startAngle
+        } else {
+            normalizedAngle - startAngle
+        }
+        
+        // Calculate the index within the ring
+        val idxInRing = (relativeAngle / angleStep).toInt()
+        
+        // Convert to global index
+        val index = if (ring == 0) idxInRing else numInner + idxInRing
+        
+        if (index in options.indices) {
+            if (selectedIndex != index) {
+                selectedIndex = index
+                invalidate()
+            }
+        }
     }
 
-    fun showAt(center: PointF, options: List<Option>, listener: OnOptionSelectedListener, screenSize: PointF? = null) {
+    fun showAt(center: PointF, options: List<Option>, listener: OnOptionSelectedListener, screenSize: PointF) {
+        this.center = center
         this.options = options
         this.listener = listener
+        this.screenSize = screenSize
         this.selectedIndex = null
+        this.isTransitioning = false
         numInner = minOf(options.size, maxItemsInnerRing)
         numOuter = options.size - numInner
-        this.center = center
+
+        // Calculate optimal menu angle and position
+        calculateOptimalMenuAngle(center, screenSize)
+        
+        invalidate()
+    }
+
+    private fun calculateOptimalMenuAngle(center: PointF, screenSize: PointF) {
         val minFanAngle = Math.PI / 2 // 90 degrees
         val maxFanAngle = 2 * Math.PI // 360 degrees
         val minRadius = 300f
-        val maxRadius = 500f // You can adjust this as needed
+        val maxRadius = 500f
         val minAngleBetween = Math.PI / 8 // 22.5 degrees between items minimum
         val iconSpacing = iconRadius * 2 * 2.1 // 220% extra spacing for more padding
         val n = numInner
         var requiredFanAngle = minFanAngle
         var requiredRadius = minRadius
+
         if (n > 1) {
             // Calculate the minimum angle needed to avoid overlap at minRadius
             val angleBetween = Math.max(minAngleBetween, 2 * Math.asin(iconSpacing / (2 * minRadius)))
@@ -440,36 +508,36 @@ class FanMenuView @JvmOverloads constructor(
                 requiredRadius = neededRadius.coerceAtLeast(minRadius).coerceAtMost(maxRadius)
             }
         }
+
         menuFanAngle = requiredFanAngle
         menuRadius = requiredRadius
-        // Default: fan out to the right
+
+        // Calculate the optimal start angle that maximizes visible items
+        val candidateAngles = listOf(
+            0.0, // right
+            Math.PI / 4, // down-right
+            Math.PI / 2, // down
+            3 * Math.PI / 4, // down-left
+            Math.PI, // left
+            5 * Math.PI / 4, // up-left
+            3 * Math.PI / 2, // up
+            7 * Math.PI / 4 // up-right
+        )
+
+        var maxVisible = -1f
         var bestStartAngle = 0.0
-        if (screenSize != null) {
-            // Try several candidate start angles and pick the one that keeps the most of the arc visible
-            val candidateAngles = listOf(
-                0.0, // right
-                Math.PI / 4, // down-right
-                Math.PI / 2, // down
-                3 * Math.PI / 4, // down-left
-                Math.PI, // left
-                5 * Math.PI / 4, // up-left
-                3 * Math.PI / 2, // up
-                7 * Math.PI / 4 // up-right
-            )
-            var maxVisible = -1f
-            for (angle in candidateAngles) {
-                val visible = computeVisibleArcFraction(center, menuRadius, angle, menuFanAngle, screenSize)
-                if (visible > maxVisible) {
-                    maxVisible = visible
-                    bestStartAngle = angle
-                }
+
+        for (angle in candidateAngles) {
+            val visible = computeVisibleArcFraction(center, menuRadius, angle, menuFanAngle, screenSize)
+            if (visible > maxVisible) {
+                maxVisible = visible
+                bestStartAngle = angle
             }
         }
+
         menuStartAngle = bestStartAngle
         // Normalize menuStartAngle to [0, 2PI)
         menuStartAngle = (menuStartAngle + 2 * Math.PI) % (2 * Math.PI)
-        visibility = VISIBLE
-        invalidate()
     }
 
     /**
@@ -487,11 +555,6 @@ class FanMenuView @JvmOverloads constructor(
             }
         }
         return visible.toFloat() / (steps + 1)
-    }
-
-    fun dismiss() {
-        visibility = GONE
-        listener?.onMenuDismissed()
     }
 
     /**
@@ -518,4 +581,4 @@ class FanMenuView @JvmOverloads constructor(
         }
         return requiredRadius
     }
-} 
+}

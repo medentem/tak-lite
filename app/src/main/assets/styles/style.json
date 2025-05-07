@@ -5,7 +5,7 @@
     "raster-tiles": {
       "type": "raster",
       "tiles": [
-        "mbtiles://{z}/{x}/{y}.png"
+        "file:///data/data/com.tak.lite/files/tiles/osm/{z}/{x}/{y}.png"
       ],
       "tileSize": 256,
       "minzoom": 0,

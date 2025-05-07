@@ -21,30 +21,31 @@ class AnnotationOverlayView @JvmOverloads constructor(
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0
 ) : View(context, attrs, defStyleAttr) {
-    
+
     private val paint = Paint().apply {
         isAntiAlias = true
         style = Paint.Style.STROKE
         strokeWidth = 8f
     }
-    
+
     private val fillPaint = Paint().apply {
         isAntiAlias = true
         style = Paint.Style.FILL
     }
-    
+
     private var projection: Projection? = null
     private var annotations: List<MapAnnotation> = emptyList()
     private var currentZoom: Float = 0f
     private var tempStartDot: LatLng? = null
     private var tempEndDot: LatLng? = null
     private var tempLinePoints: List<LatLng>? = null
-    
+
     interface OnPoiLongPressListener {
         fun onPoiLongPressed(poiId: String, screenPosition: PointF)
         fun onLineLongPressed(lineId: String, screenPosition: PointF)
     }
     var poiLongPressListener: OnPoiLongPressListener? = null
+    var annotationController: AnnotationController? = null
     private var longPressHandler: Handler? = null
     private var longPressRunnable: Runnable? = null
     private var longPressStartTime: Long = 0
@@ -52,33 +53,33 @@ class AnnotationOverlayView @JvmOverloads constructor(
     private var longPressDownPos: PointF? = null
     private var longPressLineCandidate: MapAnnotation.Line? = null
     private var longPressLineDownPos: PointF? = null
-    
+
     fun setProjection(projection: Projection?) {
         this.projection = projection
         invalidate()
     }
-    
+
     fun updateAnnotations(annotations: List<MapAnnotation>) {
         this.annotations = annotations
         invalidate()
     }
-    
+
     fun setZoom(zoom: Float) {
         this.currentZoom = zoom
         invalidate()
     }
-    
+
     fun setTempLineDots(start: LatLng?, end: LatLng?) {
         tempStartDot = start
         tempEndDot = end
         invalidate()
     }
-    
+
     fun setTempLinePoints(points: List<LatLng>?) {
         tempLinePoints = points
         invalidate()
     }
-    
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         if (projection == null) return
@@ -145,10 +146,10 @@ class AnnotationOverlayView @JvmOverloads constructor(
             }
         }
     }
-    
+
     private fun drawPoint(canvas: Canvas, point: PointF, annotation: MapAnnotation.PointOfInterest) {
         paint.color = annotation.color.toColor()
-        
+
         when (annotation.shape) {
             PointShape.CIRCLE -> {
                 canvas.drawCircle(point.x, point.y, 30f, paint)
@@ -202,7 +203,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
             }
         }
     }
-    
+
     private fun drawLine(canvas: Canvas, point1: PointF, point2: PointF, annotation: MapAnnotation.Line) {
         paint.color = annotation.color.toColor()
         // Set line style
@@ -221,7 +222,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
         // Reset pathEffect
         paint.pathEffect = null
     }
-    
+
     private fun drawArrowHead(canvas: Canvas, start: PointF, end: PointF, color: Int) {
         val arrowSize = 30f
         val angle = Math.atan2((end.y - start.y).toDouble(), (end.x - start.x).toDouble())
@@ -240,16 +241,16 @@ class AnnotationOverlayView @JvmOverloads constructor(
         arrowPath.close()
         canvas.drawPath(arrowPath, arrowPaint)
     }
-    
+
     private fun drawArea(canvas: Canvas, center: PointF, annotation: MapAnnotation.Area) {
         paint.color = annotation.color.toColor()
         fillPaint.color = annotation.color.toColor()
-        
+
         val radius = annotation.radius * currentZoom
         canvas.drawCircle(center.x, center.y, radius.toFloat(), fillPaint)
         canvas.drawCircle(center.x, center.y, radius.toFloat(), paint)
     }
-    
+
     private fun AnnotationColor.toColor(): Int {
         return when (this) {
             AnnotationColor.GREEN -> Color.GREEN
@@ -258,7 +259,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
             AnnotationColor.BLACK -> Color.BLACK
         }
     }
-    
+
     private fun Int.withAlpha(alpha: Int): Int {
         return Color.argb(alpha, Color.red(this), Color.green(this), Color.blue(this))
     }
