@@ -356,9 +356,6 @@ class FanMenuView @JvmOverloads constructor(
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
-                // Request that our parent view not intercept touch events
-                parent?.requestDisallowInterceptTouchEvent(true)
-                
                 val distance = hypot(event.x - center.x, event.y - center.y)
                 if (distance < centerHoleRadius) {
                     // Touched the center hole
@@ -368,26 +365,16 @@ class FanMenuView @JvmOverloads constructor(
                     return true
                 }
                 
-                // Check if touch is within the menu's radius range
-                val maxRadius = menuRadius + (if (numOuter > 0) ringSpacing else 0f) + iconRadius
-                if (distance > maxRadius) {
-                    if (!isTransitioning) {
-                        listener?.onMenuDismissed()
-                    }
-                    return true // Dismiss menu for touches outside the menu radius
-                }
-                
+                // Start tracking touch
                 updateSelectedItem(event.x, event.y)
                 return true
             }
             MotionEvent.ACTION_MOVE -> {
+                // Update selection based on current touch position
                 updateSelectedItem(event.x, event.y)
                 return true
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                // Allow parent to intercept touch events again
-                parent?.requestDisallowInterceptTouchEvent(false)
-                
                 if (event.action == MotionEvent.ACTION_UP) {
                     selectedIndex?.let { index ->
                         if (index in options.indices) {
@@ -406,14 +393,6 @@ class FanMenuView @JvmOverloads constructor(
 
     private fun updateSelectedItem(x: Float, y: Float) {
         val distance = hypot(x - center.x, y - center.y)
-        
-        // Check if touch is within the menu's radius range
-        val maxRadius = menuRadius + (if (numOuter > 0) ringSpacing else 0f) + iconRadius
-        if (distance > maxRadius) {
-            selectedIndex = null
-            invalidate()
-            return
-        }
         
         // Find which option was selected
         val angle = atan2(y - center.y, x - center.x)

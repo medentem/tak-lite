@@ -2,6 +2,7 @@ package com.tak.lite
 
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.view.View
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
@@ -41,6 +42,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var annotationController: com.tak.lite.ui.map.AnnotationController
     private lateinit var locationController: LocationController
     private lateinit var audioController: AudioController
+    private lateinit var fanMenuView: com.tak.lite.ui.map.FanMenuView
+    private lateinit var annotationOverlayView: AnnotationOverlayView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,8 +53,8 @@ class MainActivity : AppCompatActivity() {
         loadNickname()?.let { viewModel.setLocalNickname(it) }
 
         mapView = findViewById(R.id.mapView)
-        val fanMenuView = findViewById<com.tak.lite.ui.map.FanMenuView>(R.id.fanMenuView)
-        val annotationOverlayView = findViewById<AnnotationOverlayView>(R.id.annotationOverlayView)
+        fanMenuView = findViewById(R.id.fanMenuView)
+        annotationOverlayView = findViewById(R.id.annotationOverlayView)
         annotationController = com.tak.lite.ui.map.AnnotationController(
             context = this,
             binding = binding,
@@ -282,5 +285,33 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
         mapController.onDestroy()
         audioController.cleanupAudioUI()
+    }
+
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+        if (::fanMenuView.isInitialized && fanMenuView.visibility == View.VISIBLE) {
+            // Offset event coordinates if needed (if fanMenuView is not full screen)
+            val location = IntArray(2)
+            fanMenuView.getLocationOnScreen(location)
+            val offsetX = location[0]
+            val offsetY = location[1]
+            val event = android.view.MotionEvent.obtain(ev)
+            event.offsetLocation(-offsetX.toFloat(), -offsetY.toFloat())
+            val handled = fanMenuView.dispatchTouchEvent(event)
+            event.recycle()
+            return handled
+        }
+        // --- Forward to annotationOverlayView if visible ---
+        if (::annotationOverlayView.isInitialized && annotationOverlayView.visibility == View.VISIBLE) {
+            val location = IntArray(2)
+            annotationOverlayView.getLocationOnScreen(location)
+            val offsetX = location[0]
+            val offsetY = location[1]
+            val event = android.view.MotionEvent.obtain(ev)
+            event.offsetLocation(-offsetX.toFloat(), -offsetY.toFloat())
+            val handled = annotationOverlayView.dispatchTouchEvent(event)
+            event.recycle()
+            if (handled) return true
+        }
+        return super.dispatchTouchEvent(ev)
     }
 }
