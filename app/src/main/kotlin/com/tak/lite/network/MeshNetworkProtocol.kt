@@ -253,8 +253,39 @@ class MeshNetworkProtocol(
         try {
             val jsonString = json.encodeToString(MapAnnotation.serializer(), annotation)
             sendToAllPeers(jsonString.toByteArray(), ANNOTATION_PORT)
+            // Also broadcast to ensure all peers receive it
+            val socket = createBoundSocket()
+            val packet = DatagramPacket(
+                jsonString.toByteArray(),
+                jsonString.toByteArray().size,
+                InetAddress.getByName("255.255.255.255"),
+                ANNOTATION_PORT
+            )
+            socket.broadcast = true
+            socket.send(packet)
+            socket.close()
         } catch (e: Exception) {
             Log.e(TAG, "Error sending annotation: ${e.message}")
+            // Retry once after a short delay
+            CoroutineScope(coroutineContext).launch {
+                delay(1000)
+                try {
+                    val jsonString = json.encodeToString(MapAnnotation.serializer(), annotation)
+                    sendToAllPeers(jsonString.toByteArray(), ANNOTATION_PORT)
+                    val socket = createBoundSocket()
+                    val packet = DatagramPacket(
+                        jsonString.toByteArray(),
+                        jsonString.toByteArray().size,
+                        InetAddress.getByName("255.255.255.255"),
+                        ANNOTATION_PORT
+                    )
+                    socket.broadcast = true
+                    socket.send(packet)
+                    socket.close()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error retrying annotation send: ${e.message}")
+                }
+            }
         }
     }
     
@@ -325,6 +356,21 @@ class MeshNetworkProtocol(
                 socket.close()
             } catch (e: Exception) {
                 Log.e(TAG, "Error sending state sync: ${e.message}")
+                // Retry once after a short delay
+                delay(1000)
+                try {
+                    val socket = createBoundSocket()
+                    val packet = DatagramPacket(
+                        jsonString.toByteArray(),
+                        jsonString.toByteArray().size,
+                        InetAddress.getByName(toIp),
+                        STATE_SYNC_PORT
+                    )
+                    socket.send(packet)
+                    socket.close()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error retrying state sync: ${e.message}")
+                }
             }
         }
     }
@@ -354,7 +400,6 @@ class MeshNetworkProtocol(
     }
 
     private fun startPeriodicStateRebroadcast() {
-        stateRebroadcastJob?.cancel()
         stateRebroadcastJob = CoroutineScope(coroutineContext).launch {
             while (isActive) {
                 try {
@@ -376,7 +421,7 @@ class MeshNetworkProtocol(
                     ipAddress = it.ipAddress,
                     lastSeen = it.lastSeen,
                     nickname = it.nickname
-                ) }.let { emptyList<com.tak.lite.data.model.AudioChannel>() }, // Replace with actual channels if available
+                ) }.let { emptyList<com.tak.lite.data.model.AudioChannel>() },
                 peerLocations = peerLocations.mapValues { LatLngSerializable.fromMapLibreLatLng(it.value) },
                 annotations = annotations
             )
