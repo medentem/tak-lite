@@ -66,7 +66,7 @@ TAK Lite is designed to operate in environments with limited or no internet conn
 - **Resilience**: The mesh network is resilient to node failures and adapts dynamically as devices join or leave the network.
 
 **Further Reading:**
-- [Doodle Labs Mesh Networking Overview](https://doodlelabs.com/technology/mesh-networking/)
+- [Doodle Labs Mesh Networking Overview](https://doodlelabs.com)
 - [Doodle Labs Technical Documentation](https://support.doodlelabs.com/hc/en-us/categories/360002078032-Technical-Documentation)
 
 ## Development Status
