@@ -59,7 +59,7 @@ class LocationController(
         currentSource = LocationSource.UNKNOWN
         // First try to get location from Mesh Rider
         coroutineScope.launch {
-            val meshRiderLocation = meshRiderGpsController.getMeshRiderLocation()
+            val meshRiderLocation = meshRiderGpsController.getMeshRiderLocation(activity)
             if (meshRiderLocation != null) {
                 currentSource = LocationSource.MESH_RIDER
                 onSourceChanged?.invoke(LocationSource.MESH_RIDER)
@@ -167,7 +167,7 @@ class LocationController(
             
             // First try Mesh Rider location
             coroutineScope.launch {
-                val meshRiderLocation = meshRiderGpsController.getMeshRiderLocation()
+                val meshRiderLocation = meshRiderGpsController.getMeshRiderLocation(activity)
                 if (meshRiderLocation != null) {
                     val latLng = LatLng(meshRiderLocation.latitude, meshRiderLocation.longitude)
                     try {
