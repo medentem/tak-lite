@@ -30,6 +30,13 @@ A situational awareness Android application designed for use with Doodle Labs me
 4. Sync the project with Gradle files
 5. Build and run the application
 
+## Mesh Rider Setup
+
+1. Ensure one radio on the network is setup as the DHCP server with the radio on 192.168.1.10, subnet 255.255.255.0.
+2. If you want the radio's GPS to work with the app, continue:
+3. Ensure the GPS service is bound to all network interfaces
+4. Ensure the radio firewall allows GPS port traffic
+
 ## Dependencies
 
 - MapLibre GL Android SDK (map rendering)
