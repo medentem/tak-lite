@@ -9,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.webrtc.*
 import java.nio.ByteBuffer
@@ -61,6 +62,9 @@ class MeshNetworkManagerImpl @Inject constructor(
     private var meshProtocol: MeshNetworkProtocol? = null
     private var annotationSync: ((List<com.tak.lite.model.MapAnnotation>) -> Unit)? = null
     private var locationSync: ((Map<String, LatLng>) -> Unit)? = null
+
+    private val _isReceivingAudio = MutableStateFlow(false)
+    val receivingAudioFlow: StateFlow<Boolean> = _isReceivingAudio.asStateFlow()
 
     private val peerConnectionObserver = object : PeerConnection.Observer {
         override fun onSignalingChange(state: PeerConnection.SignalingState?) {
@@ -209,7 +213,7 @@ class MeshNetworkManagerImpl @Inject constructor(
     override fun receiveAudioData(channelId: String): ByteArray? {
         if (_connectionState.value != ConnectionState.CONNECTED) return null
         val useChannelId = channelId.ifBlank { selectedChannelId }
-        return synchronized(audioBuffers) {
+        val audioData = synchronized(audioBuffers) {
             val buffer = audioBuffers[useChannelId] ?: return null
             if (buffer.isNotEmpty()) {
                 buffer.removeAt(0)
@@ -217,6 +221,8 @@ class MeshNetworkManagerImpl @Inject constructor(
                 null
             }
         }
+        _isReceivingAudio.value = audioData != null
+        return audioData
     }
 
     private fun setupDataChannel(dataChannel: DataChannel) {

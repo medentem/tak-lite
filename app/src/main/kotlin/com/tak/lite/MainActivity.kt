@@ -31,6 +31,10 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Color
 import kotlinx.coroutines.delay
+import android.widget.ImageView
+import android.widget.TextView
+import android.widget.FrameLayout
+import com.tak.lite.ui.location.LocationSource
 
 val DEFAULT_US_CENTER = LatLng(39.8283, -98.5795)
 const val DEFAULT_US_ZOOM = 4.0
@@ -54,6 +58,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var annotationOverlayView: AnnotationOverlayView
     private val peerMarkers = mutableMapOf<String, org.maplibre.android.annotations.Marker>()
     private val peerLastSeen = mutableMapOf<String, Long>()
+    private lateinit var locationSourceOverlay: FrameLayout
+    private lateinit var locationSourceIcon: ImageView
+    private lateinit var locationSourceLabel: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -93,6 +100,17 @@ class MainActivity : AppCompatActivity() {
                 annotationController.setupAnnotationOverlay(map)
                 annotationController.setupPoiLongPressListener()
                 annotationController.setupMapLongPress(map)
+                // Center on last known location if available
+                loadLastLocation()?.let { (lat, lon, zoom) ->
+                    val latLng = org.maplibre.android.geometry.LatLng(lat, lon)
+                    map.moveCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(latLng, zoom.toDouble()))
+                    // Set source to PHONE if not mesh
+                    locationSourceOverlay.visibility = View.VISIBLE
+                    locationSourceIcon.setImageResource(R.drawable.ic_baseline_my_location_24)
+                    locationSourceIcon.setColorFilter(Color.parseColor("#2196F3"))
+                    locationSourceLabel.text = "Phone"
+                    locationSourceLabel.setTextColor(Color.parseColor("#2196F3"))
+                }
                 
                 // Add map click listener for line tool
                 map.addOnMapClickListener { latLng ->
@@ -124,6 +142,17 @@ class MainActivity : AppCompatActivity() {
         annotationController.mapController = mapController
         mapController.onCreate(savedInstanceState, loadLastLocation())
 
+        locationSourceOverlay = findViewById(R.id.locationSourceOverlay)
+        locationSourceIcon = findViewById(R.id.locationSourceIcon)
+        locationSourceLabel = findViewById(R.id.locationSourceLabel)
+
+        // Set to unknown by default
+        locationSourceOverlay.visibility = View.VISIBLE
+        locationSourceIcon.setImageResource(R.drawable.baseline_help_24) // Use a gray question mark icon
+        locationSourceIcon.setColorFilter(Color.GRAY)
+        locationSourceLabel.text = "Unknown"
+        locationSourceLabel.setTextColor(Color.GRAY)
+
         locationController = LocationController(
             activity = this,
             onLocationUpdate = { location ->
@@ -132,9 +161,46 @@ class MainActivity : AppCompatActivity() {
                 val currentZoom = mapController.mapLibreMap?.cameraPosition?.zoom?.toFloat() ?: DEFAULT_US_ZOOM.toFloat()
                 saveLastLocation(location.latitude, location.longitude, currentZoom)
                 viewModel.sendLocationUpdate(location.latitude, location.longitude)
+                // Center map on new location
+                mapController.mapLibreMap?.moveCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(latLng, currentZoom.toDouble()))
+                // Set source to PHONE if not mesh
+                if (locationSourceLabel.text != "Mesh") {
+                    locationSourceOverlay.visibility = View.VISIBLE
+                    locationSourceIcon.setImageResource(R.drawable.ic_baseline_my_location_24)
+                    locationSourceIcon.setColorFilter(Color.parseColor("#2196F3"))
+                    locationSourceLabel.text = "Phone"
+                    locationSourceLabel.setTextColor(Color.parseColor("#2196F3"))
+                }
             },
             onPermissionDenied = {
                 Toast.makeText(this, "Location permission not granted", Toast.LENGTH_SHORT).show()
+            },
+            onSourceChanged = { source: LocationSource ->
+                runOnUiThread {
+                    when (source) {
+                        LocationSource.MESH_RIDER -> {
+                            locationSourceOverlay.visibility = View.VISIBLE
+                            locationSourceIcon.setImageResource(R.drawable.mesh_rider_icon)
+                            locationSourceIcon.setColorFilter(Color.parseColor("#2196F3")) // Blue
+                            locationSourceLabel.text = "Mesh"
+                            locationSourceLabel.setTextColor(Color.parseColor("#2196F3"))
+                        }
+                        LocationSource.PHONE -> {
+                            locationSourceOverlay.visibility = View.VISIBLE
+                            locationSourceIcon.setImageResource(R.drawable.ic_baseline_my_location_24)
+                            locationSourceIcon.setColorFilter(Color.parseColor("#2196F3")) // Blue
+                            locationSourceLabel.text = "Phone"
+                            locationSourceLabel.setTextColor(Color.parseColor("#2196F3"))
+                        }
+                        LocationSource.UNKNOWN -> {
+                            locationSourceOverlay.visibility = View.VISIBLE
+                            locationSourceIcon.setImageResource(R.drawable.baseline_help_24)
+                            locationSourceIcon.setColorFilter(Color.GRAY)
+                            locationSourceLabel.text = "Unknown"
+                            locationSourceLabel.setTextColor(Color.GRAY)
+                        }
+                    }
+                }
             }
         )
         locationController.checkAndRequestPermissions(PERMISSIONS_REQUEST_CODE)

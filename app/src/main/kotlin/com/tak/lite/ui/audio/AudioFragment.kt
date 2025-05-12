@@ -81,8 +81,9 @@ class AudioFragment : Fragment() {
 
         // Group menu button opens the channel overlay
         binding.groupMenuButton.setOnClickListener {
+            val overlayView: View
             if (binding.talkGroupOverlayContainer.childCount == 0) {
-                val overlayView = LayoutInflater.from(requireContext()).inflate(R.layout.talk_group_overlay, binding.talkGroupOverlayContainer, false)
+                overlayView = LayoutInflater.from(requireContext()).inflate(R.layout.talk_group_overlay, binding.talkGroupOverlayContainer, false)
                 binding.talkGroupOverlayContainer.addView(overlayView)
                 // Close button inside overlay
                 overlayView.findViewById<View>(R.id.closeTalkGroupOverlayButton).setOnClickListener {
@@ -93,7 +94,6 @@ class AudioFragment : Fragment() {
                 val talkGroupAdapter = TalkGroupAdapter(
                     onGroupSelected = { channel ->
                         viewModel.selectChannel(channel.id)
-                        binding.talkGroupOverlayContainer.visibility = View.GONE
                     },
                     getUserName = { userId ->
                         // Use nickname if available
@@ -112,10 +112,42 @@ class AudioFragment : Fragment() {
                         talkGroupAdapter.submitList(channels)
                     }
                 }
+                // Wire up indicator/animation logic
+                viewLifecycleOwner.lifecycleScope.launch {
+                    viewModel.settings.collectLatest { settings ->
+                        talkGroupAdapter.setActiveGroup(settings.selectedChannelId)
+                    }
+                }
+                viewLifecycleOwner.lifecycleScope.launch {
+                    viewModel.isTransmitting.collectLatest { isTransmitting ->
+                        talkGroupAdapter.setTransmittingGroup(if (isTransmitting) viewModel.settings.value.selectedChannelId else null)
+                    }
+                }
+                viewLifecycleOwner.lifecycleScope.launch {
+                    viewModel.isReceiving.collectLatest { isReceiving ->
+                        talkGroupAdapter.setReceivingGroup(if (isReceiving) viewModel.settings.value.selectedChannelId else null)
+                    }
+                }
                 // Add Channel button
                 overlayView.findViewById<View>(R.id.addTalkGroupButton).setOnClickListener {
                     showAddChannelDialog()
                 }
+                // Manage Channels button
+                overlayView.findViewById<View>(R.id.manageChannelsButton).setOnClickListener {
+                    val intent = android.content.Intent(requireContext(), ChannelManagementActivity::class.java)
+                    requireContext().startActivity(intent)
+                    binding.talkGroupOverlayContainer.visibility = View.GONE
+                }
+            } else {
+                overlayView = binding.talkGroupOverlayContainer.getChildAt(0)
+            }
+            overlayView.findViewById<View>(R.id.addTalkGroupButton).setOnClickListener {
+                showAddChannelDialog()
+            }
+            overlayView.findViewById<View>(R.id.manageChannelsButton).setOnClickListener {
+                val intent = android.content.Intent(requireContext(), ChannelManagementActivity::class.java)
+                requireContext().startActivity(intent)
+                binding.talkGroupOverlayContainer.visibility = View.GONE
             }
             binding.talkGroupOverlayContainer.visibility = View.VISIBLE
         }
@@ -254,12 +286,25 @@ class AudioFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewModel.settings.collectLatest { settings ->
                 updateUI(settings)
+                adapter.setActiveChannel(settings.selectedChannelId)
             }
         }
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewModel.connectionState.collectLatest { state ->
                 updateConnectionState(state)
+            }
+        }
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewModel.isTransmitting.collectLatest { isTransmitting ->
+                adapter.setTransmittingChannel(if (isTransmitting) viewModel.settings.value.selectedChannelId else null)
+            }
+        }
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewModel.isReceiving.collectLatest { isReceiving ->
+                adapter.setReceivingChannel(if (isReceiving) viewModel.settings.value.selectedChannelId else null)
             }
         }
     }

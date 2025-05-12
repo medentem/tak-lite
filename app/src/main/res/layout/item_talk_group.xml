@@ -6,13 +6,24 @@
     android:padding="12dp"
     android:background="?attr/selectableItemBackground">
 
+    <ImageView
+        android:id="@+id/groupIndicator"
+        android:layout_width="16dp"
+        android:layout_height="16dp"
+        android:src="@drawable/channel_indicator"
+        android:visibility="gone"
+        android:layout_marginEnd="8dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent" />
+
     <TextView
         android:id="@+id/groupName"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:textSize="16sp"
         android:textStyle="bold"
-        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintStart_toEndOf="@id/groupIndicator"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintEnd_toStartOf="@id/groupMemberCount"
         app:layout_constraintBottom_toTopOf="@id/membersList"
@@ -34,20 +45,10 @@
         android:layout_width="24dp"
         android:layout_height="24dp"
         android:src="@android:drawable/arrow_down_float"
-        app:layout_constraintEnd_toStartOf="@id/activeIndicator"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toTopOf="@id/membersList"
         android:contentDescription="Expand/collapse" />
-
-    <View
-        android:id="@+id/activeIndicator"
-        android:layout_width="8dp"
-        android:layout_height="8dp"
-        android:background="@drawable/circle_green"
-        android:visibility="invisible"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toTopOf="@id/membersList" />
 
     <TextView
         android:id="@+id/membersList"

@@ -1,5 +1,6 @@
 package com.tak.lite.ui.audio
 
+import android.animation.AnimatorSet
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -18,6 +19,10 @@ class TalkGroupAdapter(
 ) : ListAdapter<AudioChannel, TalkGroupAdapter.TalkGroupViewHolder>(TalkGroupDiffCallback()) {
 
     private val expandedGroups = mutableSetOf<String>()
+    private var activeGroupId: String? = null
+    private var transmittingGroupId: String? = null
+    private var receivingGroupId: String? = null
+    private val animators = mutableMapOf<String, AnimatorSet>()
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): TalkGroupViewHolder {
         val view = LayoutInflater.from(parent.context)
@@ -29,17 +34,75 @@ class TalkGroupAdapter(
         holder.bind(getItem(position))
     }
 
+    fun setActiveGroup(groupId: String?) {
+        if (activeGroupId != groupId) {
+            val oldPosition = currentList.indexOfFirst { it.id == activeGroupId }
+            val newPosition = currentList.indexOfFirst { it.id == groupId }
+            activeGroupId = groupId
+            if (oldPosition != -1) notifyItemChanged(oldPosition)
+            if (newPosition != -1) notifyItemChanged(newPosition)
+        }
+    }
+
+    fun setTransmittingGroup(groupId: String?) {
+        if (transmittingGroupId != groupId) {
+            val oldPosition = currentList.indexOfFirst { it.id == transmittingGroupId }
+            val newPosition = currentList.indexOfFirst { it.id == groupId }
+            transmittingGroupId = groupId
+            if (oldPosition != -1) notifyItemChanged(oldPosition)
+            if (newPosition != -1) notifyItemChanged(newPosition)
+        }
+    }
+
+    fun setReceivingGroup(groupId: String?) {
+        if (receivingGroupId != groupId) {
+            val oldPosition = currentList.indexOfFirst { it.id == receivingGroupId }
+            val newPosition = currentList.indexOfFirst { it.id == groupId }
+            receivingGroupId = groupId
+            if (oldPosition != -1) notifyItemChanged(oldPosition)
+            if (newPosition != -1) notifyItemChanged(newPosition)
+        }
+    }
+
     inner class TalkGroupViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val groupName: TextView = itemView.findViewById(R.id.groupName)
         private val memberCount: TextView = itemView.findViewById(R.id.groupMemberCount)
         private val expandIcon: ImageView = itemView.findViewById(R.id.expandIcon)
         private val membersList: TextView = itemView.findViewById(R.id.membersList)
-        private val activeIndicator: View = itemView.findViewById(R.id.activeIndicator)
+        private val groupIndicator: ImageView = itemView.findViewById(R.id.groupIndicator)
 
         fun bind(group: AudioChannel) {
             groupName.text = group.name
             memberCount.text = "${group.members.size} members"
-            activeIndicator.visibility = if (getIsActive(group)) View.VISIBLE else View.INVISIBLE
+
+            val isActive = group.id == activeGroupId || getIsActive(group)
+            groupIndicator.visibility = if (isActive) View.VISIBLE else View.GONE
+
+            val shouldAnimate = group.id == transmittingGroupId || group.id == receivingGroupId
+            if (shouldAnimate) {
+                if (animators[group.id] == null) {
+                    val animator = AnimatorSet()
+                    animator.playTogether(
+                        android.animation.ObjectAnimator.ofFloat(groupIndicator, "scaleX", 1f, 1.2f).apply {
+                            duration = 1000
+                            repeatCount = android.animation.ValueAnimator.INFINITE
+                            repeatMode = android.animation.ValueAnimator.REVERSE
+                        },
+                        android.animation.ObjectAnimator.ofFloat(groupIndicator, "scaleY", 1f, 1.2f).apply {
+                            duration = 1000
+                            repeatCount = android.animation.ValueAnimator.INFINITE
+                            repeatMode = android.animation.ValueAnimator.REVERSE
+                        }
+                    )
+                    animator.start()
+                    animators[group.id] = animator
+                }
+            } else {
+                animators[group.id]?.cancel()
+                animators.remove(group.id)
+                groupIndicator.scaleX = 1f
+                groupIndicator.scaleY = 1f
+            }
 
             val isExpanded = expandedGroups.contains(group.id)
             expandIcon.rotation = if (isExpanded) 90f else 0f

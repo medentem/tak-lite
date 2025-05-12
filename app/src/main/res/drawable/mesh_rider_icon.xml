@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="32dp"
+    android:height="32dp"
+    android:viewportWidth="32"
+    android:viewportHeight="32">
+    <!-- Device body -->
+    <path
+        android:fillColor="#222222"
+        android:strokeColor="#444444"
+        android:strokeWidth="1"
+        android:pathData="M10,14 h12 v14 h-12 z" />
+    <!-- Left antenna -->
+    <path
+        android:pathData="M12,14 L8,4"
+        android:strokeColor="#444444"
+        android:strokeWidth="2"
+        android:fillColor="@android:color/transparent" />
+    <!-- Right antenna -->
+    <path
+        android:pathData="M20,14 L24,4"
+        android:strokeColor="#444444"
+        android:strokeWidth="2"
+        android:fillColor="@android:color/transparent" />
+    <!-- Device details (lines) -->
+    <path
+        android:fillColor="#444444"
+        android:pathData="M12,18 h8 v2 h-8 z" />
+    <path
+        android:fillColor="#444444"
+        android:pathData="M12,22 h8 v2 h-8 z" />
+</vector> 

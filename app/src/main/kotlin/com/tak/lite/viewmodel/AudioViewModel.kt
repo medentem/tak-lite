@@ -26,6 +26,12 @@ class AudioViewModel @Inject constructor(
     private val _connectionState = MutableStateFlow(MeshNetworkManagerImpl.ConnectionState.DISCONNECTED)
     val connectionState: StateFlow<MeshNetworkManagerImpl.ConnectionState> = _connectionState.asStateFlow()
 
+    private val _isTransmitting = MutableStateFlow(false)
+    val isTransmitting: StateFlow<Boolean> = _isTransmitting.asStateFlow()
+
+    private val _isReceiving = MutableStateFlow(false)
+    val isReceiving: StateFlow<Boolean> = _isReceiving.asStateFlow()
+
     init {
         // Observe channels from the network manager
         viewModelScope.launch {
@@ -36,6 +42,13 @@ class AudioViewModel @Inject constructor(
                 if (active != null && _settings.value.selectedChannelId != active.id) {
                     _settings.value = _settings.value.copy(selectedChannelId = active.id)
                 }
+            }
+        }
+
+        // Start monitoring for received audio
+        viewModelScope.launch {
+            meshNetworkManager.receivingAudioFlow.collect { isReceiving ->
+                _isReceiving.value = isReceiving
             }
         }
     }
@@ -56,6 +69,7 @@ class AudioViewModel @Inject constructor(
     fun setPTTState(isPressed: Boolean) {
         viewModelScope.launch {
             meshNetworkManager.setPTTState(isPressed)
+            _isTransmitting.value = isPressed
         }
     }
 

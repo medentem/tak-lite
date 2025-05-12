@@ -134,6 +134,13 @@ class AudioController(
                 overlay.findViewById<View>(R.id.addTalkGroupButton)?.setOnClickListener {
                     showAddChannelDialog()
                 }
+                overlay.findViewById<View>(R.id.manageChannelsButton)?.setOnClickListener {
+                    val intent = android.content.Intent(activity, ChannelManagementActivity::class.java)
+                    activity.startActivity(intent)
+                    overlay.animate().translationX(overlayWidth.toFloat()).setDuration(300).withEndAction {
+                        rootView.removeView(overlay)
+                    }.start()
+                }
                 overlay.setOnClickListener { /* consume clicks */ }
             }
         }

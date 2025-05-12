@@ -18,12 +18,18 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.maplibre.android.geometry.LatLng
+import com.tak.lite.ui.location.LocationSource
 
 class LocationController(
     private val activity: Activity,
     private val onLocationUpdate: (Location) -> Unit,
-    private val onPermissionDenied: (() -> Unit)? = null
+    private val onPermissionDenied: (() -> Unit)? = null,
+    private val onSourceChanged: ((LocationSource) -> Unit)? = null
 ) {
     private val fusedLocationClient: FusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(activity)
     private var fallbackLocationManager: LocationManager? = null
@@ -31,6 +37,9 @@ class LocationController(
     private var fallbackHandler: Handler? = null
     private var fallbackRunnable: Runnable? = null
     private var receivedFirstLocation = false
+    private val meshRiderGpsController = MeshRiderGpsController()
+    private val coroutineScope = CoroutineScope(Dispatchers.Main)
+    private var currentSource: LocationSource = LocationSource.UNKNOWN
 
     fun checkAndRequestPermissions(requestCode: Int) {
         val permissions = arrayOf(
@@ -47,12 +56,30 @@ class LocationController(
 
     fun startLocationUpdates() {
         receivedFirstLocation = false
+        currentSource = LocationSource.UNKNOWN
+        // First try to get location from Mesh Rider
+        coroutineScope.launch {
+            val meshRiderLocation = meshRiderGpsController.getMeshRiderLocation()
+            if (meshRiderLocation != null) {
+                currentSource = LocationSource.MESH_RIDER
+                onSourceChanged?.invoke(LocationSource.MESH_RIDER)
+                handleLocation(meshRiderLocation)
+                return@launch
+            }
+            currentSource = LocationSource.PHONE
+            onSourceChanged?.invoke(LocationSource.PHONE)
+            // If Mesh Rider location fails, fall back to Android location
+            startAndroidLocationUpdates()
+        }
+    }
+
+    private fun startAndroidLocationUpdates() {
         val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 5000)
             .setMinUpdateIntervalMillis(2000)
             .build()
         if (ActivityCompat.checkSelfPermission(activity, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
             ActivityCompat.checkSelfPermission(activity, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            Log.d("LocationController", "Starting location updates")
+            Log.d("LocationController", "Starting Android location updates")
             fusedLocationClient.requestLocationUpdates(request, object : LocationCallback() {
                 override fun onLocationResult(result: LocationResult) {
                     handleLocation(result.lastLocation)
@@ -82,6 +109,11 @@ class LocationController(
             receivedFirstLocation = true
             fallbackHandler?.removeCallbacks(fallbackRunnable!!)
             stopFallbackLocationManager()
+        }
+        // If not mesh, always update to PHONE when a location is received
+        if (currentSource != LocationSource.MESH_RIDER && currentSource != LocationSource.PHONE) {
+            currentSource = LocationSource.PHONE
+            onSourceChanged?.invoke(LocationSource.PHONE)
         }
         onLocationUpdate(location)
     }
@@ -132,35 +164,54 @@ class LocationController(
                 android.widget.Toast.makeText(activity, "Location permission not granted", android.widget.Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            // Request a fresh location
-            fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
-                .addOnSuccessListener { location ->
-                    if (location != null) {
-                        val latLng = org.maplibre.android.geometry.LatLng(location.latitude, location.longitude)
-                        try {
-                            // Try to activate the LocationComponent
-                            map.locationComponent.activateLocationComponent(
-                                org.maplibre.android.location.LocationComponentActivationOptions.builder(activity, map.style!!).build()
-                            )
-                            map.locationComponent.isLocationComponentEnabled = true
-                            map.locationComponent.cameraMode = org.maplibre.android.location.modes.CameraMode.TRACKING
-                            map.animateCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(latLng, 17.0))
-                        } catch (e: Exception) {
-                            // If activation fails, just animate to the location without tracking
-                            map.animateCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(latLng, 17.0))
-                            android.widget.Toast.makeText(activity, "Location tracking not available", android.widget.Toast.LENGTH_SHORT).show()
-                        }
-                    } else {
-                        android.widget.Toast.makeText(activity, "User location not available yet", android.widget.Toast.LENGTH_SHORT).show()
+            
+            // First try Mesh Rider location
+            coroutineScope.launch {
+                val meshRiderLocation = meshRiderGpsController.getMeshRiderLocation()
+                if (meshRiderLocation != null) {
+                    val latLng = LatLng(meshRiderLocation.latitude, meshRiderLocation.longitude)
+                    try {
+                        map.locationComponent.activateLocationComponent(
+                            org.maplibre.android.location.LocationComponentActivationOptions.builder(activity, map.style!!).build()
+                        )
+                        map.locationComponent.isLocationComponentEnabled = true
+                        map.locationComponent.cameraMode = org.maplibre.android.location.modes.CameraMode.TRACKING
+                        map.animateCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(latLng, 17.0))
+                    } catch (e: Exception) {
+                        map.animateCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(latLng, 17.0))
+                        android.widget.Toast.makeText(activity, "Location tracking not available", android.widget.Toast.LENGTH_SHORT).show()
                     }
+                    return@launch
                 }
-                .addOnFailureListener {
-                    android.widget.Toast.makeText(activity, "Failed to get current location", android.widget.Toast.LENGTH_SHORT).show()
-                }
+                
+                // Fall back to Android location
+                fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+                    .addOnSuccessListener { location ->
+                        if (location != null) {
+                            val latLng = LatLng(location.latitude, location.longitude)
+                            try {
+                                map.locationComponent.activateLocationComponent(
+                                    org.maplibre.android.location.LocationComponentActivationOptions.builder(activity, map.style!!).build()
+                                )
+                                map.locationComponent.isLocationComponentEnabled = true
+                                map.locationComponent.cameraMode = org.maplibre.android.location.modes.CameraMode.TRACKING
+                                map.animateCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(latLng, 17.0))
+                            } catch (e: Exception) {
+                                map.animateCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(latLng, 17.0))
+                                android.widget.Toast.makeText(activity, "Location tracking not available", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        } else {
+                            android.widget.Toast.makeText(activity, "User location not available yet", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    .addOnFailureListener {
+                        android.widget.Toast.makeText(activity, "Failed to get current location", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+            }
         }
     }
 
-    fun getLastKnownLocation(): android.location.Location? {
+    fun getLastKnownLocation(): Location? {
         if (ActivityCompat.checkSelfPermission(activity, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
             ActivityCompat.checkSelfPermission(activity, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             return null
