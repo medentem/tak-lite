@@ -13,7 +13,7 @@ import org.json.JSONObject
 class MeshRiderGpsController {
     companion object {
         private const val TAG = "MeshRiderGpsController"
-        private const val MESH_RIDER_IP = "10.223.0.1"
+        private const val MESH_RIDER_IP = "192.168.1.10"
         private const val GPS_PORT = 2947
     }
 
