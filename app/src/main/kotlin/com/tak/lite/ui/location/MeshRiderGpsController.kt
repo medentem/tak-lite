@@ -1,10 +1,13 @@
 package com.tak.lite.ui.location
 
+import android.content.Context
 import android.location.Location
+import android.net.wifi.WifiManager
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
+import java.net.InetAddress
 import java.net.URL
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -13,8 +16,21 @@ import org.json.JSONObject
 class MeshRiderGpsController {
     companion object {
         private const val TAG = "MeshRiderGpsController"
-        private const val MESH_RIDER_IP = "192.168.1.10"
         private const val GPS_PORT = 2947
+    }
+
+    private fun getGatewayIp(context: Context): String? {
+        val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        val dhcpInfo = wifiManager.dhcpInfo
+        val gateway = dhcpInfo.gateway
+        return InetAddress.getByAddress(
+            byteArrayOf(
+                (gateway and 0xFF).toByte(),
+                (gateway shr 8 and 0xFF).toByte(),
+                (gateway shr 16 and 0xFF).toByte(),
+                (gateway shr 24 and 0xFF).toByte()
+            )
+        ).hostAddress
     }
 
     data class GpsData(
@@ -25,10 +41,15 @@ class MeshRiderGpsController {
         val time: String
     )
 
-    suspend fun getMeshRiderLocation(): Location? = withContext(Dispatchers.IO) {
+    suspend fun getMeshRiderLocation(context: Context): Location? = withContext(Dispatchers.IO) {
         try {
+            val gatewayIp = getGatewayIp(context)
+            if (gatewayIp == null) {
+                Log.d(TAG, "Could not determine gateway IP address")
+                return@withContext null
+            }
             // Try to connect to the Mesh Rider's GPS data
-            val url = URL("http://$MESH_RIDER_IP:$GPS_PORT")
+            val url = URL("http://$gatewayIp:$GPS_PORT")
             val connection = url.openConnection() as HttpURLConnection
             connection.connectTimeout = 2000 // 2 second timeout
             connection.readTimeout = 2000
@@ -57,7 +78,7 @@ class MeshRiderGpsController {
                         return@withContext location
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Error parsing GPS JSON: ${e.message}")
+                    Log.e(TAG, "Error parsing GPS JSON: "+e.message)
                 }
             } else {
                 Log.d(TAG, "Failed to connect to Mesh Rider GPS: ${connection.responseCode}")
