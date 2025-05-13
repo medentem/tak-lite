@@ -26,6 +26,7 @@ class FanMenuView @JvmOverloads constructor(
         data class Color(val color: AnnotationColor) : Option()
         data class Delete(val id: String) : Option()
         data class LineStyle(val style: com.tak.lite.model.LineStyle) : Option()
+        data class Timer(val id: String) : Option()
     }
 
     interface OnOptionSelectedListener {
@@ -139,6 +140,7 @@ class FanMenuView @JvmOverloads constructor(
                 is Option.Color -> drawColorIcon(canvas, x, y, option.color, isSelected)
                 is Option.Delete -> drawDeleteIcon(canvas, x, y, isSelected)
                 is Option.LineStyle -> drawLineStyleIcon(canvas, x, y, option.style, isSelected)
+                is Option.Timer -> drawTimerIcon(canvas, x, y, isSelected)
             }
         }
     }
@@ -337,6 +339,62 @@ class FanMenuView @JvmOverloads constructor(
             x,
             y + iconRadius * 0.8f,
             textPaint
+        )
+    }
+
+    private fun drawTimerIcon(canvas: Canvas, x: Float, y: Float, highlight: Boolean) {
+        // Draw background circle
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (highlight) Color.YELLOW else Color.WHITE
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(x, y, iconRadius, bgPaint)
+        
+        // Draw border
+        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (highlight) Color.WHITE else Color.DKGRAY
+            style = Paint.Style.STROKE
+            strokeWidth = 4f
+        }
+        canvas.drawCircle(x, y, iconRadius, borderPaint)
+        
+        // Draw timer circle
+        val timerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.BLACK
+            style = Paint.Style.STROKE
+            strokeWidth = 8f
+        }
+        val timerRadius = iconRadius * 0.6f
+        canvas.drawCircle(x, y, timerRadius, timerPaint)
+        
+        // Draw timer hands
+        val handPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.BLACK
+            style = Paint.Style.STROKE
+            strokeWidth = 6f
+            strokeCap = Paint.Cap.ROUND
+        }
+        
+        // Hour hand
+        val hourHandLength = timerRadius * 0.5f
+        val hourAngle = -Math.PI / 4 // 45 degrees
+        canvas.drawLine(
+            x,
+            y,
+            x + (hourHandLength * Math.cos(hourAngle)).toFloat(),
+            y + (hourHandLength * Math.sin(hourAngle)).toFloat(),
+            handPaint
+        )
+        
+        // Minute hand
+        val minuteHandLength = timerRadius * 0.8f
+        val minuteAngle = Math.PI / 2 // 90 degrees
+        canvas.drawLine(
+            x,
+            y,
+            x + (minuteHandLength * Math.cos(minuteAngle)).toFloat(),
+            y + (minuteHandLength * Math.sin(minuteAngle)).toFloat(),
+            handPaint
         )
     }
 

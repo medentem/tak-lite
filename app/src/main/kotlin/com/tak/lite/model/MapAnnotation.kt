@@ -10,6 +10,7 @@ sealed class MapAnnotation {
     abstract val creatorId: String
     abstract val timestamp: Long
     abstract val color: AnnotationColor
+    abstract val expirationTime: Long? // null means no expiration
     
     @Serializable
     @SerialName("poi")
@@ -19,7 +20,8 @@ sealed class MapAnnotation {
         override val timestamp: Long = System.currentTimeMillis(),
         override val color: AnnotationColor,
         val position: LatLngSerializable,
-        val shape: PointShape
+        val shape: PointShape,
+        override val expirationTime: Long? = null
     ) : MapAnnotation()
     
     @Serializable
@@ -31,7 +33,8 @@ sealed class MapAnnotation {
         override val color: AnnotationColor,
         val points: List<LatLngSerializable>,
         val style: LineStyle = LineStyle.SOLID,
-        val arrowHead: Boolean = true
+        val arrowHead: Boolean = true,
+        override val expirationTime: Long? = null
     ) : MapAnnotation()
     
     @Serializable
@@ -42,7 +45,8 @@ sealed class MapAnnotation {
         override val timestamp: Long = System.currentTimeMillis(),
         override val color: AnnotationColor,
         val center: LatLngSerializable,
-        val radius: Double // in meters
+        val radius: Double, // in meters
+        override val expirationTime: Long? = null
     ) : MapAnnotation()
     
     @Serializable
@@ -51,7 +55,8 @@ sealed class MapAnnotation {
         override val id: String,
         override val creatorId: String,
         override val timestamp: Long = System.currentTimeMillis(),
-        override val color: AnnotationColor = AnnotationColor.RED // Not used, but required by base class
+        override val color: AnnotationColor = AnnotationColor.RED, // Not used, but required by base class
+        override val expirationTime: Long? = null
     ) : MapAnnotation()
 }
 

@@ -127,6 +127,7 @@ class MainActivity : AppCompatActivity() {
                 // Add camera move listener for syncing annotations
                 map.addOnCameraMoveListener {
                     annotationController.syncAnnotationOverlayView(map)
+                    annotationOverlayView.setZoom(map.cameraPosition.zoom.toFloat())
                 }
             },
             onStyleChanged = {

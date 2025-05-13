@@ -74,6 +74,7 @@ class AnnotationController(
 
     // POI/line/area editing
     fun showPoiEditMenu(center: PointF, poiId: String) {
+        val poi = annotationViewModel.uiState.value.annotations.filterIsInstance<MapAnnotation.PointOfInterest>().find { it.id == poiId } ?: return
         val options = listOf(
             FanMenuView.Option.Shape(PointShape.CIRCLE),
             FanMenuView.Option.Shape(PointShape.EXCLAMATION),
@@ -83,38 +84,30 @@ class AnnotationController(
             FanMenuView.Option.Color(AnnotationColor.YELLOW),
             FanMenuView.Option.Color(AnnotationColor.RED),
             FanMenuView.Option.Color(AnnotationColor.BLACK),
+            FanMenuView.Option.Timer(poiId),
             FanMenuView.Option.Delete(poiId)
         )
         val screenSize = PointF(binding.root.width.toFloat(), binding.root.height.toFloat())
         fanMenuView.showAt(center, options, object : FanMenuView.OnOptionSelectedListener {
             override fun onOptionSelected(option: FanMenuView.Option) {
                 when (option) {
-                    is FanMenuView.Option.Shape -> {
-                        editingPoiId?.let { updatePoiShape(it, option.shape) }
-                    }
-                    is FanMenuView.Option.Color -> {
-                        editingPoiId?.let { updatePoiColor(it, option.color) }
-                    }
-                    is FanMenuView.Option.Delete -> {
-                        deletePoi(option.id)
-                    }
-                    is FanMenuView.Option.LineStyle -> { /* no-op for POI */ }
+                    is FanMenuView.Option.Shape -> updatePoiShape(poi, option.shape)
+                    is FanMenuView.Option.Color -> updatePoiColor(poiId, option.color)
+                    is FanMenuView.Option.Timer -> setAnnotationExpiration(poiId)
+                    is FanMenuView.Option.Delete -> deletePoi(option.id)
                     else -> {}
                 }
-                annotationOverlayView.setTempLinePoints(null)
                 fanMenuView.visibility = View.GONE
-                editingPoiId = null
             }
             override fun onMenuDismissed() {
                 fanMenuView.visibility = View.GONE
-                editingPoiId = null
             }
         }, screenSize)
         fanMenuView.visibility = View.VISIBLE
     }
 
-    fun updatePoiShape(poiId: String, shape: PointShape) {
-        annotationViewModel.updatePointOfInterest(poiId, newShape = shape)
+    fun updatePoiShape(poi: MapAnnotation.PointOfInterest, shape: PointShape) {
+        annotationViewModel.updatePointOfInterest(poi.id, newShape = shape)
     }
 
     fun updatePoiColor(poiId: String, color: AnnotationColor) {
@@ -137,6 +130,7 @@ class AnnotationController(
             FanMenuView.Option.Color(AnnotationColor.YELLOW),
             FanMenuView.Option.Color(AnnotationColor.RED),
             FanMenuView.Option.Color(AnnotationColor.BLACK),
+            FanMenuView.Option.Timer(lineId),
             FanMenuView.Option.Delete(lineId)
         )
         val screenSize = PointF(binding.root.width.toFloat(), binding.root.height.toFloat())
@@ -145,6 +139,7 @@ class AnnotationController(
                 when (option) {
                     is FanMenuView.Option.LineStyle -> updateLineStyle(line, option.style)
                     is FanMenuView.Option.Color -> updateLineColor(line, option.color)
+                    is FanMenuView.Option.Timer -> setAnnotationExpiration(lineId)
                     is FanMenuView.Option.Delete -> deletePoi(option.id)
                     else -> {}
                 }
@@ -319,5 +314,10 @@ class AnnotationController(
         }
         lineToolCancelButton.visibility = View.GONE
         lineToolConfirmButton.visibility = View.GONE
+    }
+
+    private fun setAnnotationExpiration(annotationId: String) {
+        val expirationTime = System.currentTimeMillis() + (3 * 60 * 1000) // 3 minutes from now
+        annotationViewModel.setAnnotationExpiration(annotationId, expirationTime)
     }
 } 

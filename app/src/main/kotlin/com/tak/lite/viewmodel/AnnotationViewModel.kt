@@ -61,7 +61,8 @@ class AnnotationViewModel @Inject constructor(
                 creatorId = "local", // TODO: Replace with actual user ID
                 color = currentColor,
                 position = LatLngSerializable.fromMapLibreLatLng(position),
-                shape = currentShape
+                shape = currentShape,
+                expirationTime = null
             )
             annotationRepository.addAnnotation(annotation)
         }
@@ -74,7 +75,8 @@ class AnnotationViewModel @Inject constructor(
                 color = currentColor,
                 points = points.map { LatLngSerializable.fromMapLibreLatLng(it) },
                 style = currentLineStyle,
-                arrowHead = currentArrowHead
+                arrowHead = currentArrowHead,
+                expirationTime = null
             )
             annotationRepository.addAnnotation(annotation)
         }
@@ -86,7 +88,8 @@ class AnnotationViewModel @Inject constructor(
                 creatorId = "local", // TODO: Replace with actual user ID
                 color = currentColor,
                 center = LatLngSerializable.fromMapLibreLatLng(center),
-                radius = radius
+                radius = radius,
+                expirationTime = null
             )
             annotationRepository.addAnnotation(annotation)
         }
@@ -124,6 +127,20 @@ class AnnotationViewModel @Inject constructor(
                 color = newColor ?: current.color
             )
             annotationRepository.removeAnnotation(id)
+            annotationRepository.addAnnotation(updated)
+        }
+    }
+    
+    fun setAnnotationExpiration(annotationId: String, expirationTime: Long) {
+        viewModelScope.launch {
+            val current = annotationRepository.annotations.value.find { it.id == annotationId } ?: return@launch
+            val updated = when (current) {
+                is MapAnnotation.PointOfInterest -> current.copy(expirationTime = expirationTime)
+                is MapAnnotation.Line -> current.copy(expirationTime = expirationTime)
+                is MapAnnotation.Area -> current.copy(expirationTime = expirationTime)
+                is MapAnnotation.Deletion -> current // Don't modify deletions
+            }
+            annotationRepository.removeAnnotation(annotationId)
             annotationRepository.addAnnotation(updated)
         }
     }

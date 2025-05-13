@@ -10,6 +10,7 @@ import android.view.View
 import org.maplibre.android.maps.Projection
 import com.tak.lite.data.model.AnnotationType
 import com.tak.lite.data.model.type
+import com.tak.lite.data.model.AnnotationCluster
 import com.tak.lite.model.AnnotationColor
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PointShape
@@ -39,6 +40,25 @@ class AnnotationOverlayView @JvmOverloads constructor(
     private var tempStartDot: LatLng? = null
     private var tempEndDot: LatLng? = null
     private var tempLinePoints: List<LatLng>? = null
+    private var lastTimerUpdate: Long = 0
+    private var timerAngle: Float = 0f
+    private var clusters: List<AnnotationCluster> = emptyList()
+    private val clusterThreshold = 100f // pixels
+    private val minZoomForClustering = 12f // zoom level below which clustering occurs
+
+    // Timer update handler
+    private val timerHandler = Handler(Looper.getMainLooper())
+    private val timerRunnable = object : Runnable {
+        override fun run() {
+            val now = System.currentTimeMillis()
+            if (now - lastTimerUpdate >= 1000) { // Update every second
+                timerAngle = (timerAngle + 6f) % 360f // 6 degrees per second (360/60)
+                lastTimerUpdate = now
+                invalidate()
+            }
+            timerHandler.postDelayed(this, 16) // ~60fps
+        }
+    }
 
     interface OnPoiLongPressListener {
         fun onPoiLongPressed(poiId: String, screenPosition: PointF)
@@ -54,6 +74,15 @@ class AnnotationOverlayView @JvmOverloads constructor(
     private var longPressLineCandidate: MapAnnotation.Line? = null
     private var longPressLineDownPos: PointF? = null
 
+    init {
+        timerHandler.post(timerRunnable)
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        timerHandler.removeCallbacks(timerRunnable)
+    }
+
     fun setProjection(projection: Projection?) {
         this.projection = projection
         invalidate()
@@ -66,6 +95,11 @@ class AnnotationOverlayView @JvmOverloads constructor(
 
     fun setZoom(zoom: Float) {
         this.currentZoom = zoom
+        if (zoom < minZoomForClustering) {
+            updateClusters()
+        } else {
+            clusters = emptyList()
+        }
         invalidate()
     }
 
@@ -78,6 +112,55 @@ class AnnotationOverlayView @JvmOverloads constructor(
     fun setTempLinePoints(points: List<LatLng>?) {
         tempLinePoints = points
         invalidate()
+    }
+
+    private fun updateClusters() {
+        if (projection == null) return
+        
+        val screenPoints = annotations.mapNotNull { annotation ->
+            val latLng = annotation.toMapLibreLatLng()
+            projection?.toScreenLocation(latLng)?.let { point ->
+                Pair(annotation, PointF(point.x.toFloat(), point.y.toFloat()))
+            }
+        }
+
+        val newClusters = mutableListOf<AnnotationCluster>()
+        val processed = mutableSetOf<MapAnnotation>()
+
+        for ((annotation, point) in screenPoints) {
+            if (annotation in processed) continue
+
+            val clusterAnnotations = mutableListOf(annotation)
+            val bounds = RectF(point.x - clusterThreshold/2, point.y - clusterThreshold/2,
+                             point.x + clusterThreshold/2, point.y + clusterThreshold/2)
+            
+            // Find nearby annotations
+            for ((otherAnnotation, otherPoint) in screenPoints) {
+                if (otherAnnotation != annotation && otherAnnotation !in processed) {
+                    if (bounds.contains(otherPoint.x, otherPoint.y)) {
+                        clusterAnnotations.add(otherAnnotation)
+                        processed.add(otherAnnotation)
+                        bounds.union(otherPoint.x, otherPoint.y)
+                    }
+                }
+            }
+
+            if (clusterAnnotations.size > 1) {
+                // Calculate cluster center
+                val centerX = bounds.centerX()
+                val centerY = bounds.centerY()
+                val centerPointF = PointF(centerX, centerY)
+                val centerLatLng = projection?.fromScreenLocation(centerPointF)
+                
+                centerLatLng?.let {
+                    newClusters.add(AnnotationCluster(it, clusterAnnotations, bounds))
+                }
+            }
+            
+            processed.add(annotation)
+        }
+
+        clusters = newClusters
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -111,37 +194,85 @@ class AnnotationOverlayView @JvmOverloads constructor(
             }
         }
 
-        annotations.forEach { annotation ->
-            val point = annotation.toMapLibreLatLng().let { latLng ->
-                projection?.toScreenLocation(latLng)
-            }
-            if (point == null) return@forEach
-            val pointF = PointF(point.x.toFloat(), point.y.toFloat())
-            when (annotation) {
-                is MapAnnotation.PointOfInterest -> {
-                    drawPoint(canvas, pointF, annotation)
+        if (currentZoom < minZoomForClustering) {
+            // Draw clusters
+            clusters.forEach { cluster ->
+                val point = projection?.toScreenLocation(cluster.center)
+                if (point != null) {
+                    val pointF = PointF(point.x.toFloat(), point.y.toFloat())
+                    drawCluster(canvas, pointF, cluster)
                 }
-                is MapAnnotation.Line -> {
-                    // Draw lines between all points
-                    val latLngs = annotation.points.map { it.toMapLibreLatLng() }
-                    if (latLngs.size >= 2) {
-                        val screenPoints = latLngs.mapNotNull { projection?.toScreenLocation(it) }
-                        for (i in 0 until screenPoints.size - 1) {
-                            val p1 = PointF(screenPoints[i].x.toFloat(), screenPoints[i].y.toFloat())
-                            val p2 = PointF(screenPoints[i + 1].x.toFloat(), screenPoints[i + 1].y.toFloat())
-                            drawLine(canvas, p1, p2, annotation)
+            }
+
+            // Draw non-clustered annotations
+            val clusteredAnnotations = clusters.flatMap { it.annotations }.toSet()
+            annotations.filter { it !in clusteredAnnotations }.forEach { annotation ->
+                val point = annotation.toMapLibreLatLng().let { latLng ->
+                    projection?.toScreenLocation(latLng)
+                }
+                if (point != null) {
+                    val pointF = PointF(point.x.toFloat(), point.y.toFloat())
+                    when (annotation) {
+                        is MapAnnotation.PointOfInterest -> drawPoint(canvas, pointF, annotation)
+                        is MapAnnotation.Line -> {
+                            // Draw lines between all points
+                            val latLngs = annotation.points.map { it.toMapLibreLatLng() }
+                            if (latLngs.size >= 2) {
+                                val screenPoints = latLngs.mapNotNull { projection?.toScreenLocation(it) }
+                                for (i in 0 until screenPoints.size - 1) {
+                                    val p1 = PointF(screenPoints[i].x.toFloat(), screenPoints[i].y.toFloat())
+                                    val p2 = PointF(screenPoints[i + 1].x.toFloat(), screenPoints[i + 1].y.toFloat())
+                                    drawLine(canvas, p1, p2, annotation)
+                                }
+                            }
+                        }
+                        is MapAnnotation.Area -> {
+                            val centerPoint = projection?.toScreenLocation(annotation.center.toMapLibreLatLng())
+                            if (centerPoint != null) {
+                                val centerPointF = PointF(centerPoint.x.toFloat(), centerPoint.y.toFloat())
+                                drawArea(canvas, centerPointF, annotation)
+                            }
+                        }
+                        is MapAnnotation.Deletion -> {
+                            // Do nothing for deletions
                         }
                     }
                 }
-                is MapAnnotation.Area -> {
-                    val centerPoint = projection?.toScreenLocation(annotation.center.toMapLibreLatLng())
-                    if (centerPoint != null) {
-                        val centerPointF = PointF(centerPoint.x.toFloat(), centerPoint.y.toFloat())
-                        drawArea(canvas, centerPointF, annotation)
-                    }
+            }
+        } else {
+            // Draw all annotations normally
+            annotations.forEach { annotation ->
+                val point = annotation.toMapLibreLatLng().let { latLng ->
+                    projection?.toScreenLocation(latLng)
                 }
-                is MapAnnotation.Deletion -> {
-                    // Do nothing for deletions
+                if (point == null) return@forEach
+                val pointF = PointF(point.x.toFloat(), point.y.toFloat())
+                when (annotation) {
+                    is MapAnnotation.PointOfInterest -> {
+                        drawPoint(canvas, pointF, annotation)
+                    }
+                    is MapAnnotation.Line -> {
+                        // Draw lines between all points
+                        val latLngs = annotation.points.map { it.toMapLibreLatLng() }
+                        if (latLngs.size >= 2) {
+                            val screenPoints = latLngs.mapNotNull { projection?.toScreenLocation(it) }
+                            for (i in 0 until screenPoints.size - 1) {
+                                val p1 = PointF(screenPoints[i].x.toFloat(), screenPoints[i].y.toFloat())
+                                val p2 = PointF(screenPoints[i + 1].x.toFloat(), screenPoints[i + 1].y.toFloat())
+                                drawLine(canvas, p1, p2, annotation)
+                            }
+                        }
+                    }
+                    is MapAnnotation.Area -> {
+                        val centerPoint = projection?.toScreenLocation(annotation.center.toMapLibreLatLng())
+                        if (centerPoint != null) {
+                            val centerPointF = PointF(centerPoint.x.toFloat(), centerPoint.y.toFloat())
+                            drawArea(canvas, centerPointF, annotation)
+                        }
+                    }
+                    is MapAnnotation.Deletion -> {
+                        // Do nothing for deletions
+                    }
                 }
             }
         }
@@ -202,6 +333,11 @@ class AnnotationOverlayView @JvmOverloads constructor(
                 canvas.drawPath(path, paint)
             }
         }
+
+        // Draw timer indicator if annotation has expiration time
+        annotation.expirationTime?.let {
+            drawTimerIndicator(canvas, point, annotation.color.toColor(), annotation)
+        }
     }
 
     private fun drawLine(canvas: Canvas, point1: PointF, point2: PointF, annotation: MapAnnotation.Line) {
@@ -221,6 +357,14 @@ class AnnotationOverlayView @JvmOverloads constructor(
         }
         // Reset pathEffect
         paint.pathEffect = null
+
+        // Draw timer indicator if annotation has expiration time
+        annotation.expirationTime?.let {
+            // Draw timer at the midpoint of the line
+            val midX = (point1.x + point2.x) / 2
+            val midY = (point1.y + point2.y) / 2
+            drawTimerIndicator(canvas, PointF(midX, midY), annotation.color.toColor(), annotation)
+        }
     }
 
     private fun drawArrowHead(canvas: Canvas, start: PointF, end: PointF, color: Int) {
@@ -249,6 +393,82 @@ class AnnotationOverlayView @JvmOverloads constructor(
         val radius = annotation.radius * currentZoom
         canvas.drawCircle(center.x, center.y, radius.toFloat(), fillPaint)
         canvas.drawCircle(center.x, center.y, radius.toFloat(), paint)
+    }
+
+    private fun drawTimerIndicator(canvas: Canvas, center: PointF, color: Int, annotation: MapAnnotation) {
+        val timerRadius = 45f // Slightly larger than the annotation
+        val handLength = 8f
+        val handWidth = 2f
+        
+        // Draw timer circle
+        val timerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = color
+            style = Paint.Style.STROKE
+            strokeWidth = 2f
+        }
+        canvas.drawCircle(center.x, center.y, timerRadius, timerPaint)
+        
+        // Draw second hand
+        val handPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = color
+            style = Paint.Style.STROKE
+            strokeWidth = handWidth
+            strokeCap = Paint.Cap.ROUND
+        }
+        
+        val angle = Math.toRadians(timerAngle.toDouble())
+        val endX = center.x + (timerRadius * Math.cos(angle)).toFloat()
+        val endY = center.y + (timerRadius * Math.sin(angle)).toFloat()
+        canvas.drawLine(center.x, center.y, endX, endY, handPaint)
+
+        // Draw countdown text
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = color
+            textSize = 32f
+            textAlign = Paint.Align.CENTER
+        }
+        val secondsRemaining = ((annotation.expirationTime ?: 0) - System.currentTimeMillis()) / 1000
+        if (secondsRemaining > 0) {
+            canvas.drawText(
+                "${secondsRemaining}s",
+                center.x,
+                center.y + timerRadius + 35f,
+                textPaint
+            )
+        }
+    }
+
+    private fun drawCluster(canvas: Canvas, center: PointF, cluster: AnnotationCluster) {
+        // Draw cluster circle
+        val clusterPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            style = Paint.Style.FILL
+        }
+        val radius = 40f // Increased from 30f
+        canvas.drawCircle(center.x, center.y, radius, clusterPaint)
+
+        // Draw cluster border
+        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.BLACK
+            style = Paint.Style.STROKE
+            strokeWidth = 3f // Increased from 2f
+        }
+        canvas.drawCircle(center.x, center.y, radius, borderPaint)
+
+        // Draw count
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.BLACK
+            textSize = 32f // Increased from 24f
+            textAlign = Paint.Align.CENTER
+            isFakeBoldText = true // Make text bold
+            typeface = Typeface.DEFAULT_BOLD // Use bold typeface
+        }
+        canvas.drawText(
+            cluster.annotations.size.toString(),
+            center.x,
+            center.y + textPaint.textSize/3,
+            textPaint
+        )
     }
 
     private fun AnnotationColor.toColor(): Int {

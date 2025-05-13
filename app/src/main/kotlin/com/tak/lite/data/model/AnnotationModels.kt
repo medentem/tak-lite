@@ -4,6 +4,7 @@ import com.tak.lite.model.AnnotationColor
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PointShape
 import org.maplibre.android.geometry.LatLng
+import android.graphics.RectF
 
 // Extension functions to convert between MapAnnotation and MapLibre LatLng
 fun MapAnnotation.PointOfInterest.toMapLibreLatLng(): LatLng {
@@ -31,4 +32,10 @@ enum class AnnotationType {
     POINT,
     LINE,
     AREA
-} 
+}
+
+data class AnnotationCluster(
+    val center: LatLng,
+    val annotations: List<MapAnnotation>,
+    val bounds: RectF
+) 

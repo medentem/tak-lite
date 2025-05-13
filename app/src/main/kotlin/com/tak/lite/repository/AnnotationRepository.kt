@@ -2,9 +2,14 @@ package com.tak.lite.repository
 
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.network.MeshNetworkProtocol
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -14,6 +19,9 @@ class AnnotationRepository @Inject constructor(
 ) {
     private val _annotations = MutableStateFlow<List<MapAnnotation>>(emptyList())
     val annotations: StateFlow<List<MapAnnotation>> = _annotations.asStateFlow()
+    
+    // Create a coroutine scope for the repository
+    private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
     init {
         meshProtocol.setAnnotationCallback { annotation ->
@@ -27,6 +35,25 @@ class AnnotationRepository @Inject constructor(
                     if (existing == null || annotation.timestamp > existing.timestamp) {
                         _annotations.value = _annotations.value.filter { it.id != annotation.id } + annotation
                     }
+                }
+            }
+        }
+
+        // Start periodic check for expired annotations using the repository scope
+        repositoryScope.launch {
+            while (true) {
+                delay(1000) // Check every second
+                val now = System.currentTimeMillis()
+                val expiredIds = _annotations.value
+                    .filter { annotation -> 
+                        annotation.expirationTime?.let { expirationTime ->
+                            expirationTime <= now
+                        } ?: false
+                    }
+                    .map { it.id }
+                
+                if (expiredIds.isNotEmpty()) {
+                    _annotations.value = _annotations.value.filter { it.id !in expiredIds }
                 }
             }
         }
