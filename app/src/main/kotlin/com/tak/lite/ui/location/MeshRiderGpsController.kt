@@ -33,14 +33,6 @@ class MeshRiderGpsController {
         ).hostAddress
     }
 
-    data class GpsData(
-        val latitude: Double,
-        val longitude: Double,
-        val altitude: Double,
-        val speed: Float,
-        val time: String
-    )
-
     suspend fun getMeshRiderLocation(context: Context): Location? = withContext(Dispatchers.IO) {
         try {
             val gatewayIp = getGatewayIp(context)

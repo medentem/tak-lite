@@ -6,7 +6,6 @@ import android.graphics.Color
 import android.graphics.PointF
 import android.view.View
 import android.widget.Toast
-import com.tak.lite.R
 import com.tak.lite.databinding.ActivityMainBinding
 import com.tak.lite.model.AnnotationColor
 import com.tak.lite.model.LineStyle
@@ -15,7 +14,6 @@ import com.tak.lite.model.PointShape
 import com.tak.lite.viewmodel.AnnotationViewModel
 import org.maplibre.android.annotations.Marker
 import org.maplibre.android.annotations.Polygon
-import org.maplibre.android.annotations.PolygonOptions
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 
@@ -27,7 +25,7 @@ class AnnotationController(
     private val annotationOverlayView: AnnotationOverlayView,
     private val onAnnotationChanged: (() -> Unit)? = null
 ) {
-    var pendingPoiLatLng: LatLng? = null
+    private var pendingPoiLatLng: LatLng? = null
     var editingPoiId: String? = null
     var isLineDrawingMode: Boolean = false
     var tempLinePoints: MutableList<LatLng> = mutableListOf()
@@ -65,7 +63,7 @@ class AnnotationController(
         mapLibreMap.addOnMapLongClickListener { latLng ->
             val projection = mapLibreMap.projection
             val point = projection.toScreenLocation(latLng)
-            val center = PointF(point.x.toFloat(), point.y.toFloat())
+            val center = PointF(point.x, point.y)
             pendingPoiLatLng = latLng
             showFanMenu(center)
             true
@@ -172,7 +170,7 @@ class AnnotationController(
         }
     }
 
-    fun finishLineDrawing(cancel: Boolean) {
+    private fun finishLineDrawing(cancel: Boolean) {
         if (!cancel && tempLinePoints.size >= 2) {
             annotationViewModel.addLine(tempLinePoints.toList())
             Toast.makeText(context, "Line added!", Toast.LENGTH_SHORT).show()
@@ -228,7 +226,7 @@ class AnnotationController(
         }
     }
 
-    fun showFanMenu(center: PointF) {
+    private fun showFanMenu(center: PointF) {
         annotationOverlayView.setTempLinePoints(null)
         val shapeOptions = listOf(
             FanMenuView.Option.Shape(PointShape.CIRCLE),

@@ -53,12 +53,6 @@ class MeshNetworkViewModel @Inject constructor(
         }
     }
     
-    fun sendAudioData(audioData: ByteArray) {
-        viewModelScope.launch {
-            meshNetworkRepository.sendAudioData(audioData)
-        }
-    }
-    
     fun setLocalNickname(nickname: String) {
         meshNetworkRepository.setLocalNickname(nickname)
     }
@@ -70,8 +64,8 @@ class MeshNetworkViewModel @Inject constructor(
 }
 
 sealed class MeshNetworkUiState {
-    object Initial : MeshNetworkUiState()
-    object Disconnected : MeshNetworkUiState()
+    data object Initial : MeshNetworkUiState()
+    data object Disconnected : MeshNetworkUiState()
     data class Connected(val peers: List<MeshPeer> = emptyList()) : MeshNetworkUiState()
     data class Error(val message: String) : MeshNetworkUiState()
 } 

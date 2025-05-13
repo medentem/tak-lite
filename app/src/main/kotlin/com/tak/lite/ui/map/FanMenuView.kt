@@ -10,10 +10,13 @@ import android.view.MotionEvent
 import android.view.View
 import com.tak.lite.model.PointShape
 import com.tak.lite.model.AnnotationColor
+import kotlin.math.asin
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
+import kotlin.math.max
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 class FanMenuView @JvmOverloads constructor(
     context: Context,
@@ -34,14 +37,14 @@ class FanMenuView @JvmOverloads constructor(
         fun onMenuDismissed()
     }
 
-    var center: PointF = PointF(0f, 0f)
-    var options: List<Option> = emptyList()
-    var listener: OnOptionSelectedListener? = null
+    private var center: PointF = PointF(0f, 0f)
+    private var options: List<Option> = emptyList()
+    private var listener: OnOptionSelectedListener? = null
     private var selectedIndex: Int? = null
-    var menuRadius: Float = 200f
-    var menuFanAngle: Double = 1.5 * Math.PI
-    var menuStartAngle: Double = 5 * Math.PI / 4
-    var screenSize: PointF = PointF(0f, 0f)
+    private var menuRadius: Float = 200f
+    private var menuFanAngle: Double = 1.5 * Math.PI
+    private var menuStartAngle: Double = 5 * Math.PI / 4
+    private var screenSize: PointF = PointF(0f, 0f)
     private val iconRadius = 60f
     private val centerHoleRadius = 135f
     private var isTransitioning = false
@@ -163,7 +166,7 @@ class FanMenuView @JvmOverloads constructor(
             PointShape.EXCLAMATION -> {
                 // Draw filled black triangle
                 val half = iconRadius / 2f
-                val height = (half * Math.sqrt(3.0)).toFloat()
+                val height = (half * sqrt(3.0)).toFloat()
                 val path = android.graphics.Path()
                 path.moveTo(x, y - height / 2) // Top
                 path.lineTo(x - half, y + height / 2) // Bottom left
@@ -199,7 +202,7 @@ class FanMenuView @JvmOverloads constructor(
             }
             PointShape.TRIANGLE -> {
                 val half = iconRadius / 2
-                val height = (half * Math.sqrt(3.0)).toFloat()
+                val height = (half * sqrt(3.0)).toFloat()
                 val path = android.graphics.Path()
                 path.moveTo(x, y - height / 2) // Top
                 path.lineTo(x - half, y + height / 2) // Bottom left
@@ -381,8 +384,8 @@ class FanMenuView @JvmOverloads constructor(
         canvas.drawLine(
             x,
             y,
-            x + (hourHandLength * Math.cos(hourAngle)).toFloat(),
-            y + (hourHandLength * Math.sin(hourAngle)).toFloat(),
+            x + (hourHandLength * cos(hourAngle)).toFloat(),
+            y + (hourHandLength * sin(hourAngle)).toFloat(),
             handPaint
         )
         
@@ -392,8 +395,8 @@ class FanMenuView @JvmOverloads constructor(
         canvas.drawLine(
             x,
             y,
-            x + (minuteHandLength * Math.cos(minuteAngle)).toFloat(),
-            y + (minuteHandLength * Math.sin(minuteAngle)).toFloat(),
+            x + (minuteHandLength * cos(minuteAngle)).toFloat(),
+            y + (minuteHandLength * sin(minuteAngle)).toFloat(),
             handPaint
         )
     }
@@ -460,7 +463,7 @@ class FanMenuView @JvmOverloads constructor(
         
         // Check if the touch is within the fan menu's angle range
         val inFan = if (startAngle < endAngle) {
-            normalizedAngle >= startAngle && normalizedAngle <= endAngle
+            normalizedAngle in startAngle..endAngle
         } else {
             normalizedAngle >= startAngle || normalizedAngle <= endAngle
         }
@@ -532,16 +535,16 @@ class FanMenuView @JvmOverloads constructor(
 
         if (n > 1) {
             // Calculate the minimum angle needed to avoid overlap at minRadius
-            val angleBetween = Math.max(minAngleBetween, 2 * Math.asin(iconSpacing / (2 * minRadius)))
+            val angleBetween = max(minAngleBetween, 2 * asin(iconSpacing / (2 * minRadius)))
             val totalAngleNeeded = angleBetween * (n - 1)
             if (totalAngleNeeded <= maxFanAngle) {
-                requiredFanAngle = Math.max(minFanAngle, totalAngleNeeded)
+                requiredFanAngle = max(minFanAngle, totalAngleNeeded)
                 requiredRadius = minRadius
             } else {
                 // Use full circle, increase radius to fit all items
                 requiredFanAngle = maxFanAngle
                 // Calculate the radius needed to fit all items in a full circle
-                val neededRadius = (iconSpacing / (2 * Math.sin(Math.PI / n))).toFloat()
+                val neededRadius = (iconSpacing / (2 * sin(Math.PI / n))).toFloat()
                 requiredRadius = neededRadius.coerceAtLeast(minRadius).coerceAtMost(maxRadius)
             }
         }
@@ -585,37 +588,12 @@ class FanMenuView @JvmOverloads constructor(
         var visible = 0
         for (i in 0..steps) {
             val theta = startAngle + fanAngle * i / steps
-            val x = center.x + (radius + iconRadius) * Math.cos(theta).toFloat()
-            val y = center.y + (radius + iconRadius) * Math.sin(theta).toFloat()
+            val x = center.x + (radius + iconRadius) * cos(theta).toFloat()
+            val y = center.y + (radius + iconRadius) * sin(theta).toFloat()
             if (x >= 0 && x <= screenSize.x && y >= 0 && y <= screenSize.y) {
                 visible++
             }
         }
         return visible.toFloat() / (steps + 1)
-    }
-
-    /**
-     * Calculates the required menu radius for the given options, using the same logic as showAt.
-     */
-    fun calculateMenuRadius(options: List<Option>): Float {
-        val maxItemsInnerRing = 6
-        val iconRadius = 40f
-        val ringSpacing = iconRadius * 2.5f
-        val minRadius = 300f
-        val maxRadius = 500f
-        val iconSpacing = iconRadius * 2 * 2.1 // 220% extra spacing for more padding
-        val n = minOf(options.size, maxItemsInnerRing)
-        var requiredRadius = minRadius
-        if (n > 1) {
-            val angleBetween = Math.max(Math.PI / 8, 2 * Math.asin(iconSpacing / (2 * minRadius)))
-            val totalAngleNeeded = angleBetween * (n - 1)
-            if (totalAngleNeeded <= 2 * Math.PI) {
-                requiredRadius = minRadius
-            } else {
-                val neededRadius = (iconSpacing / (2 * Math.sin(Math.PI / n))).toFloat()
-                requiredRadius = neededRadius.coerceAtLeast(minRadius).coerceAtMost(maxRadius)
-            }
-        }
-        return requiredRadius
     }
 }

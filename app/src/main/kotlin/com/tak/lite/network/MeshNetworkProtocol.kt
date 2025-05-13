@@ -224,8 +224,6 @@ class MeshNetworkProtocol(
         peerLocationCallback = callback
     }
     
-    fun getPeerLocations(): Map<String, LatLng> = peerLocations.toMap()
-    
     fun stopDiscovery() {
         discoveryJob?.cancel()
         listenerJob?.cancel()
@@ -375,30 +373,6 @@ class MeshNetworkProtocol(
         }
     }
 
-    fun startStateSyncListener(onStateSync: (StateSyncMessage) -> Unit) {
-        CoroutineScope(coroutineContext).launch {
-            try {
-                val socket = createBoundSocket(STATE_SYNC_PORT)
-                val buffer = ByteArray(65536)
-                val packet = DatagramPacket(buffer, buffer.size)
-                while (isActive) {
-                    try {
-                        socket.receive(packet)
-                        val msg = String(packet.data, 0, packet.length)
-                        if (msg.contains("STATE_SYNC")) {
-                            val state = json.decodeFromString<StateSyncMessage>(msg)
-                            onStateSync(state)
-                        }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error receiving state sync: ${e.message}")
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error setting up state sync listener: ${e.message}")
-            }
-        }
-    }
-
     private fun startPeriodicStateRebroadcast() {
         stateRebroadcastJob = CoroutineScope(coroutineContext).launch {
             while (isActive) {
@@ -421,7 +395,7 @@ class MeshNetworkProtocol(
                     ipAddress = it.ipAddress,
                     lastSeen = it.lastSeen,
                     nickname = it.nickname
-                ) }.let { emptyList<com.tak.lite.data.model.AudioChannel>() },
+                ) }.let { emptyList() },
                 peerLocations = peerLocations.mapValues { LatLngSerializable.fromMapLibreLatLng(it.value) },
                 annotations = annotations
             )

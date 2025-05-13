@@ -1,6 +1,9 @@
 package com.tak.lite.service
 
 import android.Manifest
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -9,9 +12,14 @@ import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.MediaRecorder
+import android.media.audiofx.AcousticEchoCanceler
+import android.os.Build
 import android.os.IBinder
 import android.os.Process
+import android.util.Log
 import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationCompat
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.tak.lite.data.model.AudioSettings
 import com.tak.lite.network.MeshNetworkManager
 import dagger.hilt.android.AndroidEntryPoint
@@ -20,16 +28,8 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.nio.ByteBuffer
 import javax.inject.Inject
-import android.media.audiofx.AcousticEchoCanceler
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
-import android.util.Log
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.os.Build
-import androidx.core.app.NotificationCompat
+import kotlin.math.sqrt
 
 @AndroidEntryPoint
 class AudioStreamingService : Service() {
@@ -103,7 +103,7 @@ class AudioStreamingService : Service() {
         startForeground(NOTIFICATION_ID, notification)
     }
 
-    fun startStreaming(settings: AudioSettings) {
+    private fun startStreaming(settings: AudioSettings) {
         Log.d("Waveform", "startStreaming called, isStreaming=$isStreaming, isPTTHeld=${settings.isPTTHeld}")
         if (isStreaming) return
         // Start foreground notification
@@ -238,7 +238,7 @@ class AudioStreamingService : Service() {
         }
     }
 
-    fun stopStreaming() {
+    private fun stopStreaming() {
         Log.d("Waveform", "stopStreaming called")
         isStreaming = false
         streamingJob?.cancel()
@@ -272,7 +272,7 @@ class AudioStreamingService : Service() {
             count++
             i += 2
         }
-        val rms = if (count > 0) Math.sqrt(sum / count) else 0.0
+        val rms = if (count > 0) sqrt(sum / count) else 0.0
         return rms.toInt().coerceAtMost(32767)
     }
 

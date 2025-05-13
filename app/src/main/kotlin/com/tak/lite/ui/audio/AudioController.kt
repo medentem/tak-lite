@@ -7,20 +7,15 @@ import android.util.Log
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageButton
-import android.widget.Toast
 import androidx.lifecycle.LifecycleCoroutineScope
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.tak.lite.R
 import com.tak.lite.databinding.ActivityMainBinding
 import com.tak.lite.service.AudioStreamingService
-import com.tak.lite.ui.audio.TalkGroupAdapter
 import com.tak.lite.viewmodel.AudioViewModel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import com.tak.lite.R
 
 class AudioController(
     private val activity: Activity,
@@ -29,7 +24,7 @@ class AudioController(
     private val lifecycleScope: LifecycleCoroutineScope
 ) {
     private lateinit var waveformOverlayContainer: View
-    private lateinit var waveformView: com.tak.lite.ui.audio.WaveformView
+    private lateinit var waveformView: WaveformView
     private var waveformJob: kotlinx.coroutines.Job? = null
     private var amplitudes: MutableList<Int> = mutableListOf()
     private var amplitudeReceiver: android.content.BroadcastReceiver? = null
@@ -73,7 +68,7 @@ class AudioController(
         }
     }
 
-    fun startAudioTransmission() {
+    private fun startAudioTransmission() {
         waveformOverlayContainer.visibility = View.VISIBLE
         val intent = Intent(activity, AudioStreamingService::class.java)
         intent.putExtra("isMuted", false)
@@ -83,7 +78,7 @@ class AudioController(
         activity.startService(intent)
     }
 
-    fun stopAudioTransmission() {
+    private fun stopAudioTransmission() {
         waveformOverlayContainer.visibility = View.GONE
         waveformJob?.cancel()
         waveformJob = null
@@ -135,7 +130,7 @@ class AudioController(
                     showAddChannelDialog()
                 }
                 overlay.findViewById<View>(R.id.manageChannelsButton)?.setOnClickListener {
-                    val intent = android.content.Intent(activity, ChannelManagementActivity::class.java)
+                    val intent = Intent(activity, ChannelManagementActivity::class.java)
                     activity.startActivity(intent)
                     overlay.animate().translationX(overlayWidth.toFloat()).setDuration(300).withEndAction {
                         rootView.removeView(overlay)
@@ -146,7 +141,7 @@ class AudioController(
         }
     }
 
-    fun showAddChannelDialog() {
+    private fun showAddChannelDialog() {
         val dialogView = activity.layoutInflater.inflate(R.layout.dialog_add_channel, null)
         val channelNameInput = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.channelNameInput)
         com.google.android.material.dialog.MaterialAlertDialogBuilder(activity)

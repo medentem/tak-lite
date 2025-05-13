@@ -1,8 +1,8 @@
 package com.tak.lite.network
 
 import android.content.Context
-import android.util.Log
 import android.content.SharedPreferences
+import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -11,14 +11,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import org.webrtc.*
-import java.nio.ByteBuffer
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import org.webrtc.DataChannel
+import org.webrtc.PeerConnection
+import org.webrtc.PeerConnectionFactory
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.json.Json
-import org.maplibre.android.geometry.LatLng
 
 @Singleton
 class MeshNetworkManagerImpl @Inject constructor(
@@ -27,8 +26,7 @@ class MeshNetworkManagerImpl @Inject constructor(
     private val TAG = "MeshNetworkManager"
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
-    private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.DISCONNECTED)
-    val connectionState: StateFlow<ConnectionState> = _connectionState
+    private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
 
     enum class ConnectionState {
         DISCONNECTED,
@@ -42,7 +40,7 @@ class MeshNetworkManagerImpl @Inject constructor(
     private val dataChannels = mutableMapOf<String, DataChannel>()
     private val audioBuffers = mutableMapOf<String, MutableList<ByteArray>>()
 
-    private val _channels = MutableStateFlow<List<com.tak.lite.data.model.AudioChannel>>(
+    private val _channels = MutableStateFlow(
         listOf(
             com.tak.lite.data.model.AudioChannel(
                 id = "all",
@@ -60,73 +58,9 @@ class MeshNetworkManagerImpl @Inject constructor(
     private val json = Json { ignoreUnknownKeys = true }
 
     private var meshProtocol: MeshNetworkProtocol? = null
-    private var annotationSync: ((List<com.tak.lite.model.MapAnnotation>) -> Unit)? = null
-    private var locationSync: ((Map<String, LatLng>) -> Unit)? = null
 
     private val _isReceivingAudio = MutableStateFlow(false)
     val receivingAudioFlow: StateFlow<Boolean> = _isReceivingAudio.asStateFlow()
-
-    private val peerConnectionObserver = object : PeerConnection.Observer {
-        override fun onSignalingChange(state: PeerConnection.SignalingState?) {
-            Log.d(TAG, "Signaling state changed: $state")
-        }
-
-        override fun onIceConnectionChange(state: PeerConnection.IceConnectionState?) {
-            Log.d(TAG, "ICE connection state changed: $state")
-            when (state) {
-                PeerConnection.IceConnectionState.CONNECTED -> {
-                    _connectionState.value = ConnectionState.CONNECTED
-                }
-                PeerConnection.IceConnectionState.DISCONNECTED -> {
-                    _connectionState.value = ConnectionState.DISCONNECTED
-                    attemptReconnect()
-                }
-                else -> {}
-            }
-        }
-
-        override fun onIceConnectionReceivingChange(p0: Boolean) {}
-        override fun onIceGatheringChange(state: PeerConnection.IceGatheringState?) {
-            Log.d(TAG, "ICE gathering state changed: $state")
-        }
-
-        override fun onIceCandidate(candidate: IceCandidate?) {
-            candidate?.let {
-                // TODO: Send ICE candidate to signaling server
-                Log.d(TAG, "New ICE candidate: ${it.sdp}")
-            }
-        }
-
-        override fun onIceCandidatesRemoved(p0: Array<out IceCandidate>?) {}
-        override fun onAddStream(stream: MediaStream?) {}
-        override fun onRemoveStream(stream: MediaStream?) {}
-        override fun onDataChannel(dataChannel: DataChannel?) {
-            dataChannel?.let { channel ->
-                setupDataChannel(channel)
-            }
-        }
-
-        override fun onRenegotiationNeeded() {}
-        override fun onAddTrack(rtpReceiver: RtpReceiver?, mediaStreams: Array<out MediaStream>?) {}
-    }
-
-    private val dataChannelObserver = object : DataChannel.Observer {
-        override fun onBufferedAmountChange(amount: Long) {
-            Log.d(TAG, "Buffered amount changed: $amount")
-        }
-
-        override fun onStateChange() {
-            Log.d(TAG, "Data channel state changed")
-        }
-
-        override fun onMessage(buffer: DataChannel.Buffer?) {
-            buffer?.let {
-                val data = ByteArray(it.data.remaining())
-                it.data.get(data)
-                handleReceivedData(data)
-            }
-        }
-    }
 
     init {
         initializeWebRTC()
@@ -225,19 +159,6 @@ class MeshNetworkManagerImpl @Inject constructor(
         return audioData
     }
 
-    private fun setupDataChannel(dataChannel: DataChannel) {
-        dataChannel.registerObserver(dataChannelObserver)
-        dataChannels[dataChannel.label()] = dataChannel
-    }
-
-    private fun handleReceivedData(data: ByteArray) {
-        // TODO: Implement proper channel routing based on data header
-        synchronized(audioBuffers) {
-            val buffer = audioBuffers.getOrPut("default") { mutableListOf() }
-            buffer.add(data)
-        }
-    }
-
     private fun attemptReconnect() {
         scope.launch {
             var retryCount = 0
@@ -257,19 +178,6 @@ class MeshNetworkManagerImpl @Inject constructor(
             }
 
             if (_connectionState.value != ConnectionState.CONNECTED) {
-                _connectionState.value = ConnectionState.ERROR
-            }
-        }
-    }
-
-    private fun handleError(error: Exception) {
-        Log.e(TAG, "Network error occurred", error)
-        when (error) {
-            is java.net.ConnectException -> {
-                _connectionState.value = ConnectionState.DISCONNECTED
-                attemptReconnect()
-            }
-            else -> {
                 _connectionState.value = ConnectionState.ERROR
             }
         }
@@ -305,7 +213,7 @@ class MeshNetworkManagerImpl @Inject constructor(
             isActive = false,
             members = emptyList()
         )
-        _channels.value = _channels.value + newChannel
+        _channels.value += newChannel
         Log.d(TAG, "Creating channel: $name")
     }
 
@@ -317,34 +225,4 @@ class MeshNetworkManagerImpl @Inject constructor(
         }
         Log.d(TAG, "Deleting channel: $channelId")
     }
-
-    fun setMeshProtocol(protocol: MeshNetworkProtocol) {
-        meshProtocol = protocol
-        // Listen for state sync
-        protocol.startStateSyncListener { state ->
-            // Merge channels by ID
-            val local = _channels.value.associateBy { it.id }
-            val remote = state.channels.associateBy { it.id }
-            val merged = (local + remote).values.toList()
-            _channels.value = merged
-            // Merge annotations (stub)
-            annotationSync?.invoke(state.annotations)
-            // Merge locations (convert to LatLng)
-            val latLngMap = state.peerLocations.mapValues { it.value.toMapLibreLatLng() }
-            locationSync?.invoke(latLngMap)
-        }
-        // Listen for new peers and send state sync
-        protocol.startDiscovery { peers ->
-            // For each new peer, send state sync
-            val channels = _channels.value
-            val locations = locationSync?.let { emptyMap<String, LatLng>() } ?: emptyMap()
-            val annotations = annotationSync?.let { emptyList<com.tak.lite.model.MapAnnotation>() } ?: emptyList()
-            peers.forEach { peer ->
-                protocol.sendStateSync(peer.ipAddress, channels, locations, annotations)
-            }
-        }
-    }
-
-    fun setAnnotationSyncHandler(handler: (List<com.tak.lite.model.MapAnnotation>) -> Unit) { annotationSync = handler }
-    fun setLocationSyncHandler(handler: (Map<String, LatLng>) -> Unit) { locationSync = handler }
 } 

@@ -21,9 +21,7 @@ import com.google.android.gms.location.Priority
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.maplibre.android.geometry.LatLng
-import com.tak.lite.ui.location.LocationSource
 
 class LocationController(
     private val activity: Activity,
@@ -96,11 +94,6 @@ class LocationController(
         } else {
             onPermissionDenied?.invoke()
         }
-    }
-
-    fun stopLocationUpdates() {
-        fallbackHandler?.removeCallbacks(fallbackRunnable!!)
-        stopFallbackLocationManager()
     }
 
     private fun handleLocation(location: Location?) {
@@ -209,13 +202,5 @@ class LocationController(
                     }
             }
         }
-    }
-
-    fun getLastKnownLocation(): Location? {
-        if (ActivityCompat.checkSelfPermission(activity, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
-            ActivityCompat.checkSelfPermission(activity, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            return null
-        }
-        return fusedLocationClient.lastLocation.result
     }
 } 

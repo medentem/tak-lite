@@ -3,12 +3,11 @@ package com.tak.lite.di
 import android.content.Context
 import com.tak.lite.network.MeshNetworkProtocol
 import com.tak.lite.network.MeshNetworkService
-import com.tak.lite.repository.AnnotationRepository
 import com.tak.lite.network.MeshNetworkManager
 import com.tak.lite.network.MeshNetworkManagerImpl
+import com.tak.lite.repository.AnnotationRepository
 import dagger.Module
 import dagger.Provides
-import dagger.Binds
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
@@ -35,6 +34,14 @@ object NetworkProvidesModule {
     
     @Provides
     @Singleton
+    fun provideMeshNetworkManager(
+        @ApplicationContext context: Context
+    ): MeshNetworkManager {
+        return MeshNetworkManagerImpl(context)
+    }
+    
+    @Provides
+    @Singleton
     fun provideAnnotationRepository(
         meshProtocol: MeshNetworkProtocol
     ): AnnotationRepository {
@@ -43,12 +50,3 @@ object NetworkProvidesModule {
         return repo
     }
 }
-
-@Module
-@InstallIn(SingletonComponent::class)
-abstract class NetworkBindsModule {
-    
-    @Binds
-    @Singleton
-    abstract fun bindMeshNetworkManager(impl: MeshNetworkManagerImpl): MeshNetworkManager
-} 

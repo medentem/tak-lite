@@ -18,7 +18,7 @@ import org.maplibre.android.geometry.LatLng
 
 @Singleton
 class MeshNetworkService @Inject constructor(
-    private val context: Context,
+    context: Context,
     private val meshProtocol: MeshNetworkProtocol
 ) {
     private val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -49,7 +49,7 @@ class MeshNetworkService @Inject constructor(
             override fun onAvailable(network: Network) {
                 networkScope.launch {
                     meshProtocol.setNetwork(network)
-                    checkMeshNetworkConnection(network)
+                    checkMeshNetworkConnection()
                 }
             }
             
@@ -65,7 +65,7 @@ class MeshNetworkService @Inject constructor(
         connectivityManager.registerNetworkCallback(networkRequest, meshNetworkCallback!!)
     }
     
-    private suspend fun checkMeshNetworkConnection(network: Network) {
+    private fun checkMeshNetworkConnection() {
         try {
             val networkInterface = NetworkInterface.getByInetAddress(
                 InetAddress.getByName("10.223.0.1")
@@ -107,15 +107,11 @@ class MeshNetworkService @Inject constructor(
     fun setLocalNickname(nickname: String) {
         meshProtocol.setLocalNickname(nickname)
     }
-    
-    fun mergePeerLocations(remote: Map<String, LatLng>) {
-        _peerLocations.value = _peerLocations.value + remote
-    }
 }
 
 sealed class MeshNetworkState {
-    object Connected : MeshNetworkState()
-    object Disconnected : MeshNetworkState()
+    data object Connected : MeshNetworkState()
+    data object Disconnected : MeshNetworkState()
     data class Error(val message: String) : MeshNetworkState()
 }
 

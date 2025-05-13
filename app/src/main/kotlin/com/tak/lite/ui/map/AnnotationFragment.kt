@@ -7,27 +7,21 @@ import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
-import com.google.android.gms.maps.CameraUpdateFactory
-import com.google.android.gms.maps.GoogleMap
-import com.google.android.gms.maps.OnMapReadyCallback
-import com.google.android.gms.maps.SupportMapFragment
 import com.tak.lite.R
 import com.tak.lite.data.model.AnnotationType
-import com.tak.lite.model.AnnotationColor
-import com.tak.lite.model.MapAnnotation
-import com.tak.lite.model.PointShape
-import com.tak.lite.model.LatLngSerializable
-import com.tak.lite.model.LineStyle
 import com.tak.lite.databinding.AnnotationControlsBinding
 import com.tak.lite.databinding.FragmentAnnotationBinding
-import com.tak.lite.viewmodel.AnnotationViewModel
+import com.tak.lite.model.AnnotationColor
+import com.tak.lite.model.LineStyle
+import com.tak.lite.model.PointShape
 import com.tak.lite.viewmodel.AnnotationUiState
+import com.tak.lite.viewmodel.AnnotationViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import org.maplibre.android.geometry.LatLng
-import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
 
 @AndroidEntryPoint

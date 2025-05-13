@@ -6,7 +6,6 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.util.AttributeSet
 import android.view.View
-import kotlin.math.min
 
 class WaveformView @JvmOverloads constructor(
     context: Context,

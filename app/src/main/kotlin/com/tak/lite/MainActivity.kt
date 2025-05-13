@@ -1,8 +1,15 @@
 package com.tak.lite
 
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
 import android.os.Bundle
 import android.view.View
+import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
@@ -10,31 +17,19 @@ import androidx.lifecycle.lifecycleScope
 import com.tak.lite.databinding.ActivityMainBinding
 import com.tak.lite.ui.audio.AudioController
 import com.tak.lite.ui.location.LocationController
+import com.tak.lite.ui.location.LocationSource
 import com.tak.lite.ui.map.AnnotationOverlayView
 import com.tak.lite.viewmodel.AnnotationViewModel
 import com.tak.lite.viewmodel.AudioViewModel
 import com.tak.lite.viewmodel.MeshNetworkUiState
 import com.tak.lite.viewmodel.MeshNetworkViewModel
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
-import org.maplibre.android.geometry.LatLng
-import org.maplibre.android.annotations.Marker
-import org.maplibre.android.annotations.MarkerOptions
-import org.maplibre.android.annotations.IconFactory
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Paint
-import android.graphics.Color
-import kotlinx.coroutines.delay
-import android.widget.ImageView
-import android.widget.TextView
-import android.widget.FrameLayout
-import com.tak.lite.ui.location.LocationSource
 
 val DEFAULT_US_CENTER = LatLng(39.8283, -98.5795)
 const val DEFAULT_US_ZOOM = 4.0
@@ -92,7 +87,6 @@ class MainActivity : AppCompatActivity() {
         mapController = com.tak.lite.ui.map.MapController(
             context = this,
             mapView = mapView,
-            binding = binding,
             defaultCenter = DEFAULT_US_CENTER,
             defaultZoom = DEFAULT_US_ZOOM,
             onMapReady = { map ->
@@ -102,7 +96,7 @@ class MainActivity : AppCompatActivity() {
                 annotationController.setupMapLongPress(map)
                 // Center on last known location if available
                 loadLastLocation()?.let { (lat, lon, zoom) ->
-                    val latLng = org.maplibre.android.geometry.LatLng(lat, lon)
+                    val latLng = LatLng(lat, lon)
                     map.moveCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(latLng, zoom.toDouble()))
                     // Set source to PHONE if not mesh
                     locationSourceOverlay.visibility = View.VISIBLE
@@ -134,7 +128,6 @@ class MainActivity : AppCompatActivity() {
                 annotationController.setupAnnotationOverlay(mapController.mapLibreMap)
                 annotationController.renderAllAnnotations(mapController.mapLibreMap)
             },
-            getIsSatellite = { false },
             getMapTilerUrl = { "https://api.maptiler.com/tiles/satellite/{z}/{x}/{y}.jpg?key=" + BuildConfig.MAPTILER_API_KEY },
             getMapTilerAttribution = { "© MapTiler © OpenStreetMap contributors" },
             getOsmAttribution = { "© OpenStreetMap contributors" },
@@ -158,7 +151,7 @@ class MainActivity : AppCompatActivity() {
             activity = this,
             onLocationUpdate = { location ->
                 // Only handle mesh update and persistence here
-                val latLng = org.maplibre.android.geometry.LatLng(location.latitude, location.longitude)
+                val latLng = LatLng(location.latitude, location.longitude)
                 val currentZoom = mapController.mapLibreMap?.cameraPosition?.zoom?.toFloat() ?: DEFAULT_US_ZOOM.toFloat()
                 saveLastLocation(location.latitude, location.longitude, currentZoom)
                 viewModel.sendLocationUpdate(location.latitude, location.longitude)
@@ -206,9 +199,8 @@ class MainActivity : AppCompatActivity() {
         )
         locationController.checkAndRequestPermissions(PERMISSIONS_REQUEST_CODE)
         locationController.setupZoomToLocationButton(
-            binding.zoomToLocationButton,
-            { mapController.mapLibreMap }
-        )
+            binding.zoomToLocationButton
+        ) { mapController.mapLibreMap }
 
         audioController = AudioController(
             activity = this,
@@ -277,7 +269,7 @@ class MainActivity : AppCompatActivity() {
 
         // Observe annotation state changes
         lifecycleScope.launch {
-            annotationViewModel.uiState.collect { state ->
+            annotationViewModel.uiState.collect { _ ->
                 annotationController.renderAllAnnotations(mapController.mapLibreMap)
                 annotationController.syncAnnotationOverlayView(mapController.mapLibreMap)
             }
@@ -485,6 +477,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         val color = getMarkerColorForPeer(peerId)
-        marker.setIcon(org.maplibre.android.annotations.IconFactory.getInstance(this).fromBitmap(createPeerMarkerIcon(color)))
+        marker.icon = org.maplibre.android.annotations.IconFactory.getInstance(this).fromBitmap(createPeerMarkerIcon(color))
     }
 }

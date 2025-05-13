@@ -1,37 +1,23 @@
 package com.tak.lite.ui.map
 
 import android.content.Context
-import android.os.Bundle
-import android.widget.Toast
-import com.tak.lite.databinding.ActivityMainBinding
-import org.maplibre.android.geometry.LatLng
-import org.maplibre.android.geometry.LatLngBounds
-import org.maplibre.android.geometry.VisibleRegion
-import org.maplibre.android.maps.MapLibreMap
-import org.maplibre.android.maps.MapView
-import org.maplibre.android.maps.Style
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
-import android.os.Handler
-import android.os.Looper
-import android.util.Log
-import android.widget.ImageButton
-import com.tak.lite.model.AnnotationColor
-import com.tak.lite.model.PointShape
-import org.maplibre.android.annotations.Polygon
-import org.maplibre.android.annotations.PolygonOptions
-import java.io.File
+import android.os.Bundle
+import android.widget.Toast
 import kotlinx.coroutines.withContext
+import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.maps.MapView
+import java.io.File
 
 class MapController(
     private val context: Context,
     private val mapView: MapView,
-    private val binding: ActivityMainBinding,
     private val defaultCenter: LatLng,
     private val defaultZoom: Double,
     private val onMapReady: (MapLibreMap) -> Unit = {},
     private val onStyleChanged: (() -> Unit)? = null,
-    private val getIsSatellite: () -> Boolean = { false },
     private val getMapTilerUrl: () -> String = { "" },
     private val getMapTilerAttribution: () -> String = { "" },
     private val getOsmAttribution: () -> String = { "" },
@@ -63,7 +49,7 @@ class MapController(
         }
     }
 
-    fun setStyleForCurrentViewport(map: MapLibreMap) {
+    private fun setStyleForCurrentViewport(map: MapLibreMap) {
         val tileCoords = getVisibleTileCoords(map)
         val useOffline = allOfflineTilesExist(tileCoords)
         val isDeviceOnline = isOnline()
@@ -180,8 +166,6 @@ class MapController(
         mapLibreMap?.let { setStyleForCurrentViewport(it) }
     }
 
-    fun getIsSatelliteMode(): Boolean = isSatellite
-
     private fun isOnline(): Boolean {
         val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val network = connectivityManager.activeNetwork ?: return false
@@ -262,17 +246,6 @@ class MapController(
         return successCount to failCount
     }
 
-    fun setMapTouchEnabled(enabled: Boolean) {
-        mapLibreMap?.let { map ->
-            map.uiSettings.apply {
-                isScrollGesturesEnabled = enabled
-                isRotateGesturesEnabled = enabled
-                isTiltGesturesEnabled = enabled
-                isZoomGesturesEnabled = enabled
-            }
-        }
-    }
-
     private fun setupLocationComponent(map: MapLibreMap) {
         if (androidx.core.app.ActivityCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED ||
             androidx.core.app.ActivityCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
@@ -286,25 +259,10 @@ class MapController(
 
             // Add camera move listener to disable tracking when user pans
             map.addOnCameraMoveStartedListener { reason ->
-                if (reason == org.maplibre.android.maps.MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) {
+                if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) {
                     locationComponent.cameraMode = org.maplibre.android.location.modes.CameraMode.NONE
                 }
             }
-        }
-    }
-
-    fun enableLocationTracking() {
-        mapLibreMap?.let { map ->
-            if (androidx.core.app.ActivityCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED ||
-                androidx.core.app.ActivityCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                map.locationComponent.cameraMode = org.maplibre.android.location.modes.CameraMode.TRACKING
-            }
-        }
-    }
-
-    fun disableLocationTracking() {
-        mapLibreMap?.let { map ->
-            map.locationComponent.cameraMode = org.maplibre.android.location.modes.CameraMode.NONE
         }
     }
 } 
