@@ -1,21 +1,31 @@
 package com.tak.lite.ui.map
 
 import android.content.Context
-import android.graphics.*
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.DashPathEffect
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.PointF
+import android.graphics.RectF
+import android.graphics.Typeface
 import android.os.Handler
 import android.os.Looper
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
-import org.maplibre.android.maps.Projection
-import com.tak.lite.data.model.AnnotationType
-import com.tak.lite.data.model.type
 import com.tak.lite.data.model.AnnotationCluster
 import com.tak.lite.model.AnnotationColor
+import com.tak.lite.model.LineStyle
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PointShape
-import com.tak.lite.model.LineStyle
 import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.maps.Projection
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.hypot
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 class AnnotationOverlayView @JvmOverloads constructor(
     context: Context,
@@ -37,8 +47,6 @@ class AnnotationOverlayView @JvmOverloads constructor(
     private var projection: Projection? = null
     private var annotations: List<MapAnnotation> = emptyList()
     private var currentZoom: Float = 0f
-    private var tempStartDot: LatLng? = null
-    private var tempEndDot: LatLng? = null
     private var tempLinePoints: List<LatLng>? = null
     private var lastTimerUpdate: Long = 0
     private var timerAngle: Float = 0f
@@ -68,7 +76,6 @@ class AnnotationOverlayView @JvmOverloads constructor(
     var annotationController: AnnotationController? = null
     private var longPressHandler: Handler? = null
     private var longPressRunnable: Runnable? = null
-    private var longPressStartTime: Long = 0
     private var longPressCandidate: MapAnnotation.PointOfInterest? = null
     private var longPressDownPos: PointF? = null
     private var longPressLineCandidate: MapAnnotation.Line? = null
@@ -103,12 +110,6 @@ class AnnotationOverlayView @JvmOverloads constructor(
         invalidate()
     }
 
-    fun setTempLineDots(start: LatLng?, end: LatLng?) {
-        tempStartDot = start
-        tempEndDot = end
-        invalidate()
-    }
-
     fun setTempLinePoints(points: List<LatLng>?) {
         tempLinePoints = points
         invalidate()
@@ -120,7 +121,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
         val screenPoints = annotations.mapNotNull { annotation ->
             val latLng = annotation.toMapLibreLatLng()
             projection?.toScreenLocation(latLng)?.let { point ->
-                Pair(annotation, PointF(point.x.toFloat(), point.y.toFloat()))
+                Pair(annotation, PointF(point.x, point.y))
             }
         }
 
@@ -172,8 +173,8 @@ class AnnotationOverlayView @JvmOverloads constructor(
             if (points.size >= 2) {
                 val screenPoints = points.mapNotNull { projection?.toScreenLocation(it) }
                 for (i in 0 until screenPoints.size - 1) {
-                    val p1 = PointF(screenPoints[i].x.toFloat(), screenPoints[i].y.toFloat())
-                    val p2 = PointF(screenPoints[i + 1].x.toFloat(), screenPoints[i + 1].y.toFloat())
+                    val p1 = PointF(screenPoints[i].x, screenPoints[i].y)
+                    val p2 = PointF(screenPoints[i + 1].x, screenPoints[i + 1].y)
                     val tempPaint = Paint(paint).apply {
                         color = Color.RED
                         pathEffect = null
@@ -184,7 +185,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
             // Draw dots at each point
             points.forEach { latLng ->
                 projection?.toScreenLocation(latLng)?.let { pt ->
-                    val pointF = PointF(pt.x.toFloat(), pt.y.toFloat())
+                    val pointF = PointF(pt.x, pt.y)
                     val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                         color = Color.RED
                         style = Paint.Style.FILL
@@ -199,7 +200,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
             clusters.forEach { cluster ->
                 val point = projection?.toScreenLocation(cluster.center)
                 if (point != null) {
-                    val pointF = PointF(point.x.toFloat(), point.y.toFloat())
+                    val pointF = PointF(point.x, point.y)
                     drawCluster(canvas, pointF, cluster)
                 }
             }
@@ -211,7 +212,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     projection?.toScreenLocation(latLng)
                 }
                 if (point != null) {
-                    val pointF = PointF(point.x.toFloat(), point.y.toFloat())
+                    val pointF = PointF(point.x, point.y)
                     when (annotation) {
                         is MapAnnotation.PointOfInterest -> drawPoint(canvas, pointF, annotation)
                         is MapAnnotation.Line -> {
@@ -220,8 +221,8 @@ class AnnotationOverlayView @JvmOverloads constructor(
                             if (latLngs.size >= 2) {
                                 val screenPoints = latLngs.mapNotNull { projection?.toScreenLocation(it) }
                                 for (i in 0 until screenPoints.size - 1) {
-                                    val p1 = PointF(screenPoints[i].x.toFloat(), screenPoints[i].y.toFloat())
-                                    val p2 = PointF(screenPoints[i + 1].x.toFloat(), screenPoints[i + 1].y.toFloat())
+                                    val p1 = PointF(screenPoints[i].x, screenPoints[i].y)
+                                    val p2 = PointF(screenPoints[i + 1].x, screenPoints[i + 1].y)
                                     drawLine(canvas, p1, p2, annotation)
                                 }
                             }
@@ -229,7 +230,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
                         is MapAnnotation.Area -> {
                             val centerPoint = projection?.toScreenLocation(annotation.center.toMapLibreLatLng())
                             if (centerPoint != null) {
-                                val centerPointF = PointF(centerPoint.x.toFloat(), centerPoint.y.toFloat())
+                                val centerPointF = PointF(centerPoint.x, centerPoint.y)
                                 drawArea(canvas, centerPointF, annotation)
                             }
                         }
@@ -246,7 +247,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     projection?.toScreenLocation(latLng)
                 }
                 if (point == null) return@forEach
-                val pointF = PointF(point.x.toFloat(), point.y.toFloat())
+                val pointF = PointF(point.x, point.y)
                 when (annotation) {
                     is MapAnnotation.PointOfInterest -> {
                         drawPoint(canvas, pointF, annotation)
@@ -257,8 +258,8 @@ class AnnotationOverlayView @JvmOverloads constructor(
                         if (latLngs.size >= 2) {
                             val screenPoints = latLngs.mapNotNull { projection?.toScreenLocation(it) }
                             for (i in 0 until screenPoints.size - 1) {
-                                val p1 = PointF(screenPoints[i].x.toFloat(), screenPoints[i].y.toFloat())
-                                val p2 = PointF(screenPoints[i + 1].x.toFloat(), screenPoints[i + 1].y.toFloat())
+                                val p1 = PointF(screenPoints[i].x, screenPoints[i].y)
+                                val p2 = PointF(screenPoints[i + 1].x, screenPoints[i + 1].y)
                                 drawLine(canvas, p1, p2, annotation)
                             }
                         }
@@ -266,7 +267,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     is MapAnnotation.Area -> {
                         val centerPoint = projection?.toScreenLocation(annotation.center.toMapLibreLatLng())
                         if (centerPoint != null) {
-                            val centerPointF = PointF(centerPoint.x.toFloat(), centerPoint.y.toFloat())
+                            val centerPointF = PointF(centerPoint.x, centerPoint.y)
                             drawArea(canvas, centerPointF, annotation)
                         }
                     }
@@ -288,8 +289,8 @@ class AnnotationOverlayView @JvmOverloads constructor(
             PointShape.EXCLAMATION -> {
                 // Draw filled triangle with selected color
                 val half = 30f
-                val height = (half * Math.sqrt(3.0)).toFloat()
-                val path = android.graphics.Path()
+                val height = (half * sqrt(3.0)).toFloat()
+                val path = Path()
                 path.moveTo(point.x, point.y - height / 2) // Top
                 path.lineTo(point.x - half, point.y + height / 2) // Bottom left
                 path.lineTo(point.x + half, point.y + height / 2) // Bottom right
@@ -324,8 +325,8 @@ class AnnotationOverlayView @JvmOverloads constructor(
             }
             PointShape.TRIANGLE -> {
                 val half = 30f
-                val height = (half * Math.sqrt(3.0)).toFloat()
-                val path = android.graphics.Path()
+                val height = (half * sqrt(3.0)).toFloat()
+                val path = Path()
                 path.moveTo(point.x, point.y - height / 2) // Top
                 path.lineTo(point.x - half, point.y + height / 2) // Bottom left
                 path.lineTo(point.x + half, point.y + height / 2) // Bottom right
@@ -369,12 +370,12 @@ class AnnotationOverlayView @JvmOverloads constructor(
 
     private fun drawArrowHead(canvas: Canvas, start: PointF, end: PointF, color: Int) {
         val arrowSize = 30f
-        val angle = Math.atan2((end.y - start.y).toDouble(), (end.x - start.x).toDouble())
+        val angle = atan2((end.y - start.y).toDouble(), (end.x - start.x).toDouble())
         val arrowAngle = Math.PI / 8 // 22.5 degrees
-        val x1 = (end.x - arrowSize * Math.cos(angle - arrowAngle)).toFloat()
-        val y1 = (end.y - arrowSize * Math.sin(angle - arrowAngle)).toFloat()
-        val x2 = (end.x - arrowSize * Math.cos(angle + arrowAngle)).toFloat()
-        val y2 = (end.y - arrowSize * Math.sin(angle + arrowAngle)).toFloat()
+        val x1 = (end.x - arrowSize * cos(angle - arrowAngle)).toFloat()
+        val y1 = (end.y - arrowSize * sin(angle - arrowAngle)).toFloat()
+        val x2 = (end.x - arrowSize * cos(angle + arrowAngle)).toFloat()
+        val y2 = (end.y - arrowSize * sin(angle + arrowAngle)).toFloat()
         val arrowPaint = Paint(paint)
         arrowPaint.color = color
         arrowPaint.style = Paint.Style.FILL_AND_STROKE
@@ -397,7 +398,6 @@ class AnnotationOverlayView @JvmOverloads constructor(
 
     private fun drawTimerIndicator(canvas: Canvas, center: PointF, color: Int, annotation: MapAnnotation) {
         val timerRadius = 45f // Slightly larger than the annotation
-        val handLength = 8f
         val handWidth = 2f
         
         // Draw timer circle
@@ -417,8 +417,8 @@ class AnnotationOverlayView @JvmOverloads constructor(
         }
         
         val angle = Math.toRadians(timerAngle.toDouble())
-        val endX = center.x + (timerRadius * Math.cos(angle)).toFloat()
-        val endY = center.y + (timerRadius * Math.sin(angle)).toFloat()
+        val endX = center.x + (timerRadius * cos(angle)).toFloat()
+        val endY = center.y + (timerRadius * sin(angle)).toFloat()
         canvas.drawLine(center.x, center.y, endX, endY, handPaint)
 
         // Draw countdown text
@@ -480,16 +480,6 @@ class AnnotationOverlayView @JvmOverloads constructor(
         }
     }
 
-    private fun Int.withAlpha(alpha: Int): Int {
-        return Color.argb(alpha, Color.red(this), Color.green(this), Color.blue(this))
-    }
-
-    private fun metersToEquatorPixels(meters: Double, zoom: Float): Double {
-        val earthCircumference = 40075016.686 // Earth's circumference in meters at the equator
-        val pixelsPerMeter = 256.0 * Math.pow(2.0, zoom.toDouble()) / earthCircumference
-        return meters * pixelsPerMeter
-    }
-
     private fun MapAnnotation.toMapLibreLatLng(): LatLng {
         return when (this) {
             is MapAnnotation.PointOfInterest -> this.position.toMapLibreLatLng()
@@ -498,23 +488,6 @@ class AnnotationOverlayView @JvmOverloads constructor(
             is MapAnnotation.Deletion -> throw IllegalArgumentException("Deletion has no LatLng")
         }
     }
-
-    private fun MapAnnotation.toMapLibreLatLngs(): List<LatLng> {
-        return when (this) {
-            is MapAnnotation.PointOfInterest -> listOf(this.position.toMapLibreLatLng())
-            is MapAnnotation.Line -> this.points.map { it.toMapLibreLatLng() }
-            is MapAnnotation.Area -> listOf(this.center.toMapLibreLatLng())
-            is MapAnnotation.Deletion -> emptyList()
-        }
-    }
-
-    private val MapAnnotation.type: AnnotationType
-        get() = when (this) {
-            is MapAnnotation.PointOfInterest -> AnnotationType.POINT
-            is MapAnnotation.Line -> AnnotationType.LINE
-            is MapAnnotation.Area -> AnnotationType.AREA
-            is MapAnnotation.Deletion -> throw IllegalArgumentException("Deletion has no AnnotationType")
-        }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.action) {
@@ -550,13 +523,13 @@ class AnnotationOverlayView @JvmOverloads constructor(
             }
             MotionEvent.ACTION_MOVE -> {
                 longPressDownPos?.let { down ->
-                    if (Math.hypot((event.x - down.x).toDouble(), (event.y - down.y).toDouble()) > 40) {
+                    if (hypot((event.x - down.x).toDouble(), (event.y - down.y).toDouble()) > 40) {
                         longPressHandler?.removeCallbacks(longPressRunnable!!)
                         longPressCandidate = null
                     }
                 }
                 longPressLineDownPos?.let { down ->
-                    if (Math.hypot((event.x - down.x).toDouble(), (event.y - down.y).toDouble()) > 40) {
+                    if (hypot((event.x - down.x).toDouble(), (event.y - down.y).toDouble()) > 40) {
                         longPressHandler?.removeCallbacks(longPressRunnable!!)
                         longPressLineCandidate = null
                     }
@@ -578,7 +551,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
             val point = projection?.toScreenLocation(poi.position.toMapLibreLatLng()) ?: continue
             val dx = x - point.x
             val dy = y - point.y
-            if (Math.hypot(dx.toDouble(), dy.toDouble()) < 40) {
+            if (hypot(dx.toDouble(), dy.toDouble()) < 40) {
                 return poi
             }
         }
@@ -594,8 +567,8 @@ class AnnotationOverlayView @JvmOverloads constructor(
             if (latLngs.size >= 2) {
                 val screenPoints = latLngs.mapNotNull { projection?.toScreenLocation(it) }
                 for (i in 0 until screenPoints.size - 1) {
-                    val p1 = PointF(screenPoints[i].x.toFloat(), screenPoints[i].y.toFloat())
-                    val p2 = PointF(screenPoints[i + 1].x.toFloat(), screenPoints[i + 1].y.toFloat())
+                    val p1 = PointF(screenPoints[i].x, screenPoints[i].y)
+                    val p2 = PointF(screenPoints[i + 1].x, screenPoints[i + 1].y)
                     if (isPointNearLineSegment(x, y, p1, p2, threshold)) {
                         return Pair(line, Pair(p1, p2))
                     }
@@ -614,7 +587,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
         val tClamped = t.coerceIn(0f, 1f)
         val closestX = p1.x + tClamped * dx
         val closestY = p1.y + tClamped * dy
-        val dist = Math.hypot((x - closestX).toDouble(), (y - closestY).toDouble())
+        val dist = hypot((x - closestX).toDouble(), (y - closestY).toDouble())
         return dist < threshold
     }
 } 
