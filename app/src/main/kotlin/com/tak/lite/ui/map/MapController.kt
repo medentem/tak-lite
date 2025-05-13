@@ -19,13 +19,20 @@ class MapController(
     private val onMapReady: (MapLibreMap) -> Unit = {},
     private val onStyleChanged: (() -> Unit)? = null,
     private val getMapTilerUrl: () -> String = { "" },
+    private val getGlyphsUrl: () -> String = { "" },
+    private val getVectorTileUrl: () -> String = { "" },
+    private val getVectorTileJsonUrl: () -> String = { "" },
     private val getMapTilerAttribution: () -> String = { "" },
     private val getOsmAttribution: () -> String = { "" },
     private val getFilesDir: () -> File = { File("") }
 ) {
     var mapLibreMap: MapLibreMap? = null
         private set
-    private var isSatellite: Boolean = false
+    private var mapType: MapType = MapType.HYBRID
+
+    enum class MapType {
+        STREETS, SATELLITE, HYBRID
+    }
 
     fun onCreate(savedInstanceState: Bundle?, lastLocation: Triple<Double, Double, Float>?) {
         mapView.onCreate(savedInstanceState)
@@ -53,14 +60,15 @@ class MapController(
         val tileCoords = getVisibleTileCoords(map)
         val useOffline = allOfflineTilesExist(tileCoords)
         val isDeviceOnline = isOnline()
-        val isSatellite = this.isSatellite
         val mapTilerUrl = getMapTilerUrl()
+        val mapTilerVectorJsonUrl = getVectorTileJsonUrl()
+        val glyphsUrl = getGlyphsUrl();
         val mapTilerAttribution = getMapTilerAttribution()
         val osmAttribution = getOsmAttribution()
         val osmAttributionLine = if (osmAttribution.isNotBlank()) ",\n          \"attribution\": \"$osmAttribution\"" else ""
         val mapTilerAttributionLine = if (mapTilerAttribution.isNotBlank()) ",\n          \"attribution\": \"$mapTilerAttribution\"" else ""
         val styleJson = when {
-            isDeviceOnline && isSatellite -> {
+            isDeviceOnline && mapType == MapType.SATELLITE -> {
                 """
                 {
                   "version": 8,
@@ -80,6 +88,139 @@ class MapController(
                   ]
                 }
                 """
+            }
+            isDeviceOnline && mapType == MapType.HYBRID -> {
+                val style = """
+                {
+                  "version": 8,
+                  "glyphs": "$glyphsUrl",
+                  "sources": {
+                    "satellite-tiles": {
+                      "type": "raster",
+                      "tiles": ["$mapTilerUrl"],
+                      "tileSize": 512$mapTilerAttributionLine
+                    },
+                    "vector-tiles": {
+                      "type": "vector",
+                      "url": "$mapTilerVectorJsonUrl"
+                    }
+                  },
+                  "layers": [
+                    {
+                      "id": "satellite-tiles",
+                      "type": "raster",
+                      "source": "satellite-tiles"
+                    },
+                    {
+                      "id": "road-minor",
+                      "type": "line",
+                      "source": "vector-tiles",
+                      "source-layer": "transportation",
+                      "filter": ["all", ["in", "class", "minor", "service"]],
+                      "paint": {
+                        "line-color": "rgba(255, 255, 255, 0.6)",
+                        "line-width": 2.5
+                      }
+                    },
+                    {
+                      "id": "road-tertiary",
+                      "type": "line",
+                      "source": "vector-tiles",
+                      "source-layer": "transportation",
+                      "filter": ["all", ["==", "class", "tertiary"]],
+                      "paint": {
+                        "line-color": "rgba(255, 255, 255, 0.7)",
+                        "line-width": 3
+                      }
+                    },
+                    {
+                      "id": "road-secondary",
+                      "type": "line",
+                      "source": "vector-tiles",
+                      "source-layer": "transportation",
+                      "filter": ["all", ["==", "class", "secondary"]],
+                      "paint": {
+                        "line-color": "rgba(255, 255, 255, 0.8)",
+                        "line-width": 4
+                      }
+                    },
+                    {
+                      "id": "road-primary",
+                      "type": "line",
+                      "source": "vector-tiles",
+                      "source-layer": "transportation",
+                      "filter": ["all", ["==", "class", "primary"]],
+                      "paint": {
+                        "line-color": "rgba(255, 255, 255, 0.9)",
+                        "line-width": 5
+                      }
+                    },
+                    {
+                      "id": "road-highway",
+                      "type": "line",
+                      "source": "vector-tiles",
+                      "source-layer": "transportation",
+                      "filter": ["all", ["in", "class", "motorway", "trunk"]],
+                      "paint": {
+                        "line-color": "rgba(255, 255, 255, 1)",
+                        "line-width": 6
+                      }
+                    },
+                    {
+                      "id": "road-label",
+                      "type": "symbol",
+                      "source": "vector-tiles",
+                      "source-layer": "transportation_name",
+                      "layout": {
+                        "text-field": ["get", "name"],
+                        "text-size": 12,
+                        "text-anchor": "center",
+                        "text-allow-overlap": false
+                      },
+                      "paint": {
+                        "text-color": "rgba(255, 255, 255, 0.9)",
+                        "text-halo-color": "rgba(0, 0, 0, 0.8)",
+                        "text-halo-width": 1
+                      }
+                    },
+                    {
+                      "id": "place-label",
+                      "type": "symbol",
+                      "source": "vector-tiles",
+                      "source-layer": "place",
+                      "layout": {
+                        "text-field": ["get", "name"],
+                        "text-size": 14,
+                        "text-anchor": "center",
+                        "text-allow-overlap": false
+                      },
+                      "paint": {
+                        "text-color": "#ffff00",
+                        "text-halo-color": "#000000",
+                        "text-halo-width": 2
+                      }
+                    },
+                    {
+                      "id": "housenumber-label",
+                      "type": "symbol",
+                      "source": "vector-tiles",
+                      "source-layer": "housenumber",
+                      "layout": {
+                        "text-field": ["get", "housenumber"],
+                        "text-size": 10,
+                        "text-anchor": "center",
+                        "text-allow-overlap": false
+                      },
+                      "paint": {
+                        "text-color": "#00ffff",
+                        "text-halo-color": "#000000",
+                        "text-halo-width": 1
+                      }
+                    }
+                  ]
+                }
+                """
+                style
             }
             isDeviceOnline -> {
                 """
@@ -102,14 +243,14 @@ class MapController(
                 }
                 """
             }
-            useOffline && isSatellite -> {
+            useOffline && mapType == MapType.SATELLITE -> {
                 """
                 {
                   "version": 8,
                   "sources": {
                     "satellite-tiles": {
                       "type": "raster",
-                      "tiles": ["file://${getFilesDir()}/tiles/satellite/{z}/{x}/{y}.png"],
+                      "tiles": ["file://${getFilesDir()}/tiles/satellite-v2/{z}/{x}/{y}.png"],
                       "tileSize": 256
                     }
                   },
@@ -118,6 +259,87 @@ class MapController(
                       "id": "satellite-tiles",
                       "type": "raster",
                       "source": "satellite-tiles"
+                    }
+                  ]
+                }
+                """
+            }
+            useOffline && mapType == MapType.HYBRID -> {
+                """
+                {
+                  "version": 8,
+                  "sources": {
+                    "satellite-tiles": {
+                      "type": "raster",
+                      "tiles": ["file://${getFilesDir()}/tiles/satellite-v2/{z}/{x}/{y}.png"],
+                      "tileSize": 256
+                    },
+                    "vector-tiles": {
+                      "type": "vector",
+                      "tiles": ["file://${getFilesDir()}/tiles/vector/{z}/{x}/{y}.pbf"],
+                      "tileSize": 512
+                    }
+                  },
+                  "layers": [
+                    {
+                      "id": "satellite-tiles",
+                      "type": "raster",
+                      "source": "satellite-tiles"
+                    },
+                    {
+                      "id": "road-minor",
+                      "type": "line",
+                      "source": "vector-tiles",
+                      "source-layer": "transportation",
+                      "filter": ["all", ["in", "class", "minor", "service"]],
+                      "paint": {
+                        "line-color": "rgba(255, 255, 255, 0.6)",
+                        "line-width": 1.5
+                      }
+                    },
+                    {
+                      "id": "road-tertiary",
+                      "type": "line",
+                      "source": "vector-tiles",
+                      "source-layer": "transportation",
+                      "filter": ["all", ["==", "class", "tertiary"]],
+                      "paint": {
+                        "line-color": "rgba(255, 255, 255, 0.7)",
+                        "line-width": 2
+                      }
+                    },
+                    {
+                      "id": "road-secondary",
+                      "type": "line",
+                      "source": "vector-tiles",
+                      "source-layer": "transportation",
+                      "filter": ["all", ["==", "class", "secondary"]],
+                      "paint": {
+                        "line-color": "rgba(255, 255, 255, 0.8)",
+                        "line-width": 3
+                      }
+                    },
+                    {
+                      "id": "road-primary",
+                      "type": "line",
+                      "source": "vector-tiles",
+                      "source-layer": "transportation",
+                      "filter": ["all", ["==", "class", "primary"]],
+                      "paint": {
+                        "line-color": "rgba(255, 255, 255, 0.9)",
+                        "line-width": 4
+                      }
+                    },
+                    {
+                      "id": "road-highway",
+                      "type": "line",
+                      "source": "vector-tiles",
+                      "source-layer": "transportation",
+                      "filter": ["all", ["in", "class", "motorway", "trunk"]],
+                      "paint": {
+                        "line-color": "rgba(255, 255, 255, 1)",
+                        "line-width": 5
+                      }
                     }
                   ]
                 }
@@ -158,11 +380,19 @@ class MapController(
         map.setStyle(org.maplibre.android.maps.Style.Builder().fromJson(styleJson)) {
             setupLocationComponent(map)
             onStyleChanged?.invoke()
+            // Force a redraw of the annotation overlay
+            map.addOnCameraMoveListener {
+                onStyleChanged?.invoke()
+            }
         }
     }
 
     fun toggleMapType() {
-        isSatellite = !isSatellite
+        mapType = when (mapType) {
+            MapType.STREETS -> MapType.SATELLITE
+            MapType.SATELLITE -> MapType.HYBRID
+            MapType.HYBRID -> MapType.STREETS
+        }
         mapLibreMap?.let { setStyleForCurrentViewport(it) }
     }
 
@@ -186,8 +416,9 @@ class MapController(
     private fun allOfflineTilesExist(tileCoords: List<Triple<Int, Int, Int>>): Boolean {
         for ((z, x, y) in tileCoords) {
             val osmFile = File(getFilesDir(), "tiles/osm/$z/$x/$y.png")
-            val satFile = File(getFilesDir(), "tiles/satellite/$z/$x/$y.png")
-            if (!osmFile.exists() || !satFile.exists()) return false
+            val satFile = File(getFilesDir(), "tiles/satellite-v2/$z/$x/$y.png")
+            val vectorFile = File(getFilesDir(), "tiles/vector/$z/$x/$y.pbf")
+            if (!osmFile.exists() || !satFile.exists() || !vectorFile.exists()) return false
         }
         return tileCoords.isNotEmpty()
     }
@@ -209,6 +440,7 @@ class MapController(
         var successCount = 0
         var failCount = 0
         val mapTilerUrl = getMapTilerUrl()
+        val mapTilerVectorUrl = getVectorTileUrl()
         for (zoom in zoomLevels) {
             val tilePairs = com.tak.lite.util.OsmTileUtils.getTileRange(bounds.southWest, bounds.northEast, zoom)
             for ((x, y) in tilePairs) {
@@ -236,7 +468,23 @@ class MapController(
                         connection.setRequestProperty("User-Agent", "tak-lite/1.0 (https://github.com/developer)")
                         connection.inputStream.use { it.readBytes() }
                     }
-                    val saved = com.tak.lite.util.saveTilePngWithType(context, "satellite", zoom, x, y, bytes)
+                    val saved = com.tak.lite.util.saveTilePngWithType(context, "satellite-v2", zoom, x, y, bytes)
+                    if (saved) successCount++ else failCount++
+                } catch (e: Exception) {
+                    failCount++
+                }
+                // Download vector tile
+                val vectorUrl = mapTilerVectorUrl
+                    .replace("{z}", zoom.toString())
+                    .replace("{x}", x.toString())
+                    .replace("{y}", y.toString())
+                try {
+                    val bytes = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        val connection = java.net.URL(vectorUrl).openConnection() as java.net.HttpURLConnection
+                        connection.setRequestProperty("User-Agent", "tak-lite/1.0 (https://github.com/developer)")
+                        connection.inputStream.use { it.readBytes() }
+                    }
+                    val saved = com.tak.lite.util.saveTilePbfWithType(context, "vector", zoom, x, y, bytes)
                     if (saved) successCount++ else failCount++
                 } catch (e: Exception) {
                     failCount++

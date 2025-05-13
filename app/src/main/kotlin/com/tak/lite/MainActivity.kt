@@ -128,7 +128,10 @@ class MainActivity : AppCompatActivity() {
                 annotationController.setupAnnotationOverlay(mapController.mapLibreMap)
                 annotationController.renderAllAnnotations(mapController.mapLibreMap)
             },
-            getMapTilerUrl = { "https://api.maptiler.com/tiles/satellite/{z}/{x}/{y}.jpg?key=" + BuildConfig.MAPTILER_API_KEY },
+            getMapTilerUrl = { "https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=" + BuildConfig.MAPTILER_API_KEY },
+            getVectorTileUrl = { "https://api.maptiler.com/tiles/v3/{z}/{x}/{y}.pbf?key=" + BuildConfig.MAPTILER_API_KEY },
+            getGlyphsUrl = { "https://api.maptiler.com/fonts/{fontstack}/{range}.pbf?key=" + BuildConfig.MAPTILER_API_KEY },
+            getVectorTileJsonUrl = { "https://api.maptiler.com/tiles/v3/tiles.json?key=" + BuildConfig.MAPTILER_API_KEY },
             getMapTilerAttribution = { "© MapTiler © OpenStreetMap contributors" },
             getOsmAttribution = { "© OpenStreetMap contributors" },
             getFilesDir = { filesDir }

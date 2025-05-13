@@ -43,8 +43,10 @@ class AnnotationController(
     fun setupAnnotationOverlay(mapLibreMap: MapLibreMap?) {
         mapLibreMap?.addOnCameraMoveListener {
             annotationOverlayView.setProjection(mapLibreMap.projection)
+            annotationOverlayView.invalidate()
         }
         annotationOverlayView.setProjection(mapLibreMap?.projection)
+        annotationOverlayView.invalidate()
     }
 
     fun setupPoiLongPressListener() {
