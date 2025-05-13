@@ -52,7 +52,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
     private var timerAngle: Float = 0f
     private var clusters: List<AnnotationCluster> = emptyList()
     private val clusterThreshold = 100f // pixels
-    private val minZoomForClustering = 12f // zoom level below which clustering occurs
+    private val minZoomForClustering = 14f // zoom level below which clustering occurs
 
     // Timer update handler
     private val timerHandler = Handler(Looper.getMainLooper())
