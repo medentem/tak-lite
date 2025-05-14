@@ -70,6 +70,7 @@ class AudioStreamingService : Service() {
     private var isInSilence = false
     private var audioFeedbackManager: AudioFeedbackManager? = null
     private var wasStoppedBySilence = false  // New flag to track if transmission was stopped by silence
+    private var isDestroying = false  // Flag to prevent multiple beeps in onDestroy
 
     @Inject
     lateinit var meshNetworkManager: MeshNetworkManager
@@ -93,13 +94,6 @@ class AudioStreamingService : Service() {
         if (isPTTHeld) {
             startStreaming(settings)
         } else {
-            // Only play beep if we were actually streaming
-            if (isStreaming) {
-                Log.d("Waveform", "PTT released while streaming, playing beep")
-                playEndTransmissionBeep()
-            } else {
-                Log.d("Waveform", "PTT released but not streaming, skipping beep")
-            }
             stopStreaming()
         }
         return START_STICKY
@@ -250,8 +244,7 @@ class AudioStreamingService : Service() {
                                     } else if (System.currentTimeMillis() - silenceStartTime > SILENCE_DURATION_MS) {
                                         // Stop transmission after silence duration
                                         Log.d("Waveform", "Silence duration exceeded, stopping transmission")
-                                        playEndTransmissionBeep()
-                                        stopStreaming()
+                                        stopSelf()  // Stop and destroy the service, onDestroy will handle the beep
                                         break
                                     }
                                 } else {
@@ -336,12 +329,8 @@ class AudioStreamingService : Service() {
             // Send through mesh network to other users
             meshNetworkManager.sendAudioData(beepData, DEFAULT_CHANNEL)
             
-            // Play locally with a delay
-            GlobalScope.launch(Dispatchers.IO) {
-                // Wait for 350ms to allow last audio packets to be processed
-                kotlinx.coroutines.delay(350)
-                feedback.playTransmissionEndBeep()
-            }
+            // Play locally immediately
+            feedback.playTransmissionEndBeep()
         } ?: Log.e("Waveform", "audioFeedbackManager is null when trying to play beep")
     }
 
@@ -372,7 +361,15 @@ class AudioStreamingService : Service() {
 
     override fun onDestroy() {
         Log.d("Waveform", "AudioStreamingService onDestroy called")
-        stopStreaming()
+        if (!isDestroying) {
+            isDestroying = true
+            if (isStreaming) {
+                playEndTransmissionBeep()
+                // Wait for beep to complete before stopping
+                Thread.sleep(500)  // 500ms should be enough for the beep to play
+            }
+            stopStreaming()
+        }
         super.onDestroy()
     }
 
