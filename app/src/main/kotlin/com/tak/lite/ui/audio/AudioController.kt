@@ -28,12 +28,14 @@ class AudioController(
     private var waveformJob: kotlinx.coroutines.Job? = null
     private var amplitudes: MutableList<Int> = mutableListOf()
     private var amplitudeReceiver: android.content.BroadcastReceiver? = null
+    private var stateChangeReceiver: android.content.BroadcastReceiver? = null
 
     fun setupAudioUI() {
         waveformOverlayContainer = activity.findViewById(R.id.waveformOverlayContainer)
         waveformView = activity.findViewById(R.id.waveformView)
         waveformOverlayContainer.visibility = View.GONE
         amplitudes = mutableListOf()
+        
         // Register amplitude receiver
         amplitudeReceiver = object : android.content.BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
@@ -44,12 +46,45 @@ class AudioController(
                 waveformView.setAmplitudes(amplitudes)
             }
         }
-        androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(activity).registerReceiver(amplitudeReceiver!!, android.content.IntentFilter("AUDIO_AMPLITUDE"))
-        Log.d("Waveform", "Amplitude receiver registered")
+        
+        // Register state change receiver
+        stateChangeReceiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                val isTransmitting = intent?.getBooleanExtra("isTransmitting", false) ?: false
+                Log.d("Waveform", "Received state change: isTransmitting=$isTransmitting")
+                updatePTTButtonState(isTransmitting)
+                if (!isTransmitting) {
+                    waveformOverlayContainer.visibility = View.GONE
+                    waveformJob?.cancel()
+                    waveformJob = null
+                    amplitudes.clear()
+                    waveformView.setAmplitudes(emptyList())
+                }
+            }
+        }
+        
+        val localBroadcastManager = androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(activity)
+        localBroadcastManager.registerReceiver(amplitudeReceiver!!, android.content.IntentFilter("AUDIO_AMPLITUDE"))
+        localBroadcastManager.registerReceiver(stateChangeReceiver!!, android.content.IntentFilter("AUDIO_STATE_CHANGE"))
+        Log.d("Waveform", "Receivers registered")
+    }
+
+    private fun updatePTTButtonState(isTransmitting: Boolean) {
+        binding.pttButton.setBackgroundTintList(
+            android.content.res.ColorStateList.valueOf(
+                if (isTransmitting) {
+                    android.graphics.Color.RED
+                } else {
+                    activity.getColor(R.color.ptt_button_default)
+                }
+            )
+        )
     }
 
     fun cleanupAudioUI() {
-        amplitudeReceiver?.let { androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(activity).unregisterReceiver(it) }
+        val localBroadcastManager = androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(activity)
+        amplitudeReceiver?.let { localBroadcastManager.unregisterReceiver(it) }
+        stateChangeReceiver?.let { localBroadcastManager.unregisterReceiver(it) }
     }
 
     fun setupPTTButton() {
@@ -70,6 +105,7 @@ class AudioController(
 
     private fun startAudioTransmission() {
         waveformOverlayContainer.visibility = View.VISIBLE
+        updatePTTButtonState(true)
         val intent = Intent(activity, AudioStreamingService::class.java)
         intent.putExtra("isMuted", false)
         intent.putExtra("volume", 50)
@@ -80,6 +116,7 @@ class AudioController(
 
     private fun stopAudioTransmission() {
         waveformOverlayContainer.visibility = View.GONE
+        updatePTTButtonState(false)
         waveformJob?.cancel()
         waveformJob = null
         amplitudes.clear()

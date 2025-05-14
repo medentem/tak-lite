@@ -7,6 +7,7 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioFocusRequest.Builder
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
@@ -50,7 +51,7 @@ class AudioStreamingService : Service() {
         
         // Audio processing constants
         private const val SILENCE_THRESHOLD = 200  // Minimum amplitude to consider as speech
-        private const val SILENCE_DURATION_MS = 500  // Duration of silence before stopping transmission
+        private const val SILENCE_DURATION_MS = 1000  // Duration of silence before stopping transmission
     }
 
     private var audioRecord: AudioRecord? = null
@@ -68,6 +69,7 @@ class AudioStreamingService : Service() {
     private var silenceStartTime: Long = 0
     private var isInSilence = false
     private var audioFeedbackManager: AudioFeedbackManager? = null
+    private var wasStoppedBySilence = false  // New flag to track if transmission was stopped by silence
 
     @Inject
     lateinit var meshNetworkManager: MeshNetworkManager
@@ -81,7 +83,7 @@ class AudioStreamingService : Service() {
         val volume = intent?.getIntExtra("volume", 50) ?: 50
         val selectedChannelId = intent?.getStringExtra("selectedChannelId")
         val isPTTHeld = intent?.getBooleanExtra("isPTTHeld", false) ?: false
-        Log.d("Waveform", "AudioStreamingService onStartCommand called, isPTTHeld=$isPTTHeld, isMuted=$isMuted, selectedChannelId=$selectedChannelId")
+        Log.d("Waveform", "AudioStreamingService onStartCommand called, isPTTHeld=$isPTTHeld, isMuted=$isMuted, selectedChannelId=$selectedChannelId, isStreaming=$isStreaming")
         val settings = AudioSettings(
             isMuted = isMuted,
             volume = volume,
@@ -91,6 +93,13 @@ class AudioStreamingService : Service() {
         if (isPTTHeld) {
             startStreaming(settings)
         } else {
+            // Only play beep if we were actually streaming
+            if (isStreaming) {
+                Log.d("Waveform", "PTT released while streaming, playing beep")
+                playEndTransmissionBeep()
+            } else {
+                Log.d("Waveform", "PTT released but not streaming, skipping beep")
+            }
             stopStreaming()
         }
         return START_STICKY
@@ -117,18 +126,22 @@ class AudioStreamingService : Service() {
 
     private fun startStreaming(settings: AudioSettings) {
         Log.d("Waveform", "startStreaming called, isStreaming=$isStreaming, isPTTHeld=${settings.isPTTHeld}")
-        if (isStreaming) return
+        if (isStreaming) {
+            Log.d("Waveform", "Already streaming, ignoring start request")
+            return
+        }
         
         // Initialize audio feedback manager
         audioFeedbackManager = AudioFeedbackManager(this)
+        Log.d("Waveform", "Audio feedback manager initialized")
         
         // Start foreground notification
         startForegroundServiceNotification()
         
         val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
         
-        // Request audio focus
-        audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+        // Create audio focus change listener
+        val focusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
             Log.d("Waveform", "Audio focus changed: $focusChange")
             when (focusChange) {
                 AudioManager.AUDIOFOCUS_LOSS -> {
@@ -144,12 +157,20 @@ class AudioStreamingService : Service() {
                 }
             }
         }
+        audioFocusChangeListener = focusChangeListener
+
+        // Create audio attributes for voice communication
+        val audioAttributes = android.media.AudioAttributes.Builder()
+            .setUsage(android.media.AudioAttributes.USAGE_VOICE_COMMUNICATION)
+            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+            .build()
         
-        val focusResult = audioManager.requestAudioFocus(
-            audioFocusChangeListener,
-            AudioManager.STREAM_VOICE_CALL,
-            AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE
-        )
+        val focusRequest = Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
+            .setAudioAttributes(audioAttributes)
+            .setOnAudioFocusChangeListener(focusChangeListener)
+            .build()
+        
+        val focusResult = audioManager.requestAudioFocus(focusRequest)
         
         audioFocusRequested = true
         audioFocusGranted = (focusResult == AudioManager.AUDIOFOCUS_REQUEST_GRANTED)
@@ -170,6 +191,7 @@ class AudioStreamingService : Service() {
         audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
 
         isStreaming = true
+        Log.d("Waveform", "Streaming started, isStreaming set to true")
         streamingJob = GlobalScope.launch {
             withContext(Dispatchers.IO) {
                 Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
@@ -194,13 +216,8 @@ class AudioStreamingService : Service() {
                     }
 
                     // Initialize audio track with modern builder pattern
-                    val audioAttributes = android.media.AudioAttributes.Builder()
-                        .setUsage(android.media.AudioAttributes.USAGE_VOICE_COMMUNICATION)
-                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
-                        .build()
-
                     audioTrack = AudioTrack.Builder()
-                        .setAudioAttributes(audioAttributes)
+                        .setAudioAttributes(audioAttributes)  // Reuse the same audio attributes
                         .setAudioFormat(AudioFormat.Builder()
                             .setEncoding(AUDIO_FORMAT)
                             .setSampleRate(SAMPLE_RATE)
@@ -212,6 +229,7 @@ class AudioStreamingService : Service() {
 
                     audioRecord?.startRecording()
                     audioTrack?.play()
+                    Log.d("Waveform", "Audio recording and playback started")
 
                     val audioData = ByteArray(BUFFER_SIZE)
 
@@ -228,12 +246,18 @@ class AudioStreamingService : Service() {
                                     if (!isInSilence) {
                                         silenceStartTime = System.currentTimeMillis()
                                         isInSilence = true
+                                        Log.d("Waveform", "Silence detected, starting silence timer")
                                     } else if (System.currentTimeMillis() - silenceStartTime > SILENCE_DURATION_MS) {
                                         // Stop transmission after silence duration
+                                        Log.d("Waveform", "Silence duration exceeded, stopping transmission")
+                                        playEndTransmissionBeep()
                                         stopStreaming()
                                         break
                                     }
                                 } else {
+                                    if (isInSilence) {
+                                        Log.d("Waveform", "Audio detected, resetting silence timer")
+                                    }
                                     isInSilence = false
                                 }
                                 
@@ -262,16 +286,10 @@ class AudioStreamingService : Service() {
                         if (nextPacket != null) {
                             audioTrack?.write(nextPacket, 0, nextPacket.size)
                         }
-
-                        // Log buffer stats periodically
-                        val stats = jitterBuffer?.getBufferStats()
-                        if (stats != null && stats.packetLossRate > 0) {
-                            Log.d("Waveform", "Jitter buffer stats: size=${stats.currentSize}, " +
-                                "target=${stats.targetSize}, loss=${stats.packetLossRate * 100}%")
-                        }
                     }
                 } catch (e: Exception) {
                     Log.e("Waveform", "Exception in streaming loop", e)
+                    isStreaming = false
                 } finally {
                     cleanupAudioResources()
                 }
@@ -280,22 +298,21 @@ class AudioStreamingService : Service() {
     }
 
     private fun stopStreaming() {
-        Log.d("Waveform", "stopStreaming called")
+        Log.d("Waveform", "stopStreaming called, isStreaming=$isStreaming")
+        if (!isStreaming) {
+            Log.d("Waveform", "Not streaming, ignoring stop request")
+            return
+        }
         isStreaming = false
+        Log.d("Waveform", "Streaming stopped, isStreaming set to false")
         streamingJob?.cancel()
         streamingJob = null
 
-        // Play end transmission beep for all transmission ends
-        audioFeedbackManager?.let { feedback ->
-            // Generate beep data
-            val beepData = feedback.generateBeepData()
-            
-            // Play locally
-            feedback.playTransmissionEndBeep()
-            
-            // Send through mesh network to other users
-            meshNetworkManager.sendAudioData(beepData, DEFAULT_CHANNEL)
-        }
+        // Broadcast UI state update
+        val intent = Intent("AUDIO_STATE_CHANGE")
+        intent.putExtra("isTransmitting", false)
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+        Log.d("Waveform", "Broadcast UI state update: isTransmitting=false")
 
         // Abandon audio focus
         if (audioFocusRequested) {
@@ -307,6 +324,25 @@ class AudioStreamingService : Service() {
         }
         // Stop foreground notification
         stopForeground(true)
+        Log.d("Waveform", "Service stopped foreground")
+    }
+
+    private fun playEndTransmissionBeep() {
+        Log.d("Waveform", "Playing end transmission beep")
+        audioFeedbackManager?.let { feedback ->
+            // Generate beep data
+            val beepData = feedback.generateBeepData()
+            
+            // Send through mesh network to other users
+            meshNetworkManager.sendAudioData(beepData, DEFAULT_CHANNEL)
+            
+            // Play locally with a delay
+            GlobalScope.launch(Dispatchers.IO) {
+                // Wait for 350ms to allow last audio packets to be processed
+                kotlinx.coroutines.delay(350)
+                feedback.playTransmissionEndBeep()
+            }
+        } ?: Log.e("Waveform", "audioFeedbackManager is null when trying to play beep")
     }
 
     private fun cleanupAudioResources() {

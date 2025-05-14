@@ -22,7 +22,7 @@ android {
 
     defaultConfig {
         applicationId "com.tak.lite"
-        minSdk 24       // <— modern key
+        minSdk 26       // <— modern key
         targetSdk 34
         versionCode 1
         versionName "1.0"
