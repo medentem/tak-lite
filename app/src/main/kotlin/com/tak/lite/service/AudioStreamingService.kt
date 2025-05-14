@@ -22,6 +22,7 @@ import androidx.core.app.NotificationCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.tak.lite.data.model.AudioSettings
 import com.tak.lite.network.MeshNetworkManager
+import com.tak.lite.audio.JitterBuffer
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
@@ -56,6 +57,8 @@ class AudioStreamingService : Service() {
     private var audioFocusRequested = false
     private var audioFocusGranted = false
     private var audioFocusChangeListener: AudioManager.OnAudioFocusChangeListener? = null
+    private var jitterBuffer: JitterBuffer? = null
+    private var sequenceNumber: Long = 0
 
     @Inject
     lateinit var meshNetworkManager: MeshNetworkManager
@@ -145,6 +148,9 @@ class AudioStreamingService : Service() {
                 Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
 
                 try {
+                    // Initialize jitter buffer
+                    jitterBuffer = JitterBuffer()
+
                     // Initialize audio record
                     audioRecord = AudioRecord(
                         MediaRecorder.AudioSource.VOICE_COMMUNICATION,
@@ -188,8 +194,9 @@ class AudioStreamingService : Service() {
                             val readSize = audioRecord?.read(audioData, 0, BUFFER_SIZE) ?: 0
                             Log.d("Waveform", "AudioRecord readSize: $readSize")
                             if (readSize > 0) {
-                                // Send audio data to mesh network
+                                // Send raw PCM audio data to mesh network
                                 meshNetworkManager.sendAudioData(audioData.copyOf(readSize), settings.selectedChannelId ?: DEFAULT_CHANNEL)
+                                sequenceNumber++
                                 // Calculate amplitude and broadcast to UI
                                 val amplitude = calculateAmplitude(audioData, readSize)
                                 val intent = Intent("AUDIO_AMPLITUDE")
@@ -198,12 +205,26 @@ class AudioStreamingService : Service() {
                                 Log.d("Waveform", "Broadcasting amplitude: $amplitude")
                             }
                         }
-                        // This approach is correct for streaming long audio: as long as isStreaming is true and the mic is not muted, audio is read, sent, and amplitude is broadcast. If readSize drops to zero, the mic is being cut off or starved by the system or another app.
 
                         // Receive and play audio from mesh network
                         val receivedAudio = meshNetworkManager.receiveAudioData(settings.selectedChannelId ?: DEFAULT_CHANNEL)
                         if (receivedAudio != null) {
-                            audioTrack?.write(receivedAudio, 0, receivedAudio.size)
+                            // Add received audio to jitter buffer
+                            jitterBuffer?.addPacket(receivedAudio, sequenceNumber, System.currentTimeMillis())
+                        }
+
+                        // Get next packet from jitter buffer and play it
+                        val nextPacket = jitterBuffer?.getNextPacket()
+                        if (nextPacket != null) {
+                            // Play raw PCM audio data
+                            audioTrack?.write(nextPacket, 0, nextPacket.size)
+                        }
+
+                        // Log buffer stats periodically
+                        val stats = jitterBuffer?.getBufferStats()
+                        if (stats != null && stats.packetLossRate > 0) {
+                            Log.d("Waveform", "Jitter buffer stats: size=${stats.currentSize}, " +
+                                "target=${stats.targetSize}, loss=${stats.packetLossRate * 100}%")
                         }
                     }
                 } catch (e: SecurityException) {
@@ -233,6 +254,8 @@ class AudioStreamingService : Service() {
                         audioFocusGranted = false
                         Log.d("Waveform", "Audio focus abandoned")
                     }
+                    jitterBuffer?.clear()
+                    jitterBuffer = null
                 }
             }
         }

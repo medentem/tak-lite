@@ -19,8 +19,13 @@ object NetworkProvidesModule {
     
     @Provides
     @Singleton
-    fun provideMeshNetworkProtocol(): MeshNetworkProtocol {
-        return MeshNetworkProtocol()
+    fun provideMeshNetworkProtocol(
+        @ApplicationContext context: Context,
+        meshNetworkManager: MeshNetworkManager
+    ): MeshNetworkProtocol {
+        return MeshNetworkProtocol(context).apply {
+            setMeshNetworkManager(meshNetworkManager)
+        }
     }
     
     @Provides

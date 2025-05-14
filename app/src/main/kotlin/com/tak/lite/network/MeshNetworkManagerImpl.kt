@@ -38,7 +38,7 @@ class MeshNetworkManagerImpl @Inject constructor(
     private var peerConnectionFactory: PeerConnectionFactory? = null
     private val peerConnections = mutableMapOf<String, PeerConnection>()
     private val dataChannels = mutableMapOf<String, DataChannel>()
-    private val audioBuffers = mutableMapOf<String, MutableList<ByteArray>>()
+    val audioBuffers = mutableMapOf<String, MutableList<ByteArray>>()
 
     private val _channels = MutableStateFlow(
         listOf(
@@ -141,7 +141,7 @@ class MeshNetworkManagerImpl @Inject constructor(
 
     override fun sendAudioData(audioData: ByteArray, channelId: String) {
         // Always broadcast audio data, regardless of connection state or peers
-        meshProtocol?.sendAudioData(audioData)
+        meshProtocol?.sendAudioData(audioData, channelId)
     }
 
     override fun receiveAudioData(channelId: String): ByteArray? {
