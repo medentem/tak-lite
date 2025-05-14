@@ -63,6 +63,7 @@ class AudioStreamingService : Service() {
     private var audioFocusRequested = false
     private var audioFocusGranted = false
     private var audioFocusChangeListener: AudioManager.OnAudioFocusChangeListener? = null
+    private var audioFocusRequest: android.media.AudioFocusRequest? = null
     private var jitterBuffer: JitterBuffer? = null
     private var sequenceNumber: Long = 0
     private var lastAudioTimestamp: Long = 0
@@ -164,6 +165,7 @@ class AudioStreamingService : Service() {
             .setOnAudioFocusChangeListener(focusChangeListener)
             .build()
         
+        audioFocusRequest = focusRequest
         val focusResult = audioManager.requestAudioFocus(focusRequest)
         
         audioFocusRequested = true
@@ -310,13 +312,20 @@ class AudioStreamingService : Service() {
         // Abandon audio focus
         if (audioFocusRequested) {
             val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
-            audioManager.abandonAudioFocus(audioFocusChangeListener)
+            audioFocusRequest?.let { request ->
+                audioManager.abandonAudioFocusRequest(request)
+            }
             audioFocusRequested = false
             audioFocusGranted = false
             Log.d("Waveform", "Audio focus abandoned")
         }
         // Stop foreground notification
-        stopForeground(true)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
         Log.d("Waveform", "Service stopped foreground")
     }
 
@@ -350,7 +359,10 @@ class AudioStreamingService : Service() {
         
         // Abandon audio focus
         if (audioFocusRequested) {
-            audioManager.abandonAudioFocus(audioFocusChangeListener)
+            val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
+            audioFocusRequest?.let { request ->
+                audioManager.abandonAudioFocusRequest(request)
+            }
             audioFocusRequested = false
             audioFocusGranted = false
         }
