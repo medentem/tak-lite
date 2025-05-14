@@ -16,6 +16,7 @@ import com.tak.lite.model.LatLngSerializable
 import android.net.Network
 import java.io.File
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 @Serializable
@@ -136,6 +137,9 @@ class MeshNetworkProtocol(
     
     val channels = _channels.asStateFlow()
     val annotations = _annotations.asStateFlow()
+    
+    private val _connectionMetrics = MutableStateFlow(ConnectionMetrics())
+    val connectionMetrics: StateFlow<ConnectionMetrics> = _connectionMetrics.asStateFlow()
     
     @Serializable
     data class CachedPeer(
@@ -773,13 +777,16 @@ class MeshNetworkProtocol(
             (1.0f - (newLatency.toFloat() / MAX_PEER_TIMEOUT_MS)) * 
             (1.0f - (newJitter.toFloat() / MAX_PEER_TIMEOUT_MS))
         
-        peerMetrics[peerId] = metrics.copy(
+        val updatedMetrics = metrics.copy(
             latency = newLatency,
             jitter = newJitter,
             packetLoss = packetLoss,
             lastUpdate = now,
             networkQuality = networkQuality.coerceIn(0f, 1f)
         )
+        
+        peerMetrics[peerId] = updatedMetrics
+        _connectionMetrics.value = updatedMetrics
         
         // Adjust peer timeout based on connection quality
         val timeout = calculateAdaptiveTimeout(peerId)

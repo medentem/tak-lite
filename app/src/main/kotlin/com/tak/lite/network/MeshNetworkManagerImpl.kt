@@ -3,6 +3,7 @@ package com.tak.lite.network
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
+import com.tak.lite.audio.AudioCodecManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -16,6 +17,8 @@ import kotlinx.serialization.json.Json
 import org.webrtc.DataChannel
 import org.webrtc.PeerConnection
 import org.webrtc.PeerConnectionFactory
+import org.webrtc.AudioSource
+import org.webrtc.AudioTrack
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -27,6 +30,7 @@ class MeshNetworkManagerImpl @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
+    private val audioCodecManager = AudioCodecManager()
 
     enum class ConnectionState {
         DISCONNECTED,
@@ -36,6 +40,8 @@ class MeshNetworkManagerImpl @Inject constructor(
     }
 
     private var peerConnectionFactory: PeerConnectionFactory? = null
+    private var audioSource: AudioSource? = null
+    private var audioTrack: AudioTrack? = null
     private val peerConnections = mutableMapOf<String, PeerConnection>()
     private val dataChannels = mutableMapOf<String, DataChannel>()
     val audioBuffers = mutableMapOf<String, MutableList<ByteArray>>()
@@ -100,12 +106,52 @@ class MeshNetworkManagerImpl @Inject constructor(
                 )
 
                 val options = PeerConnectionFactory.Options()
+                options.disableNetworkMonitor = false  // Enable network monitoring
+                
                 peerConnectionFactory = PeerConnectionFactory.builder()
                     .setOptions(options)
                     .createPeerConnectionFactory()
+                
+                // Initialize audio source and track
+                peerConnectionFactory?.let { factory ->
+                    audioSource = audioCodecManager.configureAudioSource(factory)
+                    audioTrack = audioSource?.let { source ->
+                        audioCodecManager.createAudioTrack(factory, source)
+                    }
+                }
+                    
+                // Start monitoring network quality
+                startNetworkQualityMonitoring()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to initialize WebRTC", e)
                 _connectionState.value = ConnectionState.ERROR
+            }
+        }
+    }
+    
+    private fun startNetworkQualityMonitoring() {
+        scope.launch {
+            meshProtocol?.let { protocol ->
+                // Monitor network metrics and update audio codec configuration
+                protocol.connectionMetrics.collect { metrics ->
+                    audioCodecManager.updateCodecConfiguration(
+                        networkQuality = metrics.networkQuality,
+                        packetLoss = metrics.packetLoss,
+                        latency = metrics.latency
+                    )
+                    
+                    // Reconfigure audio source with new settings if needed
+                    val currentConfig = audioCodecManager.getCurrentConfiguration()
+                    if (currentConfig.bitrate != audioCodecManager.getCurrentConfiguration().bitrate ||
+                        currentConfig.frameSize != audioCodecManager.getCurrentConfiguration().frameSize) {
+                        peerConnectionFactory?.let { factory ->
+                            audioSource = audioCodecManager.configureAudioSource(factory)
+                            audioTrack = audioSource?.let { source ->
+                                audioCodecManager.createAudioTrack(factory, source)
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -129,6 +175,8 @@ class MeshNetworkManagerImpl @Inject constructor(
     override fun disconnect() {
         scope.launch {
             try {
+                audioTrack?.dispose()
+                audioSource?.dispose()
                 peerConnections.values.forEach { it.close() }
                 peerConnections.clear()
                 dataChannels.clear()
@@ -140,8 +188,28 @@ class MeshNetworkManagerImpl @Inject constructor(
     }
 
     override fun sendAudioData(audioData: ByteArray, channelId: String) {
-        // Always broadcast audio data, regardless of connection state or peers
-        meshProtocol?.sendAudioData(audioData, channelId)
+        // Get current codec configuration
+        val config = audioCodecManager.getCurrentConfiguration()
+        
+        // Optimize packet size based on current configuration
+        val optimizedData = optimizeAudioPacketSize(audioData, config)
+        
+        // Send through mesh protocol
+        meshProtocol?.sendAudioData(optimizedData, channelId)
+    }
+    
+    private fun optimizeAudioPacketSize(audioData: ByteArray, config: AudioCodecManager.AudioCodecConfiguration): ByteArray {
+        val maxPacketSize = when {
+            config.bitrate >= AudioCodecManager.HIGH_QUALITY_BITRATE -> 1200
+            config.bitrate >= AudioCodecManager.MEDIUM_QUALITY_BITRATE -> 800
+            else -> 400
+        }
+        
+        return if (audioData.size > maxPacketSize) {
+            audioData.copyOfRange(0, maxPacketSize)
+        } else {
+            audioData
+        }
     }
 
     override fun receiveAudioData(channelId: String): ByteArray? {
