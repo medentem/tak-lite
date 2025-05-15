@@ -198,7 +198,8 @@
             android:id="@+id/locationSourceOverlay"
             android:layout_width="56dp"
             android:layout_height="56dp"
-            android:background="@android:color/transparent"
+            android:background="@drawable/bg_fab_circle"
+            android:backgroundTint="@android:color/background_light"
             android:elevation="8dp"
             android:visibility="visible">
 
@@ -207,7 +208,8 @@
                 android:layout_width="32dp"
                 android:layout_height="32dp"
                 android:layout_gravity="center"
-                android:contentDescription="@string/location_source" />
+                android:contentDescription="@string/location_source"
+                android:tint="@android:color/white" />
         </FrameLayout>
 
         <TextView
@@ -216,7 +218,7 @@
             android:layout_height="wrap_content"
             android:text="Location Source"
             android:textSize="12sp"
-            android:textColor="#888888"
+            android:textColor="@android:color/white"
             android:layout_marginTop="2dp"
             android:gravity="center" />
     </LinearLayout>

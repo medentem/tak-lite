@@ -70,7 +70,6 @@ class AudioStreamingService : Service() {
     private var silenceStartTime: Long = 0
     private var isInSilence = false
     private var audioFeedbackManager: AudioFeedbackManager? = null
-    private var wasStoppedBySilence = false  // New flag to track if transmission was stopped by silence
     private var isDestroying = false  // Flag to prevent multiple beeps in onDestroy
 
     @Inject
