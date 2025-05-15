@@ -28,7 +28,8 @@
         android:contentDescription="Push to Talk"
         android:src="@android:drawable/ic_btn_speak_now"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        app:layout_constraintEnd_toEndOf="parent"
+        app:backgroundTint="@android:color/holo_blue_dark" />
 
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/zoomToLocationButton"
@@ -39,7 +40,8 @@
         android:contentDescription="Zoom to My Location"
         android:src="@android:drawable/ic_menu_mylocation"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        app:layout_constraintEnd_toEndOf="parent"
+        app:backgroundTint="@android:color/holo_blue_dark" />
 
     <LinearLayout
         android:id="@+id/lineToolButtonContainer"
@@ -60,7 +62,7 @@
             android:contentDescription="Confirm Line"
             android:layout_marginBottom="8dp"
             android:visibility="gone"
-            app:backgroundTint="@android:color/holo_green_dark" />
+            app:backgroundTint="@android:color/holo_blue_dark" />
 
         <com.google.android.material.floatingactionbutton.FloatingActionButton
             android:id="@+id/lineToolCancelButton"
@@ -78,7 +80,7 @@
             android:layout_height="56dp"
             android:layout_gravity="center"
             android:background="@drawable/bg_fab_circle"
-            android:backgroundTint="#0DCDBA">
+            android:backgroundTint="@android:color/holo_blue_dark">
 
             <ImageView
                 android:id="@+id/lineToolButton"
@@ -110,7 +112,8 @@
         android:contentDescription="Toggle Map Type"
         android:src="@android:drawable/ic_menu_mapmode"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
+        app:layout_constraintStart_toStartOf="parent"
+        app:backgroundTint="@android:color/holo_blue_dark" />
 
     <com.tak.lite.ui.map.FanMenuView
         android:id="@+id/fanMenuView"
@@ -127,7 +130,8 @@
         android:contentDescription="Set Nickname"
         android:src="@android:drawable/ic_menu_edit"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
+        app:layout_constraintStart_toStartOf="parent"
+        app:backgroundTint="@android:color/holo_blue_dark" />
 
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/downloadSectorButton"
@@ -138,7 +142,8 @@
         android:contentDescription="Download Visible Map Sector"
         android:src="@android:drawable/ic_menu_save"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
+        app:layout_constraintStart_toStartOf="parent"
+        app:backgroundTint="@android:color/holo_blue_dark" />
 
     <ImageButton
         android:id="@+id/groupAudioButton"
@@ -147,7 +152,7 @@
         android:layout_marginStart="16dp"
         android:layout_marginBottom="176dp"
         android:background="@drawable/bg_fab_circle"
-        android:backgroundTint="#0DCDBA"
+        android:backgroundTint="@android:color/holo_blue_dark"
         android:contentDescription="Show Audio Channels"
         android:elevation="16dp"
         android:src="@drawable/ic_group"

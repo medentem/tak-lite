@@ -84,6 +84,8 @@ class MainActivity : AppCompatActivity() {
             binding.lineToolButton
         )
 
+        val lastLocation = loadLastLocation()
+        val lastMapMode = loadMapMode()
         mapController = com.tak.lite.ui.map.MapController(
             context = this,
             mapView = mapView,
@@ -95,8 +97,8 @@ class MainActivity : AppCompatActivity() {
                 annotationController.setupPoiLongPressListener()
                 annotationController.setupMapLongPress(map)
                 // Center on last known location if available
-                loadLastLocation()?.let { (lat, lon, zoom) ->
-                    val latLng = LatLng(lat, lon)
+                lastLocation?.let { (lat, lon, zoom) ->
+                    val latLng = org.maplibre.android.geometry.LatLng(lat, lon)
                     map.moveCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(latLng, zoom.toDouble()))
                     // Set source to PHONE if not mesh
                     locationSourceOverlay.visibility = View.VISIBLE
@@ -105,7 +107,15 @@ class MainActivity : AppCompatActivity() {
                     locationSourceLabel.text = "Phone"
                     locationSourceLabel.setTextColor(Color.parseColor("#2196F3"))
                 }
-                
+                // Try to get current location and zoom to it if available
+                locationController.getLastKnownLocation { location ->
+                    if (location != null) {
+                        val latLng = org.maplibre.android.geometry.LatLng(location.latitude, location.longitude)
+                        val currentZoom = map.cameraPosition.zoom
+                        map.moveCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(latLng, currentZoom))
+                        saveLastLocation(location.latitude, location.longitude, currentZoom.toFloat())
+                    }
+                }
                 // Add map click listener for line tool
                 map.addOnMapClickListener { latLng ->
                     if (annotationController.isLineDrawingMode) {
@@ -117,7 +127,6 @@ class MainActivity : AppCompatActivity() {
                         false
                     }
                 }
-                
                 // Add camera move listener for syncing annotations
                 map.addOnCameraMoveListener {
                     annotationController.syncAnnotationOverlayView(map)
@@ -137,7 +146,8 @@ class MainActivity : AppCompatActivity() {
             getFilesDir = { filesDir }
         )
         annotationController.mapController = mapController
-        mapController.onCreate(savedInstanceState, loadLastLocation())
+        mapController.setMapType(lastMapMode)
+        mapController.onCreate(savedInstanceState, lastLocation)
 
         locationSourceOverlay = findViewById(R.id.locationSourceOverlay)
         locationSourceIcon = findViewById(R.id.locationSourceIcon)
@@ -283,7 +293,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.mapTypeToggleButton.setOnClickListener {
-            mapController.toggleMapType()
+            onMapModeToggled()
         }
 
         binding.downloadSectorButton.setOnClickListener {
@@ -368,6 +378,24 @@ class MainActivity : AppCompatActivity() {
         val lon = prefs.getFloat("last_lon", 0f).toDouble()
         val zoom = prefs.getFloat("last_zoom", DEFAULT_US_ZOOM.toFloat())
         return Triple(lat, lon, zoom)
+    }
+
+    private fun saveMapMode(mapType: com.tak.lite.ui.map.MapController.MapType) {
+        getSharedPreferences("user_prefs", MODE_PRIVATE)
+            .edit()
+            .putString("map_mode", mapType.name)
+            .apply()
+    }
+
+    private fun loadMapMode(): com.tak.lite.ui.map.MapController.MapType {
+        val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
+        val modeName = prefs.getString("map_mode", null)
+        return try {
+            if (modeName != null) com.tak.lite.ui.map.MapController.MapType.valueOf(modeName)
+            else com.tak.lite.ui.map.MapController.MapType.HYBRID
+        } catch (e: Exception) {
+            com.tak.lite.ui.map.MapController.MapType.HYBRID
+        }
     }
 
     override fun onRequestPermissionsResult(
@@ -481,5 +509,10 @@ class MainActivity : AppCompatActivity() {
 
         val color = getMarkerColorForPeer(peerId)
         marker.icon = org.maplibre.android.annotations.IconFactory.getInstance(this).fromBitmap(createPeerMarkerIcon(color))
+    }
+
+    private fun onMapModeToggled() {
+        mapController.toggleMapType()
+        saveMapMode(mapController.getMapType())
     }
 }

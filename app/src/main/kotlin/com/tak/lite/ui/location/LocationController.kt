@@ -203,4 +203,28 @@ class LocationController(
             }
         }
     }
+
+    fun getLastKnownLocation(callback: (Location?) -> Unit) {
+        coroutineScope.launch {
+            // Try Mesh Rider first
+            val meshRiderLocation = meshRiderGpsController.getMeshRiderLocation(activity)
+            if (meshRiderLocation != null) {
+                callback(meshRiderLocation)
+                return@launch
+            }
+            // Fall back to Android location
+            if (ActivityCompat.checkSelfPermission(activity, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                ActivityCompat.checkSelfPermission(activity, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                fusedLocationClient.lastLocation
+                    .addOnSuccessListener { location ->
+                        callback(location)
+                    }
+                    .addOnFailureListener {
+                        callback(null)
+                    }
+            } else {
+                callback(null)
+            }
+        }
+    }
 } 

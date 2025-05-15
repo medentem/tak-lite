@@ -396,6 +396,13 @@ class MapController(
         mapLibreMap?.let { setStyleForCurrentViewport(it) }
     }
 
+    fun setMapType(type: MapType) {
+        mapType = type
+        mapLibreMap?.let { setStyleForCurrentViewport(it) }
+    }
+
+    fun getMapType(): MapType = mapType
+
     private fun isOnline(): Boolean {
         val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val network = connectivityManager.activeNetwork ?: return false
