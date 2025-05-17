@@ -298,8 +298,18 @@ class MainActivity : AppCompatActivity() {
 
         binding.downloadSectorButton.setOnClickListener {
             Toast.makeText(this, "Downloading offline tiles...", Toast.LENGTH_SHORT).show()
+            binding.tileDownloadProgressBar.progress = 0
+            binding.tileDownloadProgressBar.visibility = View.VISIBLE
             lifecycleScope.launch {
-                val (successCount, failCount) = mapController.downloadVisibleTiles()
+                val (successCount, failCount) = mapController.downloadVisibleTiles { completed, total ->
+                    runOnUiThread {
+                        if (total > 0) {
+                            val percent = (completed * 100) / total
+                            binding.tileDownloadProgressBar.progress = percent
+                        }
+                    }
+                }
+                binding.tileDownloadProgressBar.visibility = View.GONE
                 Toast.makeText(this@MainActivity, "Offline tile download complete: $successCount success, $failCount failed", Toast.LENGTH_LONG).show()
             }
         }
@@ -331,6 +341,11 @@ class MainActivity : AppCompatActivity() {
     private fun showNicknameDialog() {
         val editText = android.widget.EditText(this)
         editText.hint = "Enter your nickname"
+        // Add left padding to the EditText
+        val paddingDp = 16 // 16dp is a common value for input padding
+        val scale = resources.displayMetrics.density
+        val paddingPx = (paddingDp * scale + 0.5f).toInt()
+        editText.setPadding(paddingPx, editText.paddingTop, editText.paddingRight, editText.paddingBottom)
         val savedNickname = loadNickname()
         if (!savedNickname.isNullOrEmpty()) {
             editText.setText(savedNickname)

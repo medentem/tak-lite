@@ -418,14 +418,20 @@ class FanMenuView @JvmOverloads constructor(
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
                 val distance = hypot(event.x - center.x, event.y - center.y)
+                val inMenu = isPointInMenu(event.x, event.y)
                 if (distance < centerHoleRadius) {
                     // Touched the center hole
                     if (!isTransitioning) {
                         listener?.onMenuDismissed()
                     }
                     return true
+                } else if (!inMenu) {
+                    // Touched outside the fan menu
+                    if (!isTransitioning) {
+                        listener?.onMenuDismissed()
+                    }
+                    return true
                 }
-                
                 // Start tracking touch
                 updateSelectedItem(event.x, event.y)
                 return true
@@ -504,6 +510,25 @@ class FanMenuView @JvmOverloads constructor(
                 invalidate()
             }
         }
+    }
+
+    /**
+     * Returns true if the given point is within the fan menu area (any ring), false if outside.
+     */
+    private fun isPointInMenu(x: Float, y: Float): Boolean {
+        val distance = hypot(x - center.x, y - center.y)
+        val maxRadius = menuRadius + (if (numOuter > 0) ringSpacing else 0f) + iconRadius
+        val minRadius = centerHoleRadius
+        val angle = atan2(y - center.y, x - center.x)
+        val normalizedAngle = (angle + 2 * Math.PI) % (2 * Math.PI)
+        val startAngle = (menuStartAngle + 2 * Math.PI) % (2 * Math.PI)
+        val endAngle = (startAngle + menuFanAngle) % (2 * Math.PI)
+        val inFan = if (startAngle < endAngle) {
+            normalizedAngle in startAngle..endAngle
+        } else {
+            normalizedAngle >= startAngle || normalizedAngle <= endAngle
+        }
+        return distance >= minRadius && distance <= maxRadius && inFan
     }
 
     fun showAt(center: PointF, options: List<Option>, listener: OnOptionSelectedListener, screenSize: PointF) {

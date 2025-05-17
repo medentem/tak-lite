@@ -46,9 +46,6 @@ class MapController(
                 map.moveCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(defaultCenter, defaultZoom))
             }
             setStyleForCurrentViewport(map)
-            map.addOnCameraIdleListener {
-                setStyleForCurrentViewport(map)
-            }
             map.setStyle(org.maplibre.android.maps.Style.Builder().fromUri("asset://styles/style.json")) {
                 setupLocationComponent(map)
             }
@@ -437,7 +434,7 @@ class MapController(
     fun onLowMemory() { mapView.onLowMemory() }
     fun onDestroy() { mapView.onDestroy() }
 
-    suspend fun downloadVisibleTiles(): Pair<Int, Int> {
+    suspend fun downloadVisibleTiles(onProgress: ((completed: Int, total: Int) -> Unit)? = null): Pair<Int, Int> {
         val map = mapLibreMap ?: return 0 to 0
         val projection = map.projection
         val visibleRegion = projection.visibleRegion
@@ -448,8 +445,16 @@ class MapController(
         var failCount = 0
         val mapTilerUrl = getMapTilerUrl()
         val mapTilerVectorUrl = getVectorTileUrl()
+        // Calculate total number of tile downloads (OSM + satellite + vector for each tile)
+        var totalTiles = 0
+        val tileCoordsByZoom = zoomLevels.associateWith { com.tak.lite.util.OsmTileUtils.getTileRange(bounds.southWest, bounds.northEast, it) }
+        tileCoordsByZoom.forEach { (zoom, tilePairs) ->
+            totalTiles += tilePairs.size * 2 // OSM + satellite
+            if (zoom <= 15) totalTiles += tilePairs.size // vector
+        }
+        var completedTiles = 0
         for (zoom in zoomLevels) {
-            val tilePairs = com.tak.lite.util.OsmTileUtils.getTileRange(bounds.southWest, bounds.northEast, zoom)
+            val tilePairs = tileCoordsByZoom[zoom] ?: continue
             for ((x, y) in tilePairs) {
                 // Download OSM tile
                 val osmUrl = "https://tile.openstreetmap.org/$zoom/$x/$y.png"
@@ -464,6 +469,8 @@ class MapController(
                 } catch (e: Exception) {
                     failCount++
                 }
+                completedTiles++
+                onProgress?.invoke(completedTiles, totalTiles)
                 // Download satellite tile
                 val satUrl = mapTilerUrl
                     .replace("{z}", zoom.toString())
@@ -480,21 +487,33 @@ class MapController(
                 } catch (e: Exception) {
                     failCount++
                 }
-                // Download vector tile
-                val vectorUrl = mapTilerVectorUrl
-                    .replace("{z}", zoom.toString())
-                    .replace("{x}", x.toString())
-                    .replace("{y}", y.toString())
-                try {
-                    val bytes = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                        val connection = java.net.URL(vectorUrl).openConnection() as java.net.HttpURLConnection
-                        connection.setRequestProperty("User-Agent", "tak-lite/1.0 (https://github.com/developer)")
-                        connection.inputStream.use { it.readBytes() }
+                completedTiles++
+                onProgress?.invoke(completedTiles, totalTiles)
+                // Download vector tile (only if zoom <= 15)
+                if (zoom <= 15) {
+                    val vectorUrl = mapTilerVectorUrl
+                        .replace("{z}", zoom.toString())
+                        .replace("{x}", x.toString())
+                        .replace("{y}", y.toString())
+                    try {
+                        val bytes = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            val connection = java.net.URL(vectorUrl).openConnection() as java.net.HttpURLConnection
+                            connection.setRequestProperty("User-Agent", "tak-lite/1.0 (https://github.com/developer)")
+                            connection.inputStream.use { it.readBytes() }
+                        }
+                        val saved = com.tak.lite.util.saveTilePbfWithType(context, "vector", zoom, x, y, bytes)
+                        if (saved) {
+                            successCount++
+                        } else {
+                            android.util.Log.e("OfflineTiles", "Failed to save vector tile $zoom/$x/$y from $vectorUrl (saveTilePbfWithType returned false)")
+                            failCount++
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("OfflineTiles", "Exception downloading vector tile $zoom/$x/$y from $vectorUrl: ${e.message}", e)
+                        failCount++
                     }
-                    val saved = com.tak.lite.util.saveTilePbfWithType(context, "vector", zoom, x, y, bytes)
-                    if (saved) successCount++ else failCount++
-                } catch (e: Exception) {
-                    failCount++
+                    completedTiles++
+                    onProgress?.invoke(completedTiles, totalTiles)
                 }
             }
         }

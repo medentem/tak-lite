@@ -11,4 +11,7 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
     </style>
+    <style name="Theme.TakLite.Splash" parent="Theme.TakLite">
+        <item name="android:windowBackground">@color/splash_background</item>
+    </style>
 </resources> 

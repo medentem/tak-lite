@@ -13,8 +13,10 @@ class PermissionManager @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     companion object {
+        // Includes FOREGROUND_SERVICE_MICROPHONE for Android 14+ foreground audio services
         val REQUIRED_PERMISSIONS = arrayOf(
             Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.FOREGROUND_SERVICE_MICROPHONE,
             Manifest.permission.INTERNET,
             Manifest.permission.ACCESS_NETWORK_STATE
         )
