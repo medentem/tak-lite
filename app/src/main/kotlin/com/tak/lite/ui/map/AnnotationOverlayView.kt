@@ -389,20 +389,18 @@ class AnnotationOverlayView @JvmOverloads constructor(
                 val latLng2 = latLngs[segmentIndex + 1]
                 val distMeters = haversine(latLng1.latitude, latLng1.longitude, latLng2.latitude, latLng2.longitude)
                 val distMiles = distMeters / 1609.344
-                if (distMiles >= minDistMiles) {
-                    var midX = (point1.x + point2.x) / 2
-                    var midY = (point1.y + point2.y) / 2
-                    midX = midX.coerceIn(0f, width.toFloat())
-                    midY = midY.coerceIn(0f, height.toFloat())
-                    val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                        color = Color.BLACK
-                        textSize = 44f // Bigger label
-                        textAlign = Paint.Align.CENTER
-                        typeface = Typeface.DEFAULT_BOLD
-                    }
-                    val label = String.format("%.2f mi", distMiles)
-                    canvas.drawText(label, midX, midY - 24f, textPaint)
+                var midX = (point1.x + point2.x) / 2
+                var midY = (point1.y + point2.y) / 2
+                midX = midX.coerceIn(0f, width.toFloat())
+                midY = midY.coerceIn(0f, height.toFloat())
+                val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.BLACK
+                    textSize = 44f // Bigger label
+                    textAlign = Paint.Align.CENTER
+                    typeface = Typeface.DEFAULT_BOLD
                 }
+                val label = String.format("%.2f mi", distMiles)
+                canvas.drawText(label, midX, midY - 24f, textPaint)
             }
         }
 
