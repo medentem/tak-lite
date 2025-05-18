@@ -12,6 +12,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var mapModeSpinner: AutoCompleteTextView
     private lateinit var endBeepSwitch: SwitchMaterial
     private lateinit var minLineSegmentDistEditText: com.google.android.material.textfield.TextInputEditText
+    private lateinit var meshNetworkTypeSpinner: AutoCompleteTextView
     private val mapModeOptions = listOf("Last Used", "Street", "Satellite", "Hybrid")
     private val mapModeEnumValues = listOf(
         MapController.MapType.LAST_USED,
@@ -19,6 +20,7 @@ class SettingsActivity : AppCompatActivity() {
         MapController.MapType.SATELLITE,
         MapController.MapType.HYBRID
     )
+    private val meshNetworkTypeOptions = listOf("Meshtastic", "Layer 2")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -32,6 +34,7 @@ class SettingsActivity : AppCompatActivity() {
         mapModeSpinner = findViewById(R.id.mapModeSpinner)
         endBeepSwitch = findViewById(R.id.endBeepSwitch)
         minLineSegmentDistEditText = findViewById(R.id.minLineSegmentDistEditText)
+        meshNetworkTypeSpinner = findViewById(R.id.meshNetworkTypeSpinner)
 
         // Setup map mode spinner
         val adapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, mapModeOptions)
@@ -63,6 +66,18 @@ class SettingsActivity : AppCompatActivity() {
                     prefs.edit().putFloat("min_line_segment_dist_miles", value).apply()
                 }
             }
+        }
+
+        // Setup mesh network type spinner
+        val meshNetworkTypeAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, meshNetworkTypeOptions)
+        meshNetworkTypeSpinner.setAdapter(meshNetworkTypeAdapter)
+
+        val savedMeshNetworkType = prefs.getString("mesh_network_type", "Layer 2")
+        val meshNetworkTypeIndex = meshNetworkTypeOptions.indexOf(savedMeshNetworkType).takeIf { it >= 0 } ?: 1
+        meshNetworkTypeSpinner.setText(meshNetworkTypeOptions[meshNetworkTypeIndex], false)
+
+        meshNetworkTypeSpinner.setOnItemClickListener { _, _, position, _ ->
+            prefs.edit().putString("mesh_network_type", meshNetworkTypeOptions[position]).apply()
         }
     }
 
