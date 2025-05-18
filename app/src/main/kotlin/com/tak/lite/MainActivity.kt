@@ -85,7 +85,16 @@ class MainActivity : AppCompatActivity() {
         )
 
         val lastLocation = loadLastLocation()
-        val lastMapMode = loadMapMode()
+        val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
+        val startupMapMode = prefs.getString("startup_map_mode", "LAST_USED")
+        val lastUsedMapMode = loadLastUsedMapMode()
+        val initialMapMode = when (startupMapMode) {
+            "LAST_USED" -> lastUsedMapMode
+            "STREETS" -> com.tak.lite.ui.map.MapController.MapType.STREETS
+            "SATELLITE" -> com.tak.lite.ui.map.MapController.MapType.SATELLITE
+            "HYBRID" -> com.tak.lite.ui.map.MapController.MapType.HYBRID
+            else -> lastUsedMapMode
+        }
         mapController = com.tak.lite.ui.map.MapController(
             context = this,
             mapView = mapView,
@@ -93,6 +102,7 @@ class MainActivity : AppCompatActivity() {
             defaultZoom = DEFAULT_US_ZOOM,
             onMapReady = { map ->
                 mapLibreMap = map
+                mapController.setMapType(initialMapMode)
                 annotationController.setupAnnotationOverlay(map)
                 annotationController.setupPoiLongPressListener()
                 annotationController.setupMapLongPress(map)
@@ -146,7 +156,6 @@ class MainActivity : AppCompatActivity() {
             getFilesDir = { filesDir }
         )
         annotationController.mapController = mapController
-        mapController.setMapType(lastMapMode)
         mapController.onCreate(savedInstanceState, lastLocation)
 
         locationSourceOverlay = findViewById(R.id.locationSourceOverlay)
@@ -313,6 +322,11 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this@MainActivity, "Offline tile download complete: $successCount success, $failCount failed", Toast.LENGTH_LONG).show()
             }
         }
+
+        binding.settingsButton.setOnClickListener {
+            val intent = android.content.Intent(this, SettingsActivity::class.java)
+            startActivity(intent)
+        }
     }
 
     private fun observeMeshNetworkState() {
@@ -395,16 +409,19 @@ class MainActivity : AppCompatActivity() {
         return Triple(lat, lon, zoom)
     }
 
-    private fun saveMapMode(mapType: com.tak.lite.ui.map.MapController.MapType) {
-        getSharedPreferences("user_prefs", MODE_PRIVATE)
-            .edit()
-            .putString("map_mode", mapType.name)
-            .apply()
+    private fun saveLastUsedMapMode(mapType: com.tak.lite.ui.map.MapController.MapType) {
+        // Never save LAST_USED as the last used map mode
+        if (mapType != com.tak.lite.ui.map.MapController.MapType.LAST_USED) {
+            getSharedPreferences("user_prefs", MODE_PRIVATE)
+                .edit()
+                .putString("last_used_map_mode", mapType.name)
+                .apply()
+        }
     }
 
-    private fun loadMapMode(): com.tak.lite.ui.map.MapController.MapType {
+    private fun loadLastUsedMapMode(): com.tak.lite.ui.map.MapController.MapType {
         val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
-        val modeName = prefs.getString("map_mode", null)
+        val modeName = prefs.getString("last_used_map_mode", null)
         return try {
             if (modeName != null) com.tak.lite.ui.map.MapController.MapType.valueOf(modeName)
             else com.tak.lite.ui.map.MapController.MapType.HYBRID
@@ -528,6 +545,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun onMapModeToggled() {
         mapController.toggleMapType()
-        saveMapMode(mapController.getMapType())
+        val newType = mapController.getMapType()
+        saveLastUsedMapMode(newType)
     }
 }

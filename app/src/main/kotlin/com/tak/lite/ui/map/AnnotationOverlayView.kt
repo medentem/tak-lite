@@ -195,6 +195,10 @@ class AnnotationOverlayView @JvmOverloads constructor(
             }
         }
 
+        val context = context
+        val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+        val minDistMiles = prefs.getFloat("min_line_segment_dist_miles", 1.0f)
+
         if (currentZoom < minZoomForClustering) {
             // Draw clusters
             clusters.forEach { cluster ->
@@ -216,14 +220,23 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     when (annotation) {
                         is MapAnnotation.PointOfInterest -> drawPoint(canvas, pointF, annotation)
                         is MapAnnotation.Line -> {
-                            // Draw lines between all points
+                            // Compute if any segment is long enough
                             val latLngs = annotation.points.map { it.toMapLibreLatLng() }
+                            var anyLong = false
+                            for (i in 0 until latLngs.size - 1) {
+                                val distMeters = haversine(latLngs[i].latitude, latLngs[i].longitude, latLngs[i+1].latitude, latLngs[i+1].longitude)
+                                val distMiles = distMeters / 1609.344
+                                if (distMiles >= minDistMiles) {
+                                    anyLong = true
+                                    break
+                                }
+                            }
                             if (latLngs.size >= 2) {
                                 val screenPoints = latLngs.mapNotNull { projection?.toScreenLocation(it) }
                                 for (i in 0 until screenPoints.size - 1) {
                                     val p1 = PointF(screenPoints[i].x, screenPoints[i].y)
                                     val p2 = PointF(screenPoints[i + 1].x, screenPoints[i + 1].y)
-                                    drawLine(canvas, p1, p2, annotation)
+                                    drawLine(canvas, p1, p2, annotation, showLabel = anyLong, minDistMiles = minDistMiles, segmentIndex = i)
                                 }
                             }
                         }
@@ -253,14 +266,23 @@ class AnnotationOverlayView @JvmOverloads constructor(
                         drawPoint(canvas, pointF, annotation)
                     }
                     is MapAnnotation.Line -> {
-                        // Draw lines between all points
+                        // Compute if any segment is long enough
                         val latLngs = annotation.points.map { it.toMapLibreLatLng() }
+                        var anyLong = false
+                        for (i in 0 until latLngs.size - 1) {
+                            val distMeters = haversine(latLngs[i].latitude, latLngs[i].longitude, latLngs[i+1].latitude, latLngs[i+1].longitude)
+                            val distMiles = distMeters / 1609.344
+                            if (distMiles >= minDistMiles) {
+                                anyLong = true
+                                break
+                            }
+                        }
                         if (latLngs.size >= 2) {
                             val screenPoints = latLngs.mapNotNull { projection?.toScreenLocation(it) }
                             for (i in 0 until screenPoints.size - 1) {
                                 val p1 = PointF(screenPoints[i].x, screenPoints[i].y)
                                 val p2 = PointF(screenPoints[i + 1].x, screenPoints[i + 1].y)
-                                drawLine(canvas, p1, p2, annotation)
+                                drawLine(canvas, p1, p2, annotation, showLabel = anyLong, minDistMiles = minDistMiles, segmentIndex = i)
                             }
                         }
                     }
@@ -341,7 +363,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
         }
     }
 
-    private fun drawLine(canvas: Canvas, point1: PointF, point2: PointF, annotation: MapAnnotation.Line) {
+    private fun drawLine(canvas: Canvas, point1: PointF, point2: PointF, annotation: MapAnnotation.Line, showLabel: Boolean, minDistMiles: Float, segmentIndex: Int) {
         paint.color = annotation.color.toColor()
         // Set line style
         paint.pathEffect = when (annotation.style) {
@@ -359,6 +381,31 @@ class AnnotationOverlayView @JvmOverloads constructor(
         // Reset pathEffect
         paint.pathEffect = null
 
+        // Show label if requested and segment is long enough
+        if (showLabel) {
+            val latLngs = annotation.points.map { it.toMapLibreLatLng() }
+            if (segmentIndex >= 0 && segmentIndex + 1 < latLngs.size) {
+                val latLng1 = latLngs[segmentIndex]
+                val latLng2 = latLngs[segmentIndex + 1]
+                val distMeters = haversine(latLng1.latitude, latLng1.longitude, latLng2.latitude, latLng2.longitude)
+                val distMiles = distMeters / 1609.344
+                if (distMiles >= minDistMiles) {
+                    var midX = (point1.x + point2.x) / 2
+                    var midY = (point1.y + point2.y) / 2
+                    midX = midX.coerceIn(0f, width.toFloat())
+                    midY = midY.coerceIn(0f, height.toFloat())
+                    val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        color = Color.BLACK
+                        textSize = 44f // Bigger label
+                        textAlign = Paint.Align.CENTER
+                        typeface = Typeface.DEFAULT_BOLD
+                    }
+                    val label = String.format("%.2f mi", distMiles)
+                    canvas.drawText(label, midX, midY - 24f, textPaint)
+                }
+            }
+        }
+
         // Draw timer indicator if annotation has expiration time
         annotation.expirationTime?.let {
             // Draw timer at the midpoint of the line
@@ -366,6 +413,11 @@ class AnnotationOverlayView @JvmOverloads constructor(
             val midY = (point1.y + point2.y) / 2
             drawTimerIndicator(canvas, PointF(midX, midY), annotation.color.toColor(), annotation)
         }
+    }
+
+    // Helper for floating point comparison
+    private fun approximatelyEqual(p1: PointF, p2: PointF, epsilon: Float = 1.5f): Boolean {
+        return kotlin.math.abs(p1.x - p2.x) < epsilon && kotlin.math.abs(p1.y - p2.y) < epsilon
     }
 
     private fun drawArrowHead(canvas: Canvas, start: PointF, end: PointF, color: Int) {
@@ -589,5 +641,17 @@ class AnnotationOverlayView @JvmOverloads constructor(
         val closestY = p1.y + tClamped * dy
         val dist = hypot((x - closestX).toDouble(), (y - closestY).toDouble())
         return dist < threshold
+    }
+
+    // Haversine formula to calculate distance in meters between two lat/lon points
+    private fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        val R = 6371000.0 // Earth radius in meters
+        val dLat = Math.toRadians(lat2 - lat1)
+        val dLon = Math.toRadians(lon2 - lon1)
+        val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2)
+        val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+        return R * c
     }
 } 

@@ -42,5 +42,6 @@
         </activity>
 
         <activity android:name=".ui.audio.ChannelManagementActivity" />
+        <activity android:name=".SettingsActivity" />
     </application>
 </manifest> 

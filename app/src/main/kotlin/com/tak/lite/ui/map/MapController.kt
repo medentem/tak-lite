@@ -31,7 +31,7 @@ class MapController(
     private var mapType: MapType = MapType.HYBRID
 
     enum class MapType {
-        STREETS, SATELLITE, HYBRID
+        LAST_USED, STREETS, SATELLITE, HYBRID
     }
 
     fun onCreate(savedInstanceState: Bundle?, lastLocation: Triple<Double, Double, Float>?) {
@@ -388,7 +388,7 @@ class MapController(
         mapType = when (mapType) {
             MapType.STREETS -> MapType.SATELLITE
             MapType.SATELLITE -> MapType.HYBRID
-            MapType.HYBRID -> MapType.STREETS
+            MapType.HYBRID, MapType.LAST_USED -> MapType.STREETS // Never set to LAST_USED
         }
         mapLibreMap?.let { setStyleForCurrentViewport(it) }
     }

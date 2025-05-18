@@ -375,9 +375,13 @@ class AudioStreamingService : Service() {
         if (!isDestroying) {
             isDestroying = true
             if (isStreaming) {
-                playEndTransmissionBeep()
-                // Wait for beep to complete before stopping
-                Thread.sleep(500)  // 500ms should be enough for the beep to play
+                val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
+                val beepEnabled = prefs.getBoolean("end_of_transmission_beep", true)
+                if (beepEnabled) {
+                    playEndTransmissionBeep()
+                    // Wait for beep to complete before stopping
+                    Thread.sleep(500)  // 500ms should be enough for the beep to play
+                }
             }
             stopStreaming()
         }
