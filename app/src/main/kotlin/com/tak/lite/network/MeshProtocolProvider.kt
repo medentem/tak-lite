@@ -5,26 +5,29 @@ import android.content.SharedPreferences
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import com.tak.lite.TakLiteApplication
 import com.tak.lite.di.Layer2MeshProtocolAdapter
 import com.tak.lite.di.MeshProtocol
 import com.tak.lite.di.MeshtasticBluetoothProtocolAdapter
 
 object MeshProtocolProvider {
-    private val context: Context = TakLiteApplication.instance.applicationContext
-    private val prefs: SharedPreferences = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-    private val _protocol = MutableStateFlow(createProtocol(prefs.getString("mesh_network_type", "Layer 2")))
-    val protocol: StateFlow<MeshProtocol> = _protocol.asStateFlow()
+    private lateinit var prefs: SharedPreferences
+    private lateinit var _protocol: MutableStateFlow<MeshProtocol>
+    val protocol: StateFlow<MeshProtocol> get() {
+        check(:: _protocol.isInitialized) { "MeshProtocolProvider must be initialized before use" }
+        return _protocol.asStateFlow()
+    }
 
-    init {
+    fun initialize(context: Context) {
+        prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+        _protocol = MutableStateFlow(createProtocol(context, prefs.getString("mesh_network_type", "Layer 2")))
         prefs.registerOnSharedPreferenceChangeListener { _, key ->
             if (key == "mesh_network_type") {
-                _protocol.value = createProtocol(prefs.getString("mesh_network_type", "Layer 2"))
+                _protocol.value = createProtocol(context, prefs.getString("mesh_network_type", "Layer 2"))
             }
         }
     }
 
-    private fun createProtocol(type: String?): MeshProtocol {
+    private fun createProtocol(context: Context, type: String?): MeshProtocol {
         return if (type == "Meshtastic") {
             MeshtasticBluetoothProtocolAdapter(MeshtasticBluetoothProtocol(context))
         } else {
@@ -32,5 +35,8 @@ object MeshProtocolProvider {
         }
     }
 
-    fun getProtocol(): MeshProtocol = _protocol.value
+    fun getProtocol(): MeshProtocol {
+        check(:: _protocol.isInitialized) { "MeshProtocolProvider must be initialized before use" }
+        return _protocol.value
+    }
 } 

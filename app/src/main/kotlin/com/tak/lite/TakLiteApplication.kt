@@ -1,6 +1,7 @@
 package com.tak.lite
 
 import android.app.Application
+import com.tak.lite.network.MeshProtocolProvider
 import dagger.hilt.android.HiltAndroidApp
 
 @HiltAndroidApp
@@ -9,6 +10,7 @@ class TakLiteApplication : Application() {
         super.onCreate()
         // Initialize MapLibre before any MapView is created
         org.maplibre.android.MapLibre.getInstance(this)
+        MeshProtocolProvider.initialize(this)
         instance = this
     }
 
