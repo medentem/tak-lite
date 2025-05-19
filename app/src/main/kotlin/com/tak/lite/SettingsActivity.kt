@@ -7,12 +7,19 @@ import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.tak.lite.ui.map.MapController
+import com.tak.lite.network.MeshtasticBluetoothProtocol
+import android.widget.Button
+import android.widget.TextView
+import android.bluetooth.BluetoothDevice
 
 class SettingsActivity : AppCompatActivity() {
     private lateinit var mapModeSpinner: AutoCompleteTextView
     private lateinit var endBeepSwitch: SwitchMaterial
     private lateinit var minLineSegmentDistEditText: com.google.android.material.textfield.TextInputEditText
-    private lateinit var meshNetworkTypeSpinner: AutoCompleteTextView
+    private lateinit var bluetoothConnectButton: Button
+    private lateinit var bluetoothStatusText: TextView
+    private lateinit var meshtasticBluetoothProtocol: MeshtasticBluetoothProtocol
+    private var connectedDevice: BluetoothDevice? = null
     private val mapModeOptions = listOf("Last Used", "Street", "Satellite", "Hybrid")
     private val mapModeEnumValues = listOf(
         MapController.MapType.LAST_USED,
@@ -20,7 +27,6 @@ class SettingsActivity : AppCompatActivity() {
         MapController.MapType.SATELLITE,
         MapController.MapType.HYBRID
     )
-    private val meshNetworkTypeOptions = listOf("Meshtastic", "Layer 2")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -34,7 +40,9 @@ class SettingsActivity : AppCompatActivity() {
         mapModeSpinner = findViewById(R.id.mapModeSpinner)
         endBeepSwitch = findViewById(R.id.endBeepSwitch)
         minLineSegmentDistEditText = findViewById(R.id.minLineSegmentDistEditText)
-        meshNetworkTypeSpinner = findViewById(R.id.meshNetworkTypeSpinner)
+        bluetoothConnectButton = findViewById(R.id.bluetoothConnectButton)
+        bluetoothStatusText = findViewById(R.id.bluetoothStatusText)
+        meshtasticBluetoothProtocol = MeshtasticBluetoothProtocol(this)
 
         // Setup map mode spinner
         val adapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, mapModeOptions)
@@ -68,16 +76,45 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
-        // Setup mesh network type spinner
-        val meshNetworkTypeAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, meshNetworkTypeOptions)
-        meshNetworkTypeSpinner.setAdapter(meshNetworkTypeAdapter)
+        val savedDeviceName = prefs.getString("meshtastic_bt_device_name", null)
+        val savedDeviceAddr = prefs.getString("meshtastic_bt_device_addr", null)
+        if (savedDeviceName != null && savedDeviceAddr != null) {
+            bluetoothStatusText.text = "Last connected: $savedDeviceName ($savedDeviceAddr)"
+        }
 
-        val savedMeshNetworkType = prefs.getString("mesh_network_type", "Layer 2")
-        val meshNetworkTypeIndex = meshNetworkTypeOptions.indexOf(savedMeshNetworkType).takeIf { it >= 0 } ?: 1
-        meshNetworkTypeSpinner.setText(meshNetworkTypeOptions[meshNetworkTypeIndex], false)
+        bluetoothConnectButton.setOnClickListener {
+            meshtasticBluetoothProtocol.showScanDialog { device ->
+                bluetoothStatusText.text = "Connecting to: ${device.name ?: "Unknown"} (${device.address})..."
+                meshtasticBluetoothProtocol.connectToDevice(device) { success ->
+                    runOnUiThread {
+                        if (success) {
+                            bluetoothStatusText.text = "Connected: ${device.name ?: "Unknown"} (${device.address})"
+                            prefs.edit().putString("meshtastic_bt_device_name", device.name).putString("meshtastic_bt_device_addr", device.address).apply()
+                            connectedDevice = device
+                        } else {
+                            bluetoothStatusText.text = "Failed to connect to: ${device.name ?: "Unknown"} (${device.address})"
+                        }
+                    }
+                }
+            }
+        }
+
+        // Setup mesh network adapter spinner
+        val meshNetworkTypeSpinner = findViewById<com.google.android.material.textfield.MaterialAutoCompleteTextView>(R.id.meshNetworkTypeSpinner)
+        val meshNetworkOptions = listOf("Layer 2", "Meshtastic")
+        val meshAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, meshNetworkOptions)
+        meshNetworkTypeSpinner.setAdapter(meshAdapter)
+        val savedMeshType = prefs.getString("mesh_network_type", meshNetworkOptions[0])
+        meshNetworkTypeSpinner.setText(savedMeshType, false)
+
+        // Show/hide the connect button based on initial value
+        bluetoothConnectButton.visibility = if (savedMeshType == "Meshtastic") android.view.View.VISIBLE else android.view.View.GONE
 
         meshNetworkTypeSpinner.setOnItemClickListener { _, _, position, _ ->
-            prefs.edit().putString("mesh_network_type", meshNetworkTypeOptions[position]).apply()
+            val selectedType = meshNetworkOptions[position]
+            prefs.edit().putString("mesh_network_type", selectedType).apply()
+            // Show/hide the connect button based on selection
+            bluetoothConnectButton.visibility = if (selectedType == "Meshtastic") android.view.View.VISIBLE else android.view.View.GONE
         }
     }
 

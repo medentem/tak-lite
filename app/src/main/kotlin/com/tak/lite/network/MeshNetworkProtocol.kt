@@ -96,7 +96,9 @@ class MeshNetworkProtocol(
     private var annotationListenerJob: Job? = null
     private var stateRebroadcastJob: Job? = null
     
-    private val peers = mutableMapOf<String, MeshPeer>()
+    private val peersMap = mutableMapOf<String, MeshPeer>()
+    private val _peers = MutableStateFlow<List<MeshPeer>>(emptyList())
+    val peers: StateFlow<List<MeshPeer>> = _peers.asStateFlow()
     private var peerUpdateCallback: ((List<MeshPeer>) -> Unit)? = null
     private var annotationCallback: ((MapAnnotation) -> Unit)? = null
     
@@ -176,7 +178,7 @@ class MeshNetworkProtocol(
     }
     
     private fun updateDiscoveryInterval() {
-        val activePeers = peers.count { it.value.lastSeen > System.currentTimeMillis() - PEER_TIMEOUT_MS }
+        val activePeers = peersMap.count { it.value.lastSeen > System.currentTimeMillis() - PEER_TIMEOUT_MS }
         val networkQuality = peerMetrics.values.map { it.networkQuality }.average().toFloat()
         
         // Adjust interval based on number of peers and network quality
@@ -274,7 +276,7 @@ class MeshNetworkProtocol(
             val discoveryInfo = DiscoveryPacket(
                 nickname = localNickname,
                 capabilities = setOf("audio", "location", "annotation"),
-                knownPeers = peers.keys,
+                knownPeers = peersMap.keys,
                 networkQuality = peerMetrics.values.map { it.networkQuality }.average().toFloat(),
                 lastStateVersion = currentStateVersion.version
             )
@@ -371,7 +373,6 @@ class MeshNetworkProtocol(
         try {
             val message = String(packet.data, 0, packet.length)
             val discoveryInfo = json.decodeFromString<DiscoveryPacket>(message)
-            
             val peerId = "${packet.address.hostAddress}:${packet.port}"
             val peer = MeshPeer(
                 id = peerId,
@@ -379,7 +380,6 @@ class MeshNetworkProtocol(
                 lastSeen = System.currentTimeMillis(),
                 nickname = discoveryInfo.nickname
             )
-            
             // Update peer cache
             peerCache[peerId] = CachedPeer(
                 id = peerId,
@@ -390,17 +390,14 @@ class MeshNetworkProtocol(
                 networkQuality = discoveryInfo.networkQuality,
                 lastStateVersion = discoveryInfo.lastStateVersion
             )
-            
             // Update network topology
             networkTopology[peerId] = discoveryInfo.knownPeers
-            
             // Update peers list
-            peers[peerId] = peer
+            peersMap[peerId] = peer
+            _peers.value = peersMap.values.toList()
             cleanupOldPeers()
-            
             // Update discovery interval
             updateDiscoveryInterval()
-            
             // Trigger state sync if needed
             if (discoveryInfo.lastStateVersion < currentStateVersion.version) {
                 sendStateSync(
@@ -410,8 +407,7 @@ class MeshNetworkProtocol(
                     annotations = annotationProvider?.invoke() ?: emptyList()
                 )
             }
-            
-            peerUpdateCallback?.invoke(peers.values.toList())
+            peerUpdateCallback?.invoke(peersMap.values.toList())
         } catch (e: Exception) {
             Log.e(TAG, "Error handling discovery packet: ${e.message}")
         }
@@ -444,9 +440,10 @@ class MeshNetworkProtocol(
     
     private fun cleanupOldPeers() {
         val now = System.currentTimeMillis()
-        peers.entries.removeIf { (_, peer) ->
+        val removed = peersMap.entries.removeIf { (_, peer) ->
             now - peer.lastSeen > PEER_TIMEOUT_MS
         }
+        if (removed) _peers.value = peersMap.values.toList()
     }
     
     fun setAnnotationCallback(callback: (MapAnnotation) -> Unit) {
@@ -463,7 +460,7 @@ class MeshNetworkProtocol(
         annotationListenerJob?.cancel()
         broadcastSocket?.close()
         savePeerCache()
-        peers.clear()
+        peersMap.clear()
         peerUpdateCallback = null
         annotationCallback = null
         peerLocations.clear()
@@ -538,7 +535,7 @@ class MeshNetworkProtocol(
             .array()
 
         val sentToPeers = mutableSetOf<String>()
-        peers.values.forEach { peer ->
+        peersMap.values.forEach { peer ->
             try {
                 val socket = createBoundSocket()
                 val packet = DatagramPacket(
@@ -578,7 +575,7 @@ class MeshNetworkProtocol(
             }
         }
         
-        if (peers.isEmpty()) {
+        if (peersMap.isEmpty()) {
             CoroutineScope(coroutineContext).launch {
                 try {
                     val socket = createBoundSocket()
@@ -672,7 +669,7 @@ class MeshNetworkProtocol(
             val annotations = annotationProvider?.invoke() ?: emptyList()
             val msg = StateSyncMessage(
                 version = currentStateVersion,
-                channels = peers.values.map { MeshPeer(
+                channels = peersMap.values.map { MeshPeer(
                     id = it.id,
                     ipAddress = it.ipAddress,
                     lastSeen = it.lastSeen,
@@ -722,7 +719,7 @@ class MeshNetworkProtocol(
     private fun startConnectionMonitoring() {
         CoroutineScope(coroutineContext).launch {
             while (isActive) {
-                peers.values.forEach { peer ->
+                peersMap.values.forEach { peer ->
                     sendPing(peer)
                 }
                 delay(PING_INTERVAL_MS)

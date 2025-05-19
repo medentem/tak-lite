@@ -4,6 +4,7 @@ plugins {
     id 'org.jetbrains.kotlin.kapt'
     id 'com.google.dagger.hilt.android'
     id 'org.jetbrains.kotlin.plugin.serialization'
+    id 'com.google.protobuf'
 }
 
 // Load MAPTILER_API_KEY from local.properties after plugins block
@@ -24,8 +25,8 @@ android {
         applicationId "com.tak.lite"
         minSdk 26       // <— modern key
         targetSdk 34
-        versionCode 5
-        versionName "1.0.1-alpha.3"
+        versionCode 6
+        versionName "1.0.1-alpha.4"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders = [
@@ -60,6 +61,29 @@ android {
         useBuildCache true
         arguments {
             arg("dagger.formatGeneratedSource", "enabled")
+        }
+    }
+
+    sourceSets {
+        main {
+        }
+        androidTest.assets.srcDirs += files("$projectDir/schemas".toString())
+    }
+}
+
+protobuf {
+    protoc {
+        artifact = 'com.google.protobuf:protoc:3.25.3'
+    }
+    generateProtoTasks {
+        all().each { task ->
+            task.builtins {
+                java {
+                    // option "lite" // (commented out in Meshtastic)
+                }
+                kotlin {
+                }
+            }
         }
     }
 }
@@ -116,4 +140,7 @@ dependencies {
 
     // MapLibre GL Android SDK
     implementation 'org.maplibre.gl:android-sdk:11.8.7'
+
+    implementation 'com.google.protobuf:protobuf-java:3.25.3'
+    implementation("com.google.protobuf:protobuf-kotlin:3.25.3")
 }

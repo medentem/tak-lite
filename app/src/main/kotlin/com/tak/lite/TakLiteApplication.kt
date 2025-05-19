@@ -9,5 +9,11 @@ class TakLiteApplication : Application() {
         super.onCreate()
         // Initialize MapLibre before any MapView is created
         org.maplibre.android.MapLibre.getInstance(this)
+        instance = this
+    }
+
+    companion object {
+        lateinit var instance: TakLiteApplication
+            private set
     }
 }

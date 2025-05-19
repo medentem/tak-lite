@@ -66,6 +66,23 @@
                             android:dropDownWidth="match_parent"
                             android:background="@android:color/transparent" />
                     </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/bluetoothConnectButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Connect to Meshtastic via Bluetooth"
+                        android:layout_marginTop="8dp"
+                        android:layout_marginBottom="4dp" />
+
+                    <TextView
+                        android:id="@+id/bluetoothStatusText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Not connected"
+                        android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+                        android:paddingTop="4dp"
+                        android:paddingBottom="4dp" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 

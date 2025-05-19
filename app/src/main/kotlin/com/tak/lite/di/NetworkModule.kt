@@ -1,6 +1,7 @@
 package com.tak.lite.di
 
 import android.content.Context
+import android.content.SharedPreferences
 import com.tak.lite.network.MeshNetworkProtocol
 import com.tak.lite.network.MeshNetworkService
 import com.tak.lite.network.MeshNetworkManager
@@ -12,6 +13,8 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
+import com.tak.lite.network.MeshtasticBluetoothProtocol
+import com.tak.lite.network.MeshProtocolProvider
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -19,22 +22,8 @@ object NetworkProvidesModule {
     
     @Provides
     @Singleton
-    fun provideMeshNetworkProtocol(
-        @ApplicationContext context: Context,
-        meshNetworkManager: MeshNetworkManager
-    ): MeshNetworkProtocol {
-        return MeshNetworkProtocol(context).apply {
-            setMeshNetworkManager(meshNetworkManager)
-        }
-    }
-    
-    @Provides
-    @Singleton
-    fun provideMeshNetworkService(
-        @ApplicationContext context: Context,
-        meshProtocol: MeshNetworkProtocol
-    ): MeshNetworkService {
-        return MeshNetworkService(context, meshProtocol)
+    fun provideMeshNetworkService(): MeshNetworkService {
+        return MeshNetworkService()
     }
     
     @Provides
@@ -47,11 +36,7 @@ object NetworkProvidesModule {
     
     @Provides
     @Singleton
-    fun provideAnnotationRepository(
-        meshProtocol: MeshNetworkProtocol
-    ): AnnotationRepository {
-        val repo = AnnotationRepository(meshProtocol)
-        meshProtocol.setAnnotationProvider { repo.annotations.value }
-        return repo
+    fun provideAnnotationRepository(): AnnotationRepository {
+        return AnnotationRepository()
     }
 }

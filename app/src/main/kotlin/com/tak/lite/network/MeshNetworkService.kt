@@ -9,101 +9,70 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 import java.net.InetAddress
 import java.net.NetworkInterface
 import javax.inject.Inject
 import javax.inject.Singleton
 import org.maplibre.android.geometry.LatLng
+import com.tak.lite.di.MeshProtocol
+import android.bluetooth.BluetoothDevice
 
 @Singleton
-class MeshNetworkService @Inject constructor(
-    context: Context,
-    private val meshProtocol: MeshNetworkProtocol
-) {
-    private val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-    private val networkScope = CoroutineScope(Dispatchers.IO)
-    
+class MeshNetworkService @Inject constructor() {
+    private val scope = CoroutineScope(Dispatchers.Main)
+    private var protocolJob: Job? = null
+    private var meshProtocol: MeshProtocol = MeshProtocolProvider.getProtocol()
     private val _networkState = MutableStateFlow<MeshNetworkState>(MeshNetworkState.Disconnected)
     val networkState: StateFlow<MeshNetworkState> = _networkState
-    
-    private val _peers = MutableStateFlow<List<MeshPeer>>(emptyList())
-    val peers: StateFlow<List<MeshPeer>> = _peers
-    
     private val _peerLocations = MutableStateFlow<Map<String, LatLng>>(emptyMap())
     val peerLocations: StateFlow<Map<String, LatLng>> = _peerLocations
-    
-    private var meshNetworkCallback: ConnectivityManager.NetworkCallback? = null
-    
+    val peers: StateFlow<List<MeshPeer>> get() = meshProtocol.peers
+
     init {
-        setupNetworkMonitoring()
-    }
-    
-    private fun setupNetworkMonitoring() {
-        val networkRequest = NetworkRequest.Builder()
-            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-            .addTransportType(NetworkCapabilities.TRANSPORT_ETHERNET)
-            .build()
-            
-        meshNetworkCallback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) {
-                networkScope.launch {
-                    meshProtocol.setNetwork(network)
-                    checkMeshNetworkConnection()
-                }
-            }
-            
-            override fun onLost(network: Network) {
-                networkScope.launch {
-                    _networkState.value = MeshNetworkState.Disconnected
-                    _peers.value = emptyList()
-                    meshProtocol.stopDiscovery()
+        // Observe protocol changes
+        protocolJob = scope.launch {
+            MeshProtocolProvider.protocol.collect { newProtocol: MeshProtocol ->
+                if (meshProtocol !== newProtocol) {
+                    meshProtocol.disconnect()
+                    meshProtocol = newProtocol
+                    meshProtocol.setPeerLocationCallback { locations: Map<String, LatLng> ->
+                        _peerLocations.value = locations
+                    }
                 }
             }
         }
-        
-        connectivityManager.registerNetworkCallback(networkRequest, meshNetworkCallback!!)
-    }
-    
-    private fun checkMeshNetworkConnection() {
-        try {
-            val networkInterface = NetworkInterface.getByInetAddress(
-                InetAddress.getByName("10.223.0.1")
-            )
-            
-            if (networkInterface != null) {
-                _networkState.value = MeshNetworkState.Connected
-                startPeerDiscovery()
-            }
-        } catch (e: Exception) {
-            _networkState.value = MeshNetworkState.Disconnected
-        }
-    }
-    
-    private fun startPeerDiscovery() {
-        meshProtocol.startDiscovery { discoveredPeers ->
-            _peers.value = discoveredPeers
-        }
-        meshProtocol.setPeerLocationCallback { locations ->
+        meshProtocol.setPeerLocationCallback { locations: Map<String, LatLng> ->
             _peerLocations.value = locations
         }
     }
-    
+
+    fun connectToDevice(device: BluetoothDevice, onConnected: (Boolean) -> Unit) {
+        meshProtocol.connectToDevice(device) { success ->
+            _networkState.value = if (success) MeshNetworkState.Connected else MeshNetworkState.Disconnected
+            onConnected(success)
+        }
+    }
+
     fun sendLocationUpdate(latitude: Double, longitude: Double) {
         meshProtocol.sendLocationUpdate(latitude, longitude)
     }
-    
-    fun sendAudioData(audioData: ByteArray) {
-        meshProtocol.sendAudioData(audioData)
+
+    fun sendAnnotation(annotation: com.tak.lite.model.MapAnnotation) {
+        meshProtocol.sendAnnotation(annotation)
     }
-    
+
+    fun sendAudioData(audioData: ByteArray, channelId: String = "default") {
+        meshProtocol.sendAudioData(audioData, channelId)
+    }
+
     fun cleanup() {
-        meshNetworkCallback?.let {
-            connectivityManager.unregisterNetworkCallback(it)
-        }
-        meshProtocol.stopDiscovery()
+        meshProtocol.disconnect()
+        _networkState.value = MeshNetworkState.Disconnected
     }
-    
+
     fun setLocalNickname(nickname: String) {
         meshProtocol.setLocalNickname(nickname)
     }
