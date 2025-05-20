@@ -68,19 +68,37 @@ class MeshtasticBluetoothProtocol(
         val filter = android.content.IntentFilter(BluetoothDevice.ACTION_FOUND)
         context.registerReceiver(discoveryReceiver, filter)
         adapter.startDiscovery()
-        // Show dialog after a short scan period
+
+        // Show loading dialog immediately
+        val progressDialog = android.app.AlertDialog.Builder(context)
+            .setTitle("Scanning for devices...")
+            .setView(android.widget.ProgressBar(context))
+            .setCancelable(true)
+            .create()
+        progressDialog.show()
+
+        // After scan, update dialog with device list
         CoroutineScope(Dispatchers.Main).launch {
             delay(4000)
             adapter.cancelDiscovery()
             context.unregisterReceiver(discoveryReceiver)
-            AlertDialog.Builder(context)
-                .setTitle("Select Meshtastic Device")
-                .setItems(deviceNames.toTypedArray()) { _, which ->
-                    val device = discoveredDevices[which]
-                    onDeviceSelected(device)
-                }
-                .setCancelable(true)
-                .show()
+            progressDialog.dismiss()
+            if (deviceNames.isEmpty()) {
+                android.app.AlertDialog.Builder(context)
+                    .setTitle("No devices found")
+                    .setMessage("No Bluetooth devices were found. Make sure your device is discoverable and try again.")
+                    .setPositiveButton("OK", null)
+                    .show()
+            } else {
+                android.app.AlertDialog.Builder(context)
+                    .setTitle("Select Meshtastic Device")
+                    .setItems(deviceNames.toTypedArray()) { _, which ->
+                        val device = discoveredDevices[which]
+                        onDeviceSelected(device)
+                    }
+                    .setCancelable(true)
+                    .show()
+            }
         }
     }
 

@@ -11,6 +11,11 @@ import com.tak.lite.network.MeshtasticBluetoothProtocol
 import android.widget.Button
 import android.widget.TextView
 import android.bluetooth.BluetoothDevice
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 
 class SettingsActivity : AppCompatActivity() {
     private lateinit var mapModeSpinner: AutoCompleteTextView
@@ -27,6 +32,19 @@ class SettingsActivity : AppCompatActivity() {
         MapController.MapType.SATELLITE,
         MapController.MapType.HYBRID
     )
+    private val BLUETOOTH_PERMISSIONS = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        arrayOf(
+            Manifest.permission.BLUETOOTH_SCAN,
+            Manifest.permission.BLUETOOTH_CONNECT
+        )
+    } else {
+        arrayOf(
+            Manifest.permission.BLUETOOTH,
+            Manifest.permission.BLUETOOTH_ADMIN,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        )
+    }
+    private val REQUEST_CODE_BLUETOOTH_PERMISSIONS = 1002
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -83,19 +101,10 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         bluetoothConnectButton.setOnClickListener {
-            meshtasticBluetoothProtocol.showScanDialog { device ->
-                bluetoothStatusText.text = "Connecting to: ${device.name ?: "Unknown"} (${device.address})..."
-                meshtasticBluetoothProtocol.connectToDevice(device) { success ->
-                    runOnUiThread {
-                        if (success) {
-                            bluetoothStatusText.text = "Connected: ${device.name ?: "Unknown"} (${device.address})"
-                            prefs.edit().putString("meshtastic_bt_device_name", device.name).putString("meshtastic_bt_device_addr", device.address).apply()
-                            connectedDevice = device
-                        } else {
-                            bluetoothStatusText.text = "Failed to connect to: ${device.name ?: "Unknown"} (${device.address})"
-                        }
-                    }
-                }
+            if (hasBluetoothPermissions()) {
+                showBluetoothScanDialog()
+            } else {
+                requestBluetoothPermissions()
             }
         }
 
@@ -124,6 +133,50 @@ class SettingsActivity : AppCompatActivity() {
         val value = minLineSegmentDistEditText.text.toString().toFloatOrNull()
         if (value != null) {
             prefs.edit().putFloat("min_line_segment_dist_miles", value).apply()
+        }
+    }
+
+    private fun hasBluetoothPermissions(): Boolean {
+        return BLUETOOTH_PERMISSIONS.all {
+            ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    private fun requestBluetoothPermissions() {
+        ActivityCompat.requestPermissions(this, BLUETOOTH_PERMISSIONS, REQUEST_CODE_BLUETOOTH_PERMISSIONS)
+    }
+
+    private fun showBluetoothScanDialog() {
+        meshtasticBluetoothProtocol.showScanDialog { device ->
+            bluetoothStatusText.text = "Connecting to: ${device.name ?: "Unknown"} (${device.address})..."
+            meshtasticBluetoothProtocol.connectToDevice(device) { success ->
+                runOnUiThread {
+                    if (success) {
+                        bluetoothStatusText.text = "Connected: ${device.name ?: "Unknown"} (${device.address})"
+                        val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
+                        prefs.edit().putString("meshtastic_bt_device_name", device.name)
+                            .putString("meshtastic_bt_device_addr", device.address).apply()
+                        connectedDevice = device
+                    } else {
+                        bluetoothStatusText.text = "Failed to connect to: ${device.name ?: "Unknown"} (${device.address})"
+                    }
+                }
+            }
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_CODE_BLUETOOTH_PERMISSIONS) {
+            if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+                showBluetoothScanDialog()
+            } else {
+                bluetoothStatusText.text = "Bluetooth permissions are required to connect."
+            }
         }
     }
 } 
