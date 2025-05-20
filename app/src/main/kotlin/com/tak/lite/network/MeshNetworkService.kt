@@ -31,12 +31,13 @@ class MeshNetworkService @Inject constructor() {
     val peerLocations: StateFlow<Map<String, LatLng>> = _peerLocations
     val peers: StateFlow<List<MeshPeer>> get() = meshProtocol.peers
 
+    private val bluetoothDeviceManager = MeshProtocolProvider.getBluetoothDeviceManager()
+
     init {
         // Observe protocol changes
         protocolJob = scope.launch {
             MeshProtocolProvider.protocol.collect { newProtocol: MeshProtocol ->
                 if (meshProtocol !== newProtocol) {
-                    meshProtocol.disconnect()
                     meshProtocol = newProtocol
                     meshProtocol.setPeerLocationCallback { locations: Map<String, LatLng> ->
                         _peerLocations.value = locations
@@ -50,7 +51,7 @@ class MeshNetworkService @Inject constructor() {
     }
 
     fun connectToDevice(device: BluetoothDevice, onConnected: (Boolean) -> Unit) {
-        meshProtocol.connectToDevice(device) { success ->
+        bluetoothDeviceManager?.connect(device) { success ->
             _networkState.value = if (success) MeshNetworkState.Connected else MeshNetworkState.Disconnected
             onConnected(success)
         }
@@ -69,7 +70,7 @@ class MeshNetworkService @Inject constructor() {
     }
 
     fun cleanup() {
-        meshProtocol.disconnect()
+        bluetoothDeviceManager?.disconnect()
         _networkState.value = MeshNetworkState.Disconnected
     }
 

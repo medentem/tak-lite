@@ -17,8 +17,12 @@ object MeshProtocolProvider {
         return _protocol.asStateFlow()
     }
 
+    private var bluetoothDeviceManager: BluetoothDeviceManager? = null
+    fun getBluetoothDeviceManager(): BluetoothDeviceManager? = bluetoothDeviceManager
+
     fun initialize(context: Context) {
         prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+        bluetoothDeviceManager = BluetoothDeviceManager(context)
         _protocol = MutableStateFlow(createProtocol(context, prefs.getString("mesh_network_type", "Layer 2")))
         prefs.registerOnSharedPreferenceChangeListener { _, key ->
             if (key == "mesh_network_type") {
@@ -29,7 +33,8 @@ object MeshProtocolProvider {
 
     private fun createProtocol(context: Context, type: String?): MeshProtocol {
         return if (type == "Meshtastic") {
-            MeshtasticBluetoothProtocolAdapter(MeshtasticBluetoothProtocol(context))
+            val manager = bluetoothDeviceManager ?: BluetoothDeviceManager(context)
+            MeshtasticBluetoothProtocolAdapter(MeshtasticBluetoothProtocol(manager))
         } else {
             Layer2MeshProtocolAdapter(MeshNetworkProtocol(context))
         }

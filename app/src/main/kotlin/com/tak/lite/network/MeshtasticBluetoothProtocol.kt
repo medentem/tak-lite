@@ -1,15 +1,8 @@
 package com.tak.lite.network
 
-import android.app.AlertDialog
-import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothSocket
-import android.content.Context
-import android.os.ParcelUuid
+import android.bluetooth.BluetoothGatt
 import android.util.Log
 import kotlinx.coroutines.*
-import java.io.InputStream
-import java.io.OutputStream
 import java.util.*
 import kotlin.coroutines.CoroutineContext
 import com.geeksville.mesh.MeshProtos
@@ -23,17 +16,16 @@ import com.tak.lite.util.MeshAnnotationInterop
 import com.google.protobuf.ByteString
 
 class MeshtasticBluetoothProtocol(
-    private val context: Context,
+    private val deviceManager: BluetoothDeviceManager,
     private val coroutineContext: CoroutineContext = Dispatchers.IO
 ) {
     private val TAG = "MeshtasticBluetoothProtocol"
-    private val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
-    private var bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
-    private var bluetoothSocket: BluetoothSocket? = null
-    private var connectionJob: Job? = null
-    private var readJob: Job? = null
-    private var isConnected = false
-    private var selectedDevice: BluetoothDevice? = null
+    // Official Meshtastic Service UUIDs and Characteristics
+    private val MESHTASTIC_SERVICE_UUID: UUID = UUID.fromString("6ba1b218-15a8-461f-9fa8-5dcae273eafd")
+    private val FROMRADIO_CHARACTERISTIC_UUID: UUID = UUID.fromString("2c55e69e-4993-11ed-b878-0242ac120002")
+    private val TORADIO_CHARACTERISTIC_UUID: UUID = UUID.fromString("f75c76d2-129e-4dad-a1dd-7866124401e7")
+    private val FROMNUM_CHARACTERISTIC_UUID: UUID = UUID.fromString("ed9da18c-a800-4f66-a670-aa7547e34453")
+
     private var annotationCallback: ((MapAnnotation) -> Unit)? = null
     private var peerLocationCallback: ((Map<String, LatLng>) -> Unit)? = null
     private val peerLocations = ConcurrentHashMap<String, LatLng>()
@@ -45,125 +37,25 @@ class MeshtasticBluetoothProtocol(
     private val _peers = MutableStateFlow<List<MeshPeer>>(emptyList())
     val peers: StateFlow<List<MeshPeer>> = _peers.asStateFlow()
 
-    fun showScanDialog(onDeviceSelected: (BluetoothDevice) -> Unit) {
-        val adapter = bluetoothAdapter ?: return
-        val discoveredDevices = mutableListOf<BluetoothDevice>()
-        val deviceNames = mutableListOf<String>()
-        val discoveryReceiver = object : android.content.BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: android.content.Intent) {
-                val action = intent.action
-                if (BluetoothDevice.ACTION_FOUND == action) {
-                    val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
-                    device?.let {
-                        if (!discoveredDevices.contains(it)) {
-                            discoveredDevices.add(it)
-                            val name = it.name ?: "Unknown"
-                            val highlight = if (name.contains("Meshtastic", ignoreCase = true)) " (Meshtastic)" else ""
-                            deviceNames.add("$name [$highlight] (${it.address})")
-                        }
-                    }
-                }
-            }
-        }
-        val filter = android.content.IntentFilter(BluetoothDevice.ACTION_FOUND)
-        context.registerReceiver(discoveryReceiver, filter)
-        adapter.startDiscovery()
-
-        // Show loading dialog immediately
-        val progressDialog = android.app.AlertDialog.Builder(context)
-            .setTitle("Scanning for devices...")
-            .setView(android.widget.ProgressBar(context))
-            .setCancelable(true)
-            .create()
-        progressDialog.show()
-
-        // After scan, update dialog with device list
-        CoroutineScope(Dispatchers.Main).launch {
-            delay(4000)
-            adapter.cancelDiscovery()
-            context.unregisterReceiver(discoveryReceiver)
-            progressDialog.dismiss()
-            if (deviceNames.isEmpty()) {
-                android.app.AlertDialog.Builder(context)
-                    .setTitle("No devices found")
-                    .setMessage("No Bluetooth devices were found. Make sure your device is discoverable and try again.")
-                    .setPositiveButton("OK", null)
-                    .show()
-            } else {
-                android.app.AlertDialog.Builder(context)
-                    .setTitle("Select Meshtastic Device")
-                    .setItems(deviceNames.toTypedArray()) { _, which ->
-                        val device = discoveredDevices[which]
-                        onDeviceSelected(device)
-                    }
-                    .setCancelable(true)
-                    .show()
-            }
-        }
-    }
-
-    fun connectToDevice(device: BluetoothDevice, onConnected: (Boolean) -> Unit) {
-        connectionJob?.cancel()
-        connectionJob = CoroutineScope(coroutineContext).launch {
-            try {
-                bluetoothSocket = device.createRfcommSocketToServiceRecord(SPP_UUID)
-                bluetoothAdapter?.cancelDiscovery()
-                bluetoothSocket?.connect()
-                isConnected = true
-                selectedDevice = device
-                onConnected(true)
-                startReadLoop()
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to connect: ${e.message}")
-                isConnected = false
-                onConnected(false)
-            }
-        }
-    }
-
-    private fun startReadLoop() {
-        readJob?.cancel()
-        readJob = CoroutineScope(coroutineContext).launch {
-            val socket = bluetoothSocket ?: return@launch
-            val input: InputStream = socket.inputStream
-            try {
-                val buffer = ByteArray(8192)
-                while (isConnected && socket.isConnected) {
-                    val bytesRead = input.read(buffer)
-                    if (bytesRead > 0) {
-                        val packet = buffer.copyOf(bytesRead)
-                        handleIncomingPacket(packet)
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error reading from Bluetooth: ${e.message}")
-                isConnected = false
-            }
+    init {
+        deviceManager.setPacketListener { data ->
+            handleIncomingPacket(data)
         }
     }
 
     fun sendPacket(data: ByteArray) {
+        Log.d(TAG, "sendPacket: Sending ${data.size} bytes: ${data.joinToString(", ", limit = 16)}")
         CoroutineScope(coroutineContext).launch {
             try {
-                val socket = bluetoothSocket ?: return@launch
-                val output: OutputStream = socket.outputStream
-                output.write(data)
-                output.flush()
+                val gatt = deviceManager.connectedGatt ?: return@launch
+                val service = gatt.getService(MESHTASTIC_SERVICE_UUID) ?: return@launch
+                val characteristic = service.getCharacteristic(TORADIO_CHARACTERISTIC_UUID) ?: return@launch
+                characteristic.value = data
+                gatt.writeCharacteristic(characteristic)
             } catch (e: Exception) {
                 Log.e(TAG, "Error sending packet: ${e.message}")
             }
         }
-    }
-
-    fun disconnect() {
-        isConnected = false
-        connectionJob?.cancel()
-        readJob?.cancel()
-        try {
-            bluetoothSocket?.close()
-        } catch (_: Exception) {}
-        bluetoothSocket = null
-        selectedDevice = null
     }
 
     fun setAnnotationCallback(callback: (MapAnnotation) -> Unit) {
@@ -199,12 +91,16 @@ class MeshtasticBluetoothProtocol(
             .setTo(0xffffffffL.toInt())
             .setDecoded(data)
             .build()
+        Log.d(TAG, "Sending annotation: $annotation as packet bytes: ${packet.toByteArray().joinToString(", ", limit = 16)}")
         sendPacket(packet.toByteArray())
     }
 
-    private fun handleIncomingPacket(data: ByteArray) {
+    // Call this when you receive a packet from the device
+    fun handleIncomingPacket(data: ByteArray) {
+        Log.d(TAG, "Received packet from device: ${data.size} bytes: ${data.joinToString(", ", limit = 16)}")
         try {
             val meshPacket = MeshProtos.MeshPacket.parseFrom(data)
+            Log.d(TAG, "Parsed MeshPacket: $meshPacket")
             if (meshPacket.hasDecoded()) {
                 val decoded = meshPacket.decoded
                 val peerId = meshPacket.from.toString()
@@ -221,6 +117,7 @@ class MeshtasticBluetoothProtocol(
                         val position = MeshProtos.Position.parseFrom(decoded.payload)
                         val lat = position.latitudeI / 1e7
                         val lng = position.longitudeI / 1e7
+                        Log.d(TAG, "Parsed position from peer $peerId: lat=$lat, lng=$lng")
                         peerLocations[peerId] = LatLng(lat, lng)
                         peerLocationCallback?.invoke(peerLocations.toMap())
                     } catch (e: Exception) {
@@ -229,6 +126,7 @@ class MeshtasticBluetoothProtocol(
                 } else {
                     val annotation = MeshAnnotationInterop.meshDataToMapAnnotation(decoded)
                     if (annotation != null) {
+                        Log.d(TAG, "Parsed annotation from peer $peerId: $annotation")
                         annotationCallback?.invoke(annotation)
                         _annotations.value = _annotations.value + annotation
                     } else {
