@@ -19,6 +19,7 @@ import javax.inject.Singleton
 import org.maplibre.android.geometry.LatLng
 import com.tak.lite.di.MeshProtocol
 import android.bluetooth.BluetoothDevice
+import dagger.hilt.android.qualifiers.ApplicationContext
 
 @Singleton
 class MeshNetworkService @Inject constructor() {

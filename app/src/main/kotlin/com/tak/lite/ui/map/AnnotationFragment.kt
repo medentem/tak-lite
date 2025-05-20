@@ -16,6 +16,7 @@ import com.tak.lite.model.LineStyle
 import com.tak.lite.model.PointShape
 import com.tak.lite.viewmodel.AnnotationUiState
 import com.tak.lite.viewmodel.AnnotationViewModel
+import com.tak.lite.viewmodel.MeshNetworkViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -32,6 +33,7 @@ class AnnotationFragment : Fragment() {
     private var controlsBinding: AnnotationControlsBinding? = null
 
     private val viewModel: AnnotationViewModel by viewModels()
+    private val meshNetworkViewModel: MeshNetworkViewModel by viewModels()
     private lateinit var mapView: MapView
     private var mapboxMap: MapLibreMap? = null
     private var annotationOverlayView: AnnotationOverlayView? = null
@@ -66,6 +68,12 @@ class AnnotationFragment : Fragment() {
         }
         setupControls()
         observeViewModel()
+        // Observe peer locations and update overlay
+        viewLifecycleOwner.lifecycleScope.launch {
+            meshNetworkViewModel.peerLocations.collectLatest { locations ->
+                annotationOverlayView?.updatePeerLocations(locations)
+            }
+        }
     }
 
     private fun setupControls() {

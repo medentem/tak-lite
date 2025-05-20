@@ -81,6 +81,13 @@ class AnnotationOverlayView @JvmOverloads constructor(
     private var longPressLineCandidate: MapAnnotation.Line? = null
     private var longPressLineDownPos: PointF? = null
 
+    // --- Peer Location Dot Support ---
+    private var peerLocations: Map<String, LatLng> = emptyMap()
+    fun updatePeerLocations(locations: Map<String, LatLng>) {
+        this.peerLocations = locations
+        invalidate()
+    }
+
     init {
         timerHandler.post(timerRunnable)
     }
@@ -192,6 +199,15 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     }
                     canvas.drawCircle(pointF.x, pointF.y, 18f, dotPaint)
                 }
+            }
+        }
+
+        // Draw peer location dots (solid green, not user annotations)
+        peerLocations.values.forEach { latLng ->
+            val point = projection?.toScreenLocation(latLng)
+            if (point != null) {
+                val pointF = PointF(point.x, point.y)
+                drawPeerLocationDot(canvas, pointF)
             }
         }
 
@@ -651,5 +667,30 @@ class AnnotationOverlayView @JvmOverloads constructor(
                 Math.sin(dLon / 2) * Math.sin(dLon / 2)
         val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
         return R * c
+    }
+
+    // Draw a solid green dot with white border and shadow for peer locations
+    private fun drawPeerLocationDot(canvas: Canvas, point: PointF) {
+        val dotRadius = 24f
+        val borderRadius = 28f
+        val shadowRadius = 32f
+        // Draw shadow
+        val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#33000000")
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(point.x, point.y + 4f, shadowRadius, shadowPaint)
+        // Draw white border
+        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(point.x, point.y, borderRadius, borderPaint)
+        // Draw solid green dot
+        val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#4CAF50") // Material green 500
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(point.x, point.y, dotRadius, fillPaint)
     }
 } 

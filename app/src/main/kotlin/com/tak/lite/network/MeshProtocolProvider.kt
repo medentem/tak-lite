@@ -34,7 +34,7 @@ object MeshProtocolProvider {
     private fun createProtocol(context: Context, type: String?): MeshProtocol {
         return if (type == "Meshtastic") {
             val manager = bluetoothDeviceManager ?: BluetoothDeviceManager(context)
-            MeshtasticBluetoothProtocolAdapter(MeshtasticBluetoothProtocol(manager))
+            MeshtasticBluetoothProtocolAdapter(MeshtasticBluetoothProtocol(manager, context))
         } else {
             Layer2MeshProtocolAdapter(MeshNetworkProtocol(context))
         }

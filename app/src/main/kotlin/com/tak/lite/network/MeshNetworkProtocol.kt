@@ -18,6 +18,10 @@ import java.io.File
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import com.tak.lite.util.DeviceController
+import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Inject
+import kotlinx.serialization.decodeFromString
 
 @Serializable
 data class PacketHeader(
@@ -72,8 +76,24 @@ data class DiscoveryPacket(
     val lastStateVersion: Long = 0
 )
 
-class MeshNetworkProtocol(
-    private val context: android.content.Context,
+// Add Layer 2 data models
+@Serializable
+data class Layer2LocationPacket(
+    val type: String = "location",
+    val peerId: String,
+    val latitude: Double,
+    val longitude: Double,
+    val timestamp: Long
+)
+
+@Serializable
+data class Layer2AnnotationPacket(
+    val type: String = "annotation",
+    val annotation: MapAnnotation
+)
+
+class MeshNetworkProtocol @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val coroutineContext: CoroutineContext = Dispatchers.IO
 ) {
     private val TAG = "MeshNetworkProtocol"
@@ -416,8 +436,8 @@ class MeshNetworkProtocol(
     private fun handleAnnotationPacket(packet: DatagramPacket) {
         try {
             val jsonString = String(packet.data, 0, packet.length)
-            val annotation = json.decodeFromString<MapAnnotation>(jsonString)
-            annotationCallback?.invoke(annotation)
+            val ann = json.decodeFromString<Layer2AnnotationPacket>(jsonString)
+            annotationCallback?.invoke(ann.annotation)
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing annotation packet: ${e.message}")
         }
@@ -425,14 +445,11 @@ class MeshNetworkProtocol(
     
     private fun handleLocationPacket(packet: DatagramPacket) {
         try {
-            if (packet.length == 16) {
-                val buf = ByteBuffer.wrap(packet.data, 0, 16).order(ByteOrder.LITTLE_ENDIAN)
-                val lat = buf.double
-                val lng = buf.double
-                val peerId = "${packet.address.hostAddress}:${packet.port}"
-                peerLocations[peerId] = LatLng(lat, lng)
-                peerLocationCallback?.invoke(peerLocations.toMap())
-            }
+            val jsonString = String(packet.data, 0, packet.length)
+            val loc = json.decodeFromString<Layer2LocationPacket>(jsonString)
+            val peerId = loc.peerId
+            peerLocations[peerId] = LatLng(loc.latitude, loc.longitude)
+            peerLocationCallback?.invoke(peerLocations.toMap())
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing location packet: ${e.message}")
         }
@@ -469,53 +486,36 @@ class MeshNetworkProtocol(
     }
     
     fun sendLocationUpdate(latitude: Double, longitude: Double) {
-        val message = ByteBuffer.allocate(16).apply {
-            order(ByteOrder.LITTLE_ENDIAN)
-            putDouble(latitude)
-            putDouble(longitude)
-        }.array()
-        
-        sendToAllPeers(message, DISCOVERY_PORT + 1, PacketType.LOCATION)
+        val context = context.applicationContext
+        val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+        val nickname = prefs.getString("nickname", null) ?: "local"
+        val packet = Layer2LocationPacket(
+            peerId = nickname,
+            latitude = latitude,
+            longitude = longitude,
+            timestamp = System.currentTimeMillis()
+        )
+        val jsonString = json.encodeToString(Layer2LocationPacket.serializer(), packet)
+        sendToAllPeers(jsonString.toByteArray(), DISCOVERY_PORT + 1, PacketType.LOCATION)
     }
     
     fun sendAnnotation(annotation: MapAnnotation) {
-        try {
-            val jsonString = json.encodeToString(MapAnnotation.serializer(), annotation)
-            sendToAllPeers(jsonString.toByteArray(), ANNOTATION_PORT, PacketType.ANNOTATION)
-            // Also broadcast to ensure all peers receive it
-            val socket = createBoundSocket()
-            val packet = DatagramPacket(
-                jsonString.toByteArray(),
-                jsonString.toByteArray().size,
-                InetAddress.getByName("255.255.255.255"),
-                ANNOTATION_PORT
-            )
-            socket.broadcast = true
-            socket.send(packet)
-            socket.close()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error sending annotation: ${e.message}")
-            // Retry once after a short delay
-            CoroutineScope(coroutineContext).launch {
-                delay(1000)
-                try {
-                    val jsonString = json.encodeToString(MapAnnotation.serializer(), annotation)
-                    sendToAllPeers(jsonString.toByteArray(), ANNOTATION_PORT, PacketType.ANNOTATION)
-                    val socket = createBoundSocket()
-                    val packet = DatagramPacket(
-                        jsonString.toByteArray(),
-                        jsonString.toByteArray().size,
-                        InetAddress.getByName("255.255.255.255"),
-                        ANNOTATION_PORT
-                    )
-                    socket.broadcast = true
-                    socket.send(packet)
-                    socket.close()
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error retrying annotation send: ${e.message}")
-                }
-            }
-        }
+        val packet = Layer2AnnotationPacket(
+            annotation = annotation
+        )
+        val jsonString = json.encodeToString(Layer2AnnotationPacket.serializer(), packet)
+        sendToAllPeers(jsonString.toByteArray(), ANNOTATION_PORT, PacketType.ANNOTATION)
+        // Also broadcast
+        val socket = createBoundSocket()
+        val packetData = DatagramPacket(
+            jsonString.toByteArray(),
+            jsonString.toByteArray().size,
+            InetAddress.getByName("255.255.255.255"),
+            ANNOTATION_PORT
+        )
+        socket.broadcast = true
+        socket.send(packetData)
+        socket.close()
     }
     
     fun sendAudioData(audioData: ByteArray, channelId: String = "default") {

@@ -14,9 +14,15 @@ import org.maplibre.android.geometry.LatLng
 import java.util.concurrent.ConcurrentHashMap
 import com.tak.lite.util.MeshAnnotationInterop
 import com.google.protobuf.ByteString
+import com.tak.lite.util.DeviceController
+import android.content.Context
+import android.content.SharedPreferences
+import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Inject
 
-class MeshtasticBluetoothProtocol(
+class MeshtasticBluetoothProtocol @Inject constructor(
     private val deviceManager: BluetoothDeviceManager,
+    @ApplicationContext private val context: Context,
     private val coroutineContext: CoroutineContext = Dispatchers.IO
 ) {
     private val TAG = "MeshtasticBluetoothProtocol"
@@ -67,25 +73,34 @@ class MeshtasticBluetoothProtocol(
     }
 
     fun sendLocationUpdate(latitude: Double, longitude: Double) {
-        val position = MeshProtos.Position.newBuilder()
-            .setLatitudeI((latitude * 1e7).toInt())
-            .setLongitudeI((longitude * 1e7).toInt())
-            .setTime((System.currentTimeMillis() / 1000).toInt())
-            .build()
-        val data = MeshProtos.Data.newBuilder()
-            .setPortnum(com.geeksville.mesh.Portnums.PortNum.POSITION_APP)
-            .setPayload(ByteString.copyFrom(position.toByteArray()))
-            .build()
+        // Only send location data, not an annotation
+        val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+        val nickname = prefs.getString("nickname", null)
+        val battery = DeviceController.batteryLevel.value
+        // Build a location-only packet (customize as needed for your protocol)
+        val data = MeshAnnotationInterop.mapLocationToMeshData(
+            nickname = nickname,
+            batteryLevel = battery,
+            pliLatitude = latitude,
+            pliLongitude = longitude
+        )
         val packet = MeshProtos.MeshPacket.newBuilder()
-            .setFrom(0) // Let firmware handle node id
-            .setTo(0xffffffffL.toInt()) // broadcast
+            .setFrom(0)
+            .setTo(0xffffffffL.toInt())
             .setDecoded(data)
             .build()
         sendPacket(packet.toByteArray())
     }
 
     fun sendAnnotation(annotation: MapAnnotation) {
-        val data = MeshAnnotationInterop.mapAnnotationToMeshData(annotation)
+        val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+        val nickname = prefs.getString("nickname", null)
+        val battery = DeviceController.batteryLevel.value
+        val data = MeshAnnotationInterop.mapAnnotationToMeshData(
+            annotation = annotation,
+            nickname = nickname,
+            batteryLevel = battery
+        )
         val packet = MeshProtos.MeshPacket.newBuilder()
             .setFrom(0)
             .setTo(0xffffffffL.toInt())
@@ -119,6 +134,7 @@ class MeshtasticBluetoothProtocol(
                         val lng = position.longitudeI / 1e7
                         Log.d(TAG, "Parsed position from peer $peerId: lat=$lat, lng=$lng")
                         peerLocations[peerId] = LatLng(lat, lng)
+                        // Do not create an annotation, just update peer locations
                         peerLocationCallback?.invoke(peerLocations.toMap())
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to parse position: ${e.message}")

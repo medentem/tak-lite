@@ -225,6 +225,9 @@ enum PortNum {
    */
   ATAK_FORWARDER = 257;
 
+  /* Used for the tak-lite app package available here: https://github.com/medentem/tak-lite */
+  TAK_LITE_APP = 333;
+
   /*
    * Currently we limit port nums to no higher than this value
    */

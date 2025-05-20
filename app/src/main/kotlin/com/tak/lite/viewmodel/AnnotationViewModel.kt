@@ -55,10 +55,10 @@ class AnnotationViewModel @Inject constructor(
         currentArrowHead = arrow
     }
     
-    fun addPointOfInterest(position: LatLng) {
+    fun addPointOfInterest(position: LatLng, nickname: String? = null, battery: Int? = null) {
         viewModelScope.launch {
             val annotation = MapAnnotation.PointOfInterest(
-                creatorId = "local", // TODO: Replace with actual user ID
+                creatorId = nickname ?: "local", // Use nickname if available
                 color = currentColor,
                 position = LatLngSerializable.fromMapLibreLatLng(position),
                 shape = currentShape,

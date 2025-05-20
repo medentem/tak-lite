@@ -8,6 +8,7 @@ import dagger.hilt.android.HiltAndroidApp
 class TakLiteApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        com.tak.lite.util.DeviceController.initialize(this)
         // Initialize MapLibre before any MapView is created
         org.maplibre.android.MapLibre.getInstance(this)
         MeshProtocolProvider.initialize(this)
