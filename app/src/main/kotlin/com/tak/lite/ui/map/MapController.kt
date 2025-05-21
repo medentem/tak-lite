@@ -30,6 +30,7 @@ class MapController(
     var mapLibreMap: MapLibreMap? = null
         private set
     private var mapType: MapType = MapType.HYBRID
+    private var is3DBuildingsEnabled: Boolean = false
 
     private var onStyleChanged: (() -> Unit)? = null
     fun setOnStyleChangedCallback(callback: (() -> Unit)?) {
@@ -228,6 +229,54 @@ class MapController(
                 }
                 """
                 style
+            }
+            isDeviceOnline && mapType == MapType.STREETS && is3DBuildingsEnabled -> {
+                android.util.Log.d("MapController", "Using 3D buildings in STREETS mode (dark: $isDarkTheme)")
+                val rasterTilesUrl = if (isDarkTheme) darkModeTileUrl else "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+                val rasterAttributionLine = if (isDarkTheme) mapTilerAttributionLine else osmAttributionLine
+                """
+                {
+                  "version": 8,
+                  "glyphs": "$glyphsUrl",
+                  "sources": {
+                    "vector-tiles": {
+                      "type": "vector",
+                      "url": "$mapTilerVectorJsonUrl"
+                    },
+                    "raster-tiles": {
+                      "type": "raster",
+                      "tiles": ["$rasterTilesUrl"],
+                      "tileSize": 256$rasterAttributionLine
+                    }
+                  },
+                  "layers": [
+                    {
+                      "id": "raster-tiles",
+                      "type": "raster",
+                      "source": "raster-tiles"
+                    },
+                    {
+                      "id": "3d-buildings",
+                      "type": "fill-extrusion",
+                      "source": "vector-tiles",
+                      "source-layer": "building",
+                      "minzoom": 15,
+                      "filter": ["!=", ["get", "hide_3d"], true],
+                      "paint": {
+                        "fill-extrusion-color": [
+                          "interpolate", ["linear"], ["get", "render_height"],
+                          0, "lightgray", 200, "royalblue", 400, "lightblue"
+                        ],
+                        "fill-extrusion-height": [
+                          "interpolate", ["linear"], ["zoom"],
+                          15, 0, 16, ["get", "render_height"]
+                        ],
+                        "fill-extrusion-base": ["case", [">=", ["get", "zoom"], 16], ["get", "render_min_height"], 0]
+                      }
+                    }
+                  ]
+                }
+                """
             }
             isDeviceOnline && mapType == MapType.STREETS && isDarkTheme -> {
                 android.util.Log.d("MapController", "Using DARK streets style (darkModeTileUrl: $darkModeTileUrl)")
@@ -591,6 +640,23 @@ class MapController(
                     locationComponent.cameraMode = org.maplibre.android.location.modes.CameraMode.NONE
                 }
             }
+        }
+    }
+
+    fun set3DBuildingsEnabled(enabled: Boolean) {
+        is3DBuildingsEnabled = enabled
+        mapLibreMap?.let {
+            setStyleForCurrentViewport(it)
+            // Set camera tilt for 3D buildings
+            val currentPosition = it.cameraPosition
+            val newTilt = if (enabled) 45.0 else 0.0
+            val cameraPosition = org.maplibre.android.camera.CameraPosition.Builder()
+                .target(currentPosition.target)
+                .zoom(currentPosition.zoom)
+                .tilt(newTilt)
+                .bearing(currentPosition.bearing)
+                .build()
+            it.animateCamera(org.maplibre.android.camera.CameraUpdateFactory.newCameraPosition(cameraPosition))
         }
     }
 } 

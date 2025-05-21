@@ -57,6 +57,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var locationSourceOverlay: FrameLayout
     private lateinit var locationSourceIcon: ImageView
     private lateinit var locationSourceLabel: TextView
+    private var is3DBuildingsEnabled = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -337,6 +338,13 @@ class MainActivity : AppCompatActivity() {
         binding.settingsButton.setOnClickListener {
             val intent = android.content.Intent(this, SettingsActivity::class.java)
             startActivity(intent)
+        }
+
+        val toggle3dFab = findViewById<com.google.android.material.floatingactionbutton.FloatingActionButton>(R.id.toggle3dFab)
+        toggle3dFab.setOnClickListener {
+            is3DBuildingsEnabled = !is3DBuildingsEnabled
+            mapController.set3DBuildingsEnabled(is3DBuildingsEnabled)
+            toggle3dFab.setImageResource(if (is3DBuildingsEnabled) android.R.drawable.ic_menu_view else R.drawable.baseline_3d_rotation_24)
         }
     }
 
