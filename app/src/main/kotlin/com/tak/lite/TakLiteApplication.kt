@@ -8,6 +8,12 @@ import dagger.hilt.android.HiltAndroidApp
 class TakLiteApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        try {
+            java.lang.System.setProperty("java.net.preferIPv6Addresses", "false")
+            java.lang.System.setProperty("java.net.preferIPv4Stack", "true")
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
         com.tak.lite.util.DeviceController.initialize(this)
         // Initialize MapLibre before any MapView is created
         org.maplibre.android.MapLibre.getInstance(this)
