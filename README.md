@@ -5,10 +5,12 @@ A situational awareness Android application designed for use with Doodle Labs me
 ## Features
 
 - Real-time location tracking and sharing
-- Interactive map display with multiple user positions (MapLibre GL, OSM, and MapTiler satellite imagery)
+- Interactive map display with multiple user positions
+  - Street, sattelite and hybrid views
+  - 3D view of buildings and terrain
 - Points of Interest (POI) management and map annotation (lines, areas)
-- Easy longpress-and-drag fan menu to drop and edit annotations
-- Optionally expire annotations and POIs
+  - Easy longpress-and-drag fan menu to drop and edit annotations
+  - Optionally expire annotations and POIs
 - Push-to-Talk (PTT) real-time VOIP audio communication (WebRTC-based)
 - Mesh network integration
 - Offline map tile support
