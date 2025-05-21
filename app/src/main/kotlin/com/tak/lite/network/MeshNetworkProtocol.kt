@@ -291,42 +291,41 @@ class MeshNetworkProtocol @Inject constructor(
     }
     
     private fun sendDiscoveryPacket() {
-        try {
-            val socket = createBoundSocket()
-            val discoveryInfo = DiscoveryPacket(
-                nickname = localNickname,
-                capabilities = setOf("audio", "location", "annotation"),
-                knownPeers = peersMap.keys,
-                networkQuality = peerMetrics.values.map { it.networkQuality }.average().toFloat(),
-                lastStateVersion = currentStateVersion.version
-            )
-            val message = json.encodeToString(discoveryInfo)
-            
-            // Send to multicast groups
-            multicastGroups.forEach { group ->
-                val packet = DatagramPacket(
-                    message.toByteArray(),
-                    message.toByteArray().size,
-                    InetAddress.getByName(group),
-                    DISCOVERY_PORT
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val socket = createBoundSocket()
+                val discoveryInfo = DiscoveryPacket(
+                    nickname = localNickname,
+                    capabilities = setOf("audio", "location", "annotation"),
+                    knownPeers = peersMap.keys,
+                    networkQuality = peerMetrics.values.map { it.networkQuality }.average().toFloat(),
+                    lastStateVersion = currentStateVersion.version
                 )
-                socket.send(packet)
+                val message = json.encodeToString(discoveryInfo)
+                // Send to multicast groups
+                multicastGroups.forEach { group ->
+                    val packet = DatagramPacket(
+                        message.toByteArray(),
+                        message.toByteArray().size,
+                        InetAddress.getByName(group),
+                        DISCOVERY_PORT
+                    )
+                    socket.send(packet)
+                }
+                // Fallback to broadcast if no multicast groups
+                if (multicastGroups.isEmpty()) {
+                    val packet = DatagramPacket(
+                        message.toByteArray(),
+                        message.toByteArray().size,
+                        InetAddress.getByName("255.255.255.255"),
+                        DISCOVERY_PORT
+                    )
+                    socket.send(packet)
+                }
+                socket.close()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error sending discovery packet: ${e.message}")
             }
-            
-            // Fallback to broadcast if no multicast groups
-            if (multicastGroups.isEmpty()) {
-                val packet = DatagramPacket(
-                    message.toByteArray(),
-                    message.toByteArray().size,
-                    InetAddress.getByName("255.255.255.255"),
-                    DISCOVERY_PORT
-                )
-                socket.send(packet)
-            }
-            
-            socket.close()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error sending discovery packet: ${e.message}")
         }
     }
     
@@ -486,40 +485,46 @@ class MeshNetworkProtocol @Inject constructor(
     }
     
     fun sendLocationUpdate(latitude: Double, longitude: Double) {
-        val context = context.applicationContext
-        val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-        val nickname = prefs.getString("nickname", null) ?: "local"
-        val packet = Layer2LocationPacket(
-            peerId = nickname,
-            latitude = latitude,
-            longitude = longitude,
-            timestamp = System.currentTimeMillis()
-        )
-        val jsonString = json.encodeToString(Layer2LocationPacket.serializer(), packet)
-        sendToAllPeers(jsonString.toByteArray(), DISCOVERY_PORT + 1, PacketType.LOCATION)
+        CoroutineScope(Dispatchers.IO).launch {
+            val context = context.applicationContext
+            val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+            val nickname = prefs.getString("nickname", null) ?: "local"
+            val packet = Layer2LocationPacket(
+                peerId = nickname,
+                latitude = latitude,
+                longitude = longitude,
+                timestamp = System.currentTimeMillis()
+            )
+            val jsonString = json.encodeToString(Layer2LocationPacket.serializer(), packet)
+            sendToAllPeers(jsonString.toByteArray(), DISCOVERY_PORT + 1, PacketType.LOCATION)
+        }
     }
     
     fun sendAnnotation(annotation: MapAnnotation) {
-        val packet = Layer2AnnotationPacket(
-            annotation = annotation
-        )
-        val jsonString = json.encodeToString(Layer2AnnotationPacket.serializer(), packet)
-        sendToAllPeers(jsonString.toByteArray(), ANNOTATION_PORT, PacketType.ANNOTATION)
-        // Also broadcast
-        val socket = createBoundSocket()
-        val packetData = DatagramPacket(
-            jsonString.toByteArray(),
-            jsonString.toByteArray().size,
-            InetAddress.getByName("255.255.255.255"),
-            ANNOTATION_PORT
-        )
-        socket.broadcast = true
-        socket.send(packetData)
-        socket.close()
+        CoroutineScope(Dispatchers.IO).launch {
+            val packet = Layer2AnnotationPacket(
+                annotation = annotation
+            )
+            val jsonString = json.encodeToString(Layer2AnnotationPacket.serializer(), packet)
+            sendToAllPeers(jsonString.toByteArray(), ANNOTATION_PORT, PacketType.ANNOTATION)
+            // Also broadcast
+            val socket = createBoundSocket()
+            val packetData = DatagramPacket(
+                jsonString.toByteArray(),
+                jsonString.toByteArray().size,
+                InetAddress.getByName("255.255.255.255"),
+                ANNOTATION_PORT
+            )
+            socket.broadcast = true
+            socket.send(packetData)
+            socket.close()
+        }
     }
     
     fun sendAudioData(audioData: ByteArray, channelId: String = "default") {
-        sendToAllPeers(audioData, DISCOVERY_PORT + 2, PacketType.AUDIO, channelId = channelId)
+        CoroutineScope(Dispatchers.IO).launch {
+            sendToAllPeers(audioData, DISCOVERY_PORT + 2, PacketType.AUDIO, channelId = channelId)
+        }
     }
     
     private fun sendToAllPeers(data: ByteArray, port: Int, packetType: PacketType, requireAck: Boolean = false, channelId: String? = null) {
@@ -612,7 +617,6 @@ class MeshNetworkProtocol @Inject constructor(
             version = currentStateVersion.version + 1,
             timestamp = System.currentTimeMillis()
         )
-        
         val serializableLocations = peerLocations.mapValues { LatLngSerializable.fromMapLibreLatLng(it.value) }
         val msg = StateSyncMessage(
             version = currentStateVersion,
@@ -622,9 +626,8 @@ class MeshNetworkProtocol @Inject constructor(
             partialUpdate = partialUpdate,
             updateFields = updateFields
         )
-        
         val jsonString = json.encodeToString(StateSyncMessage.serializer(), msg)
-        CoroutineScope(coroutineContext).launch {
+        CoroutineScope(Dispatchers.IO).launch {
             try {
                 val socket = createBoundSocket()
                 val packet = DatagramPacket(
@@ -635,7 +638,6 @@ class MeshNetworkProtocol @Inject constructor(
                 )
                 socket.send(packet)
                 socket.close()
-                
                 // Retry if no ack received
                 if (!partialUpdate) {
                     delay(1000)
@@ -728,24 +730,26 @@ class MeshNetworkProtocol @Inject constructor(
     }
     
     private fun sendPing(peer: MeshPeer) {
-        val pingHeader = PacketHeader(
-            sequenceNumber = sequenceNumber++,
-            packetType = PacketType.DISCOVERY,
-            timestamp = System.currentTimeMillis()
-        )
-        val pingJson = json.encodeToString(PacketHeader.serializer(), pingHeader)
-        try {
-            val socket = createBoundSocket()
-            val packet = DatagramPacket(
-                pingJson.toByteArray(),
-                pingJson.toByteArray().size,
-                InetAddress.getByName(peer.ipAddress),
-                DISCOVERY_PORT
+        CoroutineScope(Dispatchers.IO).launch {
+            val pingHeader = PacketHeader(
+                sequenceNumber = sequenceNumber++,
+                packetType = PacketType.DISCOVERY,
+                timestamp = System.currentTimeMillis()
             )
-            socket.send(packet)
-            socket.close()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error sending ping to peer ${peer.id}: ${e.message}")
+            val pingJson = json.encodeToString(PacketHeader.serializer(), pingHeader)
+            try {
+                val socket = createBoundSocket()
+                val packet = DatagramPacket(
+                    pingJson.toByteArray(),
+                    pingJson.toByteArray().size,
+                    InetAddress.getByName(peer.ipAddress),
+                    DISCOVERY_PORT
+                )
+                socket.send(packet)
+                socket.close()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error sending ping to peer ${peer.id}: ${e.message}")
+            }
         }
     }
     
