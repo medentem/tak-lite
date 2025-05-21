@@ -104,6 +104,11 @@ class MainActivity : AppCompatActivity() {
             "HYBRID" -> com.tak.lite.ui.map.MapController.MapType.HYBRID
             else -> lastUsedMapMode ?: com.tak.lite.ui.map.MapController.MapType.STREETS
         }
+
+        // TODO: maybe we should disable this if we don't have 3d map data to show
+        val toggle3dFab = findViewById<com.google.android.material.floatingactionbutton.FloatingActionButton>(R.id.toggle3dFab)
+        // toggle3dFab.visibility = if (initialMapMode == com.tak.lite.ui.map.MapController.MapType.STREETS) View.VISIBLE else View.GONE
+
         mapController = com.tak.lite.ui.map.MapController(
             context = this,
             mapView = mapView,
@@ -152,6 +157,7 @@ class MainActivity : AppCompatActivity() {
                     annotationOverlayView.setZoom(map.cameraPosition.zoom.toFloat())
                 }
             },
+            getHillshadingJsonUrl = { "https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=" + BuildConfig.MAPTILER_API_KEY },
             getMapTilerUrl = { "https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=" + BuildConfig.MAPTILER_API_KEY },
             getVectorTileUrl = { "https://api.maptiler.com/tiles/v3/{z}/{x}/{y}.pbf?key=" + BuildConfig.MAPTILER_API_KEY },
             getGlyphsUrl = { "https://api.maptiler.com/fonts/{fontstack}/{range}.pbf?key=" + BuildConfig.MAPTILER_API_KEY },
@@ -166,6 +172,10 @@ class MainActivity : AppCompatActivity() {
         mapController.setOnStyleChangedCallback {
             annotationController.setupAnnotationOverlay(mapController.mapLibreMap)
             annotationController.renderAllAnnotations(mapController.mapLibreMap)
+        }
+        // Set the onMapTypeChanged callback
+        mapController.setOnMapTypeChangedCallback { mapType ->
+            // toggle3dFab.visibility = if (mapType == com.tak.lite.ui.map.MapController.MapType.STREETS) View.VISIBLE else View.GONE
         }
         annotationController.mapController = mapController
         mapController.onCreate(savedInstanceState, lastLocation)
@@ -340,7 +350,6 @@ class MainActivity : AppCompatActivity() {
             startActivity(intent)
         }
 
-        val toggle3dFab = findViewById<com.google.android.material.floatingactionbutton.FloatingActionButton>(R.id.toggle3dFab)
         toggle3dFab.setOnClickListener {
             is3DBuildingsEnabled = !is3DBuildingsEnabled
             mapController.set3DBuildingsEnabled(is3DBuildingsEnabled)

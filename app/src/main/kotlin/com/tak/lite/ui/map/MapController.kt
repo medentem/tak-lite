@@ -19,6 +19,7 @@ class MapController(
     private val onMapReady: (MapLibreMap) -> Unit = {},
     private val getMapTilerUrl: () -> String = { "" },
     private val getGlyphsUrl: () -> String = { "" },
+    private val getHillshadingJsonUrl: () -> String = { "" },
     private val getVectorTileUrl: () -> String = { "" },
     private val getVectorTileJsonUrl: () -> String = { "" },
     private val getMapTilerAttribution: () -> String = { "" },
@@ -30,11 +31,17 @@ class MapController(
     var mapLibreMap: MapLibreMap? = null
         private set
     private var mapType: MapType = MapType.HYBRID
-    private var is3DBuildingsEnabled: Boolean = false
+    private var is3DEnabled: Boolean = false
 
     private var onStyleChanged: (() -> Unit)? = null
+    private var onMapTypeChanged: ((MapType) -> Unit)? = null
+
     fun setOnStyleChangedCallback(callback: (() -> Unit)?) {
         this.onStyleChanged = callback
+    }
+
+    fun setOnMapTypeChangedCallback(callback: ((MapType) -> Unit)?) {
+        this.onMapTypeChanged = callback
     }
 
     enum class MapType {
@@ -64,6 +71,7 @@ class MapController(
         val tileCoords = getVisibleTileCoords(map)
         val useOffline = allOfflineTilesExist(tileCoords)
         val isDeviceOnline = isOnline()
+        val hillshadingJsonUrl = getHillshadingJsonUrl()
         val mapTilerUrl = getMapTilerUrl()
         val mapTilerVectorJsonUrl = getVectorTileJsonUrl()
         val glyphsUrl = getGlyphsUrl();
@@ -230,7 +238,7 @@ class MapController(
                 """
                 style
             }
-            isDeviceOnline && mapType == MapType.STREETS && is3DBuildingsEnabled -> {
+            isDeviceOnline && mapType == MapType.STREETS && is3DEnabled -> {
                 android.util.Log.d("MapController", "Using 3D buildings in STREETS mode (dark: $isDarkTheme)")
                 val rasterTilesUrl = if (isDarkTheme) darkModeTileUrl else "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
                 val rasterAttributionLine = if (isDarkTheme) mapTilerAttributionLine else osmAttributionLine
@@ -278,38 +286,17 @@ class MapController(
                 }
                 """
             }
-            isDeviceOnline && mapType == MapType.STREETS && isDarkTheme -> {
-                android.util.Log.d("MapController", "Using DARK streets style (darkModeTileUrl: $darkModeTileUrl)")
-                """
-                {
-                  "version": 8,
-                  "sources": {
-                    "raster-tiles": {
-                      "type": "raster",
-                      "tiles": ["$darkModeTileUrl"],
-                      "tileSize": 256$mapTilerAttributionLine
-                    }
-                  },
-                  "layers": [
-                    {
-                      "id": "raster-tiles",
-                      "type": "raster",
-                      "source": "raster-tiles"
-                    }
-                  ]
-                }
-                """
-            }
             isDeviceOnline && mapType == MapType.STREETS -> {
-                android.util.Log.d("MapController", "Using LIGHT streets style")
+                val rasterTilesUrl = if (isDarkTheme) darkModeTileUrl else "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+                val rasterAttributionLine = if (isDarkTheme) mapTilerAttributionLine else osmAttributionLine
                 """
                 {
                   "version": 8,
                   "sources": {
                     "raster-tiles": {
                       "type": "raster",
-                      "tiles": ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-                      "tileSize": 256$osmAttributionLine
+                      "tiles": ["$rasterTilesUrl"],
+                      "tileSize": 256$rasterAttributionLine
                     }
                   },
                   "layers": [
@@ -493,11 +480,13 @@ class MapController(
             MapType.SATELLITE -> MapType.HYBRID
             MapType.HYBRID, MapType.LAST_USED -> MapType.STREETS // Never set to LAST_USED
         }
+        onMapTypeChanged?.invoke(mapType)
         mapLibreMap?.let { setStyleForCurrentViewport(it) }
     }
 
     fun setMapType(type: MapType) {
         mapType = type
+        onMapTypeChanged?.invoke(mapType)
         mapLibreMap?.let { setStyleForCurrentViewport(it) }
     }
 
@@ -644,7 +633,7 @@ class MapController(
     }
 
     fun set3DBuildingsEnabled(enabled: Boolean) {
-        is3DBuildingsEnabled = enabled
+        is3DEnabled = enabled
         mapLibreMap?.let {
             setStyleForCurrentViewport(it)
             // Set camera tilt for 3D buildings
