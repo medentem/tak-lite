@@ -14,10 +14,10 @@ A situational awareness Android application designed for use with Doodle Labs me
 ## Example Screenshots
 
 <img src="https://github.com/user-attachments/assets/f8ad6c71-1349-40ee-bb55-24551b9ef2d6" width="250" />
-![Screenshot_20250521_144153](https://github.com/user-attachments/assets/884b5af4-efd3-4636-9b8e-51f06e07dc58)
-![Screenshot_20250521_150616](https://github.com/user-attachments/assets/faed35d4-25cf-451c-872e-d1215f36cc8a)
-![Screenshot_20250521_150652](https://github.com/user-attachments/assets/09454976-f445-4b4a-9aca-67b984acefe4)
-![Screenshot_20250521_150743](https://github.com/user-attachments/assets/4d578b3e-faa5-4ae0-965b-d44f096407ca)
+<img src="https://github.com/user-attachments/assets/884b5af4-efd3-4636-9b8e-51f06e07dc58" width="250" />
+<img src="https://github.com/user-attachments/assets/faed35d4-25cf-451c-872e-d1215f36cc8a" width="250" />
+<img src="https://github.com/user-attachments/assets/09454976-f445-4b4a-9aca-67b984acefe4" width="250" />
+<img src="https://github.com/user-attachments/assets/4d578b3e-faa5-4ae0-965b-d44f096407ca" width="250" />
 
 
 ## Requirements
