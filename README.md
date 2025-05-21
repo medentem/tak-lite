@@ -6,6 +6,7 @@ A situational awareness Android application designed for use with Doodle Labs me
 
 - Real-time location tracking and sharing
 - Interactive map display with multiple user positions (MapLibre GL, OSM, and MapTiler satellite imagery)
+- Easy longpress-and-drag fan menu to drop and edit annotations
 - Points of Interest (POI) management and map annotation (lines, areas)
 - Push-to-Talk (PTT) real-time VOIP audio communication (WebRTC-based)
 - Mesh network integration
@@ -18,6 +19,8 @@ A situational awareness Android application designed for use with Doodle Labs me
 <img src="https://github.com/user-attachments/assets/faed35d4-25cf-451c-872e-d1215f36cc8a" width="250" />
 <img src="https://github.com/user-attachments/assets/09454976-f445-4b4a-9aca-67b984acefe4" width="250" />
 <img src="https://github.com/user-attachments/assets/4d578b3e-faa5-4ae0-965b-d44f096407ca" width="250" />
+<img src="https://github.com/user-attachments/assets/ae705aec-2977-4098-ba7b-3bb4f35eb8c8" width="250" />
+<img src="https://github.com/user-attachments/assets/66a94189-fa41-49ba-aa81-bb705ddc7d1c" width="250" />
 
 
 ## Requirements
