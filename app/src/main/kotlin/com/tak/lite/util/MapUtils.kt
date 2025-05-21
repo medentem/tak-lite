@@ -30,4 +30,17 @@ suspend fun saveTilePbfWithType(context: Context, type: String, zoom: Int, x: In
         android.util.Log.e("OfflineTiles", "Failed to save $type tile $zoom/$x/$y: ${e.message}")
         false
     }
+}
+
+suspend fun saveTileWebpWithType(context: Context, type: String, zoom: Int, x: Int, y: Int, bytes: ByteArray): Boolean = withContext(Dispatchers.IO) {
+    try {
+        val dir = File(context.filesDir, "tiles/$type/$zoom/$x")
+        if (!dir.exists()) dir.mkdirs()
+        val file = File(dir, "$y.webp")
+        FileOutputStream(file).use { it.write(bytes) }
+        true
+    } catch (e: Exception) {
+        android.util.Log.e("OfflineTiles", "Failed to save $type tile $zoom/$x/$y: ${e.message}")
+        false
+    }
 } 
