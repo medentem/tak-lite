@@ -1,6 +1,6 @@
 # TAK Lite
 
-A situational awareness Android application designed for use with Doodle Labs mesh network devices.
+A situational awareness Android application designed for use with mesh network devices (Doodle Labs, Meshtastic)
 
 ## Features
 
