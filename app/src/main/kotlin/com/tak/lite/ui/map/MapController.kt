@@ -23,7 +23,9 @@ class MapController(
     private val getVectorTileJsonUrl: () -> String = { "" },
     private val getMapTilerAttribution: () -> String = { "" },
     private val getOsmAttribution: () -> String = { "" },
-    private val getFilesDir: () -> File = { File("") }
+    private val getFilesDir: () -> File = { File("") },
+    private val getDarkModeMapTilerUrl: () -> String = { "" },
+    private val getDarkModePref: () -> String = { "system" }
 ) {
     var mapLibreMap: MapLibreMap? = null
         private set
@@ -68,6 +70,10 @@ class MapController(
         val osmAttribution = getOsmAttribution()
         val osmAttributionLine = if (osmAttribution.isNotBlank()) ",\n          \"attribution\": \"$osmAttribution\"" else ""
         val mapTilerAttributionLine = if (mapTilerAttribution.isNotBlank()) ",\n          \"attribution\": \"$mapTilerAttribution\"" else ""
+        val darkModePref = getDarkModePref()
+        val isDarkTheme = darkModePref == "dark" || (darkModePref == "system" && (context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES)
+        val darkModeTileUrl = getDarkModeMapTilerUrl()
+        android.util.Log.d("MapController", "darkModePref: $darkModePref, isDarkTheme: $isDarkTheme, mapType: $mapType, darkModeTileUrl: $darkModeTileUrl")
         val styleJson = when {
             isDeviceOnline && mapType == MapType.SATELLITE -> {
                 """
@@ -222,6 +228,50 @@ class MapController(
                 }
                 """
                 style
+            }
+            isDeviceOnline && mapType == MapType.STREETS && isDarkTheme -> {
+                android.util.Log.d("MapController", "Using DARK streets style (darkModeTileUrl: $darkModeTileUrl)")
+                """
+                {
+                  "version": 8,
+                  "sources": {
+                    "raster-tiles": {
+                      "type": "raster",
+                      "tiles": ["$darkModeTileUrl"],
+                      "tileSize": 256$mapTilerAttributionLine
+                    }
+                  },
+                  "layers": [
+                    {
+                      "id": "raster-tiles",
+                      "type": "raster",
+                      "source": "raster-tiles"
+                    }
+                  ]
+                }
+                """
+            }
+            isDeviceOnline && mapType == MapType.STREETS -> {
+                android.util.Log.d("MapController", "Using LIGHT streets style")
+                """
+                {
+                  "version": 8,
+                  "sources": {
+                    "raster-tiles": {
+                      "type": "raster",
+                      "tiles": ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+                      "tileSize": 256$osmAttributionLine
+                    }
+                  },
+                  "layers": [
+                    {
+                      "id": "raster-tiles",
+                      "type": "raster",
+                      "source": "raster-tiles"
+                    }
+                  ]
+                }
+                """
             }
             isDeviceOnline -> {
                 """

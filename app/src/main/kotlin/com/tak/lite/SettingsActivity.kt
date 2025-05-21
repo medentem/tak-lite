@@ -28,6 +28,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var minLineSegmentDistEditText: com.google.android.material.textfield.TextInputEditText
     private lateinit var bluetoothConnectButton: Button
     private lateinit var bluetoothStatusText: TextView
+    private lateinit var mapDarkModeSpinner: AutoCompleteTextView
     private var connectedDevice: BluetoothDevice? = null
     private val mapModeOptions = listOf("Last Used", "Street", "Satellite", "Hybrid")
     private val mapModeEnumValues = listOf(
@@ -36,6 +37,8 @@ class SettingsActivity : AppCompatActivity() {
         MapController.MapType.SATELLITE,
         MapController.MapType.HYBRID
     )
+    private val mapDarkModeOptions = listOf("Use Phone Setting", "Always Dark", "Always Light")
+    private val mapDarkModeValues = listOf("system", "dark", "light")
     private val BLUETOOTH_PERMISSIONS = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         arrayOf(
             Manifest.permission.BLUETOOTH_SCAN,
@@ -65,6 +68,7 @@ class SettingsActivity : AppCompatActivity() {
         minLineSegmentDistEditText = findViewById(R.id.minLineSegmentDistEditText)
         bluetoothConnectButton = findViewById(R.id.bluetoothConnectButton)
         bluetoothStatusText = findViewById(R.id.bluetoothStatusText)
+        mapDarkModeSpinner = findViewById(R.id.mapDarkModeSpinner)
 
         // Setup map mode spinner
         val adapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, mapModeOptions)
@@ -181,6 +185,16 @@ class SettingsActivity : AppCompatActivity() {
                     }
                 }
             }
+        }
+
+        // Setup map dark mode spinner
+        val darkModeAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, mapDarkModeOptions)
+        mapDarkModeSpinner.setAdapter(darkModeAdapter)
+        val savedDarkMode = prefs.getString("map_dark_mode", "system")
+        val darkModeIndex = mapDarkModeValues.indexOf(savedDarkMode).takeIf { it >= 0 } ?: 0
+        mapDarkModeSpinner.setText(mapDarkModeOptions[darkModeIndex], false)
+        mapDarkModeSpinner.setOnItemClickListener { _, _, position, _ ->
+            prefs.edit().putString("map_dark_mode", mapDarkModeValues[position]).apply()
         }
     }
 

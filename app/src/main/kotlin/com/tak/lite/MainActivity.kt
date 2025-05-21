@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.widget.FrameLayout
@@ -156,7 +157,9 @@ class MainActivity : AppCompatActivity() {
             getVectorTileJsonUrl = { "https://api.maptiler.com/tiles/v3/tiles.json?key=" + BuildConfig.MAPTILER_API_KEY },
             getMapTilerAttribution = { "© MapTiler © OpenStreetMap contributors" },
             getOsmAttribution = { "© OpenStreetMap contributors" },
-            getFilesDir = { filesDir }
+            getDarkModeMapTilerUrl = { "https://api.maptiler.com/maps/streets-v2-dark/{z}/{x}/{y}.png?key=" + BuildConfig.MAPTILER_API_KEY },
+            getFilesDir = { filesDir },
+            getDarkModePref = { prefs.getString("map_dark_mode", "system") ?: "system" }
         )
         // Set the onStyleChanged callback after construction
         mapController.setOnStyleChangedCallback {
