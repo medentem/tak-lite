@@ -150,10 +150,6 @@ class MainActivity : AppCompatActivity() {
                     annotationOverlayView.setZoom(map.cameraPosition.zoom.toFloat())
                 }
             },
-            onStyleChanged = {
-                annotationController.setupAnnotationOverlay(mapController.mapLibreMap)
-                annotationController.renderAllAnnotations(mapController.mapLibreMap)
-            },
             getMapTilerUrl = { "https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=" + BuildConfig.MAPTILER_API_KEY },
             getVectorTileUrl = { "https://api.maptiler.com/tiles/v3/{z}/{x}/{y}.pbf?key=" + BuildConfig.MAPTILER_API_KEY },
             getGlyphsUrl = { "https://api.maptiler.com/fonts/{fontstack}/{range}.pbf?key=" + BuildConfig.MAPTILER_API_KEY },
@@ -162,6 +158,11 @@ class MainActivity : AppCompatActivity() {
             getOsmAttribution = { "© OpenStreetMap contributors" },
             getFilesDir = { filesDir }
         )
+        // Set the onStyleChanged callback after construction
+        mapController.setOnStyleChangedCallback {
+            annotationController.setupAnnotationOverlay(mapController.mapLibreMap)
+            annotationController.renderAllAnnotations(mapController.mapLibreMap)
+        }
         annotationController.mapController = mapController
         mapController.onCreate(savedInstanceState, lastLocation)
 
@@ -555,4 +556,7 @@ class MainActivity : AppCompatActivity() {
         val newType = mapController.getMapType()
         saveLastUsedMapMode(newType)
     }
+
+    // Add this method to expose the shared MapController instance
+    fun getMapController(): com.tak.lite.ui.map.MapController = mapController
 }

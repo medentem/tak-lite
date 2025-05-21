@@ -17,7 +17,6 @@ class MapController(
     private val defaultCenter: LatLng,
     private val defaultZoom: Double,
     private val onMapReady: (MapLibreMap) -> Unit = {},
-    private val onStyleChanged: (() -> Unit)? = null,
     private val getMapTilerUrl: () -> String = { "" },
     private val getGlyphsUrl: () -> String = { "" },
     private val getVectorTileUrl: () -> String = { "" },
@@ -29,6 +28,11 @@ class MapController(
     var mapLibreMap: MapLibreMap? = null
         private set
     private var mapType: MapType = MapType.HYBRID
+
+    private var onStyleChanged: (() -> Unit)? = null
+    fun setOnStyleChangedCallback(callback: (() -> Unit)?) {
+        this.onStyleChanged = callback
+    }
 
     enum class MapType {
         LAST_USED, STREETS, SATELLITE, HYBRID

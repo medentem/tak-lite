@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
+import com.tak.lite.MainActivity
 import com.tak.lite.R
 import com.tak.lite.data.model.AnnotationType
 import com.tak.lite.databinding.AnnotationControlsBinding
@@ -34,8 +35,6 @@ class AnnotationFragment : Fragment() {
 
     private val viewModel: AnnotationViewModel by viewModels()
     private val meshNetworkViewModel: MeshNetworkViewModel by viewModels()
-    private lateinit var mapView: MapView
-    private var mapboxMap: MapLibreMap? = null
     private var annotationOverlayView: AnnotationOverlayView? = null
     private var currentType: AnnotationType = AnnotationType.POINT
     private var currentColor: AnnotationColor = AnnotationColor.GREEN
@@ -57,18 +56,15 @@ class AnnotationFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        mapView = view.findViewById(R.id.mapView)
-        mapView.onCreate(savedInstanceState)
-        mapView.getMapAsync { map ->
-            mapboxMap = map
-            map.setStyle(Style.Builder().fromUri("asset://styles/style.json")) {
-                setupMapInteraction()
-                setupOverlayView()
+        val mapController = (activity as? MainActivity)?.getMapController()
+        mapController?.let { controller ->
+            controller.setOnStyleChangedCallback {
+                setupOverlayView(controller)
+                setupMapInteraction(controller)
             }
         }
         setupControls()
         observeViewModel()
-        // Observe peer locations and update overlay
         viewLifecycleOwner.lifecycleScope.launch {
             meshNetworkViewModel.peerLocations.collectLatest { locations ->
                 annotationOverlayView?.updatePeerLocations(locations)
@@ -117,8 +113,8 @@ class AnnotationFragment : Fragment() {
         isDrawing = state.isDrawing
     }
 
-    private fun setupMapInteraction() {
-        mapboxMap?.addOnMapClickListener { latLng ->
+    private fun setupMapInteraction(controller: MapController) {
+        controller.mapLibreMap?.addOnMapClickListener { latLng ->
             when (currentType) {
                 AnnotationType.POINT -> viewModel.addPointOfInterest(latLng)
                 AnnotationType.LINE -> {
@@ -153,11 +149,13 @@ class AnnotationFragment : Fragment() {
         }
     }
 
-    private fun setupOverlayView() {
-        annotationOverlayView = AnnotationOverlayView(requireContext())
-        binding.root.addView(annotationOverlayView)
-        mapboxMap?.addOnCameraMoveListener {
-            annotationOverlayView?.setProjection(mapboxMap?.projection)
+    private fun setupOverlayView(controller: MapController) {
+        if (annotationOverlayView == null) {
+            annotationOverlayView = AnnotationOverlayView(requireContext())
+            binding.root.addView(annotationOverlayView)
+        }
+        controller.mapLibreMap?.addOnCameraMoveListener {
+            annotationOverlayView?.setProjection(controller.mapLibreMap?.projection)
         }
     }
 
@@ -173,30 +171,8 @@ class AnnotationFragment : Fragment() {
         return results[0].toDouble()
     }
 
-    // MapView lifecycle methods
-    override fun onStart() {
-        super.onStart()
-        mapView.onStart()
-    }
-    override fun onResume() {
-        super.onResume()
-        mapView.onResume()
-    }
-    override fun onPause() {
-        super.onPause()
-        mapView.onPause()
-    }
-    override fun onStop() {
-        super.onStop()
-        mapView.onStop()
-    }
-    override fun onLowMemory() {
-        super.onLowMemory()
-        mapView.onLowMemory()
-    }
     override fun onDestroyView() {
         super.onDestroyView()
-        mapView.onDestroy()
         _binding = null
         controlsBinding = null
     }
