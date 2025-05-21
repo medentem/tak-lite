@@ -102,14 +102,14 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Startup Map Mode"
+                        android:text="Map Settings"
                         android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
                         android:paddingBottom="8dp" />
 
                     <com.google.android.material.textfield.TextInputLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="Select map mode"
+                        android:hint="Startup Map Mode"
                         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
                         app:boxBackgroundMode="outline">
 
