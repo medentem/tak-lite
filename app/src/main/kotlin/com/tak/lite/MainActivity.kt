@@ -87,13 +87,20 @@ class MainActivity : AppCompatActivity() {
         val lastLocation = loadLastLocation()
         val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
         val startupMapMode = prefs.getString("startup_map_mode", "LAST_USED")
-        val lastUsedMapMode = loadLastUsedMapMode()
+        val lastUsedMapModeName = prefs.getString("last_used_map_mode", null)
+        val lastUsedMapMode = if (lastUsedMapModeName != null) {
+            try {
+                com.tak.lite.ui.map.MapController.MapType.valueOf(lastUsedMapModeName)
+            } catch (e: Exception) {
+                com.tak.lite.ui.map.MapController.MapType.HYBRID
+            }
+        } else null
         val initialMapMode = when (startupMapMode) {
-            "LAST_USED" -> lastUsedMapMode
+            "LAST_USED" -> lastUsedMapMode ?: com.tak.lite.ui.map.MapController.MapType.STREETS
             "STREETS" -> com.tak.lite.ui.map.MapController.MapType.STREETS
             "SATELLITE" -> com.tak.lite.ui.map.MapController.MapType.SATELLITE
             "HYBRID" -> com.tak.lite.ui.map.MapController.MapType.HYBRID
-            else -> lastUsedMapMode
+            else -> lastUsedMapMode ?: com.tak.lite.ui.map.MapController.MapType.STREETS
         }
         mapController = com.tak.lite.ui.map.MapController(
             context = this,
