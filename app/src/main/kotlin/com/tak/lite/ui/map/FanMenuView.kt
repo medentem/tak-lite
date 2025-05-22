@@ -414,6 +414,11 @@ class FanMenuView @JvmOverloads constructor(
         return if (numOuter > 0) 2 else 1
     }
 
+    private fun dismissMenu() {
+        visibility = View.GONE
+        listener?.onMenuDismissed()
+    }
+
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
@@ -422,13 +427,13 @@ class FanMenuView @JvmOverloads constructor(
                 if (distance < centerHoleRadius) {
                     // Touched the center hole
                     if (!isTransitioning) {
-                        listener?.onMenuDismissed()
+                        dismissMenu()
                     }
                     return true
                 } else if (!inMenu) {
                     // Touched outside the fan menu
                     if (!isTransitioning) {
-                        listener?.onMenuDismissed()
+                        dismissMenu()
                     }
                     return true
                 }
