@@ -33,7 +33,7 @@ class FanMenuView @JvmOverloads constructor(
     }
 
     interface OnOptionSelectedListener {
-        fun onOptionSelected(option: Option)
+        fun onOptionSelected(option: Option): Boolean
         fun onMenuDismissed()
     }
 
@@ -451,7 +451,9 @@ class FanMenuView @JvmOverloads constructor(
                     selectedIndex?.let { index ->
                         if (index in options.indices) {
                             isTransitioning = true
-                            listener?.onOptionSelected(options[index])
+                            if (listener?.onOptionSelected(options[index]) == false) {
+                                dismissMenu()
+                            }
                         }
                     }
                 }

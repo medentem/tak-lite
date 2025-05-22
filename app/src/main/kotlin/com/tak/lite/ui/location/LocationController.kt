@@ -72,8 +72,8 @@ class LocationController(
     }
 
     private fun startAndroidLocationUpdates() {
-        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 5000)
-            .setMinUpdateIntervalMillis(2000)
+        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000)
+            .setMinUpdateIntervalMillis(500)
             .build()
         if (ActivityCompat.checkSelfPermission(activity, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
             ActivityCompat.checkSelfPermission(activity, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
@@ -157,50 +157,9 @@ class LocationController(
                 android.widget.Toast.makeText(activity, "Location permission not granted", android.widget.Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            
-            // First try Mesh Rider location
-            coroutineScope.launch {
-                val meshRiderLocation = meshRiderGpsController.getMeshRiderLocation(activity)
-                if (meshRiderLocation != null) {
-                    val latLng = LatLng(meshRiderLocation.latitude, meshRiderLocation.longitude)
-                    try {
-                        map.locationComponent.activateLocationComponent(
-                            org.maplibre.android.location.LocationComponentActivationOptions.builder(activity, map.style!!).build()
-                        )
-                        map.locationComponent.isLocationComponentEnabled = true
-                        map.locationComponent.cameraMode = org.maplibre.android.location.modes.CameraMode.TRACKING
-                        map.animateCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(latLng, 17.0))
-                    } catch (e: Exception) {
-                        map.animateCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(latLng, 17.0))
-                        android.widget.Toast.makeText(activity, "Location tracking not available", android.widget.Toast.LENGTH_SHORT).show()
-                    }
-                    return@launch
-                }
-                
-                // Fall back to Android location
-                fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
-                    .addOnSuccessListener { location ->
-                        if (location != null) {
-                            val latLng = LatLng(location.latitude, location.longitude)
-                            try {
-                                map.locationComponent.activateLocationComponent(
-                                    org.maplibre.android.location.LocationComponentActivationOptions.builder(activity, map.style!!).build()
-                                )
-                                map.locationComponent.isLocationComponentEnabled = true
-                                map.locationComponent.cameraMode = org.maplibre.android.location.modes.CameraMode.TRACKING
-                                map.animateCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(latLng, 17.0))
-                            } catch (e: Exception) {
-                                map.animateCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(latLng, 17.0))
-                                android.widget.Toast.makeText(activity, "Location tracking not available", android.widget.Toast.LENGTH_SHORT).show()
-                            }
-                        } else {
-                            android.widget.Toast.makeText(activity, "User location not available yet", android.widget.Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                    .addOnFailureListener {
-                        android.widget.Toast.makeText(activity, "Failed to get current location", android.widget.Toast.LENGTH_SHORT).show()
-                    }
-            }
+            // --- Instead of animating or setting camera mode here, just trigger tracking mode in MainActivity ---
+            // MainActivity will handle isTrackingLocation and cameraMode
+            // Optionally, you could call a callback here if needed
         }
     }
 

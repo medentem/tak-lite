@@ -58,6 +58,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var locationSourceIcon: ImageView
     private lateinit var locationSourceLabel: TextView
     private var is3DBuildingsEnabled = false
+    private var isTrackingLocation = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -156,6 +157,14 @@ class MainActivity : AppCompatActivity() {
                     annotationController.syncAnnotationOverlayView(map)
                     annotationOverlayView.setZoom(map.cameraPosition.zoom.toFloat())
                 }
+                // --- Add camera move started listener to disable tracking on user gesture ---
+                map.addOnCameraMoveStartedListener { reason ->
+                    if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) {
+                        isTrackingLocation = false
+                        // Set camera mode to NONE for visual feedback
+                        map.locationComponent.cameraMode = org.maplibre.android.location.modes.CameraMode.NONE
+                    }
+                }
             },
             getHillshadingTileUrl = { "https://api.maptiler.com/tiles/terrain-rgb-v2/{z}/{x}/{y}.webp?key=" + BuildConfig.MAPTILER_API_KEY },
             getMapTilerUrl = { "https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=" + BuildConfig.MAPTILER_API_KEY },
@@ -194,13 +203,15 @@ class MainActivity : AppCompatActivity() {
         locationController = LocationController(
             activity = this,
             onLocationUpdate = { location ->
-                // Only handle mesh update and persistence here
                 val latLng = LatLng(location.latitude, location.longitude)
                 val currentZoom = mapController.mapLibreMap?.cameraPosition?.zoom?.toFloat() ?: DEFAULT_US_ZOOM.toFloat()
                 saveLastLocation(location.latitude, location.longitude, currentZoom)
                 viewModel.sendLocationUpdate(location.latitude, location.longitude)
-                // Center map on new location
-                mapController.mapLibreMap?.moveCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(latLng, currentZoom.toDouble()))
+                // --- Feed location to MapLibre location component for tracking mode ---
+                mapController.mapLibreMap?.locationComponent?.forceLocationUpdate(location)
+                if (isTrackingLocation) {
+                    mapController.mapLibreMap?.locationComponent?.cameraMode = org.maplibre.android.location.modes.CameraMode.TRACKING
+                }
                 // Set source to PHONE if not mesh
                 if (locationSourceLabel.text != "Mesh") {
                     locationSourceOverlay.visibility = View.VISIBLE
@@ -242,9 +253,6 @@ class MainActivity : AppCompatActivity() {
             }
         )
         locationController.checkAndRequestPermissions(PERMISSIONS_REQUEST_CODE)
-        locationController.setupZoomToLocationButton(
-            binding.zoomToLocationButton
-        ) { mapController.mapLibreMap }
 
         audioController = AudioController(
             activity = this,
@@ -354,6 +362,34 @@ class MainActivity : AppCompatActivity() {
             is3DBuildingsEnabled = !is3DBuildingsEnabled
             mapController.set3DBuildingsEnabled(is3DBuildingsEnabled)
             toggle3dFab.setImageResource(if (is3DBuildingsEnabled) android.R.drawable.ic_menu_view else R.drawable.baseline_3d_rotation_24)
+        }
+
+        // --- Wire up My Location FAB directly ---
+        binding.zoomToLocationButton.setOnClickListener {
+            val map = mapController.mapLibreMap
+            if (map == null) {
+                Toast.makeText(this, "Map not ready yet", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            // Check permissions
+            if (androidx.core.app.ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != android.content.pm.PackageManager.PERMISSION_GRANTED &&
+                androidx.core.app.ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(this, "Location permission not granted", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            isTrackingLocation = true
+            map.locationComponent.cameraMode = org.maplibre.android.location.modes.CameraMode.TRACKING
+            // Optionally recenter to last known location for instant feedback
+            locationController.getLastKnownLocation { location ->
+                if (location != null) {
+                    val latLng = org.maplibre.android.geometry.LatLng(location.latitude, location.longitude)
+                    val currentZoom = map.cameraPosition.zoom
+                    val targetZoom = if (currentZoom > 16.0) currentZoom else 16.0
+                    runOnUiThread {
+                        map.moveCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(latLng, targetZoom))
+                    }
+                }
+            }
         }
     }
 

@@ -89,7 +89,7 @@ class AnnotationController(
         )
         val screenSize = PointF(binding.root.width.toFloat(), binding.root.height.toFloat())
         fanMenuView.showAt(center, options, object : FanMenuView.OnOptionSelectedListener {
-            override fun onOptionSelected(option: FanMenuView.Option) {
+            override fun onOptionSelected(option: FanMenuView.Option): Boolean {
                 when (option) {
                     is FanMenuView.Option.Shape -> updatePoiShape(poi, option.shape)
                     is FanMenuView.Option.Color -> updatePoiColor(poiId, option.color)
@@ -97,7 +97,7 @@ class AnnotationController(
                     is FanMenuView.Option.Delete -> deletePoi(option.id)
                     else -> {}
                 }
-                fanMenuView.visibility = View.GONE
+                return false
             }
             override fun onMenuDismissed() {
                 fanMenuView.visibility = View.GONE
@@ -135,7 +135,7 @@ class AnnotationController(
         )
         val screenSize = PointF(binding.root.width.toFloat(), binding.root.height.toFloat())
         fanMenuView.showAt(center, options, object : FanMenuView.OnOptionSelectedListener {
-            override fun onOptionSelected(option: FanMenuView.Option) {
+            override fun onOptionSelected(option: FanMenuView.Option): Boolean {
                 when (option) {
                     is FanMenuView.Option.LineStyle -> updateLineStyle(line, option.style)
                     is FanMenuView.Option.Color -> updateLineColor(line, option.color)
@@ -144,7 +144,7 @@ class AnnotationController(
                     else -> {}
                 }
                 annotationOverlayView.setTempLinePoints(null)
-                fanMenuView.visibility = View.GONE
+                return false
             }
             override fun onMenuDismissed() {
                 fanMenuView.visibility = View.GONE
@@ -238,11 +238,13 @@ class AnnotationController(
         )
         val screenSize = PointF(binding.root.width.toFloat(), binding.root.height.toFloat())
         fanMenuView.showAt(center, shapeOptions, object : FanMenuView.OnOptionSelectedListener {
-            override fun onOptionSelected(option: FanMenuView.Option) {
+            override fun onOptionSelected(option: FanMenuView.Option): Boolean {
                 if (option is FanMenuView.Option.Shape) {
                     annotationViewModel.setCurrentShape(option.shape)
                     showColorMenu(center, option.shape)
+                    return true
                 }
+                return false
             }
             override fun onMenuDismissed() {
                 fanMenuView.visibility = View.GONE
@@ -260,11 +262,12 @@ class AnnotationController(
         )
         val screenSize = PointF(binding.root.width.toFloat(), binding.root.height.toFloat())
         fanMenuView.showAt(center, colorOptions, object : FanMenuView.OnOptionSelectedListener {
-            override fun onOptionSelected(option: FanMenuView.Option) {
+            override fun onOptionSelected(option: FanMenuView.Option): Boolean {
                 if (option is FanMenuView.Option.Color) {
                     annotationViewModel.setCurrentColor(option.color)
                     addPoiFromFanMenu(shape, option.color)
                 }
+                return false
             }
             override fun onMenuDismissed() {
                 fanMenuView.visibility = View.GONE
