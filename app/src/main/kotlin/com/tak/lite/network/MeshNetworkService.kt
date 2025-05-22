@@ -1,25 +1,15 @@
 package com.tak.lite.network
 
-import android.content.Context
-import android.net.ConnectivityManager
-import android.net.Network
-import android.net.NetworkCapabilities
-import android.net.NetworkRequest
+import com.tak.lite.di.MeshProtocol
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.Job
-import java.net.InetAddress
-import java.net.NetworkInterface
+import org.maplibre.android.geometry.LatLng
 import javax.inject.Inject
 import javax.inject.Singleton
-import org.maplibre.android.geometry.LatLng
-import com.tak.lite.di.MeshProtocol
-import android.bluetooth.BluetoothDevice
-import dagger.hilt.android.qualifiers.ApplicationContext
 
 @Singleton
 class MeshNetworkService @Inject constructor() {
@@ -51,19 +41,8 @@ class MeshNetworkService @Inject constructor() {
         }
     }
 
-    fun connectToDevice(device: BluetoothDevice, onConnected: (Boolean) -> Unit) {
-        bluetoothDeviceManager?.connect(device) { success ->
-            _networkState.value = if (success) MeshNetworkState.Connected else MeshNetworkState.Disconnected
-            onConnected(success)
-        }
-    }
-
     fun sendLocationUpdate(latitude: Double, longitude: Double) {
         meshProtocol.sendLocationUpdate(latitude, longitude)
-    }
-
-    fun sendAnnotation(annotation: com.tak.lite.model.MapAnnotation) {
-        meshProtocol.sendAnnotation(annotation)
     }
 
     fun sendAudioData(audioData: ByteArray, channelId: String = "default") {
