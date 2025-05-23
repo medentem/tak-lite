@@ -23,6 +23,7 @@
         android:layout_height="wrap_content"
         android:textSize="16sp"
         android:textStyle="bold"
+        android:textColor="?android:attr/textColorPrimary"
         app:layout_constraintStart_toEndOf="@id/groupIndicator"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintEnd_toStartOf="@id/groupMemberCount"

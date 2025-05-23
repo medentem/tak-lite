@@ -401,24 +401,67 @@ class AnnotationOverlayView @JvmOverloads constructor(
 
         // Show label if requested and segment is long enough
         if (showLabel) {
-            val latLngs = annotation.points.map { it.toMapLibreLatLng() }
-            if (segmentIndex >= 0 && segmentIndex + 1 < latLngs.size) {
-                val latLng1 = latLngs[segmentIndex]
-                val latLng2 = latLngs[segmentIndex + 1]
-                val distMeters = haversine(latLng1.latitude, latLng1.longitude, latLng2.latitude, latLng2.longitude)
-                val distMiles = distMeters / 1609.344
-                var midX = (point1.x + point2.x) / 2
-                var midY = (point1.y + point2.y) / 2
-                midX = midX.coerceIn(0f, width.toFloat())
-                midY = midY.coerceIn(0f, height.toFloat())
-                val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = Color.BLACK
-                    textSize = 44f // Bigger label
-                    textAlign = Paint.Align.CENTER
-                    typeface = Typeface.DEFAULT_BOLD
+            // Compute the visible portion of the segment (clip to screen bounds)
+            val margin = 40f
+            val screenRect = RectF(-margin, -margin, width + margin, height + margin)
+            val clipped = clipSegmentToRect(point1, point2, screenRect)
+            if (clipped != null) {
+                val (visibleP1, visibleP2) = clipped
+                val latLngs = annotation.points.map { it.toMapLibreLatLng() }
+                if (segmentIndex >= 0 && segmentIndex + 1 < latLngs.size) {
+                    val latLng1 = latLngs[segmentIndex]
+                    val latLng2 = latLngs[segmentIndex + 1]
+                    val distMeters = haversine(latLng1.latitude, latLng1.longitude, latLng2.latitude, latLng2.longitude)
+                    val distMiles = distMeters / 1609.344
+                    val midX = (visibleP1.x + visibleP2.x) / 2
+                    val midY = (visibleP1.y + visibleP2.y) / 2
+                    val label = String.format("%.2f mi", distMiles)
+
+                    // --- Dynamic scaling based on zoom ---
+                    val minZoom = 10f
+                    val maxZoom = 18f
+                    val minTextSize = 24f
+                    val maxTextSize = 44f
+                    val minPadding = 8f
+                    val maxPadding = 18f
+                    val zoom = currentZoom.coerceIn(minZoom, maxZoom)
+                    val scale = (zoom - minZoom) / (maxZoom - minZoom)
+                    val textSize = minTextSize + (maxTextSize - minTextSize) * scale
+                    val padding = minPadding + (maxPadding - minPadding) * scale
+                    //--------------------------------------
+
+                    val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        color = Color.WHITE
+                        this.textSize = textSize
+                        textAlign = Paint.Align.CENTER
+                        typeface = Typeface.DEFAULT_BOLD
+                    }
+                    // Measure text size
+                    val textBounds = android.graphics.Rect()
+                    textPaint.getTextBounds(label, 0, label.length, textBounds)
+                    val rectWidth = textBounds.width() + padding * 2
+                    val rectHeight = textBounds.height() + padding * 1.2f
+                    val rectLeft = midX - rectWidth / 2
+                    val rectTop = midY - 24f - rectHeight / 2
+                    val rectRight = midX + rectWidth / 2
+                    val rectBottom = rectTop + rectHeight
+                    val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        color = Color.BLACK
+                        style = Paint.Style.FILL
+                    }
+                    canvas.drawRoundRect(
+                        rectLeft,
+                        rectTop,
+                        rectRight,
+                        rectBottom,
+                        padding,
+                        padding,
+                        bgPaint
+                    )
+                    // Draw the text centered in the rect
+                    val textY = rectTop + rectHeight / 2 - textBounds.exactCenterY()
+                    canvas.drawText(label, midX, textY, textPaint)
                 }
-                val label = String.format("%.2f mi", distMiles)
-                canvas.drawText(label, midX, midY - 24f, textPaint)
             }
         }
 
@@ -694,5 +737,52 @@ class AnnotationOverlayView @JvmOverloads constructor(
             style = Paint.Style.FILL
         }
         canvas.drawCircle(point.x, point.y, dotRadius, fillPaint)
+    }
+
+    // Cohen–Sutherland line clipping algorithm for a segment and a rectangle
+    private fun clipSegmentToRect(p1: PointF, p2: PointF, rect: RectF): Pair<PointF, PointF>? {
+        // Outcode constants
+        val INSIDE = 0; val LEFT = 1; val RIGHT = 2; val BOTTOM = 4; val TOP = 8
+        fun computeOutCode(x: Float, y: Float): Int {
+            var code = INSIDE
+            if (x < rect.left) code = code or LEFT
+            else if (x > rect.right) code = code or RIGHT
+            if (y < rect.top) code = code or TOP
+            else if (y > rect.bottom) code = code or BOTTOM
+            return code
+        }
+        var x0 = p1.x; var y0 = p1.y; var x1 = p2.x; var y1 = p2.y
+        var outcode0 = computeOutCode(x0, y0)
+        var outcode1 = computeOutCode(x1, y1)
+        var accept = false
+        while (true) {
+            if ((outcode0 or outcode1) == 0) {
+                accept = true; break
+            } else if ((outcode0 and outcode1) != 0) {
+                break
+            } else {
+                val outcodeOut = if (outcode0 != 0) outcode0 else outcode1
+                var x = 0f; var y = 0f
+                if ((outcodeOut and TOP) != 0) {
+                    x = x0 + (x1 - x0) * (rect.top - y0) / (y1 - y0)
+                    y = rect.top
+                } else if ((outcodeOut and BOTTOM) != 0) {
+                    x = x0 + (x1 - x0) * (rect.bottom - y0) / (y1 - y0)
+                    y = rect.bottom
+                } else if ((outcodeOut and RIGHT) != 0) {
+                    y = y0 + (y1 - y0) * (rect.right - x0) / (x1 - x0)
+                    x = rect.right
+                } else if ((outcodeOut and LEFT) != 0) {
+                    y = y0 + (y1 - y0) * (rect.left - x0) / (x1 - x0)
+                    x = rect.left
+                }
+                if (outcodeOut == outcode0) {
+                    x0 = x; y0 = y; outcode0 = computeOutCode(x0, y0)
+                } else {
+                    x1 = x; y1 = y; outcode1 = computeOutCode(x1, y1)
+                }
+            }
+        }
+        return if (accept) Pair(PointF(x0, y0), PointF(x1, y1)) else null
     }
 } 

@@ -10,10 +10,12 @@ import android.view.MotionEvent
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.lifecycleScope
@@ -33,6 +35,9 @@ import kotlinx.coroutines.launch
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
+import android.animation.AnimatorSet
+import android.animation.ObjectAnimator
+import android.content.res.Configuration
 
 val DEFAULT_US_CENTER = LatLng(39.8283, -98.5795)
 const val DEFAULT_US_ZOOM = 4.0
@@ -62,10 +67,24 @@ class MainActivity : AppCompatActivity() {
     private val _mapReadyLiveData = MutableLiveData<MapLibreMap>()
     val mapReadyLiveData: LiveData<MapLibreMap> get() = _mapReadyLiveData
 
+    // Add properties for FAB menu views
+    private lateinit var fabMenuContainer: LinearLayout
+    private lateinit var nicknameButton: View
+    private lateinit var mapTypeToggleButton: View
+    private lateinit var downloadSectorButton: View
+    private lateinit var settingsButton: View
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        // Initialize FAB menu views
+        fabMenuContainer = findViewById(R.id.fabMenuContainer)
+        nicknameButton = findViewById(R.id.nicknameButton)
+        mapTypeToggleButton = findViewById(R.id.mapTypeToggleButton)
+        downloadSectorButton = findViewById(R.id.downloadSectorButton)
+        settingsButton = findViewById(R.id.settingsButton)
 
         // Add AnnotationFragment if not already present
         if (savedInstanceState == null) {
@@ -146,7 +165,7 @@ class MainActivity : AppCompatActivity() {
             getOsmAttribution = { "© OpenStreetMap contributors" },
             getDarkModeMapTilerUrl = { "https://api.maptiler.com/maps/streets-v2-dark/{z}/{x}/{y}.png?key=" + BuildConfig.MAPTILER_API_KEY },
             getFilesDir = { filesDir },
-            getDarkModePref = { prefs.getString("map_dark_mode", "system") ?: "system" }
+            getDarkModePref = { prefs.getString("dark_mode", "system") ?: "system" }
         )
         mapController.setOnStyleChangedCallback {
             // Removed annotationController.setupAnnotationOverlay, renderAllAnnotations
@@ -290,15 +309,15 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        binding.nicknameButton.setOnClickListener {
+        nicknameButton.setOnClickListener {
             showNicknameDialog()
         }
 
-        binding.mapTypeToggleButton.setOnClickListener {
+        mapTypeToggleButton.setOnClickListener {
             onMapModeToggled()
         }
 
-        binding.downloadSectorButton.setOnClickListener {
+        downloadSectorButton.setOnClickListener {
             Toast.makeText(this, "Downloading offline tiles...", Toast.LENGTH_SHORT).show()
             binding.tileDownloadProgressBar.progress = 0
             binding.tileDownloadProgressBar.visibility = View.VISIBLE
@@ -316,7 +335,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        binding.settingsButton.setOnClickListener {
+        settingsButton.setOnClickListener {
             val intent = android.content.Intent(this, SettingsActivity::class.java)
             startActivity(intent)
         }
@@ -354,6 +373,19 @@ class MainActivity : AppCompatActivity() {
                 map.locationComponent.cameraMode = org.maplibre.android.location.modes.CameraMode.TRACKING
             }
         }
+
+        // Apply dark mode on startup
+        val mode = prefs.getString("dark_mode", "system") ?: "system"
+        val nightMode = when (mode) {
+            "dark" -> AppCompatDelegate.MODE_NIGHT_YES
+            "light" -> AppCompatDelegate.MODE_NIGHT_NO
+            else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+        }
+        AppCompatDelegate.setDefaultNightMode(nightMode)
+
+        // --- FAB Menu logic ---
+        setupFabMenu()
+        setFabMenuOrientation(resources.configuration.orientation)
     }
 
     private fun observeMeshNetworkState() {
@@ -560,5 +592,81 @@ class MainActivity : AppCompatActivity() {
             return true
         }
         return super.dispatchTouchEvent(event)
+    }
+
+    private fun setupFabMenu() {
+        val fabMenu = binding.fabMenu
+        var isMenuOpen = false
+
+        fun animateMenu(open: Boolean) {
+            if (open) {
+                fabMenuContainer.visibility = View.VISIBLE
+                val animators = mutableListOf<ObjectAnimator>()
+                for (i in 0 until fabMenuContainer.childCount) {
+                    val child = fabMenuContainer.getChildAt(i)
+                    child.alpha = 0f
+                    child.translationY = if (fabMenuContainer.orientation == LinearLayout.VERTICAL) 50f else 0f
+                    child.translationX = if (fabMenuContainer.orientation == LinearLayout.HORIZONTAL) 50f else 0f
+                    val alphaAnim = ObjectAnimator.ofFloat(child, "alpha", 0f, 1f)
+                    val transAnim = if (fabMenuContainer.orientation == LinearLayout.VERTICAL)
+                        ObjectAnimator.ofFloat(child, "translationY", 50f, 0f)
+                    else
+                        ObjectAnimator.ofFloat(child, "translationX", 50f, 0f)
+                    animators.add(alphaAnim)
+                    animators.add(transAnim)
+                }
+                AnimatorSet().apply {
+                    playTogether(animators as Collection<android.animation.Animator>)
+                    duration = 200
+                    start()
+                }
+            } else {
+                val animators = mutableListOf<ObjectAnimator>()
+                for (i in 0 until fabMenuContainer.childCount) {
+                    val child = fabMenuContainer.getChildAt(i)
+                    val alphaAnim = ObjectAnimator.ofFloat(child, "alpha", 1f, 0f)
+                    val transAnim = if (fabMenuContainer.orientation == LinearLayout.VERTICAL)
+                        ObjectAnimator.ofFloat(child, "translationY", 0f, 50f)
+                    else
+                        ObjectAnimator.ofFloat(child, "translationX", 0f, 50f)
+                    animators.add(alphaAnim)
+                    animators.add(transAnim)
+                }
+                AnimatorSet().apply {
+                    playTogether(animators as Collection<android.animation.Animator>)
+                    duration = 200
+                    start()
+                    addListener(object : android.animation.AnimatorListenerAdapter() {
+                        override fun onAnimationEnd(animation: android.animation.Animator) {
+                            fabMenuContainer.visibility = View.GONE
+                        }
+                    })
+                }
+            }
+        }
+
+        fabMenu.setOnClickListener {
+            isMenuOpen = !isMenuOpen
+            animateMenu(isMenuOpen)
+            fabMenu.setImageResource(if (isMenuOpen) android.R.drawable.ic_menu_close_clear_cancel else android.R.drawable.ic_input_add)
+        }
+
+        // Close menu if user taps outside (optional, not required)
+        binding.root.setOnClickListener {
+            if (isMenuOpen) {
+                isMenuOpen = false
+                animateMenu(false)
+                fabMenu.setImageResource(android.R.drawable.ic_input_add)
+            }
+        }
+    }
+
+    private fun setFabMenuOrientation(orientation: Int) {
+        fabMenuContainer.orientation = if (orientation == Configuration.ORIENTATION_LANDSCAPE) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        setFabMenuOrientation(newConfig.orientation)
     }
 }

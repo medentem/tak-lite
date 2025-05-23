@@ -144,7 +144,9 @@ class AnnotationController(
                     is FanMenuView.Option.Delete -> deletePoi(option.id)
                     else -> {}
                 }
+                annotationOverlayView.updateAnnotations(annotationViewModel.uiState.value.annotations)
                 annotationOverlayView.setTempLinePoints(null)
+                annotationOverlayView.invalidate()
                 return false
             }
             override fun onMenuDismissed() {

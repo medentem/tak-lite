@@ -97,76 +97,16 @@
             android:gravity="center" />
     </LinearLayout>
 
+    <include layout="@layout/fab_menu_container" />
+
     <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/mapTypeToggleButton"
+        android:id="@+id/fabMenu"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="16dp"
         android:layout_marginBottom="16dp"
-        android:contentDescription="Toggle Map Type"
-        android:src="@android:drawable/ic_menu_mapmode"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:backgroundTint="@android:color/holo_blue_dark" />
-
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/toggle3dFab"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="96dp"
-        android:layout_marginBottom="16dp"
-        android:contentDescription="Toggle 3D Buildings"
-        android:src="@drawable/baseline_3d_rotation_24"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:backgroundTint="@android:color/holo_blue_dark" />
-
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/nicknameButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
-        android:layout_marginTop="16dp"
-        android:contentDescription="Set Nickname"
-        android:src="@android:drawable/ic_menu_edit"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:backgroundTint="@android:color/holo_blue_dark" />
-
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/downloadSectorButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
-        android:layout_marginBottom="96dp"
-        android:contentDescription="Download Visible Map Sector"
-        android:src="@android:drawable/ic_menu_save"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:backgroundTint="@android:color/holo_blue_dark" />
-
-    <ImageButton
-        android:id="@+id/groupAudioButton"
-        android:layout_width="56dp"
-        android:layout_height="56dp"
-        android:layout_marginStart="16dp"
-        android:layout_marginBottom="176dp"
-        android:background="@drawable/bg_fab_circle"
-        android:backgroundTint="@android:color/holo_blue_dark"
-        android:contentDescription="Show Audio Channels"
-        android:elevation="16dp"
-        android:src="@drawable/ic_group"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
-
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/settingsButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
-        android:layout_marginBottom="256dp"
-        android:contentDescription="Settings"
-        android:src="@android:drawable/ic_menu_preferences"
+        android:contentDescription="Open Menu"
+        android:src="@android:drawable/ic_input_add"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:backgroundTint="@android:color/holo_blue_dark" />
@@ -176,7 +116,7 @@
         android:layout_width="match_parent"
         android:layout_height="64dp"
         android:layout_gravity="bottom"
-        android:background="#CC222222"
+        android:background="?attr/colorSurface"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
