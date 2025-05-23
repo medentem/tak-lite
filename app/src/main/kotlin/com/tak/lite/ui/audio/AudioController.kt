@@ -3,10 +3,13 @@ package com.tak.lite.ui.audio
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.util.Log
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageButton
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleCoroutineScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -91,6 +94,10 @@ class AudioController(
         binding.pttButton.setOnTouchListener { _, event ->
             when (event.action) {
                 android.view.MotionEvent.ACTION_DOWN -> {
+                    if (!hasAudioPermission()) {
+                        requestAudioPermission()
+                        return@setOnTouchListener true
+                    }
                     startAudioTransmission()
                     true
                 }
@@ -101,6 +108,18 @@ class AudioController(
                 else -> false
             }
         }
+    }
+
+    private fun hasAudioPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(activity, android.Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun requestAudioPermission() {
+        ActivityCompat.requestPermissions(
+            activity,
+            arrayOf(android.Manifest.permission.RECORD_AUDIO),
+            REQUEST_RECORD_AUDIO_PERMISSION_CODE
+        )
     }
 
     private fun startAudioTransmission() {
@@ -190,5 +209,9 @@ class AudioController(
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    companion object {
+        private const val REQUEST_RECORD_AUDIO_PERMISSION_CODE = 2001
     }
 } 
