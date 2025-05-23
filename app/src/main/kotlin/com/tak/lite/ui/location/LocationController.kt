@@ -23,6 +23,24 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.maplibre.android.geometry.LatLng
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
+import kotlin.math.roundToInt
+
+// Data class for overlay
+data class DirectionOverlayData(
+    val headingDegrees: Float = 0f,
+    val cardinal: String = "N",
+    val speedMph: Float = 0f,
+    val altitudeFt: Float = 0f,
+    val latitude: Double = 0.0,
+    val longitude: Double = 0.0
+)
 
 class LocationController(
     private val activity: Activity,
@@ -39,6 +57,54 @@ class LocationController(
     private val meshRiderGpsController = MeshRiderGpsController()
     private val coroutineScope = CoroutineScope(Dispatchers.Main)
     private var currentSource: LocationSource = LocationSource.UNKNOWN
+    private val _directionOverlayData = MutableStateFlow(DirectionOverlayData())
+    val directionOverlayData: StateFlow<DirectionOverlayData> = _directionOverlayData.asStateFlow()
+
+    // --- Compass/heading support ---
+    private val sensorManager = activity.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+    private var lastHeading: Float = 0f
+    private val sensorListener = object : SensorEventListener {
+        override fun onSensorChanged(event: SensorEvent) {
+            val heading = when (event.sensor.type) {
+                Sensor.TYPE_ROTATION_VECTOR -> {
+                    val rotationMatrix = FloatArray(9)
+                    SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
+                    val orientation = FloatArray(3)
+                    SensorManager.getOrientation(rotationMatrix, orientation)
+                    Math.toDegrees(orientation[0].toDouble()).toFloat()
+                }
+                Sensor.TYPE_ORIENTATION -> {
+                    event.values[0]
+                }
+                else -> return
+            }
+            val normalized = (heading + 360) % 360
+            lastHeading = normalized
+            val cardinal = getCardinalDirection(normalized)
+            _directionOverlayData.value = _directionOverlayData.value.copy(
+                headingDegrees = normalized,
+                cardinal = cardinal
+            )
+        }
+        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+    }
+    init {
+        // Register for rotation vector sensor, fallback to orientation
+        val rotationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
+        if (rotationSensor != null) {
+            sensorManager.registerListener(sensorListener, rotationSensor, SensorManager.SENSOR_DELAY_UI)
+        } else {
+            val orientationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ORIENTATION)
+            if (orientationSensor != null) {
+                sensorManager.registerListener(sensorListener, orientationSensor, SensorManager.SENSOR_DELAY_UI)
+            }
+        }
+    }
+    private fun getCardinalDirection(degrees: Float): String {
+        val dirs = listOf("N", "NE", "E", "SE", "S", "SW", "W", "NW", "N")
+        val ix = ((degrees + 22.5f) / 45f).roundToInt()
+        return dirs.getOrElse(ix) { "N" }
+    }
 
     fun checkAndRequestPermissions(requestCode: Int) {
         val permissions = arrayOf(
@@ -113,6 +179,13 @@ class LocationController(
             onSourceChanged?.invoke(LocationSource.PHONE)
         }
         onLocationUpdate(location)
+        // Update overlay data (heading will be updated by sensor logic later)
+        _directionOverlayData.value = _directionOverlayData.value.copy(
+            speedMph = (location.speed * 2.23694f), // m/s to mph
+            altitudeFt = (location.altitude * 3.28084f).toFloat(), // meters to feet
+            latitude = location.latitude,
+            longitude = location.longitude
+        )
     }
 
     private fun startFallbackLocationManager() {
@@ -143,28 +216,6 @@ class LocationController(
         } catch (e: Exception) {}
         fallbackLocationManager = null
         fallbackLocationListener = null
-    }
-
-    fun setupZoomToLocationButton(
-        zoomToLocationButton: android.view.View,
-        getMap: () -> org.maplibre.android.maps.MapLibreMap?
-    ) {
-        zoomToLocationButton.setOnClickListener {
-            val map = getMap()
-            if (map == null) {
-                android.widget.Toast.makeText(activity, "Map not ready yet", android.widget.Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            // Check permissions
-            if (ActivityCompat.checkSelfPermission(activity, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
-                ActivityCompat.checkSelfPermission(activity, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                android.widget.Toast.makeText(activity, "Location permission not granted", android.widget.Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            // --- Instead of animating or setting camera mode here, just trigger tracking mode in MainActivity ---
-            // MainActivity will handle isTrackingLocation and cameraMode
-            // Optionally, you could call a callback here if needed
-        }
     }
 
     fun getLastKnownLocation(callback: (Location?) -> Unit) {

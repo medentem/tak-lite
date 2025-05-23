@@ -38,6 +38,7 @@ import org.maplibre.android.maps.MapView
 import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
 import android.content.res.Configuration
+import androidx.lifecycle.repeatOnLifecycle
 
 val DEFAULT_US_CENTER = LatLng(39.8283, -98.5795)
 const val DEFAULT_US_ZOOM = 4.0
@@ -74,6 +75,23 @@ class MainActivity : AppCompatActivity() {
     private lateinit var downloadSectorButton: View
     private lateinit var settingsButton: View
 
+    // Direction overlay views
+    private lateinit var directionOverlay: View
+    private lateinit var degreeText: TextView
+    private lateinit var speedText: TextView
+    private lateinit var altitudeText: TextView
+    private lateinit var latLngText: TextView
+    private lateinit var compassBand: LinearLayout
+    private lateinit var compassLetters: List<TextView>
+
+    // For compass tape smoothing and animation
+    private var smoothedHeading: Float? = null
+    private val headingSmoothingAlpha = 0.15f // Lower = smoother, higher = more responsive
+    private var lastTapeOffset: Float = 0f
+
+    private lateinit var detailsContainer: LinearLayout
+    private var isOverlayExpanded = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -85,6 +103,23 @@ class MainActivity : AppCompatActivity() {
         mapTypeToggleButton = findViewById(R.id.mapTypeToggleButton)
         downloadSectorButton = findViewById(R.id.downloadSectorButton)
         settingsButton = findViewById(R.id.settingsButton)
+
+        // Initialize direction overlay views
+        directionOverlay = findViewById(R.id.directionOverlay)
+        degreeText = directionOverlay.findViewById(R.id.degreeText)
+        speedText = directionOverlay.findViewById(R.id.speedText)
+        altitudeText = directionOverlay.findViewById(R.id.altitudeText)
+        latLngText = directionOverlay.findViewById(R.id.latLngText)
+        compassBand = directionOverlay.findViewById(R.id.compassBand)
+        compassLetters = listOf(
+            directionOverlay.findViewById(R.id.compassLetter0),
+            directionOverlay.findViewById(R.id.compassLetter1),
+            directionOverlay.findViewById(R.id.compassLetter2),
+            directionOverlay.findViewById(R.id.compassLetter3),
+            directionOverlay.findViewById(R.id.compassLetter4)
+        )
+
+        updateDirectionOverlayPosition(resources.configuration.orientation)
 
         // Add AnnotationFragment if not already present
         if (savedInstanceState == null) {
@@ -386,6 +421,27 @@ class MainActivity : AppCompatActivity() {
         // --- FAB Menu logic ---
         setupFabMenu()
         setFabMenuOrientation(resources.configuration.orientation)
+
+        // Collect direction overlay data and update UI
+        lifecycleScope.launch {
+            repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                locationController.directionOverlayData.collect { data ->
+                    // Animated compass band update
+                    updateCompassBand(data.headingDegrees)
+                    degreeText.text = String.format("%.1f°", data.headingDegrees)
+                    speedText.text = String.format("%d", data.speedMph.toInt())
+                    altitudeText.text = String.format("%.0f", data.altitudeFt)
+                    latLngText.text = String.format("%.7f, %.7f", data.latitude, data.longitude)
+                }
+            }
+        }
+
+        detailsContainer = directionOverlay.findViewById(R.id.detailsContainer)
+        // Make the whole overlay clickable for toggling
+        directionOverlay.setOnClickListener {
+            toggleOverlayExpanded()
+        }
+        updateOverlayExpansion(animated = false)
     }
 
     private fun observeMeshNetworkState() {
@@ -665,8 +721,101 @@ class MainActivity : AppCompatActivity() {
         fabMenuContainer.orientation = if (orientation == Configuration.ORIENTATION_LANDSCAPE) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
     }
 
+    private fun updateDirectionOverlayPosition(orientation: Int) {
+        val params = directionOverlay.layoutParams as androidx.constraintlayout.widget.ConstraintLayout.LayoutParams
+        fun dpToPx(dp: Int): Int = (dp * resources.displayMetrics.density + 0.5f).toInt()
+        if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            // Bottom end (right), with margin to avoid FABs
+            params.startToStart = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.UNSET
+            params.endToEnd = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
+            params.bottomToBottom = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
+            params.topToTop = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.UNSET
+            params.marginEnd = dpToPx(96) // 96dp, enough to avoid FABs (adjust as needed)
+            params.bottomMargin = dpToPx(24)
+        } else {
+            // Bottom center
+            params.startToStart = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
+            params.endToEnd = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
+            params.bottomToBottom = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
+            params.topToTop = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.UNSET
+            params.marginEnd = 0
+            params.bottomMargin = dpToPx(24)
+        }
+        directionOverlay.layoutParams = params
+    }
+
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         setFabMenuOrientation(newConfig.orientation)
+        updateDirectionOverlayPosition(newConfig.orientation)
+    }
+
+    private fun updateCompassBand(heading: Float) {
+        // Smooth the heading
+        val prev = smoothedHeading ?: heading
+        val smooth = prev + headingSmoothingAlpha * ((heading - prev + 360) % 360).let { if (it > 180) it - 360 else it }
+        smoothedHeading = (smooth + 360) % 360
+        val useHeading = smoothedHeading!!
+        // 8 main directions
+        val directions = listOf("N", "NE", "E", "SE", "S", "SW", "W", "NW", "N", "NE", "E") // repeat for wrap
+        val total = 8
+        // Calculate the exact position between directions
+        val pos = (useHeading / 45f) % total
+        val centerIndex = pos.toInt()
+        val frac = pos - centerIndex
+        // Show 5 directions: two before, center, two after
+        for (i in -2..2) {
+            val dirIndex = (centerIndex + i + total) % total
+            val tv = compassLetters[i + 2]
+            tv.text = directions[dirIndex]
+            // Fade and scale based on distance from center (smooth interpolation)
+            val dist = Math.abs(i - frac)
+            val alpha = lerp(1.0f, 0.3f, dist / 2f)
+            val scale = lerp(1.2f, 0.8f, dist / 2f)
+            tv.setTextColor(if (dist < 0.5f) 0xFFF0F0F0.toInt() else 0xFFB0B0B0.toInt())
+            tv.setTypeface(null, if (dist < 0.5f) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+            tv.alpha = alpha
+            tv.scaleX = scale
+            tv.scaleY = scale
+        }
+        // More accurate translation: use total band width and number of visible letters
+        compassBand.post {
+            val bandWidth = compassBand.width.toFloat()
+            val visibleCount = compassLetters.size
+            val offset = (frac) * (bandWidth / visibleCount)
+            // Animate translationX for smooth movement
+            compassBand.animate().translationX(-offset).setDuration(80).setUpdateListener(null).start()
+            lastTapeOffset = -offset
+        }
+    }
+
+    private fun lerp(a: Float, b: Float, t: Float): Float {
+        return a + (b - a) * t.coerceIn(0f, 1f)
+    }
+
+    private fun toggleOverlayExpanded() {
+        isOverlayExpanded = !isOverlayExpanded
+        updateOverlayExpansion(animated = true)
+    }
+
+    private fun updateOverlayExpansion(animated: Boolean) {
+        val details = detailsContainer
+        if (isOverlayExpanded) {
+            // Expand: show details, rotate chevron down
+            if (animated) {
+                details.animate().alpha(1f).setDuration(150).withStartAction { details.visibility = View.VISIBLE }.start()
+            } else {
+                details.alpha = 1f
+                details.visibility = View.VISIBLE
+            }
+        } else {
+            // Collapse: hide details, rotate chevron up
+            if (animated) {
+                details.animate().alpha(0f).setDuration(150).withEndAction { details.visibility = View.GONE }.start()
+            } else {
+                details.alpha = 0f
+                details.visibility = View.GONE
+            }
+        }
     }
 }

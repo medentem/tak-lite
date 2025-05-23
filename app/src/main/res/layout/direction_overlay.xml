@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/directionOverlayContainer"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/overlay_bg"
+    android:padding="20dp"
+    android:gravity="center"
+    android:elevation="8dp">
+
+    <FrameLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center">
+        <LinearLayout
+            android:id="@+id/compassBand"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:layout_marginTop="-2dp"
+            android:layout_marginBottom="4dp">
+            <TextView
+                android:id="@+id/compassLetter0"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="W"
+                android:textSize="18sp"
+                android:textColor="#B0B0B0"
+                android:layout_marginEnd="8dp"/>
+            <TextView
+                android:id="@+id/compassLetter1"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="NW"
+                android:textSize="18sp"
+                android:textColor="#B0B0B0"
+                android:layout_marginEnd="8dp"/>
+            <TextView
+                android:id="@+id/compassLetter2"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="N"
+                android:textSize="18sp"
+                android:textColor="#F0F0F0"
+                android:textStyle="bold"
+                android:layout_marginEnd="8dp"/>
+            <TextView
+                android:id="@+id/compassLetter3"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="NE"
+                android:textSize="18sp"
+                android:textColor="#B0B0B0"
+                android:layout_marginEnd="8dp"/>
+            <TextView
+                android:id="@+id/compassLetter4"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="E"
+                android:textSize="18sp"
+                android:textColor="#B0B0B0"/>
+        </LinearLayout>
+        <View
+            android:id="@+id/compassCenterLine"
+            android:layout_width="2dp"
+            android:layout_height="32dp"
+            android:layout_gravity="center"
+            android:background="#F0F0F0" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/degreeText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="0.0°"
+        android:textSize="24sp"
+        android:textColor="#F0F0F0"
+        android:gravity="center" />
+
+    <LinearLayout
+        android:id="@+id/detailsContainer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:layout_marginTop="0dp">
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center">
+            <TextView
+                android:id="@+id/speedText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="1.2"
+                android:textSize="20sp"
+                android:textColor="#F0F0F0"
+                android:textStyle="bold" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="mph"
+                android:textSize="12sp"
+                android:textColor="#B0B0B0" />
+        </LinearLayout>
+        <View
+            android:layout_width="32dp"
+            android:layout_height="0dp" />
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center">
+            <TextView
+                android:id="@+id/altitudeText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="958"
+                android:textSize="20sp"
+                android:textColor="#F0F0F0"
+                android:textStyle="bold" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="ft"
+                android:textSize="12sp"
+                android:textColor="#B0B0B0" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/latLngText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="43.0938374, -88.0917566"
+        android:textSize="16sp"
+        android:textColor="#B0B0B0"
+        android:gravity="center"
+        android:layout_marginTop="8dp" />
+
+</LinearLayout> 
