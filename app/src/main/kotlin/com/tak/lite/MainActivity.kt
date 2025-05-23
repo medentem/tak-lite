@@ -5,7 +5,6 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.os.Build
 import android.os.Bundle
 import android.view.MotionEvent
 import android.view.View
@@ -22,13 +21,11 @@ import com.tak.lite.databinding.ActivityMainBinding
 import com.tak.lite.ui.audio.AudioController
 import com.tak.lite.ui.location.LocationController
 import com.tak.lite.ui.location.LocationSource
-import com.tak.lite.ui.map.AnnotationOverlayView
-import com.tak.lite.viewmodel.AnnotationViewModel
+import com.tak.lite.ui.map.AnnotationFragment
+import com.tak.lite.ui.map.FanMenuView
 import com.tak.lite.viewmodel.AudioViewModel
 import com.tak.lite.viewmodel.MeshNetworkUiState
 import com.tak.lite.viewmodel.MeshNetworkViewModel
-import com.tak.lite.ui.map.FanMenuView
-import com.tak.lite.ui.map.AnnotationFragment
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -48,7 +45,6 @@ class MainActivity : AppCompatActivity() {
     private var mapLibreMap: MapLibreMap? = null
     private val PERMISSIONS_REQUEST_CODE = 100
     private val viewModel: MeshNetworkViewModel by viewModels()
-    private val annotationViewModel: AnnotationViewModel by viewModels()
     private val peerIdToNickname = mutableMapOf<String, String?>()
     private val audioViewModel: AudioViewModel by viewModels()
     private lateinit var mapController: com.tak.lite.ui.map.MapController
@@ -174,7 +170,6 @@ class MainActivity : AppCompatActivity() {
         locationController = LocationController(
             activity = this,
             onLocationUpdate = { location ->
-                val latLng = LatLng(location.latitude, location.longitude)
                 val currentZoom = mapController.mapLibreMap?.cameraPosition?.zoom?.toFloat() ?: DEFAULT_US_ZOOM.toFloat()
                 saveLastLocation(location.latitude, location.longitude, currentZoom)
                 viewModel.sendLocationUpdate(location.latitude, location.longitude)
@@ -223,6 +218,11 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         )
+        // FIX: Start location updates if permissions are already granted
+        if (androidx.core.app.ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED ||
+            androidx.core.app.ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            locationController.startLocationUpdates()
+        }
         locationController.checkAndRequestPermissions(PERMISSIONS_REQUEST_CODE)
 
         audioController = AudioController(
@@ -340,8 +340,6 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "Location permission not granted", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            isTrackingLocation = true
-            map.locationComponent.cameraMode = org.maplibre.android.location.modes.CameraMode.TRACKING
             // Optionally recenter to last known location for instant feedback
             locationController.getLastKnownLocation { location ->
                 if (location != null) {
@@ -352,6 +350,8 @@ class MainActivity : AppCompatActivity() {
                         map.moveCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(latLng, targetZoom))
                     }
                 }
+                isTrackingLocation = true
+                map.locationComponent.cameraMode = org.maplibre.android.location.modes.CameraMode.TRACKING
             }
         }
     }
