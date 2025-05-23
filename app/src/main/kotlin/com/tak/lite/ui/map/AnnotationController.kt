@@ -103,6 +103,7 @@ class AnnotationController(
                 fanMenuView.visibility = View.GONE
             }
         }, screenSize)
+        fanMenuView.bringToFront()
         fanMenuView.visibility = View.VISIBLE
     }
 
@@ -150,6 +151,7 @@ class AnnotationController(
                 fanMenuView.visibility = View.GONE
             }
         }, screenSize)
+        fanMenuView.bringToFront()
         fanMenuView.visibility = View.VISIBLE
     }
 
@@ -250,6 +252,7 @@ class AnnotationController(
                 fanMenuView.visibility = View.GONE
             }
         }, screenSize)
+        fanMenuView.bringToFront()
         fanMenuView.visibility = View.VISIBLE
     }
 
@@ -273,6 +276,7 @@ class AnnotationController(
                 fanMenuView.visibility = View.GONE
             }
         }, screenSize)
+        fanMenuView.bringToFront()
         fanMenuView.visibility = View.VISIBLE
     }
 

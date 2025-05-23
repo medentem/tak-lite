@@ -13,12 +13,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <com.tak.lite.ui.map.AnnotationOverlayView
-        android:id="@+id/annotationOverlayView"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:visibility="visible" />
-
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/pttButton"
         android:layout_width="wrap_content"
@@ -127,12 +121,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:backgroundTint="@android:color/holo_blue_dark" />
 
-    <com.tak.lite.ui.map.FanMenuView
-        android:id="@+id/fanMenuView"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:visibility="gone" />
-
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/nicknameButton"
         android:layout_width="wrap_content"
@@ -205,7 +193,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="@android:color/transparent"
-        android:visibility="gone" />
+        android:visibility="visible" />
 
     <LinearLayout
         android:id="@+id/locationSourceContainer"

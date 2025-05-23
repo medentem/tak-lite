@@ -88,6 +88,8 @@ class AnnotationOverlayView @JvmOverloads constructor(
         invalidate()
     }
 
+    var fanMenuView: FanMenuView? = null
+
     init {
         timerHandler.post(timerRunnable)
     }
@@ -252,7 +254,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
                                 for (i in 0 until screenPoints.size - 1) {
                                     val p1 = PointF(screenPoints[i].x, screenPoints[i].y)
                                     val p2 = PointF(screenPoints[i + 1].x, screenPoints[i + 1].y)
-                                    drawLine(canvas, p1, p2, annotation, showLabel = anyLong, minDistMiles = minDistMiles, segmentIndex = i)
+                                    drawLine(canvas, p1, p2, annotation, showLabel = anyLong, segmentIndex = i)
                                 }
                             }
                         }
@@ -298,7 +300,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
                             for (i in 0 until screenPoints.size - 1) {
                                 val p1 = PointF(screenPoints[i].x, screenPoints[i].y)
                                 val p2 = PointF(screenPoints[i + 1].x, screenPoints[i + 1].y)
-                                drawLine(canvas, p1, p2, annotation, showLabel = anyLong, minDistMiles = minDistMiles, segmentIndex = i)
+                                drawLine(canvas, p1, p2, annotation, showLabel = anyLong, segmentIndex = i)
                             }
                         }
                     }
@@ -379,7 +381,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
         }
     }
 
-    private fun drawLine(canvas: Canvas, point1: PointF, point2: PointF, annotation: MapAnnotation.Line, showLabel: Boolean, minDistMiles: Float, segmentIndex: Int) {
+    private fun drawLine(canvas: Canvas, point1: PointF, point2: PointF, annotation: MapAnnotation.Line, showLabel: Boolean, segmentIndex: Int) {
         paint.color = annotation.color.toColor()
         // Set line style
         paint.pathEffect = when (annotation.style) {

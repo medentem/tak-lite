@@ -17,6 +17,7 @@ import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.sin
 import kotlin.math.sqrt
+import android.util.Log
 
 class FanMenuView @JvmOverloads constructor(
     context: Context,
@@ -420,19 +421,23 @@ class FanMenuView @JvmOverloads constructor(
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        Log.d("FanMenuView", "onTouchEvent: action=${event.action}, x=${event.x}, y=${event.y}, visible=$visibility, clickable=$isClickable")
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
                 val distance = hypot(event.x - center.x, event.y - center.y)
                 val inMenu = isPointInMenu(event.x, event.y)
+                Log.d("FanMenuView", "ACTION_DOWN: distance=$distance, inMenu=$inMenu")
                 if (distance < centerHoleRadius) {
                     // Touched the center hole
                     if (!isTransitioning) {
+                        Log.d("FanMenuView", "Dismissing menu from center hole")
                         dismissMenu()
                     }
                     return true
                 } else if (!inMenu) {
                     // Touched outside the fan menu
                     if (!isTransitioning) {
+                        Log.d("FanMenuView", "Dismissing menu from outside fan")
                         dismissMenu()
                     }
                     return true
@@ -442,15 +447,18 @@ class FanMenuView @JvmOverloads constructor(
                 return true
             }
             MotionEvent.ACTION_MOVE -> {
+                Log.d("FanMenuView", "ACTION_MOVE: x=${event.x}, y=${event.y}")
                 // Update selection based on current touch position
                 updateSelectedItem(event.x, event.y)
                 return true
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                Log.d("FanMenuView", "ACTION_UP/CANCEL: selectedIndex=$selectedIndex")
                 if (event.action == MotionEvent.ACTION_UP) {
                     selectedIndex?.let { index ->
                         if (index in options.indices) {
                             isTransitioning = true
+                            Log.d("FanMenuView", "Option selected: $index -> ${options[index]}")
                             if (listener?.onOptionSelected(options[index]) == false) {
                                 dismissMenu()
                             }
@@ -467,54 +475,44 @@ class FanMenuView @JvmOverloads constructor(
 
     private fun updateSelectedItem(x: Float, y: Float) {
         val distance = hypot(x - center.x, y - center.y)
-        
-        // Find which option was selected
         val angle = atan2(y - center.y, x - center.x)
         val normalizedAngle = (angle + 2 * Math.PI) % (2 * Math.PI)
         val startAngle = (menuStartAngle + 2 * Math.PI) % (2 * Math.PI)
         val endAngle = (startAngle + menuFanAngle) % (2 * Math.PI)
-        
-        // Check if the touch is within the fan menu's angle range
         val inFan = if (startAngle < endAngle) {
             normalizedAngle in startAngle..endAngle
         } else {
             normalizedAngle >= startAngle || normalizedAngle <= endAngle
         }
-        
+        Log.d("FanMenuView", "updateSelectedItem: x=$x, y=$y, distance=$distance, inFan=$inFan")
         if (!inFan) {
             selectedIndex = null
             invalidate()
             return
         }
-        
-        // Determine which ring was touched
         val ring = when {
             distance < menuRadius + iconRadius -> 0 // Inner ring
             distance < menuRadius + ringSpacing + iconRadius && numOuter > 0 -> 1 // Outer ring
-            else -> return // Between rings or outside
+            else -> {
+                Log.d("FanMenuView", "Touch between rings or outside")
+                return // Between rings or outside
+            }
         }
-        
-        // Calculate the angle step for the appropriate ring
         val itemsInRing = if (ring == 0) numInner else numOuter
         val angleStep = menuFanAngle / itemsInRing
-        
-        // Calculate the relative angle within the ring
         val relativeAngle = if (normalizedAngle < startAngle) {
             normalizedAngle + 2 * Math.PI - startAngle
         } else {
             normalizedAngle - startAngle
         }
-        
-        // Calculate the index within the ring
         val idxInRing = (relativeAngle / angleStep).toInt()
-        
-        // Convert to global index
         val index = if (ring == 0) idxInRing else numInner + idxInRing
-        
+        Log.d("FanMenuView", "updateSelectedItem: ring=$ring, idxInRing=$idxInRing, index=$index, selectedIndex=$selectedIndex")
         if (index in options.indices) {
             if (selectedIndex != index) {
                 selectedIndex = index
                 invalidate()
+                Log.d("FanMenuView", "Selection changed to $index")
             }
         }
     }

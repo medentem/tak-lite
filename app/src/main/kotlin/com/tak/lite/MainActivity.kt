@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.os.Build
 import android.os.Bundle
+import android.view.MotionEvent
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -14,6 +15,8 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.lifecycleScope
 import com.tak.lite.databinding.ActivityMainBinding
 import com.tak.lite.ui.audio.AudioController
@@ -24,6 +27,8 @@ import com.tak.lite.viewmodel.AnnotationViewModel
 import com.tak.lite.viewmodel.AudioViewModel
 import com.tak.lite.viewmodel.MeshNetworkUiState
 import com.tak.lite.viewmodel.MeshNetworkViewModel
+import com.tak.lite.ui.map.FanMenuView
+import com.tak.lite.ui.map.AnnotationFragment
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -38,7 +43,7 @@ const val DEFAULT_US_ZOOM = 4.0
 @AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var binding: ActivityMainBinding
+    lateinit var binding: ActivityMainBinding
     private lateinit var mapView: MapView
     private var mapLibreMap: MapLibreMap? = null
     private val PERMISSIONS_REQUEST_CODE = 100
@@ -47,11 +52,8 @@ class MainActivity : AppCompatActivity() {
     private val peerIdToNickname = mutableMapOf<String, String?>()
     private val audioViewModel: AudioViewModel by viewModels()
     private lateinit var mapController: com.tak.lite.ui.map.MapController
-    private lateinit var annotationController: com.tak.lite.ui.map.AnnotationController
     private lateinit var locationController: LocationController
     private lateinit var audioController: AudioController
-    private lateinit var fanMenuView: com.tak.lite.ui.map.FanMenuView
-    private lateinit var annotationOverlayView: AnnotationOverlayView
     private val peerMarkers = mutableMapOf<String, org.maplibre.android.annotations.Marker>()
     private val peerLastSeen = mutableMapOf<String, Long>()
     private lateinit var locationSourceOverlay: FrameLayout
@@ -60,32 +62,25 @@ class MainActivity : AppCompatActivity() {
     private var is3DBuildingsEnabled = false
     private var isTrackingLocation = false
 
+    // LiveData to notify when the map is ready
+    private val _mapReadyLiveData = MutableLiveData<MapLibreMap>()
+    val mapReadyLiveData: LiveData<MapLibreMap> get() = _mapReadyLiveData
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // Add AnnotationFragment if not already present
+        if (savedInstanceState == null) {
+            supportFragmentManager.beginTransaction()
+                .replace(R.id.mainFragmentContainer, com.tak.lite.ui.map.AnnotationFragment())
+                .commit()
+        }
+
         loadNickname()?.let { viewModel.setLocalNickname(it) }
 
         mapView = findViewById(R.id.mapView)
-        fanMenuView = findViewById(R.id.fanMenuView)
-        annotationOverlayView = findViewById(R.id.annotationOverlayView)
-        annotationController = com.tak.lite.ui.map.AnnotationController(
-            context = this,
-            binding = binding,
-            annotationViewModel = annotationViewModel,
-            fanMenuView = fanMenuView,
-            annotationOverlayView = annotationOverlayView,
-            onAnnotationChanged = { annotationController.renderAllAnnotations(mapController.mapLibreMap) }
-        )
-        annotationOverlayView.annotationController = annotationController
-        annotationController.setupLineToolButtons(
-            binding.lineToolConfirmButton,
-            binding.lineToolCancelButton,
-            binding.lineToolButtonFrame,
-            binding.lineToolLabel,
-            binding.lineToolButton
-        )
 
         val lastLocation = loadLastLocation()
         val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
@@ -117,10 +112,8 @@ class MainActivity : AppCompatActivity() {
             defaultZoom = DEFAULT_US_ZOOM,
             onMapReady = { map ->
                 mapLibreMap = map
+                _mapReadyLiveData.postValue(map)
                 mapController.setMapType(initialMapMode)
-                annotationController.setupAnnotationOverlay(map)
-                annotationController.setupPoiLongPressListener()
-                annotationController.setupMapLongPress(map)
                 // Center on last known location if available
                 lastLocation?.let { (lat, lon, zoom) ->
                     val latLng = org.maplibre.android.geometry.LatLng(lat, lon)
@@ -141,27 +134,9 @@ class MainActivity : AppCompatActivity() {
                         saveLastLocation(location.latitude, location.longitude, currentZoom.toFloat())
                     }
                 }
-                // Add map click listener for line tool
-                map.addOnMapClickListener { latLng ->
-                    if (annotationController.isLineDrawingMode) {
-                        annotationController.tempLinePoints.add(latLng)
-                        annotationOverlayView.setTempLinePoints(annotationController.tempLinePoints)
-                        annotationController.updateLineToolConfirmState()
-                        true // consume event
-                    } else {
-                        false
-                    }
-                }
-                // Add camera move listener for syncing annotations
-                map.addOnCameraMoveListener {
-                    annotationController.syncAnnotationOverlayView(map)
-                    annotationOverlayView.setZoom(map.cameraPosition.zoom.toFloat())
-                }
-                // --- Add camera move started listener to disable tracking on user gesture ---
                 map.addOnCameraMoveStartedListener { reason ->
                     if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) {
                         isTrackingLocation = false
-                        // Set camera mode to NONE for visual feedback
                         map.locationComponent.cameraMode = org.maplibre.android.location.modes.CameraMode.NONE
                     }
                 }
@@ -177,16 +152,12 @@ class MainActivity : AppCompatActivity() {
             getFilesDir = { filesDir },
             getDarkModePref = { prefs.getString("map_dark_mode", "system") ?: "system" }
         )
-        // Set the onStyleChanged callback after construction
         mapController.setOnStyleChangedCallback {
-            annotationController.setupAnnotationOverlay(mapController.mapLibreMap)
-            annotationController.renderAllAnnotations(mapController.mapLibreMap)
+            // Removed annotationController.setupAnnotationOverlay, renderAllAnnotations
         }
-        // Set the onMapTypeChanged callback
         mapController.setOnMapTypeChangedCallback { mapType ->
             // toggle3dFab.visibility = if (mapType == com.tak.lite.ui.map.MapController.MapType.STREETS) View.VISIBLE else View.GONE
         }
-        annotationController.mapController = mapController
         mapController.onCreate(savedInstanceState, lastLocation)
 
         locationSourceOverlay = findViewById(R.id.locationSourceOverlay)
@@ -316,14 +287,6 @@ class MainActivity : AppCompatActivity() {
                 peerMarkers.forEach { (peerId, marker) ->
                     updateMarkerColor(marker, peerId)
                 }
-            }
-        }
-
-        // Observe annotation state changes
-        lifecycleScope.launch {
-            annotationViewModel.uiState.collect { _ ->
-                annotationController.renderAllAnnotations(mapController.mapLibreMap)
-                annotationController.syncAnnotationOverlayView(mapController.mapLibreMap)
             }
         }
 
@@ -536,34 +499,6 @@ class MainActivity : AppCompatActivity() {
         audioController.cleanupAudioUI()
     }
 
-    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
-        if (::fanMenuView.isInitialized && fanMenuView.visibility == View.VISIBLE) {
-            // Offset event coordinates if needed (if fanMenuView is not full screen)
-            val location = IntArray(2)
-            fanMenuView.getLocationOnScreen(location)
-            val offsetX = location[0]
-            val offsetY = location[1]
-            val event = android.view.MotionEvent.obtain(ev)
-            event.offsetLocation(-offsetX.toFloat(), -offsetY.toFloat())
-            val handled = fanMenuView.dispatchTouchEvent(event)
-            event.recycle()
-            return handled
-        }
-        // --- Forward to annotationOverlayView if visible ---
-        if (::annotationOverlayView.isInitialized && annotationOverlayView.visibility == View.VISIBLE) {
-            val location = IntArray(2)
-            annotationOverlayView.getLocationOnScreen(location)
-            val offsetX = location[0]
-            val offsetY = location[1]
-            val event = android.view.MotionEvent.obtain(ev)
-            event.offsetLocation(-offsetX.toFloat(), -offsetY.toFloat())
-            val handled = annotationOverlayView.dispatchTouchEvent(event)
-            event.recycle()
-            if (handled) return true
-        }
-        return super.dispatchTouchEvent(ev)
-    }
-
     private fun createPeerMarkerIcon(color: Int): Bitmap {
         val size = 24
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
@@ -615,4 +550,15 @@ class MainActivity : AppCompatActivity() {
 
     // Add this method to expose the shared MapController instance
     fun getMapController(): com.tak.lite.ui.map.MapController = mapController
+
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        // Try to find the AnnotationFragment
+        val fragment = supportFragmentManager.findFragmentById(R.id.mainFragmentContainer) as? AnnotationFragment
+        val fanMenuView = fragment?.view?.findViewById<FanMenuView>(R.id.fanMenuView)
+        if (fanMenuView?.visibility == View.VISIBLE) {
+            fanMenuView.dispatchTouchEvent(event)
+            return true
+        }
+        return super.dispatchTouchEvent(event)
+    }
 }

@@ -4,13 +4,13 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.graphics.PointF
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import com.tak.lite.MainActivity
 import com.tak.lite.R
 import com.tak.lite.data.model.AnnotationType
-import com.tak.lite.databinding.AnnotationControlsBinding
 import com.tak.lite.databinding.FragmentAnnotationBinding
 import com.tak.lite.model.AnnotationColor
 import com.tak.lite.model.LineStyle
@@ -18,6 +18,8 @@ import com.tak.lite.model.PointShape
 import com.tak.lite.viewmodel.AnnotationUiState
 import com.tak.lite.viewmodel.AnnotationViewModel
 import com.tak.lite.viewmodel.MeshNetworkViewModel
+import com.tak.lite.ui.map.AnnotationController
+import com.tak.lite.ui.map.FanMenuView
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -31,11 +33,12 @@ class AnnotationFragment : Fragment() {
 
     private var _binding: FragmentAnnotationBinding? = null
     private val binding get() = _binding!!
-    private var controlsBinding: AnnotationControlsBinding? = null
 
     private val viewModel: AnnotationViewModel by viewModels()
     private val meshNetworkViewModel: MeshNetworkViewModel by viewModels()
-    private var annotationOverlayView: AnnotationOverlayView? = null
+    private lateinit var annotationController: AnnotationController
+    private lateinit var annotationOverlayView: AnnotationOverlayView
+    private lateinit var fanMenuView: FanMenuView
     private var currentType: AnnotationType = AnnotationType.POINT
     private var currentColor: AnnotationColor = AnnotationColor.GREEN
     private var currentShape: PointShape = PointShape.CIRCLE
@@ -50,52 +53,80 @@ class AnnotationFragment : Fragment() {
         savedInstanceState: Bundle?
     ): View {
         _binding = FragmentAnnotationBinding.inflate(inflater, container, false)
-        controlsBinding = AnnotationControlsBinding.inflate(inflater, binding.root, true)
         return binding.root
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        val mapController = (activity as? MainActivity)?.getMapController()
-        mapController?.let { controller ->
-            controller.setOnStyleChangedCallback {
-                setupOverlayView(controller)
-                setupMapInteraction(controller)
+        annotationOverlayView = binding.root.findViewById(R.id.annotationOverlayView)
+        fanMenuView = binding.root.findViewById(R.id.fanMenuView)
+        val mainActivity = activity as? MainActivity
+        val mapController = mainActivity?.getMapController()
+
+        // Observe mapReadyLiveData from MainActivity
+        mainActivity?.mapReadyLiveData?.observe(viewLifecycleOwner) { mapLibreMap ->
+            // All annotation event setup goes here!
+            annotationController = AnnotationController(
+                context = requireContext(),
+                binding = mainActivity.binding, // or pass only what's needed
+                annotationViewModel = viewModel,
+                fanMenuView = fanMenuView,
+                annotationOverlayView = annotationOverlayView,
+                onAnnotationChanged = { annotationController.renderAllAnnotations(mapLibreMap) }
+            )
+            annotationOverlayView.annotationController = annotationController
+
+            // Access FABs from the activity layout
+            val lineToolButton = requireActivity().findViewById<View>(R.id.lineToolButton)
+            val lineToolConfirmButton = requireActivity().findViewById<View>(R.id.lineToolConfirmButton)
+            val lineToolCancelButton = requireActivity().findViewById<View>(R.id.lineToolCancelButton)
+            val lineToolButtonFrame = requireActivity().findViewById<View>(R.id.lineToolButtonFrame)
+            val lineToolLabel = requireActivity().findViewById<View>(R.id.lineToolLabel)
+
+            annotationController.setupLineToolButtons(
+                lineToolConfirmButton,
+                lineToolCancelButton,
+                lineToolButtonFrame,
+                lineToolLabel,
+                lineToolButton
+            )
+            mapController?.setOnStyleChangedCallback {
+                annotationController.setupAnnotationOverlay(mapLibreMap)
+                annotationController.renderAllAnnotations(mapLibreMap)
+            }
+            annotationController.mapController = mapController
+            mapLibreMap.addOnMapClickListener { latLng ->
+                if (annotationController.isLineDrawingMode) {
+                    annotationController.tempLinePoints.add(latLng)
+                    annotationOverlayView.setTempLinePoints(annotationController.tempLinePoints)
+                    annotationController.updateLineToolConfirmState()
+                    true
+                } else {
+                    false
+                }
+            }
+            mapLibreMap.addOnCameraMoveListener {
+                annotationController.syncAnnotationOverlayView(mapLibreMap)
+                annotationOverlayView.setZoom(mapLibreMap.cameraPosition.zoom.toFloat())
+            }
+            annotationController.setupAnnotationOverlay(mapLibreMap)
+            annotationController.setupPoiLongPressListener()
+            annotationController.setupMapLongPress(mapLibreMap)
+
+            // Now safe to launch these:
+            viewLifecycleOwner.lifecycleScope.launch {
+                meshNetworkViewModel.peerLocations.collectLatest { locations ->
+                    annotationOverlayView.updatePeerLocations(locations)
+                }
+            }
+            viewLifecycleOwner.lifecycleScope.launch {
+                viewModel.uiState.collectLatest {
+                    annotationController.renderAllAnnotations(mapController?.mapLibreMap)
+                    annotationController.syncAnnotationOverlayView(mapController?.mapLibreMap)
+                }
             }
         }
-        setupControls()
         observeViewModel()
-        viewLifecycleOwner.lifecycleScope.launch {
-            meshNetworkViewModel.peerLocations.collectLatest { locations ->
-                annotationOverlayView?.updatePeerLocations(locations)
-            }
-        }
-    }
-
-    private fun setupControls() {
-        controlsBinding?.apply {
-            btnPoint.setOnClickListener { currentType = AnnotationType.POINT }
-            btnLine.setOnClickListener { currentType = AnnotationType.LINE }
-            btnArea.setOnClickListener { currentType = AnnotationType.AREA }
-            btnClear.setOnClickListener { viewModel.clearAnnotations() }
-
-            btnColorGreen.setOnClickListener { currentColor = AnnotationColor.GREEN }
-            btnColorYellow.setOnClickListener { currentColor = AnnotationColor.YELLOW }
-            btnColorRed.setOnClickListener { currentColor = AnnotationColor.RED }
-            btnColorBlack.setOnClickListener { currentColor = AnnotationColor.BLACK }
-
-            btnShapeCircle.setOnClickListener { currentShape = PointShape.CIRCLE }
-            btnShapeExclamation.setOnClickListener { currentShape = PointShape.EXCLAMATION }
-
-            btnLineStyle.setOnClickListener {
-                currentLineStyle = if (currentLineStyle == LineStyle.SOLID) LineStyle.DASHED else LineStyle.SOLID
-                btnLineStyle.text = if (currentLineStyle == LineStyle.SOLID) "Dashed Line" else "Solid Line"
-            }
-            btnArrowHead.setOnClickListener {
-                currentArrowHead = !currentArrowHead
-                btnArrowHead.text = if (currentArrowHead) "Arrow Head" else "No Arrow"
-            }
-        }
     }
 
     private fun observeViewModel() {
@@ -107,73 +138,14 @@ class AnnotationFragment : Fragment() {
     }
 
     private fun updateUI(state: AnnotationUiState) {
-        annotationOverlayView?.updateAnnotations(state.annotations)
+        annotationOverlayView.updateAnnotations(state.annotations)
         currentColor = state.selectedColor
         currentShape = state.selectedShape
         isDrawing = state.isDrawing
     }
 
-    private fun setupMapInteraction(controller: MapController) {
-        controller.mapLibreMap?.addOnMapClickListener { latLng ->
-            when (currentType) {
-                AnnotationType.POINT -> viewModel.addPointOfInterest(latLng)
-                AnnotationType.LINE -> {
-                    if (!isDrawing) {
-                        isDrawing = true
-                        startPoint = latLng
-                    } else {
-                        isDrawing = false
-                        startPoint?.let { start ->
-                            viewModel.setCurrentLineStyle(currentLineStyle)
-                            viewModel.setCurrentArrowHead(currentArrowHead)
-                            viewModel.addLine(listOf(start, latLng))
-                        }
-                        startPoint = null
-                    }
-                }
-                AnnotationType.AREA -> {
-                    if (!isDrawing) {
-                        isDrawing = true
-                        startPoint = latLng
-                    } else {
-                        isDrawing = false
-                        startPoint?.let { start ->
-                            val radius = calculateDistance(start, latLng)
-                            viewModel.addArea(start, radius)
-                        }
-                        startPoint = null
-                    }
-                }
-            }
-            true
-        }
-    }
-
-    private fun setupOverlayView(controller: MapController) {
-        if (annotationOverlayView == null) {
-            annotationOverlayView = AnnotationOverlayView(requireContext())
-            binding.root.addView(annotationOverlayView)
-        }
-        controller.mapLibreMap?.addOnCameraMoveListener {
-            annotationOverlayView?.setProjection(controller.mapLibreMap?.projection)
-        }
-    }
-
-    private fun calculateDistance(start: LatLng, end: LatLng): Double {
-        val results = FloatArray(1)
-        android.location.Location.distanceBetween(
-            start.latitude,
-            start.longitude,
-            end.latitude,
-            end.longitude,
-            results
-        )
-        return results[0].toDouble()
-    }
-
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
-        controlsBinding = null
     }
 } 
