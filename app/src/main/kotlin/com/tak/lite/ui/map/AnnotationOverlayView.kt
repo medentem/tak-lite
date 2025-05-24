@@ -106,6 +106,11 @@ class AnnotationOverlayView @JvmOverloads constructor(
     private var lassoLongPressRunnable: Runnable? = null
     private var lassoLongPressDownPos: PointF? = null
 
+    // --- Annotation label state for quick tap ---
+    private var labelPoiIdToShow: String? = null
+    private var labelDismissHandler: Handler? = null
+    private val LABEL_DISPLAY_DURATION = 8000L // 3 seconds
+    
     init {
         timerHandler.post(timerRunnable)
     }
@@ -419,6 +424,10 @@ class AnnotationOverlayView @JvmOverloads constructor(
         // Draw timer indicator if annotation has expiration time
         annotation.expirationTime?.let {
             drawTimerIndicator(canvas, point, annotation.color.toColor(), annotation)
+        }
+        // Draw label if this is the tapped POI
+        if (annotation.id == labelPoiIdToShow) {
+            drawPoiLabel(canvas, point, annotation)
         }
     }
 
@@ -734,6 +743,10 @@ class AnnotationOverlayView @JvmOverloads constructor(
                             longPressCandidate = null
                         }
                         longPressHandler?.postDelayed(longPressRunnable!!, 500)
+                        // For quick tap: record down time/position
+                        quickTapCandidate = poi
+                        quickTapDownTime = System.currentTimeMillis()
+                        quickTapDownPos = PointF(event.x, event.y)
                         return true // Intercept only if touching a POI
                     }
                     // Check for line long press
@@ -751,7 +764,35 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     }
                     longPressCandidate = null
                     longPressLineCandidate = null
+                    // Do NOT hide label when tapping elsewhere
                     return false // Let the map handle the event
+                }
+                MotionEvent.ACTION_UP -> {
+                    longPressHandler?.removeCallbacks(longPressRunnable!!)
+                    // Quick tap detection
+                    quickTapCandidate?.let { candidate ->
+                        val upTime = System.currentTimeMillis()
+                        val upPos = PointF(event.x, event.y)
+                        val duration = upTime - (quickTapDownTime ?: 0L)
+                        val moved = quickTapDownPos?.let { hypot((upPos.x - it.x).toDouble(), (upPos.y - it.y).toDouble()) > 40 } ?: false
+                        if (duration < 300 && !moved) {
+                            // Quick tap detected
+                            showPoiLabel(candidate.id)
+                        }
+                    }
+                    longPressCandidate = null
+                    longPressLineCandidate = null
+                    quickTapCandidate = null
+                    quickTapDownTime = null
+                    quickTapDownPos = null
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    longPressHandler?.removeCallbacks(longPressRunnable!!)
+                    longPressCandidate = null
+                    longPressLineCandidate = null
+                    quickTapCandidate = null
+                    quickTapDownTime = null
+                    quickTapDownPos = null
                 }
                 MotionEvent.ACTION_MOVE -> {
                     longPressDownPos?.let { down ->
@@ -766,11 +807,6 @@ class AnnotationOverlayView @JvmOverloads constructor(
                             longPressLineCandidate = null
                         }
                     }
-                }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    longPressHandler?.removeCallbacks(longPressRunnable!!)
-                    longPressCandidate = null
-                    longPressLineCandidate = null
                 }
             }
             return longPressCandidate != null || longPressLineCandidate != null // Only consume if interacting with a POI or line
@@ -956,5 +992,96 @@ class AnnotationOverlayView @JvmOverloads constructor(
     fun hideLassoMenu() {
         lassoMenuVisible = false
         invalidate()
+    }
+
+    private fun showPoiLabel(poiId: String) {
+        labelPoiIdToShow = poiId
+        labelDismissHandler?.removeCallbacksAndMessages(null)
+        labelDismissHandler = Handler(Looper.getMainLooper())
+        labelDismissHandler?.postDelayed({
+            labelPoiIdToShow = null
+            invalidate()
+        }, LABEL_DISPLAY_DURATION)
+        invalidate()
+    }
+    private fun hidePoiLabel() {
+        labelPoiIdToShow = null
+        labelDismissHandler?.removeCallbacksAndMessages(null)
+        invalidate()
+    }
+
+    // --- Quick tap state ---
+    private var quickTapCandidate: MapAnnotation.PointOfInterest? = null
+    private var quickTapDownTime: Long? = null
+    private var quickTapDownPos: PointF? = null
+
+    private fun drawPoiLabel(canvas: Canvas, point: PointF, annotation: MapAnnotation.PointOfInterest) {
+        // --- Compose label text ---
+        val now = System.currentTimeMillis()
+        val ageMs = now - annotation.timestamp
+        val ageSec = ageMs / 1000
+        val min = ageSec / 60
+        val sec = ageSec % 60
+        val ageStr = if (min > 0) "${min}m ${sec}s old" else "${sec}s old"
+        val lat = annotation.position.latitude
+        val lon = annotation.position.longitude
+        val coordStr = String.format("%.5f, %.5f", lat, lon)
+        // --- Distance ---
+        val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+        val userLat = prefs.getFloat("last_lat", Float.NaN).toDouble()
+        val userLon = prefs.getFloat("last_lon", Float.NaN).toDouble()
+        val distStr = if (!userLat.isNaN() && !userLon.isNaN()) {
+            val distMeters = haversine(lat, lon, userLat, userLon)
+            val distMiles = distMeters / 1609.344
+            String.format("%.1fmi away", distMiles)
+        } else {
+            ""
+        }
+        val lines = listOf(ageStr, coordStr, distStr).filter { it.isNotBlank() }
+        // --- Draw pill background and text ---
+        val textSize = 36f
+        val padding = 24f
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            this.textSize = textSize
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.DEFAULT_BOLD
+        }
+        // Measure max width
+        var maxWidth = 0
+        lines.forEach { line ->
+            val bounds = android.graphics.Rect()
+            textPaint.getTextBounds(line, 0, line.length, bounds)
+            if (bounds.width() > maxWidth) maxWidth = bounds.width()
+        }
+        val fontMetrics = textPaint.fontMetrics
+        val lineHeight = (fontMetrics.descent - fontMetrics.ascent).toInt()
+        val totalHeight = lineHeight * lines.size + (lines.size - 1) * 8 + (padding * 2)
+        val rectWidth = maxWidth + (padding * 2)
+        val rectHeight = totalHeight.toFloat()
+        val rectLeft = point.x - rectWidth / 2
+        val rectTop = point.y - 60f - rectHeight // 60px above shape
+        val rectRight = point.x + rectWidth / 2
+        val rectBottom = rectTop + rectHeight
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(200, 0, 0, 0)
+            style = Paint.Style.FILL
+        }
+        canvas.drawRoundRect(
+            rectLeft,
+            rectTop,
+            rectRight,
+            rectBottom,
+            rectHeight / 2,
+            rectHeight / 2,
+            bgPaint
+        )
+        // Center the block of text vertically in the pill
+        val blockHeight = lineHeight * lines.size + (lines.size - 1) * 8
+        var textY = rectTop + (rectHeight - blockHeight) / 2 - fontMetrics.ascent
+        for (line in lines) {
+            canvas.drawText(line, point.x, textY, textPaint)
+            textY += lineHeight + 8 // 8px between lines
+        }
     }
 } 

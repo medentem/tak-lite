@@ -88,6 +88,9 @@ class MainActivity : AppCompatActivity() {
     private var smoothedHeading: Float? = null
     private val headingSmoothingAlpha = 0.15f // Lower = smoother, higher = more responsive
     private var lastTapeOffset: Float = 0f
+    private var compassBandAnimator: android.animation.ValueAnimator? = null // NEW: animator reference
+    private var lastAnimatedHeading: Float? = null // NEW: for thresholding
+    private val headingUpdateThreshold = 0.5f // Only update if heading changes by more than this
 
     private lateinit var detailsContainer: LinearLayout
     private var isOverlayExpanded = false
@@ -778,9 +781,13 @@ class MainActivity : AppCompatActivity() {
     private fun updateCompassBand(heading: Float) {
         // Smooth the heading
         val prev = smoothedHeading ?: heading
-        val smooth = prev + headingSmoothingAlpha * ((heading - prev + 360) % 360).let { if (it > 180) it - 360 else it }
+        val delta = ((heading - prev + 540) % 360) - 180 // shortest path
+        val smooth = prev + headingSmoothingAlpha * delta
         smoothedHeading = (smooth + 360) % 360
         val useHeading = smoothedHeading!!
+        // Only update if heading changes enough
+        if (lastAnimatedHeading != null && kotlin.math.abs(useHeading - lastAnimatedHeading!!) < headingUpdateThreshold) return
+        lastAnimatedHeading = useHeading
         // 8 main directions
         val directions = listOf("N", "NE", "E", "SE", "S", "SW", "W", "NW", "N", "NE", "E") // repeat for wrap
         val total = 8
@@ -808,8 +815,18 @@ class MainActivity : AppCompatActivity() {
             val bandWidth = compassBand.width.toFloat()
             val visibleCount = compassLetters.size
             val offset = (frac) * (bandWidth / visibleCount)
-            // Animate translationX for smooth movement
-            compassBand.animate().translationX(-offset).setDuration(80).setUpdateListener(null).start()
+            // Animate translationX for smooth movement using ValueAnimator
+            compassBandAnimator?.cancel() // Cancel any running animation
+            val currentTx = compassBand.translationX
+            if (kotlin.math.abs(currentTx + offset) < 0.5f) return@post // No need to animate if very close
+            compassBandAnimator = android.animation.ValueAnimator.ofFloat(currentTx, -offset).apply {
+                duration = 120 // Slightly longer for smoothness
+                interpolator = android.view.animation.DecelerateInterpolator()
+                addUpdateListener { anim ->
+                    compassBand.translationX = anim.animatedValue as Float
+                }
+                start()
+            }
             lastTapeOffset = -offset
         }
     }
