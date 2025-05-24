@@ -90,6 +90,22 @@ class AnnotationOverlayView @JvmOverloads constructor(
 
     var fanMenuView: FanMenuView? = null
 
+    // --- Lasso Selection State ---
+    private var isLassoMode = false
+    private var lassoPath: Path? = null
+    private var lassoPoints: MutableList<PointF>? = null
+    private var lassoSelectedAnnotations: List<MapAnnotation> = emptyList()
+    private var lassoMenuVisible: Boolean = false // NEW: Track if bulk menu is visible
+
+    // --- Lasso Selection Listener ---
+    interface LassoSelectionListener {
+        fun onLassoSelectionLongPress(selected: List<MapAnnotation>, screenPosition: PointF)
+    }
+    var lassoSelectionListener: LassoSelectionListener? = null
+    private var lassoLongPressHandler: Handler? = null
+    private var lassoLongPressRunnable: Runnable? = null
+    private var lassoLongPressDownPos: PointF? = null
+
     init {
         timerHandler.post(timerRunnable)
     }
@@ -317,6 +333,31 @@ class AnnotationOverlayView @JvmOverloads constructor(
                 }
             }
         }
+
+        // Draw lasso path if active or menu is visible
+        if ((isLassoMode || lassoMenuVisible) && lassoPath != null) {
+            val lassoPaint = Paint().apply {
+                color = Color.argb(128, 255, 0, 0)
+                style = Paint.Style.STROKE
+                strokeWidth = 5f
+                pathEffect = DashPathEffect(floatArrayOf(20f, 10f), 0f)
+            }
+            canvas.drawPath(lassoPath!!, lassoPaint)
+        }
+        // Highlight lasso-selected annotations
+        if (lassoSelectedAnnotations.isNotEmpty()) {
+            for (annotation in lassoSelectedAnnotations) {
+                val latLng = annotation.toMapLibreLatLng()
+                val screenPt = projection?.toScreenLocation(latLng) ?: continue
+                val pointF = PointF(screenPt.x, screenPt.y)
+                val highlightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.YELLOW
+                    style = Paint.Style.STROKE
+                    strokeWidth = 10f
+                }
+                canvas.drawCircle(pointF.x, pointF.y, 24f, highlightPaint)
+            }
+        }
     }
 
     private fun drawPoint(canvas: Canvas, point: PointF, annotation: MapAnnotation.PointOfInterest) {
@@ -533,19 +574,48 @@ class AnnotationOverlayView @JvmOverloads constructor(
         canvas.drawLine(center.x, center.y, endX, endY, handPaint)
 
         // Draw countdown text
-        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            this.color = color
-            textSize = 32f
-            textAlign = Paint.Align.CENTER
-        }
         val secondsRemaining = ((annotation.expirationTime ?: 0) - System.currentTimeMillis()) / 1000
         if (secondsRemaining > 0) {
-            canvas.drawText(
-                "${secondsRemaining}s",
-                center.x,
-                center.y + timerRadius + 35f,
-                textPaint
+            // Format time as Xm Ys or Xs
+            val minutes = secondsRemaining / 60
+            val seconds = secondsRemaining % 60
+            val label = if (minutes > 0) "${minutes}m ${seconds}s" else "${seconds}s"
+
+            // Prepare text paint
+            val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                this.color = Color.WHITE
+                textSize = 32f
+                textAlign = Paint.Align.CENTER
+                typeface = Typeface.DEFAULT_BOLD
+            }
+            // Measure text size
+            val textBounds = android.graphics.Rect()
+            textPaint.getTextBounds(label, 0, label.length, textBounds)
+            val paddingH = 32f
+            val paddingV = 16f
+            val rectWidth = textBounds.width() + paddingH * 2
+            val rectHeight = textBounds.height() + paddingV * 2
+            val rectLeft = center.x - rectWidth / 2
+            val rectTop = center.y + timerRadius + 20f
+            val rectRight = center.x + rectWidth / 2
+            val rectBottom = rectTop + rectHeight
+            // Draw pill background
+            val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                this.color = Color.argb(180, 0, 0, 0) // semi-transparent black
+                style = Paint.Style.FILL
+            }
+            canvas.drawRoundRect(
+                rectLeft,
+                rectTop,
+                rectRight,
+                rectBottom,
+                rectHeight / 2,
+                rectHeight / 2,
+                bgPaint
             )
+            // Draw the text centered in the pill
+            val textY = rectTop + rectHeight / 2 - textBounds.exactCenterY()
+            canvas.drawText(label, center.x, textY, textPaint)
         }
     }
 
@@ -601,58 +671,110 @@ class AnnotationOverlayView @JvmOverloads constructor(
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        when (event.action) {
-            MotionEvent.ACTION_DOWN -> {
-                val poi = findPoiAt(event.x, event.y)
-                if (poi != null) {
-                    longPressCandidate = poi
-                    longPressDownPos = PointF(event.x, event.y)
-                    longPressHandler = Handler(Looper.getMainLooper())
-                    longPressRunnable = Runnable {
-                        poiLongPressListener?.onPoiLongPressed(poi.id, longPressDownPos!!)
-                        longPressCandidate = null
+        if (isLassoMode) {
+            // --- Lasso mode handling (as currently implemented) ---
+            val x = event.x
+            val y = event.y
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    lassoPath = Path().apply { moveTo(x, y) }
+                    lassoPoints = mutableListOf(PointF(x, y))
+                    invalidate()
+                    // Prepare for long press
+                    if (lassoSelectedAnnotations.isNotEmpty()) {
+                        lassoLongPressDownPos = PointF(x, y)
+                        lassoLongPressHandler = Handler(Looper.getMainLooper())
+                        lassoLongPressRunnable = Runnable {
+                            lassoSelectionListener?.onLassoSelectionLongPress(lassoSelectedAnnotations, lassoLongPressDownPos!!)
+                        }
+                        lassoLongPressHandler?.postDelayed(lassoLongPressRunnable!!, 500)
                     }
-                    longPressHandler?.postDelayed(longPressRunnable!!, 500)
-                    return true // Intercept only if touching a POI
+                    return true
                 }
-                // Check for line long press
-                val lineHit = findLineAt(event.x, event.y)
-                if (lineHit != null) {
-                    longPressLineCandidate = lineHit.first
-                    longPressLineDownPos = PointF(event.x, event.y)
-                    longPressHandler = Handler(Looper.getMainLooper())
-                    longPressRunnable = Runnable {
-                        poiLongPressListener?.onLineLongPressed(lineHit.first.id, longPressLineDownPos!!)
-                        longPressLineCandidate = null
+                MotionEvent.ACTION_MOVE -> {
+                    lassoPath?.lineTo(x, y)
+                    lassoPoints?.add(PointF(x, y))
+                    invalidate()
+                    // Cancel long press if moved too far
+                    lassoLongPressDownPos?.let { down ->
+                        if (hypot((x - down.x).toDouble(), (y - down.y).toDouble()) > 40) {
+                            lassoLongPressHandler?.removeCallbacks(lassoLongPressRunnable!!)
+                            lassoLongPressDownPos = null
+                        }
                     }
-                    longPressHandler?.postDelayed(longPressRunnable!!, 500)
-                    return true // Intercept only if touching a line
+                    return true
                 }
-                longPressCandidate = null
-                longPressLineCandidate = null
-                return false // Let the map handle the event
+                MotionEvent.ACTION_UP -> {
+                    lassoPath?.close()
+                    lassoPoints?.add(PointF(x, y))
+                    // Perform selection
+                    lassoSelectedAnnotations = findAnnotationsInLasso()
+                    invalidate()
+                    lassoLongPressHandler?.removeCallbacks(lassoLongPressRunnable!!)
+                    lassoLongPressDownPos = null
+                    return true
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    lassoLongPressHandler?.removeCallbacks(lassoLongPressRunnable!!)
+                    lassoLongPressDownPos = null
+                }
             }
-            MotionEvent.ACTION_MOVE -> {
-                longPressDownPos?.let { down ->
-                    if (hypot((event.x - down.x).toDouble(), (event.y - down.y).toDouble()) > 40) {
-                        longPressHandler?.removeCallbacks(longPressRunnable!!)
-                        longPressCandidate = null
+            return super.onTouchEvent(event)
+        } else {
+            // --- Annotation edit mode (POI/line long press) ---
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    val poi = findPoiAt(event.x, event.y)
+                    if (poi != null) {
+                        longPressCandidate = poi
+                        longPressDownPos = PointF(event.x, event.y)
+                        longPressHandler = Handler(Looper.getMainLooper())
+                        longPressRunnable = Runnable {
+                            poiLongPressListener?.onPoiLongPressed(poi.id, longPressDownPos!!)
+                            longPressCandidate = null
+                        }
+                        longPressHandler?.postDelayed(longPressRunnable!!, 500)
+                        return true // Intercept only if touching a POI
+                    }
+                    // Check for line long press
+                    val lineHit = findLineAt(event.x, event.y)
+                    if (lineHit != null) {
+                        longPressLineCandidate = lineHit.first
+                        longPressLineDownPos = PointF(event.x, event.y)
+                        longPressHandler = Handler(Looper.getMainLooper())
+                        longPressRunnable = Runnable {
+                            poiLongPressListener?.onLineLongPressed(lineHit.first.id, longPressLineDownPos!!)
+                            longPressLineCandidate = null
+                        }
+                        longPressHandler?.postDelayed(longPressRunnable!!, 500)
+                        return true // Intercept only if touching a line
+                    }
+                    longPressCandidate = null
+                    longPressLineCandidate = null
+                    return false // Let the map handle the event
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    longPressDownPos?.let { down ->
+                        if (hypot((event.x - down.x).toDouble(), (event.y - down.y).toDouble()) > 40) {
+                            longPressHandler?.removeCallbacks(longPressRunnable!!)
+                            longPressCandidate = null
+                        }
+                    }
+                    longPressLineDownPos?.let { down ->
+                        if (hypot((event.x - down.x).toDouble(), (event.y - down.y).toDouble()) > 40) {
+                            longPressHandler?.removeCallbacks(longPressRunnable!!)
+                            longPressLineCandidate = null
+                        }
                     }
                 }
-                longPressLineDownPos?.let { down ->
-                    if (hypot((event.x - down.x).toDouble(), (event.y - down.y).toDouble()) > 40) {
-                        longPressHandler?.removeCallbacks(longPressRunnable!!)
-                        longPressLineCandidate = null
-                    }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    longPressHandler?.removeCallbacks(longPressRunnable!!)
+                    longPressCandidate = null
+                    longPressLineCandidate = null
                 }
             }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                longPressHandler?.removeCallbacks(longPressRunnable!!)
-                longPressCandidate = null
-                longPressLineCandidate = null
-            }
+            return longPressCandidate != null || longPressLineCandidate != null // Only consume if interacting with a POI or line
         }
-        return longPressCandidate != null || longPressLineCandidate != null // Only consume if interacting with a POI or line
     }
 
     private fun findPoiAt(x: Float, y: Float): MapAnnotation.PointOfInterest? {
@@ -701,6 +823,47 @@ class AnnotationOverlayView @JvmOverloads constructor(
         val dist = hypot((x - closestX).toDouble(), (y - closestY).toDouble())
         return dist < threshold
     }
+
+    private fun findAnnotationsInLasso(): List<MapAnnotation> {
+        val points = lassoPoints ?: return emptyList()
+        if (points.size < 3) return emptyList()
+        val path = android.graphics.Path()
+        path.moveTo(points[0].x, points[0].y)
+        for (pt in points.drop(1)) path.lineTo(pt.x, pt.y)
+        path.close()
+        val selected = mutableListOf<MapAnnotation>()
+        for (annotation in annotations) {
+            val latLng = annotation.toMapLibreLatLng()
+            val screenPt = projection?.toScreenLocation(latLng) ?: continue
+            val pointF = PointF(screenPt.x, screenPt.y)
+            val contains = android.graphics.Region().apply {
+                val bounds = android.graphics.RectF()
+                path.computeBounds(bounds, true)
+                setPath(path, android.graphics.Region(bounds.left.toInt(), bounds.top.toInt(), bounds.right.toInt(), bounds.bottom.toInt()))
+            }.contains(pointF.x.toInt(), pointF.y.toInt())
+            if (contains) selected.add(annotation)
+        }
+        return selected
+    }
+
+    fun activateLassoMode() {
+        isLassoMode = true
+        lassoPath = Path()
+        lassoPoints = mutableListOf()
+        lassoSelectedAnnotations = emptyList()
+        lassoMenuVisible = false // Reset menu state
+        invalidate()
+    }
+    fun deactivateLassoMode() {
+        android.util.Log.d("AnnotationOverlayView", "deactivateLassoMode() called")
+        isLassoMode = false
+        lassoPath = null
+        lassoPoints = null
+        lassoSelectedAnnotations = emptyList()
+        lassoMenuVisible = false // Reset menu state
+        invalidate()
+    }
+    fun getLassoSelectedAnnotations(): List<MapAnnotation> = lassoSelectedAnnotations
 
     // Haversine formula to calculate distance in meters between two lat/lon points
     private fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
@@ -784,5 +947,14 @@ class AnnotationOverlayView @JvmOverloads constructor(
             }
         }
         return if (accept) Pair(PointF(x0, y0), PointF(x1, y1)) else null
+    }
+
+    fun showLassoMenu() {
+        lassoMenuVisible = true
+        invalidate() // Force redraw to keep lasso visible
+    }
+    fun hideLassoMenu() {
+        lassoMenuVisible = false
+        invalidate()
     }
 } 

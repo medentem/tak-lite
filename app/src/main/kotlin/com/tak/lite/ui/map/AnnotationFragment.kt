@@ -20,6 +20,7 @@ import com.tak.lite.viewmodel.AnnotationViewModel
 import com.tak.lite.viewmodel.MeshNetworkViewModel
 import com.tak.lite.ui.map.AnnotationController
 import com.tak.lite.ui.map.FanMenuView
+import com.tak.lite.ui.map.BulkEditAction
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -125,6 +126,36 @@ class AnnotationFragment : Fragment() {
                     annotationController.syncAnnotationOverlayView(mapController?.mapLibreMap)
                 }
             }
+
+            annotationOverlayView.lassoSelectionListener = object : AnnotationOverlayView.LassoSelectionListener {
+                override fun onLassoSelectionLongPress(selected: List<com.tak.lite.model.MapAnnotation>, screenPosition: android.graphics.PointF) {
+                    if (selected.isNotEmpty()) {
+                        annotationOverlayView.showLassoMenu()
+                        annotationController.showBulkFanMenu(screenPosition) { action ->
+                            when (action) {
+                                is BulkEditAction.ChangeColor -> {
+                                    selected.forEach {
+                                        when (it) {
+                                            is com.tak.lite.model.MapAnnotation.PointOfInterest -> viewModel.updatePointOfInterest(it.id, newColor = action.color)
+                                            is com.tak.lite.model.MapAnnotation.Line -> viewModel.updateLine(it.id, newColor = action.color)
+                                            else -> {}
+                                        }
+                                    }
+                                }
+                                is BulkEditAction.SetExpiration -> {
+                                    selected.forEach { viewModel.setAnnotationExpiration(it.id, System.currentTimeMillis() + action.millis) }
+                                }
+                                is BulkEditAction.Delete -> {
+                                    selected.forEach { viewModel.removeAnnotation(it.id) }
+                                }
+                            }
+                            annotationOverlayView.hideLassoMenu()
+                            setLassoMode(false)
+                            (activity as? MainActivity)?.resetLassoFab()
+                        }
+                    }
+                }
+            }
         }
         observeViewModel()
     }
@@ -142,6 +173,15 @@ class AnnotationFragment : Fragment() {
         currentColor = state.selectedColor
         currentShape = state.selectedShape
         isDrawing = state.isDrawing
+    }
+
+    fun setLassoMode(active: Boolean) {
+        android.util.Log.d("AnnotationFragment", "setLassoMode($active)")
+        if (active) {
+            annotationOverlayView.activateLassoMode()
+        } else {
+            annotationOverlayView.deactivateLassoMode()
+        }
     }
 
     override fun onDestroyView() {

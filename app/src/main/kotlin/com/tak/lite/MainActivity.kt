@@ -92,6 +92,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var detailsContainer: LinearLayout
     private var isOverlayExpanded = false
 
+    private lateinit var lassoToolFab: com.google.android.material.floatingactionbutton.FloatingActionButton
+    private var isLassoActive = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -442,6 +445,28 @@ class MainActivity : AppCompatActivity() {
             toggleOverlayExpanded()
         }
         updateOverlayExpansion(animated = false)
+
+        lassoToolFab = findViewById(R.id.lassoToolFab)
+        lassoToolFab.setOnClickListener {
+            isLassoActive = !isLassoActive
+            val fragment = supportFragmentManager.findFragmentById(R.id.mainFragmentContainer) as? com.tak.lite.ui.map.AnnotationFragment
+            if (isLassoActive) {
+                lassoToolFab.setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
+                lassoToolFab.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.RED)
+                fragment?.setLassoMode(true)
+                android.util.Log.d("MainActivity", "Lasso activated, fragment=$fragment")
+                android.widget.Toast.makeText(this, "Lasso activated", android.widget.Toast.LENGTH_SHORT).show()
+            } else {
+                lassoToolFab.setImageResource(R.drawable.ic_lasso)
+                lassoToolFab.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#1976D2"))
+                fragment?.setLassoMode(false)
+                android.util.Log.d("MainActivity", "Lasso deactivated, fragment=$fragment")
+                android.widget.Toast.makeText(this, "Lasso deactivated", android.widget.Toast.LENGTH_SHORT).show()
+            }
+            if (fragment == null) {
+                android.util.Log.w("MainActivity", "AnnotationFragment not found!")
+            }
+        }
     }
 
     private fun observeMeshNetworkState() {
@@ -817,5 +842,11 @@ class MainActivity : AppCompatActivity() {
                 details.visibility = View.GONE
             }
         }
+    }
+
+    fun resetLassoFab() {
+        isLassoActive = false
+        lassoToolFab.setImageResource(R.drawable.ic_lasso)
+        lassoToolFab.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#1976D2"))
     }
 }

@@ -329,4 +329,50 @@ class AnnotationController(
         val expirationTime = System.currentTimeMillis() + (3 * 60 * 1000) // 3 minutes from now
         annotationViewModel.setAnnotationExpiration(annotationId, expirationTime)
     }
+
+    fun showBulkFanMenu(center: PointF, onAction: (BulkEditAction) -> Unit) {
+        val options = mutableListOf<FanMenuView.Option>()
+        // Color options
+        options.add(FanMenuView.Option.Color(AnnotationColor.GREEN))
+        options.add(FanMenuView.Option.Color(AnnotationColor.YELLOW))
+        options.add(FanMenuView.Option.Color(AnnotationColor.RED))
+        options.add(FanMenuView.Option.Color(AnnotationColor.BLACK))
+        // Expiration (timer) option
+        options.add(FanMenuView.Option.Timer("bulk"))
+        // Delete option
+        options.add(FanMenuView.Option.Delete("bulk"))
+        val screenSize = PointF(binding.root.width.toFloat(), binding.root.height.toFloat())
+        fanMenuView.showAt(center, options, object : FanMenuView.OnOptionSelectedListener {
+            override fun onOptionSelected(option: FanMenuView.Option): Boolean {
+                when (option) {
+                    is FanMenuView.Option.Color -> onAction(BulkEditAction.ChangeColor(option.color))
+                    is FanMenuView.Option.Timer -> {
+                        // Show expiration input dialog
+                        val input = android.widget.EditText(context)
+                        input.inputType = android.text.InputType.TYPE_CLASS_NUMBER
+                        input.hint = "Expiration in minutes"
+                        androidx.appcompat.app.AlertDialog.Builder(context)
+                            .setTitle("Set Expiration (minutes)")
+                            .setView(input)
+                            .setPositiveButton("OK") { _, _ ->
+                                val minutes = input.text.toString().toLongOrNull() ?: 0L
+                                if (minutes > 0) {
+                                    onAction(BulkEditAction.SetExpiration(minutes * 60 * 1000))
+                                }
+                            }
+                            .setNegativeButton("Cancel", null)
+                            .show()
+                    }
+                    is FanMenuView.Option.Delete -> onAction(BulkEditAction.Delete)
+                    else -> {}
+                }
+                return false // Dismiss after selection
+            }
+            override fun onMenuDismissed() {
+                fanMenuView.visibility = View.GONE
+            }
+        }, screenSize)
+        fanMenuView.bringToFront()
+        fanMenuView.visibility = View.VISIBLE
+    }
 } 
