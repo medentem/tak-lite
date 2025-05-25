@@ -16,6 +16,7 @@ import org.maplibre.android.annotations.Marker
 import org.maplibre.android.annotations.Polygon
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
+import android.util.Log
 
 class AnnotationController(
     private val context: Context,
@@ -52,10 +53,12 @@ class AnnotationController(
     fun setupPoiLongPressListener() {
         annotationOverlayView.poiLongPressListener = object : AnnotationOverlayView.OnPoiLongPressListener {
             override fun onPoiLongPressed(poiId: String, screenPosition: PointF) {
+                Log.d("AnnotationController", "OnPoiLongPressListener.onPoiLongPressed called for $poiId at $screenPosition")
                 editingPoiId = poiId
                 showPoiEditMenu(screenPosition, poiId)
             }
             override fun onLineLongPressed(lineId: String, screenPosition: PointF) {
+                Log.d("AnnotationController", "OnPoiLongPressListener.onLineLongPressed called for $lineId at $screenPosition")
                 showLineEditMenu(screenPosition, lineId)
             }
         }
@@ -74,6 +77,7 @@ class AnnotationController(
 
     // POI/line/area editing
     fun showPoiEditMenu(center: PointF, poiId: String) {
+        Log.d("AnnotationController", "showPoiEditMenu called for $poiId at $center")
         val poi = annotationViewModel.uiState.value.annotations.filterIsInstance<MapAnnotation.PointOfInterest>().find { it.id == poiId } ?: return
         val options = listOf(
             FanMenuView.Option.Shape(PointShape.CIRCLE),
@@ -88,6 +92,7 @@ class AnnotationController(
             FanMenuView.Option.Delete(poiId)
         )
         val screenSize = PointF(binding.root.width.toFloat(), binding.root.height.toFloat())
+        Log.d("AnnotationController", "Calling fanMenuView.showAt for POI with options: $options at $center")
         fanMenuView.showAt(center, options, object : FanMenuView.OnOptionSelectedListener {
             override fun onOptionSelected(option: FanMenuView.Option): Boolean {
                 when (option) {
@@ -100,11 +105,14 @@ class AnnotationController(
                 return false
             }
             override fun onMenuDismissed() {
+                Log.d("AnnotationController", "fanMenuView.onMenuDismissed for POI")
                 fanMenuView.visibility = View.GONE
             }
         }, screenSize)
+        Log.d("AnnotationController", "Calling fanMenuView.bringToFront for POI")
         fanMenuView.bringToFront()
         fanMenuView.visibility = View.VISIBLE
+        Log.d("AnnotationController", "fanMenuView.visibility set to VISIBLE for POI")
     }
 
     fun updatePoiShape(poi: MapAnnotation.PointOfInterest, shape: PointShape) {
@@ -122,6 +130,7 @@ class AnnotationController(
     }
 
     fun showLineEditMenu(center: PointF, lineId: String) {
+        Log.d("AnnotationController", "showLineEditMenu called for $lineId at $center")
         val line = annotationViewModel.uiState.value.annotations.filterIsInstance<MapAnnotation.Line>().find { it.id == lineId } ?: return
         val options = listOf(
             FanMenuView.Option.LineStyle(
@@ -135,6 +144,7 @@ class AnnotationController(
             FanMenuView.Option.Delete(lineId)
         )
         val screenSize = PointF(binding.root.width.toFloat(), binding.root.height.toFloat())
+        Log.d("AnnotationController", "Calling fanMenuView.showAt for LINE with options: $options at $center")
         fanMenuView.showAt(center, options, object : FanMenuView.OnOptionSelectedListener {
             override fun onOptionSelected(option: FanMenuView.Option): Boolean {
                 when (option) {
@@ -150,11 +160,14 @@ class AnnotationController(
                 return false
             }
             override fun onMenuDismissed() {
+                Log.d("AnnotationController", "fanMenuView.onMenuDismissed for LINE")
                 fanMenuView.visibility = View.GONE
             }
         }, screenSize)
+        Log.d("AnnotationController", "Calling fanMenuView.bringToFront for LINE")
         fanMenuView.bringToFront()
         fanMenuView.visibility = View.VISIBLE
+        Log.d("AnnotationController", "fanMenuView.visibility set to VISIBLE for LINE")
     }
 
     fun updateLineStyle(line: MapAnnotation.Line, newStyle: LineStyle) {

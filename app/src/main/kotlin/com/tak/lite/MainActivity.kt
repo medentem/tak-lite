@@ -668,6 +668,7 @@ class MainActivity : AppCompatActivity() {
     fun getMapController(): com.tak.lite.ui.map.MapController = mapController
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        android.util.Log.d("MainActivity", "dispatchTouchEvent() called")
         // Try to find the AnnotationFragment
         val fragment = supportFragmentManager.findFragmentById(R.id.mainFragmentContainer) as? AnnotationFragment
         val fanMenuView = fragment?.view?.findViewById<FanMenuView>(R.id.fanMenuView)

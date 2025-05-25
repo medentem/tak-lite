@@ -70,6 +70,7 @@ class FanMenuView @JvmOverloads constructor(
     private var numOuter = 0
 
     override fun onDraw(canvas: Canvas) {
+        Log.d("FanMenuView", "onDraw called, visibility=$visibility, options.size=${options.size}")
         super.onDraw(canvas)
         if (options.isEmpty()) return
         // Draw fan background for both rings
@@ -416,12 +417,13 @@ class FanMenuView @JvmOverloads constructor(
     }
 
     private fun dismissMenu() {
+        Log.d("FanMenuView", "dismissMenu called")
         visibility = View.GONE
         listener?.onMenuDismissed()
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        Log.d("FanMenuView", "onTouchEvent: action=${event.action}, x=${event.x}, y=${event.y}, visible=$visibility, clickable=$isClickable")
+        Log.d("FanMenuView", "onTouchEvent: action=${event.action}, visible=$visibility, clickable=$isClickable")
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
                 val distance = hypot(event.x - center.x, event.y - center.y)
@@ -536,7 +538,20 @@ class FanMenuView @JvmOverloads constructor(
         return distance >= minRadius && distance <= maxRadius && inFan
     }
 
+    fun reset() {
+        listener = null
+        options = emptyList()
+        selectedIndex = null
+        isTransitioning = false
+        numInner = 0
+        numOuter = 0
+        visibility = View.GONE
+        invalidate()
+    }
+
     fun showAt(center: PointF, options: List<Option>, listener: OnOptionSelectedListener, screenSize: PointF) {
+        Log.d("FanMenuView", "showAt called with options: $options at $center")
+        reset() // Defensive: always clear state before showing
         this.center = center
         this.options = options
         this.listener = listener

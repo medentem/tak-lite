@@ -680,6 +680,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        android.util.Log.d("AnnotationOverlayView", "onTouchEvent: action=${event.action}, x=${event.x}, y=${event.y}, visible=$visibility, clickable=$isClickable")
         if (isLassoMode) {
             // --- Lasso mode handling (as currently implemented) ---
             val x = event.x
@@ -735,10 +736,12 @@ class AnnotationOverlayView @JvmOverloads constructor(
                 MotionEvent.ACTION_DOWN -> {
                     val poi = findPoiAt(event.x, event.y)
                     if (poi != null) {
+                        android.util.Log.d("AnnotationOverlayView", "Setting up long-press handler for POI ${poi.id}")
                         longPressCandidate = poi
                         longPressDownPos = PointF(event.x, event.y)
                         longPressHandler = Handler(Looper.getMainLooper())
                         longPressRunnable = Runnable {
+                            android.util.Log.d("AnnotationOverlayView", "Long-press triggered for POI ${poi.id}")
                             poiLongPressListener?.onPoiLongPressed(poi.id, longPressDownPos!!)
                             longPressCandidate = null
                         }
@@ -747,19 +750,30 @@ class AnnotationOverlayView @JvmOverloads constructor(
                         quickTapCandidate = poi
                         quickTapDownTime = System.currentTimeMillis()
                         quickTapDownPos = PointF(event.x, event.y)
+                        // --- Clear LINE handler state ---
+                        longPressLineCandidate = null
+                        longPressLineDownPos = null
                         return true // Intercept only if touching a POI
                     }
                     // Check for line long press
                     val lineHit = findLineAt(event.x, event.y)
                     if (lineHit != null) {
+                        android.util.Log.d("AnnotationOverlayView", "Setting up long-press handler for LINE ${lineHit.first.id}")
                         longPressLineCandidate = lineHit.first
                         longPressLineDownPos = PointF(event.x, event.y)
                         longPressHandler = Handler(Looper.getMainLooper())
                         longPressRunnable = Runnable {
+                            android.util.Log.d("AnnotationOverlayView", "Long-press triggered for LINE ${lineHit.first.id}")
                             poiLongPressListener?.onLineLongPressed(lineHit.first.id, longPressLineDownPos!!)
                             longPressLineCandidate = null
                         }
                         longPressHandler?.postDelayed(longPressRunnable!!, 500)
+                        // --- Clear POI handler state ---
+                        longPressCandidate = null
+                        longPressDownPos = null
+                        quickTapCandidate = null
+                        quickTapDownTime = null
+                        quickTapDownPos = null
                         return true // Intercept only if touching a line
                     }
                     longPressCandidate = null
@@ -768,6 +782,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     return false // Let the map handle the event
                 }
                 MotionEvent.ACTION_UP -> {
+                    android.util.Log.d("AnnotationOverlayView", "Cancelling long-press handler (ACTION_UP)")
                     longPressHandler?.removeCallbacks(longPressRunnable!!)
                     // Quick tap detection
                     quickTapCandidate?.let { candidate ->
@@ -787,6 +802,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     quickTapDownPos = null
                 }
                 MotionEvent.ACTION_CANCEL -> {
+                    android.util.Log.d("AnnotationOverlayView", "Cancelling long-press handler (ACTION_CANCEL)")
                     longPressHandler?.removeCallbacks(longPressRunnable!!)
                     longPressCandidate = null
                     longPressLineCandidate = null
@@ -796,19 +812,26 @@ class AnnotationOverlayView @JvmOverloads constructor(
                 }
                 MotionEvent.ACTION_MOVE -> {
                     longPressDownPos?.let { down ->
-                        if (hypot((event.x - down.x).toDouble(), (event.y - down.y).toDouble()) > 40) {
+                        val dist = hypot((event.x - down.x).toDouble(), (event.y - down.y).toDouble())
+                        android.util.Log.d("AnnotationOverlayView", "POI move: dist=$dist, from=(${"%.2f".format(down.x)}, ${"%.2f".format(down.y)}) to=(${"%.2f".format(event.x)}, ${"%.2f".format(event.y)})")
+                        if (dist > 40) {
+                            android.util.Log.d("AnnotationOverlayView", "Cancelling long-press handler (moved too far for POI)")
                             longPressHandler?.removeCallbacks(longPressRunnable!!)
                             longPressCandidate = null
                         }
                     }
                     longPressLineDownPos?.let { down ->
-                        if (hypot((event.x - down.x).toDouble(), (event.y - down.y).toDouble()) > 40) {
+                        val dist = hypot((event.x - down.x).toDouble(), (event.y - down.y).toDouble())
+                        android.util.Log.d("AnnotationOverlayView", "LINE move: dist=$dist, from=(${"%.2f".format(down.x)}, ${"%.2f".format(down.y)}) to=(${"%.2f".format(event.x)}, ${"%.2f".format(event.y)})")
+                        if (dist > 40) {
+                            android.util.Log.d("AnnotationOverlayView", "Cancelling long-press handler (moved too far for LINE)")
                             longPressHandler?.removeCallbacks(longPressRunnable!!)
                             longPressLineCandidate = null
                         }
                     }
                 }
             }
+            android.util.Log.d("AnnotationViewModel", "onTouchEvent: longPressCandidate=$longPressCandidate}, longPressLineCandidate=${longPressLineCandidate}")
             return longPressCandidate != null || longPressLineCandidate != null // Only consume if interacting with a POI or line
         }
     }
