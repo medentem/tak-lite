@@ -619,27 +619,30 @@ class FanMenuView @JvmOverloads constructor(
         this.screenSize = screenSize
         this.selectedIndex = null
         this.isTransitioning = false
-        this.rings = computeRings(options.size)
         this.menuCenterLatLng = menuLatLng
-        // Center the fan arc horizontally (pointing right)
+        // --- Enhanced: calculate optimal angle and first ring count ---
+        val layout = calculateOptimalMenuAngle(center, screenSize, options.size)
+        this.rings = computeRings(options.size, layout.firstRingCount)
+        val widestRing = rings.maxByOrNull { it.count } ?: rings.first()
         val gapAngleDeg = 4f
         val gapAngleRad = Math.toRadians(gapAngleDeg.toDouble())
-        val widestRing = rings.maxByOrNull { it.count } ?: rings.first()
         val totalCoveredAngle = widestRing.count * widestRing.sectorAngle + widestRing.count * gapAngleRad
-        menuStartAngle = -totalCoveredAngle / 2.0
+        menuStartAngle = layout.startAngle
         menuFanAngle = totalCoveredAngle // Ensure hit-testing matches drawing
         invalidate()
     }
 
     // Compute rings: prefer maxSectorAngle, shrink to minSectorAngle, overflow to new ring if needed
-    private fun computeRings(optionCount: Int): List<Ring> {
+    private fun computeRings(optionCount: Int, firstRingCount: Int? = null): List<Ring> {
         val rings = mutableListOf<Ring>()
         var remaining = optionCount
         var startIdx = 0
         val gapAngleDeg = 4f // Must match drawing and hit-testing
         val gapAngleRad = Math.toRadians(gapAngleDeg.toDouble())
+        var firstRing = true
         while (remaining > 0) {
-            var nThisRing = remaining
+            var nThisRing = if (firstRing && firstRingCount != null) minOf(firstRingCount, remaining) else remaining
+            firstRing = false
             while (nThisRing > 0) {
                 val availableAngle = 2 * Math.PI - nThisRing * gapAngleRad
                 var sectorAngle = availableAngle / nThisRing
@@ -664,9 +667,61 @@ class FanMenuView @JvmOverloads constructor(
         return rings
     }
 
-    private fun calculateOptimalMenuAngle(center: PointF, screenSize: PointF) {
-        // For simplicity, keep menuStartAngle at 0 (right), or you can implement the same candidate angle logic as before
-        menuStartAngle = 0.0
+    /**
+     * Returns the optimal menu start angle and number of items in the first ring so that all icons are on-screen.
+     * Prefers to open toward the center of the screen.
+     */
+    private data class FanMenuLayout(val startAngle: Double, val firstRingCount: Int)
+    private fun calculateOptimalMenuAngle(center: PointF, screenSize: PointF, optionCount: Int): FanMenuLayout {
+        val screenCenter = PointF(screenSize.x / 2f, screenSize.y / 2f)
+        val dx = screenCenter.x - center.x
+        val dy = screenCenter.y - center.y
+        val preferredAngle = atan2(dy, dx) // radians, 0 = right, pi/2 = down
+        val gapAngleDeg = 4f
+        val gapAngleRad = Math.toRadians(gapAngleDeg.toDouble())
+        val minFirstRing = 1
+        val maxFirstRing = optionCount
+        val innerRadius = centerHoleRadius
+        val outerRadius = innerRadius + ringSpacing
+        val iconMargin = 10f
+        val iconR = minOf(iconRadius, (ringSpacing / 2f) - iconMargin)
+        // Try largest possible first ring down to 1
+        for (n in maxFirstRing downTo minFirstRing) {
+            val availableAngle = 2 * Math.PI - n * gapAngleRad
+            var sectorAngle = availableAngle / n
+            if (sectorAngle < minSectorAngle) continue
+            sectorAngle = sectorAngle.coerceAtMost(maxSectorAngle)
+            val totalFanAngle = n * sectorAngle + n * gapAngleRad
+            // Try centering the fan on preferredAngle, but allow shifting if needed
+            val candidateAngles = listOf(
+                preferredAngle - totalFanAngle / 2.0,
+                preferredAngle - totalFanAngle / 2.0 + Math.PI / 12,
+                preferredAngle - totalFanAngle / 2.0 - Math.PI / 12,
+                0.0, // fallback: right
+                Math.PI / 2, // down
+                Math.PI, // left
+                -Math.PI / 2 // up
+            )
+            for (candidateStart in candidateAngles) {
+                var allOnScreen = true
+                for (i in 0 until n) {
+                    val angle = candidateStart + (i + 0.5) * sectorAngle + gapAngleRad * (i + 0.5)
+                    val r = (innerRadius + outerRadius) / 2f
+                    val x = center.x + r * cos(angle).toFloat()
+                    val y = center.y + r * sin(angle).toFloat()
+                    // Check if icon is fully on screen
+                    if (x - iconR < 0f || x + iconR > screenSize.x || y - iconR < 0f || y + iconR > screenSize.y) {
+                        allOnScreen = false
+                        break
+                    }
+                }
+                if (allOnScreen) {
+                    return FanMenuLayout(candidateStart, n)
+                }
+            }
+        }
+        // Fallback: open right with 1 item
+        return FanMenuLayout(0.0, 1)
     }
 
     private fun drawCenterText(canvas: Canvas) {
