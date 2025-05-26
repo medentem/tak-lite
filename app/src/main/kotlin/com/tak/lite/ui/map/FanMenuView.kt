@@ -145,6 +145,12 @@ class FanMenuView @JvmOverloads constructor(
         }
         // Draw empty center (hole)
         canvas.drawCircle(center.x, center.y, centerHoleRadius, clearPaint)
+        // Draw small white dot at center
+        val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(center.x, center.y, 7f, dotPaint)
         // Draw center text (example: distance and bearing)
         drawCenterText(canvas)
         // Draw selected sector background if any
@@ -676,7 +682,7 @@ class FanMenuView @JvmOverloads constructor(
         val distStr = if (!userLat.isNaN() && !userLon.isNaN()) {
             val distMeters = haversine(lat, lon, userLat, userLon)
             val distMiles = distMeters / 1609.344
-            String.format("%.1f mi", distMiles)
+            String.format("%.1f mi away", distMiles)
         } else null
         // Draw white outline around center hole
         val outlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -685,13 +691,19 @@ class FanMenuView @JvmOverloads constructor(
             strokeWidth = 4f
         }
         canvas.drawCircle(center.x, center.y, centerHoleRadius, outlinePaint)
+        // Draw small white dot at center
+        val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(center.x, center.y, 7f, dotPaint)
         // Draw coordinates on bottom arc
         val radius = centerHoleRadius - 38f
         val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.LTGRAY
-            textSize = 38f
+            textSize = 30f
             style = Paint.Style.FILL
-            textAlign = Paint.Align.LEFT
+            textAlign = Paint.Align.CENTER
         }
         val bottomArc = android.graphics.Path()
         bottomArc.addArc(
@@ -711,10 +723,10 @@ class FanMenuView @JvmOverloads constructor(
                 center.y - radius,
                 center.x + radius,
                 center.y + radius,
-                0f, // Start at right
-                180f // Sweep to left (top half)
+                180f, // Start at left
+                -180f // Sweep to right (top half, reversed)
             )
-            canvas.drawTextOnPath(it, topArc, 0f, 0f, textPaint)
+            canvas.drawTextOnPath(it, topArc, 0f, 12f, textPaint)
         }
     }
 
