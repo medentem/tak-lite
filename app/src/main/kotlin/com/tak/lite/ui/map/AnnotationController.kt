@@ -53,12 +53,12 @@ class AnnotationController(
     fun setupPoiLongPressListener() {
         annotationOverlayView.poiLongPressListener = object : AnnotationOverlayView.OnPoiLongPressListener {
             override fun onPoiLongPressed(poiId: String, screenPosition: PointF) {
-                Log.d("AnnotationController", "OnPoiLongPressListener.onPoiLongPressed called for $poiId at $screenPosition")
+                Log.d("AnnotationController", "onPoiLongPressed: poiId=$poiId, screenPosition=$screenPosition")
                 editingPoiId = poiId
                 showPoiEditMenu(screenPosition, poiId)
             }
             override fun onLineLongPressed(lineId: String, screenPosition: PointF) {
-                Log.d("AnnotationController", "OnPoiLongPressListener.onLineLongPressed called for $lineId at $screenPosition")
+                Log.d("AnnotationController", "onLineLongPressed: lineId=$lineId, screenPosition=$screenPosition")
                 showLineEditMenu(screenPosition, lineId)
             }
         }
@@ -77,7 +77,7 @@ class AnnotationController(
 
     // POI/line/area editing
     fun showPoiEditMenu(center: PointF, poiId: String) {
-        Log.d("AnnotationController", "showPoiEditMenu called for $poiId at $center")
+        Log.d("AnnotationController", "showPoiEditMenu: center=$center, poiId=$poiId")
         val poi = annotationViewModel.uiState.value.annotations.filterIsInstance<MapAnnotation.PointOfInterest>().find { it.id == poiId } ?: return
         val options = listOf(
             FanMenuView.Option.Shape(PointShape.CIRCLE),
@@ -130,7 +130,7 @@ class AnnotationController(
     }
 
     fun showLineEditMenu(center: PointF, lineId: String) {
-        Log.d("AnnotationController", "showLineEditMenu called for $lineId at $center")
+        Log.d("AnnotationController", "showLineEditMenu: center=$center, lineId=$lineId")
         val line = annotationViewModel.uiState.value.annotations.filterIsInstance<MapAnnotation.Line>().find { it.id == lineId } ?: return
         val options = listOf(
             FanMenuView.Option.LineStyle(
@@ -246,6 +246,7 @@ class AnnotationController(
     }
 
     private fun showFanMenu(center: PointF) {
+        Log.d("AnnotationController", "showFanMenu: center=$center")
         annotationOverlayView.setTempLinePoints(null)
         val shapeOptions = listOf(
             FanMenuView.Option.Shape(PointShape.CIRCLE),

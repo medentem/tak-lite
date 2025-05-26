@@ -736,12 +736,13 @@ class AnnotationOverlayView @JvmOverloads constructor(
                 MotionEvent.ACTION_DOWN -> {
                     val poi = findPoiAt(event.x, event.y)
                     if (poi != null) {
-                        android.util.Log.d("AnnotationOverlayView", "Setting up long-press handler for POI ${poi.id}")
+                        android.util.Log.d("AnnotationOverlayView", "ACTION_DOWN on POI: event.x=${event.x}, event.y=${event.y}")
                         longPressCandidate = poi
                         longPressDownPos = PointF(event.x, event.y)
+                        android.util.Log.d("AnnotationOverlayView", "Set longPressDownPos: $longPressDownPos for POI ${poi.id}")
                         longPressHandler = Handler(Looper.getMainLooper())
                         longPressRunnable = Runnable {
-                            android.util.Log.d("AnnotationOverlayView", "Long-press triggered for POI ${poi.id}")
+                            android.util.Log.d("AnnotationOverlayView", "Long-press triggered for POI ${poi.id} at $longPressDownPos")
                             poiLongPressListener?.onPoiLongPressed(poi.id, longPressDownPos!!)
                             longPressCandidate = null
                         }
@@ -758,12 +759,13 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     // Check for line long press
                     val lineHit = findLineAt(event.x, event.y)
                     if (lineHit != null) {
-                        android.util.Log.d("AnnotationOverlayView", "Setting up long-press handler for LINE ${lineHit.first.id}")
+                        android.util.Log.d("AnnotationOverlayView", "ACTION_DOWN on LINE: event.x=${event.x}, event.y=${event.y}")
                         longPressLineCandidate = lineHit.first
                         longPressLineDownPos = PointF(event.x, event.y)
+                        android.util.Log.d("AnnotationOverlayView", "Set longPressLineDownPos: $longPressLineDownPos for LINE ${lineHit.first.id}")
                         longPressHandler = Handler(Looper.getMainLooper())
                         longPressRunnable = Runnable {
-                            android.util.Log.d("AnnotationOverlayView", "Long-press triggered for LINE ${lineHit.first.id}")
+                            android.util.Log.d("AnnotationOverlayView", "Long-press triggered for LINE ${lineHit.first.id} at $longPressLineDownPos")
                             poiLongPressListener?.onLineLongPressed(lineHit.first.id, longPressLineDownPos!!)
                             longPressLineCandidate = null
                         }
@@ -782,6 +784,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     return false // Let the map handle the event
                 }
                 MotionEvent.ACTION_UP -> {
+                    android.util.Log.d("AnnotationOverlayView", "ACTION_UP: event.x=${event.x}, event.y=${event.y}")
                     android.util.Log.d("AnnotationOverlayView", "Cancelling long-press handler (ACTION_UP)")
                     longPressHandler?.removeCallbacks(longPressRunnable!!)
                     // Quick tap detection
@@ -802,6 +805,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     quickTapDownPos = null
                 }
                 MotionEvent.ACTION_CANCEL -> {
+                    android.util.Log.d("AnnotationOverlayView", "ACTION_CANCEL: event.x=${event.x}, event.y=${event.y}")
                     android.util.Log.d("AnnotationOverlayView", "Cancelling long-press handler (ACTION_CANCEL)")
                     longPressHandler?.removeCallbacks(longPressRunnable!!)
                     longPressCandidate = null
@@ -811,6 +815,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     quickTapDownPos = null
                 }
                 MotionEvent.ACTION_MOVE -> {
+                    android.util.Log.d("AnnotationOverlayView", "ACTION_MOVE: event.x=${event.x}, event.y=${event.y}")
                     longPressDownPos?.let { down ->
                         val dist = hypot((event.x - down.x).toDouble(), (event.y - down.y).toDouble())
                         android.util.Log.d("AnnotationOverlayView", "POI move: dist=$dist, from=(${"%.2f".format(down.x)}, ${"%.2f".format(down.y)}) to=(${"%.2f".format(event.x)}, ${"%.2f".format(event.y)})")
