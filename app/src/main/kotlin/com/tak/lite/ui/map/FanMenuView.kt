@@ -78,6 +78,7 @@ class FanMenuView @JvmOverloads constructor(
     private val fullCircle = 2 * Math.PI
 
     private var centerOffset: PointF = PointF(0f, 0f)
+    private var menuCenterLatLng: org.maplibre.android.geometry.LatLng? = null
 
     override fun onDraw(canvas: Canvas) {
         Log.d("FanMenuView", "onDraw called, visibility=$visibility, options.size=${options.size}")
@@ -600,8 +601,8 @@ class FanMenuView @JvmOverloads constructor(
         invalidate()
     }
 
-    fun showAt(center: PointF, options: List<Option>, listener: OnOptionSelectedListener, screenSize: PointF) {
-        Log.d("FanMenuView", "showAt: center=$center, screenSize=$screenSize, options=$options")
+    fun showAt(center: PointF, options: List<Option>, listener: OnOptionSelectedListener, screenSize: PointF, menuLatLng: org.maplibre.android.geometry.LatLng? = null) {
+        Log.d("FanMenuView", "showAt: center=$center, screenSize=$screenSize, options=$options, menuLatLng=$menuLatLng")
         reset() // Defensive: always clear state before showing
         val viewLocation = IntArray(2)
         this.getLocationOnScreen(viewLocation)
@@ -613,6 +614,7 @@ class FanMenuView @JvmOverloads constructor(
         this.selectedIndex = null
         this.isTransitioning = false
         this.rings = computeRings(options.size)
+        this.menuCenterLatLng = menuLatLng
         // Center the fan arc horizontally (pointing right)
         val gapAngleDeg = 4f
         val gapAngleRad = Math.toRadians(gapAngleDeg.toDouble())
@@ -662,21 +664,68 @@ class FanMenuView @JvmOverloads constructor(
     }
 
     private fun drawCenterText(canvas: Canvas) {
-        // Example: Draws two lines, e.g. "200NM" and "182°M". Replace with dynamic values as needed.
-        val text1 = "200NM"
-        val text2 = "182°M"
-        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        // Draw coordinates (bottom arc) and distance (top arc) as curved text
+        val latLng = menuCenterLatLng ?: return
+        val lat = latLng.latitude
+        val lon = latLng.longitude
+        val coordStr = String.format("%.5f, %.5f", lat, lon)
+        // Get user location from shared prefs
+        val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+        val userLat = prefs.getFloat("last_lat", Float.NaN).toDouble()
+        val userLon = prefs.getFloat("last_lon", Float.NaN).toDouble()
+        val distStr = if (!userLat.isNaN() && !userLon.isNaN()) {
+            val distMeters = haversine(lat, lon, userLat, userLon)
+            val distMiles = distMeters / 1609.344
+            String.format("%.1f mi", distMiles)
+        } else null
+        // Draw white outline around center hole
+        val outlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
-            textSize = 48f
-            textAlign = Paint.Align.CENTER
-            style = Paint.Style.FILL
+            style = Paint.Style.STROKE
+            strokeWidth = 4f
         }
-        val textPaint2 = Paint(textPaint).apply {
-            textSize = 38f
+        canvas.drawCircle(center.x, center.y, centerHoleRadius, outlinePaint)
+        // Draw coordinates on bottom arc
+        val radius = centerHoleRadius - 38f
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.LTGRAY
+            textSize = 38f
+            style = Paint.Style.FILL
+            textAlign = Paint.Align.LEFT
         }
-        val centerY = center.y
-        canvas.drawText(text1, center.x, centerY - 10, textPaint)
-        canvas.drawText(text2, center.x, centerY + 40, textPaint2)
+        val bottomArc = android.graphics.Path()
+        bottomArc.addArc(
+            center.x - radius,
+            center.y - radius,
+            center.x + radius,
+            center.y + radius,
+            180f, // Start at left
+            180f  // Sweep to right (bottom half)
+        )
+        canvas.drawTextOnPath(coordStr, bottomArc, 0f, 0f, textPaint)
+        // Draw distance on top arc (if available)
+        distStr?.let {
+            val topArc = android.graphics.Path()
+            topArc.addArc(
+                center.x - radius,
+                center.y - radius,
+                center.x + radius,
+                center.y + radius,
+                0f, // Start at right
+                180f // Sweep to left (top half)
+            )
+            canvas.drawTextOnPath(it, topArc, 0f, 0f, textPaint)
+        }
+    }
+
+    private fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        val R = 6371000.0 // meters
+        val dLat = Math.toRadians(lat2 - lat1)
+        val dLon = Math.toRadians(lon2 - lon1)
+        val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2)
+        val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+        return R * c
     }
 }
