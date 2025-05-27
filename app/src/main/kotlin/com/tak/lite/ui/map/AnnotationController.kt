@@ -17,9 +17,10 @@ import org.maplibre.android.annotations.Polygon
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 import android.util.Log
+import androidx.fragment.app.Fragment
 
 class AnnotationController(
-    private val context: Context,
+    private val fragment: Fragment,
     private val binding: ActivityMainBinding,
     private val annotationViewModel: AnnotationViewModel,
     private val fanMenuView: FanMenuView,
@@ -141,7 +142,8 @@ class AnnotationController(
             FanMenuView.Option.Color(AnnotationColor.RED),
             FanMenuView.Option.Color(AnnotationColor.BLACK),
             FanMenuView.Option.Timer(lineId),
-            FanMenuView.Option.Delete(lineId)
+            FanMenuView.Option.Delete(lineId),
+            FanMenuView.Option.ElevationChart(lineId)
         )
         val screenSize = PointF(binding.root.width.toFloat(), binding.root.height.toFloat())
         Log.d("AnnotationController", "Calling fanMenuView.showAt for LINE with options: $options at $center")
@@ -153,6 +155,7 @@ class AnnotationController(
                     is FanMenuView.Option.Color -> updateLineColor(line, option.color)
                     is FanMenuView.Option.Timer -> setAnnotationExpiration(lineId)
                     is FanMenuView.Option.Delete -> deletePoi(option.id)
+                    is FanMenuView.Option.ElevationChart -> showElevationChartBottomSheet(lineId)
                     else -> {}
                 }
                 annotationOverlayView.updateAnnotations(annotationViewModel.uiState.value.annotations)
@@ -193,7 +196,7 @@ class AnnotationController(
     private fun finishLineDrawing(cancel: Boolean) {
         if (!cancel && tempLinePoints.size >= 2) {
             annotationViewModel.addLine(tempLinePoints.toList())
-            Toast.makeText(context, "Line added!", Toast.LENGTH_SHORT).show()
+            Toast.makeText(fragment.requireContext(), "Line added!", Toast.LENGTH_SHORT).show()
         }
         isLineDrawingMode = false
         tempLinePoints.clear()
@@ -365,10 +368,10 @@ class AnnotationController(
                     is FanMenuView.Option.Color -> onAction(BulkEditAction.ChangeColor(option.color))
                     is FanMenuView.Option.Timer -> {
                         // Show expiration input dialog
-                        val input = android.widget.EditText(context)
+                        val input = android.widget.EditText(fragment.requireContext())
                         input.inputType = android.text.InputType.TYPE_CLASS_NUMBER
                         input.hint = "Expiration in minutes"
-                        androidx.appcompat.app.AlertDialog.Builder(context)
+                        androidx.appcompat.app.AlertDialog.Builder(fragment.requireContext())
                             .setTitle("Set Expiration (minutes)")
                             .setView(input)
                             .setPositiveButton("OK") { _, _ ->
@@ -391,5 +394,19 @@ class AnnotationController(
         }, screenSize, null)
         fanMenuView.bringToFront()
         fanMenuView.visibility = View.VISIBLE
+    }
+
+    // Stub for showing the elevation chart bottom sheet
+    private fun showElevationChartBottomSheet(lineId: String) {
+        android.util.Log.d("AnnotationController", "showElevationChartBottomSheet called for lineId=$lineId")
+        val line = annotationViewModel.uiState.value.annotations.filterIsInstance<com.tak.lite.model.MapAnnotation.Line>().find { it.id == lineId } ?: return
+        val activity = fragment.requireActivity() as? androidx.fragment.app.FragmentActivity
+        if (activity != null) {
+            android.util.Log.d("AnnotationController", "Showing ElevationChartBottomSheet for lineId=$lineId")
+            val sheet = ElevationChartBottomSheet(line)
+            sheet.show(activity.supportFragmentManager, "ElevationChartBottomSheet")
+        } else {
+            android.util.Log.e("AnnotationController", "Fragment's activity is not a FragmentActivity, cannot show bottom sheet")
+        }
     }
 } 

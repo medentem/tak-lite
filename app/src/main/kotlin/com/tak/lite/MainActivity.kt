@@ -44,7 +44,7 @@ val DEFAULT_US_CENTER = LatLng(39.8283, -98.5795)
 const val DEFAULT_US_ZOOM = 4.0
 
 @AndroidEntryPoint
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), com.tak.lite.ui.map.ElevationChartBottomSheet.MapControllerProvider {
 
     lateinit var binding: ActivityMainBinding
     private lateinit var mapView: MapView
@@ -664,9 +664,6 @@ class MainActivity : AppCompatActivity() {
         saveLastUsedMapMode(newType)
     }
 
-    // Add this method to expose the shared MapController instance
-    fun getMapController(): com.tak.lite.ui.map.MapController = mapController
-
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
         android.util.Log.d("MainActivity", "dispatchTouchEvent() called")
         // Try to find the AnnotationFragment
@@ -867,4 +864,6 @@ class MainActivity : AppCompatActivity() {
         lassoToolFab.setImageResource(R.drawable.ic_lasso)
         lassoToolFab.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#1976D2"))
     }
+
+    override fun getMapController(): com.tak.lite.ui.map.MapController? = mapController
 }

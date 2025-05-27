@@ -26,6 +26,7 @@ import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
 import kotlin.math.sqrt
+import com.tak.lite.util.haversine
 
 class AnnotationOverlayView @JvmOverloads constructor(
     context: Context,

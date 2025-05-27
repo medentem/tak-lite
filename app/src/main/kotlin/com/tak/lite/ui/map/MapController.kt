@@ -10,6 +10,8 @@ import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import java.io.File
+import com.tak.lite.util.saveTileWebpWithType
+import kotlinx.coroutines.Dispatchers
 
 class MapController(
     private val context: Context,
@@ -888,6 +890,28 @@ class MapController(
                 .bearing(currentPosition.bearing)
                 .build()
             it.animateCamera(org.maplibre.android.camera.CameraUpdateFactory.newCameraPosition(cameraPosition))
+        }
+    }
+
+    /**
+     * Downloads a single terrain-dem tile (webp) for the given zoom/x/y. Returns true if successful.
+     */
+    suspend fun downloadTerrainDemTile(zoom: Int, x: Int, y: Int): Boolean {
+        val hillshadingTileUrl = getHillshadingTileUrl()
+        val terrainUrl = hillshadingTileUrl
+            .replace("{z}", zoom.toString())
+            .replace("{x}", x.toString())
+            .replace("{y}", y.toString())
+        return try {
+            val bytes = withContext(Dispatchers.IO) {
+                val connection = java.net.URL(terrainUrl).openConnection() as java.net.HttpURLConnection
+                connection.setRequestProperty("User-Agent", "tak-lite/1.0 (https://github.com/developer)")
+                connection.inputStream.use { it.readBytes() }
+            }
+            saveTileWebpWithType(context, "terrain-dem", zoom, x, y, bytes)
+        } catch (e: Exception) {
+            android.util.Log.e("OfflineTiles", "Failed to download terrain-dem tile $zoom/$x/$y: ${e.message}")
+            false
         }
     }
 } 

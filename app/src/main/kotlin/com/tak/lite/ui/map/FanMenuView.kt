@@ -32,6 +32,7 @@ class FanMenuView @JvmOverloads constructor(
         data class Delete(val id: String) : Option()
         data class LineStyle(val style: com.tak.lite.model.LineStyle) : Option()
         data class Timer(val id: String) : Option()
+        data class ElevationChart(val id: String) : Option()
     }
 
     interface OnOptionSelectedListener {
@@ -204,6 +205,7 @@ class FanMenuView @JvmOverloads constructor(
                     is Option.Delete -> drawDeleteIcon(canvas, x, y, isSelected, usedIconRadius)
                     is Option.LineStyle -> drawLineStyleIcon(canvas, x, y, option.style, isSelected, usedIconRadius)
                     is Option.Timer -> drawTimerIcon(canvas, x, y, isSelected, usedIconRadius)
+                    is Option.ElevationChart -> drawElevationChartIcon(canvas, x, y, isSelected, usedIconRadius)
                 }
             }
         }
@@ -435,6 +437,48 @@ class FanMenuView @JvmOverloads constructor(
             y + (minuteHandLength * sin(minuteAngle)).toFloat(),
             handPaint
         )
+    }
+
+    private fun drawElevationChartIcon(canvas: Canvas, x: Float, y: Float, highlight: Boolean, iconRadius: Float) {
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (highlight) Color.YELLOW else Color.WHITE
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(x, y, iconRadius, bgPaint)
+        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (highlight) Color.WHITE else Color.DKGRAY
+            style = Paint.Style.STROKE
+            strokeWidth = 2.5f
+        }
+        canvas.drawCircle(x, y, iconRadius, borderPaint)
+        // Draw a rising chart: three segments rising left to right
+        val chartPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#1976D2") // Blue
+            style = Paint.Style.STROKE
+            strokeWidth = 5f
+        }
+        val nPoints = 4
+        val padding = iconRadius * 0.4f
+        val chartWidth = iconRadius * 1.2f
+        val chartHeight = iconRadius * 1.0f
+        val startX = x - chartWidth / 2
+        val startY = y + chartHeight / 2
+        val dx = chartWidth / (nPoints - 1)
+        val dy = chartHeight / (nPoints - 1)
+        val points = List(nPoints) { i ->
+            val px = startX + i * dx
+            val py = startY - i * dy * 0.7f // rising
+            PointF(px, py)
+        }
+        for (i in 0 until nPoints - 1) {
+            canvas.drawLine(points[i].x, points[i].y, points[i + 1].x, points[i + 1].y, chartPaint)
+        }
+        // Draw a dot at the last point
+        val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.RED
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(points.last().x, points.last().y, iconRadius * 0.16f, dotPaint)
     }
 
     // Returns Triple<ringIdx, idxInRing, Ring>

@@ -68,7 +68,7 @@ class AnnotationFragment : Fragment() {
         mainActivity?.mapReadyLiveData?.observe(viewLifecycleOwner) { mapLibreMap ->
             // All annotation event setup goes here!
             annotationController = AnnotationController(
-                context = requireContext(),
+                fragment = this,
                 binding = mainActivity.binding, // or pass only what's needed
                 annotationViewModel = viewModel,
                 fanMenuView = fanMenuView,
