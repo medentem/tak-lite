@@ -74,7 +74,7 @@ class FanMenuView @JvmOverloads constructor(
 
     // Constants for sector angles
     private val minSectorAngle = Math.PI / 5 // 30 degrees
-    private val maxSectorAngle = Math.PI / 3 // 60 degrees
+    private val maxSectorAngle = Math.PI / 4 // 60 degrees
     private val fullCircle = 2 * Math.PI
 
     private var centerOffset: PointF = PointF(0f, 0f)
