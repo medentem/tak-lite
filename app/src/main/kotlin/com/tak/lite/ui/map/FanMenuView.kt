@@ -451,23 +451,28 @@ class FanMenuView @JvmOverloads constructor(
             strokeWidth = 2.5f
         }
         canvas.drawCircle(x, y, iconRadius, borderPaint)
-        // Draw a rising chart: three segments rising left to right
+        // Draw a more angular, zigzag chart line
         val chartPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#1976D2") // Blue
             style = Paint.Style.STROKE
             strokeWidth = 5f
         }
-        val nPoints = 4
-        val padding = iconRadius * 0.4f
+        val nPoints = 5
         val chartWidth = iconRadius * 1.2f
         val chartHeight = iconRadius * 1.0f
         val startX = x - chartWidth / 2
         val startY = y + chartHeight / 2
         val dx = chartWidth / (nPoints - 1)
-        val dy = chartHeight / (nPoints - 1)
+        // Alternate up and down for angular effect
         val points = List(nPoints) { i ->
             val px = startX + i * dx
-            val py = startY - i * dy * 0.7f // rising
+            val py = when (i % 2) {
+                0 -> startY - chartHeight * 0.2f
+                1 -> startY - chartHeight * 0.8f
+                2 -> startY - chartHeight * 0.4f
+                3 -> startY - chartHeight * 0.9f
+                else -> startY - chartHeight * 0.3f
+            }
             PointF(px, py)
         }
         for (i in 0 until nPoints - 1) {
