@@ -5,6 +5,7 @@ A situational awareness Android application designed for use with mesh network d
 ## Features
 
 - Real-time location tracking and sharing
+  - Peers are shown as green dots
 - Interactive map display with multiple user positions
   - Street, sattelite and hybrid views
   - 3D view of buildings and terrain
