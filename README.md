@@ -19,6 +19,7 @@ A situational awareness Android application designed for use with mesh network d
 
 ## Example Screenshots
 
+<img src="https://github.com/user-attachments/assets/70fac0d2-ee35-4cc0-a166-27d73342fdf2" width=200 />
 <img src="https://github.com/user-attachments/assets/17f764fb-f6f4-416d-8323-66144bd0769d" width=200 />
 <img src="https://github.com/user-attachments/assets/aba0119c-90eb-4765-964f-8ba3213e423a" width=200 />
 <img src="https://github.com/user-attachments/assets/0b7e4158-1142-499a-9a55-47bbf33e6f2e" width=200 />
