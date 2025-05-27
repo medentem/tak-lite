@@ -39,6 +39,7 @@ import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
 import android.content.res.Configuration
 import androidx.lifecycle.repeatOnLifecycle
+import android.app.AlertDialog
 
 val DEFAULT_US_CENTER = LatLng(39.8283, -98.5795)
 const val DEFAULT_US_ZOOM = 4.0
@@ -97,6 +98,9 @@ class MainActivity : AppCompatActivity(), com.tak.lite.ui.map.ElevationChartBott
 
     private lateinit var lassoToolFab: com.google.android.material.floatingactionbutton.FloatingActionButton
     private var isLassoActive = false
+
+    private var locationSourcePreference: String = "AUTO"
+    private var isDeviceLocationStale: Boolean = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -227,12 +231,23 @@ class MainActivity : AppCompatActivity(), com.tak.lite.ui.map.ElevationChartBott
         locationSourceLabel.text = "Unknown"
         locationSourceLabel.setTextColor(Color.GRAY)
 
+        lifecycleScope.launch {
+            repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                viewModel.isDeviceLocationStale.collectLatest { stale ->
+                    isDeviceLocationStale = stale
+                }
+            }
+        }
+
         locationController = LocationController(
             activity = this,
             onLocationUpdate = { location ->
                 val currentZoom = mapController.mapLibreMap?.cameraPosition?.zoom?.toFloat() ?: DEFAULT_US_ZOOM.toFloat()
                 saveLastLocation(location.latitude, location.longitude, currentZoom)
-                viewModel.sendLocationUpdate(location.latitude, location.longitude)
+                // Only send phone location if allowed by preference
+                if (shouldUsePhoneLocation()) {
+                    viewModel.sendLocationUpdate(location.latitude, location.longitude)
+                }
                 // --- Feed location to MapLibre location component for tracking mode ---
                 mapController.mapLibreMap?.locationComponent?.forceLocationUpdate(location)
                 if (isTrackingLocation) {
@@ -470,6 +485,54 @@ class MainActivity : AppCompatActivity(), com.tak.lite.ui.map.ElevationChartBott
                 android.util.Log.w("MainActivity", "AnnotationFragment not found!")
             }
         }
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                viewModel.userLocation.collectLatest { userLatLng ->
+                    if (userLatLng != null) {
+                        // Center map or update user marker as needed
+                        val currentZoom = mapController.mapLibreMap?.cameraPosition?.zoom ?: DEFAULT_US_ZOOM
+                        mapController.mapLibreMap?.moveCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(userLatLng, currentZoom))
+                    }
+                }
+            }
+        }
+        // Improved UI: show source and staleness
+        lifecycleScope.launch {
+            repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                viewModel.isDeviceLocationStale.collectLatest { isStale ->
+                    val userLatLng = viewModel.userLocation.value
+                    if (userLatLng != null) {
+                        if (!isStale) {
+                            // Device location is fresh
+                            locationSourceOverlay.visibility = View.VISIBLE
+                            locationSourceIcon.setImageResource(R.drawable.ic_baseline_my_location_24)
+                            locationSourceIcon.setColorFilter(Color.parseColor("#4CAF50")) // Green
+                            locationSourceLabel.text = "Device"
+                            locationSourceLabel.setTextColor(Color.parseColor("#4CAF50"))
+                        } else {
+                            // Device location is stale, using phone or last known
+                            locationSourceOverlay.visibility = View.VISIBLE
+                            locationSourceIcon.setImageResource(R.drawable.ic_baseline_my_location_24)
+                            locationSourceIcon.setColorFilter(Color.parseColor("#FFA726")) // Orange
+                            locationSourceLabel.text = "Stale"
+                            locationSourceLabel.setTextColor(Color.parseColor("#FFA726"))
+                        }
+                    } else {
+                        // No location available, fallback to phone
+                        locationSourceOverlay.visibility = View.VISIBLE
+                        locationSourceIcon.setImageResource(R.drawable.ic_baseline_my_location_24)
+                        locationSourceIcon.setColorFilter(Color.parseColor("#2196F3")) // Blue
+                        locationSourceLabel.text = "Phone"
+                        locationSourceLabel.setTextColor(Color.parseColor("#2196F3"))
+                    }
+                }
+            }
+        }
+
+        locationSourcePreference = prefs.getString("location_source_preference", "AUTO") ?: "AUTO"
+
+        updateLocationSourceLogic() // Ensure logic is set on startup
     }
 
     private fun observeMeshNetworkState() {
@@ -866,4 +929,52 @@ class MainActivity : AppCompatActivity(), com.tak.lite.ui.map.ElevationChartBott
     }
 
     override fun getMapController(): com.tak.lite.ui.map.MapController? = mapController
+
+    private fun updateLocationSourceLogic() {
+        when (locationSourcePreference) {
+            "AUTO" -> {
+                // Default: prefer device, fallback to phone (current behavior)
+                locationController.isDeviceLocationActive = !isDeviceLocationStale
+            }
+            "DEVICE_ONLY" -> {
+                // Only use device location, ignore phone location updates
+                locationController.isDeviceLocationActive = true
+            }
+            "PHONE_ONLY" -> {
+                // Only use phone location, ignore device location updates
+                locationController.isDeviceLocationActive = false
+            }
+        }
+        // Optionally update overlays/UI to reflect forced source
+        updateLocationSourceOverlayForPreference()
+    }
+
+    private fun updateLocationSourceOverlayForPreference() {
+        when (locationSourcePreference) {
+            "DEVICE_ONLY" -> {
+                locationSourceOverlay.visibility = View.VISIBLE
+                locationSourceIcon.setImageResource(R.drawable.ic_baseline_my_location_24)
+                locationSourceIcon.setColorFilter(Color.parseColor("#4CAF50")) // Green
+                locationSourceLabel.text = "Device (Forced)"
+                locationSourceLabel.setTextColor(Color.parseColor("#4CAF50"))
+            }
+            "PHONE_ONLY" -> {
+                locationSourceOverlay.visibility = View.VISIBLE
+                locationSourceIcon.setImageResource(R.drawable.ic_baseline_my_location_24)
+                locationSourceIcon.setColorFilter(Color.parseColor("#2196F3")) // Blue
+                locationSourceLabel.text = "Phone (Forced)"
+                locationSourceLabel.setTextColor(Color.parseColor("#2196F3"))
+            }
+            // AUTO: handled by normal staleness logic
+        }
+    }
+
+    private fun shouldUsePhoneLocation(): Boolean {
+        return when (locationSourcePreference) {
+            "AUTO" -> isDeviceLocationStale
+            "DEVICE_ONLY" -> false
+            "PHONE_ONLY" -> true
+            else -> isDeviceLocationStale
+        }
+    }
 }

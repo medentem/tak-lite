@@ -209,6 +209,18 @@ class SettingsActivity : AppCompatActivity() {
             prefs.edit().putBoolean("keep_screen_awake", isChecked).apply()
             setKeepScreenAwake(isChecked)
         }
+
+        val locationSourceSpinner = findViewById<com.google.android.material.textfield.MaterialAutoCompleteTextView>(R.id.locationSourceSpinner)
+        val locationSourceOptions = listOf("Auto (Prefer Device)", "Device Only", "Phone Only")
+        val locationSourceValues = listOf("AUTO", "DEVICE_ONLY", "PHONE_ONLY")
+        val locationSourceAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, locationSourceOptions)
+        locationSourceSpinner.setAdapter(locationSourceAdapter)
+        val savedLocationSource = prefs.getString("location_source_preference", "AUTO")
+        val locationSourceIndex = locationSourceValues.indexOf(savedLocationSource).takeIf { it >= 0 } ?: 0
+        locationSourceSpinner.setText(locationSourceOptions[locationSourceIndex], false)
+        locationSourceSpinner.setOnItemClickListener { _, _, position, _ ->
+            prefs.edit().putString("location_source_preference", locationSourceValues[position]).apply()
+        }
     }
 
     override fun onPause() {

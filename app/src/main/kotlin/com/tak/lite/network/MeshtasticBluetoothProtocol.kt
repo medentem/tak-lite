@@ -34,6 +34,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
 
     private var annotationCallback: ((MapAnnotation) -> Unit)? = null
     private var peerLocationCallback: ((Map<String, LatLng>) -> Unit)? = null
+    private var userLocationCallback: ((LatLng) -> Unit)? = null
     private val peerLocations = ConcurrentHashMap<String, LatLng>()
     private val _annotations = MutableStateFlow<List<MapAnnotation>>(emptyList())
     val annotations: StateFlow<List<MapAnnotation>> = _annotations.asStateFlow()
@@ -42,6 +43,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     private val peersMap = ConcurrentHashMap<String, MeshPeer>()
     private val _peers = MutableStateFlow<List<MeshPeer>>(emptyList())
     val peers: StateFlow<List<MeshPeer>> = _peers.asStateFlow()
+    private var connectedNodeId: String? = null
 
     init {
         deviceManager.setPacketListener { data ->
@@ -70,6 +72,10 @@ class MeshtasticBluetoothProtocol @Inject constructor(
 
     fun setPeerLocationCallback(callback: (Map<String, LatLng>) -> Unit) {
         peerLocationCallback = callback
+    }
+
+    fun setUserLocationCallback(callback: (LatLng) -> Unit) {
+        userLocationCallback = callback
     }
 
     fun sendLocationUpdate(latitude: Double, longitude: Double) {
@@ -114,45 +120,67 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     fun handleIncomingPacket(data: ByteArray) {
         Log.d(TAG, "Received packet from device: ${data.size} bytes: ${data.joinToString(", ", limit = 16)}")
         try {
-            val meshPacket = MeshProtos.MeshPacket.parseFrom(data)
-            Log.d(TAG, "Parsed MeshPacket: $meshPacket")
-            if (meshPacket.hasDecoded()) {
-                val decoded = meshPacket.decoded
-                val peerId = meshPacket.from.toString()
-                // Update peer list
-                peersMap[peerId] = MeshPeer(
-                    id = peerId,
-                    ipAddress = "N/A",
-                    lastSeen = System.currentTimeMillis(),
-                    nickname = null // Meshtastic packets may not have nickname
-                )
-                _peers.value = peersMap.values.toList()
-                if (decoded.portnum == com.geeksville.mesh.Portnums.PortNum.POSITION_APP) {
-                    try {
-                        val position = MeshProtos.Position.parseFrom(decoded.payload)
-                        val lat = position.latitudeI / 1e7
-                        val lng = position.longitudeI / 1e7
-                        Log.d(TAG, "Parsed position from peer $peerId: lat=$lat, lng=$lng")
-                        peerLocations[peerId] = LatLng(lat, lng)
-                        // Do not create an annotation, just update peer locations
-                        peerLocationCallback?.invoke(peerLocations.toMap())
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to parse position: ${e.message}")
+            val fromRadio = MeshProtos.FromRadio.parseFrom(data)
+            when (fromRadio.payloadVariantCase) {
+                MeshProtos.FromRadio.PayloadVariantCase.PACKET -> {
+                    val meshPacket = fromRadio.packet
+                    Log.d(TAG, "Parsed MeshPacket: $meshPacket")
+                    if (meshPacket.hasDecoded()) {
+                        val decoded = meshPacket.decoded
+                        val peerId = meshPacket.from.toString()
+                        // Update peer list
+                        peersMap[peerId] = MeshPeer(
+                            id = peerId,
+                            ipAddress = "N/A",
+                            lastSeen = System.currentTimeMillis(),
+                            nickname = null // Meshtastic packets may not have nickname
+                        )
+                        _peers.value = peersMap.values.toList()
+                        if (decoded.portnum == com.geeksville.mesh.Portnums.PortNum.POSITION_APP) {
+                            try {
+                                val position = MeshProtos.Position.parseFrom(decoded.payload)
+                                val lat = position.latitudeI / 1e7
+                                val lng = position.longitudeI / 1e7
+                                Log.d(TAG, "Parsed position from peer $peerId: lat=$lat, lng=$lng")
+                                peerLocations[peerId] = LatLng(lat, lng)
+                                // Do not create an annotation, just update peer locations
+                                peerLocationCallback?.invoke(peerLocations.toMap())
+                                // If this is our own node, emit to user location callback
+                                if (isOwnNode(peerId)) {
+                                    userLocationCallback?.invoke(LatLng(lat, lng))
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to parse position: ${e.message}")
+                            }
+                        } else {
+                            val annotation = MeshAnnotationInterop.meshDataToMapAnnotation(decoded)
+                            if (annotation != null) {
+                                Log.d(TAG, "Parsed annotation from peer $peerId: $annotation")
+                                annotationCallback?.invoke(annotation)
+                                _annotations.value = _annotations.value + annotation
+                            } else {
+                                Log.d(TAG, "Received non-annotation, non-location message (portnum: ${decoded.portnum})")
+                            }
+                        }
                     }
-                } else {
-                    val annotation = MeshAnnotationInterop.meshDataToMapAnnotation(decoded)
-                    if (annotation != null) {
-                        Log.d(TAG, "Parsed annotation from peer $peerId: $annotation")
-                        annotationCallback?.invoke(annotation)
-                        _annotations.value = _annotations.value + annotation
-                    } else {
-                        Log.d(TAG, "Received non-annotation, non-location message (portnum: ${decoded.portnum})")
-                    }
+                }
+                MeshProtos.FromRadio.PayloadVariantCase.MY_INFO -> {
+                    val myInfo = fromRadio.myInfo
+                    connectedNodeId = myInfo.myNodeNum.toString()
+                    Log.d(TAG, "Received MyNodeInfo, nodeId: $connectedNodeId")
+                }
+                else -> {
+                    // Handle other cases if needed
                 }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing incoming packet: ${e.message}")
         }
+    }
+
+    // Helper to determine if a peerId is our own node
+    private fun isOwnNode(peerId: String): Boolean {
+        return connectedNodeId != null && peerId == connectedNodeId
     }
 
     data class ConnectionMetrics(

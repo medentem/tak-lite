@@ -163,6 +163,8 @@ class MeshNetworkProtocol @Inject constructor(
     private val _connectionMetrics = MutableStateFlow(ConnectionMetrics())
     val connectionMetrics: StateFlow<ConnectionMetrics> = _connectionMetrics.asStateFlow()
     
+    private var userLocationCallback: ((LatLng) -> Unit)? = null
+    
     @Serializable
     data class CachedPeer(
         val id: String,
@@ -449,6 +451,7 @@ class MeshNetworkProtocol @Inject constructor(
             val peerId = loc.peerId
             peerLocations[peerId] = LatLng(loc.latitude, loc.longitude)
             peerLocationCallback?.invoke(peerLocations.toMap())
+            handleOwnLocationUpdate(loc.latitude, loc.longitude)
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing location packet: ${e.message}")
         }
@@ -946,5 +949,13 @@ class MeshNetworkProtocol @Inject constructor(
 
     fun setMeshNetworkManager(manager: MeshNetworkManager) {
         meshNetworkManager = manager
+    }
+
+    private fun handleOwnLocationUpdate(lat: Double, lng: Double) {
+        userLocationCallback?.invoke(LatLng(lat, lng))
+    }
+
+    fun setUserLocationCallback(callback: (LatLng) -> Unit) {
+        userLocationCallback = callback
     }
 } 

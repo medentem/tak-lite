@@ -25,6 +25,9 @@ class MeshNetworkViewModel @Inject constructor(
     private val _peerLocations = MutableStateFlow<Map<String, LatLng>>(emptyMap())
     val peerLocations: StateFlow<Map<String, LatLng>> = _peerLocations.asStateFlow()
     
+    val userLocation: StateFlow<org.maplibre.android.geometry.LatLng?> = meshNetworkRepository.userLocation as StateFlow<org.maplibre.android.geometry.LatLng?>
+    val isDeviceLocationStale: StateFlow<Boolean> = meshNetworkRepository.isDeviceLocationStale as StateFlow<Boolean>
+    
     init {
         viewModelScope.launch {
             combine(

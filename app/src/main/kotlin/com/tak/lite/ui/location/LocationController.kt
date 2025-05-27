@@ -106,6 +106,9 @@ class LocationController(
         return dirs.getOrElse(ix) { "N" }
     }
 
+    // Add a flag or callback to indicate if device location is active
+    var isDeviceLocationActive: Boolean = false
+
     fun checkAndRequestPermissions(requestCode: Int) {
         val permissions = arrayOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
@@ -126,11 +129,13 @@ class LocationController(
         coroutineScope.launch {
             val meshRiderLocation = meshRiderGpsController.getMeshRiderLocation(activity)
             if (meshRiderLocation != null) {
+                isDeviceLocationActive = true
                 currentSource = LocationSource.MESH_RIDER
                 onSourceChanged?.invoke(LocationSource.MESH_RIDER)
                 handleLocation(meshRiderLocation)
                 return@launch
             }
+            isDeviceLocationActive = false
             currentSource = LocationSource.PHONE
             onSourceChanged?.invoke(LocationSource.PHONE)
             // If Mesh Rider location fails, fall back to Android location
@@ -173,12 +178,14 @@ class LocationController(
             fallbackHandler?.removeCallbacks(fallbackRunnable!!)
             stopFallbackLocationManager()
         }
-        // If not mesh, always update to PHONE when a location is received
-        if (currentSource != LocationSource.MESH_RIDER && currentSource != LocationSource.PHONE) {
+        // Only update to PHONE if device location is not active
+        if (!isDeviceLocationActive && currentSource != LocationSource.MESH_RIDER && currentSource != LocationSource.PHONE) {
             currentSource = LocationSource.PHONE
             onSourceChanged?.invoke(LocationSource.PHONE)
         }
-        onLocationUpdate(location)
+        if (!isDeviceLocationActive) {
+            onLocationUpdate(location)
+        }
         // Update overlay data (heading will be updated by sensor logic later)
         _directionOverlayData.value = _directionOverlayData.value.copy(
             speedMph = (location.speed * 2.23694f), // m/s to mph

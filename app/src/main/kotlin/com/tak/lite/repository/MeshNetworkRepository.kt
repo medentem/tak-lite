@@ -22,6 +22,12 @@ class MeshNetworkRepository @Inject constructor(
     val peerLocations: Flow<Map<String, LatLng>>
         get() = meshNetworkService.peerLocations
     
+    val userLocation: Flow<LatLng?>
+        get() = meshNetworkService.userLocation
+    
+    val isDeviceLocationStale: Flow<Boolean>
+        get() = meshNetworkService.isDeviceLocationStale
+    
     fun sendLocationUpdate(latitude: Double, longitude: Double) {
         meshNetworkService.sendLocationUpdate(latitude, longitude)
     }

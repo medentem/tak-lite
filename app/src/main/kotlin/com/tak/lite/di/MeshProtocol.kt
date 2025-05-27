@@ -24,6 +24,7 @@ sealed interface MeshProtocol {
         partialUpdate: Boolean = false,
         updateFields: Set<String> = emptySet()
     )
+    fun setUserLocationCallback(callback: (LatLng) -> Unit)
 }
 
 class Layer2MeshProtocolAdapter(private val impl: MeshNetworkProtocol) : MeshProtocol {
@@ -42,6 +43,7 @@ class Layer2MeshProtocolAdapter(private val impl: MeshNetworkProtocol) : MeshPro
         updateFields: Set<String>
     ) = impl.sendStateSync(toIp, channels, peerLocations, annotations, partialUpdate, updateFields)
     override fun setLocalNickname(nickname: String) = impl.setLocalNickname(nickname)
+    override fun setUserLocationCallback(callback: (LatLng) -> Unit) = impl.setUserLocationCallback(callback)
 }
 
 class MeshtasticBluetoothProtocolAdapter(val impl: MeshtasticBluetoothProtocol) : MeshProtocol {
@@ -66,4 +68,5 @@ class MeshtasticBluetoothProtocolAdapter(val impl: MeshtasticBluetoothProtocol) 
     override fun setLocalNickname(nickname: String) {
         // TODO: Implement nickname setting for Bluetooth mesh if/when supported
     }
+    override fun setUserLocationCallback(callback: (LatLng) -> Unit) = impl.setUserLocationCallback(callback)
 } 
