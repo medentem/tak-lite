@@ -31,6 +31,9 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var bluetoothStatusText: TextView
     private lateinit var darkModeSpinner: AutoCompleteTextView
     private lateinit var keepScreenAwakeSwitch: com.google.android.material.switchmaterial.SwitchMaterial
+    private lateinit var simulatePeersSwitch: com.google.android.material.switchmaterial.SwitchMaterial
+    private lateinit var simulatedPeersCountEditText: com.google.android.material.textfield.TextInputEditText
+    private lateinit var simulatedPeersCountLayout: com.google.android.material.textfield.TextInputLayout
     private var connectedDevice: BluetoothDevice? = null
     private val mapModeOptions = listOf("Last Used", "Street", "Satellite", "Hybrid")
     private val mapModeEnumValues = listOf(
@@ -72,6 +75,9 @@ class SettingsActivity : AppCompatActivity() {
         bluetoothStatusText = findViewById(R.id.bluetoothStatusText)
         darkModeSpinner = findViewById(R.id.darkModeSpinner)
         keepScreenAwakeSwitch = findViewById(R.id.keepScreenAwakeSwitch)
+        simulatePeersSwitch = findViewById(R.id.simulatePeersSwitch)
+        simulatedPeersCountEditText = findViewById(R.id.simulatedPeersCountEditText)
+        simulatedPeersCountLayout = findViewById(R.id.simulatedPeersCountLayout)
 
         // Setup map mode spinner
         val adapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, mapModeOptions)
@@ -208,6 +214,27 @@ class SettingsActivity : AppCompatActivity() {
         keepScreenAwakeSwitch.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean("keep_screen_awake", isChecked).apply()
             setKeepScreenAwake(isChecked)
+        }
+
+        // Load and set Simulate Peers settings
+        val simulatePeersEnabled = prefs.getBoolean("simulate_peers_enabled", false)
+        val simulatedPeersCount = prefs.getInt("simulated_peers_count", 3)
+        simulatePeersSwitch.isChecked = simulatePeersEnabled
+        simulatedPeersCountEditText.setText(simulatedPeersCount.toString())
+        simulatedPeersCountLayout.isEnabled = simulatePeersEnabled
+        simulatedPeersCountEditText.isEnabled = simulatePeersEnabled
+
+        simulatePeersSwitch.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean("simulate_peers_enabled", isChecked).apply()
+            simulatedPeersCountLayout.isEnabled = isChecked
+            simulatedPeersCountEditText.isEnabled = isChecked
+        }
+        simulatedPeersCountEditText.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) {
+                val value = simulatedPeersCountEditText.text.toString().toIntOrNull()?.coerceIn(1, 10) ?: 1
+                simulatedPeersCountEditText.setText(value.toString())
+                prefs.edit().putInt("simulated_peers_count", value).apply()
+            }
         }
 
         val locationSourceSpinner = findViewById<com.google.android.material.textfield.MaterialAutoCompleteTextView>(R.id.locationSourceSpinner)
