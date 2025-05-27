@@ -11,9 +11,11 @@ A situational awareness Android application designed for use with mesh network d
 - Points of Interest (POI) management and map annotation (lines, areas)
   - Easy longpress-and-drag fan menu to drop and edit annotations
   - Optionally expire annotations and POIs
+  - View elevation chart for lines
 - Push-to-Talk (PTT) real-time VOIP audio communication (WebRTC-based)
-- Mesh network integration
+- Mesh network integration (meshtastic or doodle labs)
 - Offline map tile support
+- Dark mode support
 
 ## Example Screenshots
 
