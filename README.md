@@ -17,14 +17,11 @@ A situational awareness Android application designed for use with mesh network d
 
 ## Example Screenshots
 
-<img src="https://github.com/user-attachments/assets/f8ad6c71-1349-40ee-bb55-24551b9ef2d6" width="250" />
-<img src="https://github.com/user-attachments/assets/884b5af4-efd3-4636-9b8e-51f06e07dc58" width="250" />
-<img src="https://github.com/user-attachments/assets/faed35d4-25cf-451c-872e-d1215f36cc8a" width="250" />
-<img src="https://github.com/user-attachments/assets/09454976-f445-4b4a-9aca-67b984acefe4" width="250" />
-<img src="https://github.com/user-attachments/assets/4d578b3e-faa5-4ae0-965b-d44f096407ca" width="250" />
-<img src="https://github.com/user-attachments/assets/ae705aec-2977-4098-ba7b-3bb4f35eb8c8" width="250" />
-<img src="https://github.com/user-attachments/assets/66a94189-fa41-49ba-aa81-bb705ddc7d1c" width="250" />
-
+<img src="https://github.com/user-attachments/assets/17f764fb-f6f4-416d-8323-66144bd0769d" width=200 />
+<img src="https://github.com/user-attachments/assets/aba0119c-90eb-4765-964f-8ba3213e423a" width=200 />
+<img src="https://github.com/user-attachments/assets/0b7e4158-1142-499a-9a55-47bbf33e6f2e" width=200 />
+<img src="https://github.com/user-attachments/assets/13a5f07a-ac55-4a96-837f-3f589ad3a12e" width=200 />
+<img src="https://github.com/user-attachments/assets/6fc716c3-7bbd-401b-a900-d7f0808183f5" width=200 />
 
 ## Requirements
 
