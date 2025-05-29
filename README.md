@@ -22,21 +22,27 @@ A situational awareness Android application designed for use with mesh network d
 
 Peer Locations
 <img src="https://github.com/user-attachments/assets/70fac0d2-ee35-4cc0-a166-27d73342fdf2" width=200 />
+<br />
 
 Adaptive fan menu w/ coordinates and distance from current location
 <img src="https://github.com/user-attachments/assets/17f764fb-f6f4-416d-8323-66144bd0769d" width=200 />
+<br />
 
 Annotation Editing
 <img src="https://github.com/user-attachments/assets/aba0119c-90eb-4765-964f-8ba3213e423a" width=200 />
+<br />
 
 Line Elevation View
 <img src="https://github.com/user-attachments/assets/0b7e4158-1142-499a-9a55-47bbf33e6f2e" width=200 />
+<br />
 
 3D Building & Terrain (terrain 3d is just hill shading now, true 3d will be added later)
 <img src="https://github.com/user-attachments/assets/13a5f07a-ac55-4a96-837f-3f589ad3a12e" width=200 />
+<br />
 
 Settings to Configure Experience
 <img src="https://github.com/user-attachments/assets/6fc716c3-7bbd-401b-a900-d7f0808183f5" width=200 />
+<br />
 
 ## Requirements
 
