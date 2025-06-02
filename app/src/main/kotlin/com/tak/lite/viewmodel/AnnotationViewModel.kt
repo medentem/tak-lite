@@ -32,6 +32,7 @@ class AnnotationViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             annotationRepository.annotations.collect { annotations ->
+                android.util.Log.d("AnnotationViewModel", "uiState updated: ${annotations.map { it.id }}")
                 _uiState.value = _uiState.value.copy(annotations = annotations)
             }
         }

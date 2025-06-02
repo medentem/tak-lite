@@ -61,8 +61,10 @@ class AnnotationRepository @Inject constructor() {
     }
     
     private fun handleAnnotation(annotation: MapAnnotation) {
+        android.util.Log.d("AnnotationRepository", "Before: ${_annotations.value.map { it.id }}")
         when (annotation) {
             is MapAnnotation.Deletion -> {
+                android.util.Log.d("AnnotationRepository", "Processing deletion for id=${annotation.id}")
                 _annotations.value = _annotations.value.filter { it.id != annotation.id }
             }
             else -> {
@@ -73,6 +75,7 @@ class AnnotationRepository @Inject constructor() {
                 }
             }
         }
+        android.util.Log.d("AnnotationRepository", "After: ${_annotations.value.map { it.id }}")
     }
     
     fun addAnnotation(annotation: MapAnnotation) {
@@ -108,14 +111,9 @@ class AnnotationRepository @Inject constructor() {
     }
     
     fun clearAnnotations() {
-        // Create deletion annotations for all existing annotations
-        _annotations.value.forEach { annotation ->
-            val deletion = MapAnnotation.Deletion(
-                id = annotation.id,
-                creatorId = "local" // TODO: Replace with actual user ID
-            )
-            meshProtocol.sendAnnotation(deletion)
-        }
+        // Send all deletions as a single (or minimal) bulk packet
+        val ids = _annotations.value.map { it.id }
+        meshProtocol.sendBulkAnnotationDeletions(ids)
         // Clear local state
         _annotations.value = emptyList()
         // Trigger state sync

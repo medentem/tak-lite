@@ -69,9 +69,15 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     }
 
     fun sendPacket(data: ByteArray) {
+        val MAX_SAFE_PACKET = 252 // Based on MTU 255 - 3 bytes ATT header
+        Log.d(TAG, "sendPacket: Attempting to send packet of size ${data.size} bytes")
+        if (data.size > MAX_SAFE_PACKET) {
+            Log.e(TAG, "sendPacket: Data size ${data.size} exceeds safe MTU payload ($MAX_SAFE_PACKET), not sending.")
+            return
+        }
         val MAXPACKET = 256
         if (data.size > MAXPACKET) {
-            Log.e(TAG, "sendPacket: Data size \\${data.size} exceeds MAXPACKET (\\$MAXPACKET), not sending.")
+            Log.e(TAG, "sendPacket: Data size ${data.size} exceeds MAXPACKET ($MAXPACKET), not sending.")
             return
         }
         // Wrap the MeshPacket bytes in a ToRadio message
@@ -79,7 +85,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             .setPacket(MeshProtos.MeshPacket.parseFrom(data))
             .build()
         val toRadioBytes = toRadio.toByteArray()
-        Log.d(TAG, "sendPacket: Sending ToRadio \\${toRadioBytes.size} bytes: \\${toRadioBytes.joinToString(", ", limit = 16)}")
+        Log.d(TAG, "sendPacket: Sending ToRadio ${toRadioBytes.size} bytes: ${toRadioBytes.joinToString(", ", limit = 16)}")
         CoroutineScope(coroutineContext).launch {
             try {
                 val gatt = deviceManager.connectedGatt
@@ -88,16 +94,16 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                 if (gatt != null && service != null && toRadioChar != null) {
                     deviceManager.reliableWrite(toRadioChar, toRadioBytes) { result ->
                         result.onSuccess { success ->
-                            Log.d(TAG, "sendPacket: reliableWrite returned \\${success}")
+                            Log.d(TAG, "sendPacket: reliableWrite returned ${success}")
                         }.onFailure { error ->
-                            Log.e(TAG, "sendPacket: reliableWrite error: \\${error.message}")
+                            Log.e(TAG, "sendPacket: reliableWrite error: ${error.message}")
                         }
                     }
                 } else {
                     Log.e(TAG, "sendPacket: GATT/service/ToRadio characteristic missing, cannot send packet.")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error sending packet: \\${e.message}")
+                Log.e(TAG, "Error sending packet: ${e.message}")
             }
         }
     }
@@ -201,6 +207,9 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     // Call this when you receive a packet from the device
     fun handleIncomingPacket(data: ByteArray) {
         Log.d(TAG, "handleIncomingPacket called with data: ${data.size} bytes: ${data.joinToString(", ", limit = 16)}")
+        if (data.size > 252) {
+            Log.e(TAG, "handleIncomingPacket: Received packet size ${data.size} exceeds safe MTU payload (252 bytes)")
+        }
         try {
             val fromRadio = com.geeksville.mesh.MeshProtos.FromRadio.parseFrom(data)
             Log.d(TAG, "Parsed FromRadio: $fromRadio")
@@ -268,13 +277,38 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                                 Log.e(TAG, "Failed to parse position: ${e.message}")
                             }
                         } else if (decoded.portnum == com.geeksville.mesh.Portnums.PortNum.ATAK_PLUGIN) {
-                            val annotation = com.tak.lite.util.MeshAnnotationInterop.meshDataToMapAnnotation(decoded)
-                            if (annotation != null) {
-                                Log.d(TAG, "Parsed annotation from peer $peerId: $annotation")
-                                annotationCallback?.invoke(annotation)
-                                _annotations.value = _annotations.value + annotation
+                            // Try to parse as bulk deletion
+                            val bulkDeleteIds = com.tak.lite.util.MeshAnnotationInterop.meshDataToBulkDeleteIds(decoded)
+                            if (bulkDeleteIds != null) {
+                                Log.d(TAG, "Parsed bulk deletion of ${bulkDeleteIds.size} IDs from peer $peerId")
+                                // Remove all matching annotations
+                                _annotations.value = _annotations.value.filter { it.id !in bulkDeleteIds }
+                                annotationCallback?.let { cb ->
+                                    bulkDeleteIds.forEach { id ->
+                                        cb(com.tak.lite.model.MapAnnotation.Deletion(id = id, creatorId = peerId))
+                                    }
+                                }
                             } else {
-                                Log.d(TAG, "Received TAK_LITE_APP message from $peerId but failed to parse annotation")
+                                val annotation = com.tak.lite.util.MeshAnnotationInterop.meshDataToMapAnnotation(decoded)
+                                if (annotation != null) {
+                                    Log.d(TAG, "Parsed annotation from peer $peerId: $annotation")
+                                    annotationCallback?.invoke(annotation)
+                                    // Replace or remove annotation by ID
+                                    when (annotation) {
+                                        is com.tak.lite.model.MapAnnotation.Deletion -> {
+                                            _annotations.value = _annotations.value.filter { it.id != annotation.id }
+                                        }
+                                        else -> {
+                                            // Replace if exists, add if new, keep most recent by timestamp
+                                            val existing = _annotations.value.find { it.id == annotation.id }
+                                            if (existing == null || annotation.timestamp > existing.timestamp) {
+                                                _annotations.value = _annotations.value.filter { it.id != annotation.id } + annotation
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    Log.d(TAG, "Received ATAK_PLUGIN message from $peerId but failed to parse annotation")
+                                }
                             }
                         } else {
                             Log.d(TAG, "Ignored packet from $peerId with portnum: ${decoded.portnum}")
@@ -295,6 +329,37 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     // Helper to determine if a peerId is our own node
     private fun isOwnNode(peerId: String): Boolean {
         return connectedNodeId != null && peerId == connectedNodeId
+    }
+
+    /**
+     * Send a bulk deletion of annotation IDs as a single packet, batching as many as will fit under 252 bytes.
+     */
+    fun sendBulkAnnotationDeletions(ids: List<String>) {
+        if (ids.isEmpty()) return
+        val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+        val nickname = prefs.getString("nickname", null)
+        val battery = DeviceController.batteryLevel.value
+        // Batch IDs into groups that fit under 252 bytes
+        var batch = mutableListOf<String>()
+        var batchSize = 0
+        for (id in ids) {
+            val testBatch = batch + id
+            val data = com.tak.lite.util.MeshAnnotationInterop.bulkDeleteToMeshData(testBatch, nickname, battery)
+            val size = data.toByteArray().size
+            if (size > 252 && batch.isNotEmpty()) {
+                // Send current batch
+                sendPacket(com.tak.lite.util.MeshAnnotationInterop.bulkDeleteToMeshData(batch, nickname, battery).toByteArray())
+                batch = mutableListOf(id)
+            } else if (size > 252) {
+                // Single ID is too large (should not happen), skip
+                continue
+            } else {
+                batch.add(id)
+            }
+        }
+        if (batch.isNotEmpty()) {
+            sendPacket(com.tak.lite.util.MeshAnnotationInterop.bulkDeleteToMeshData(batch, nickname, battery).toByteArray())
+        }
     }
 
     data class ConnectionMetrics(

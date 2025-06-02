@@ -659,6 +659,14 @@ class MainActivity : AppCompatActivity(), com.tak.lite.ui.map.ElevationChartBott
     override fun onResume() {
         super.onResume()
         mapController.onResume()
+        // Apply keep screen awake preference
+        val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
+        val keepAwakeEnabled = prefs.getBoolean("keep_screen_awake", false)
+        if (keepAwakeEnabled) {
+            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
     }
     override fun onPause() {
         super.onPause()

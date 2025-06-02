@@ -127,6 +127,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
     }
 
     fun updateAnnotations(annotations: List<MapAnnotation>) {
+        android.util.Log.d("AnnotationOverlayView", "updateAnnotations called: ${annotations.map { it.id }}")
         this.annotations = annotations
         invalidate()
     }

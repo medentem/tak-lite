@@ -124,12 +124,7 @@ class SettingsActivity : AppCompatActivity() {
 
         bluetoothConnectButton.setOnClickListener {
             if (isBluetoothConnected) {
-                // Disconnect
                 bluetoothDeviceManager?.disconnect()
-                connectedDevice = null
-                isBluetoothConnected = false
-                bluetoothStatusText.text = "Not connected"
-                updateBluetoothButtonState()
             } else {
                 when {
                     !isBluetoothEnabled() -> {
@@ -166,10 +161,6 @@ class SettingsActivity : AppCompatActivity() {
             bluetoothConnectButton.visibility = if (selectedType == "Meshtastic") android.view.View.VISIBLE else android.view.View.GONE
             if (selectedType != "Meshtastic" && isBluetoothConnected) {
                 bluetoothDeviceManager?.disconnect()
-                connectedDevice = null
-                isBluetoothConnected = false
-                bluetoothStatusText.text = "Not connected"
-                updateBluetoothButtonState()
             }
         }
 
@@ -353,6 +344,9 @@ class SettingsActivity : AppCompatActivity() {
         val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
         val mode = prefs.getString("dark_mode", "system") ?: "system"
         applyDarkMode(mode)
+        // Ensure keep screen awake is always set according to preference
+        val keepAwakeEnabled = prefs.getBoolean("keep_screen_awake", false)
+        setKeepScreenAwake(keepAwakeEnabled)
     }
 
     private fun setKeepScreenAwake(enabled: Boolean) {
