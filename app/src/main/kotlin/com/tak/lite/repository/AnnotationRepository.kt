@@ -142,4 +142,10 @@ class AnnotationRepository @Inject constructor() {
         
         _annotations.value = merged
     }
+    
+    fun sendBulkAnnotationDeletions(ids: List<String>) {
+        meshProtocol.sendBulkAnnotationDeletions(ids)
+        // Remove from local state as well
+        _annotations.value = _annotations.value.filter { it.id !in ids }
+    }
 } 

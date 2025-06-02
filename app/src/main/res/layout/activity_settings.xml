@@ -83,6 +83,20 @@
                         android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
                         android:paddingTop="4dp"
                         android:paddingBottom="4dp" />
+
+                    <ProgressBar
+                        android:id="@+id/configProgressBar"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:visibility="gone"
+                        style="?android:attr/progressBarStyleHorizontal" />
+
+                    <TextView
+                        android:id="@+id/configProgressText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:visibility="gone"
+                        android:text="Downloading config..." />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 

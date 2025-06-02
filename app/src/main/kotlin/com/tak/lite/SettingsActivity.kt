@@ -59,6 +59,8 @@ class SettingsActivity : AppCompatActivity() {
     }
     private val REQUEST_CODE_BLUETOOTH_PERMISSIONS = 1002
     private var isBluetoothConnected: Boolean = false
+    private lateinit var configProgressBar: android.widget.ProgressBar
+    private lateinit var configProgressText: android.widget.TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -79,6 +81,8 @@ class SettingsActivity : AppCompatActivity() {
         simulatePeersSwitch = findViewById(R.id.simulatePeersSwitch)
         simulatedPeersCountEditText = findViewById(R.id.simulatedPeersCountEditText)
         simulatedPeersCountLayout = findViewById(R.id.simulatedPeersCountLayout)
+        configProgressBar = findViewById(R.id.configProgressBar)
+        configProgressText = findViewById(R.id.configProgressText)
 
         // Setup map mode spinner
         val adapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, mapModeOptions)
@@ -248,6 +252,43 @@ class SettingsActivity : AppCompatActivity() {
         locationSourceSpinner.setText(locationSourceOptions[locationSourceIndex], false)
         locationSourceSpinner.setOnItemClickListener { _, _, position, _ ->
             prefs.edit().putString("location_source_preference", locationSourceValues[position]).apply()
+        }
+
+        // Observe config download progress if available
+        val protocol = MeshProtocolProvider.protocol.value
+        protocol.configDownloadStep?.let { stepFlow ->
+            lifecycleScope.launch {
+                repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                    stepFlow.collect { step ->
+                        when (step) {
+                            is com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep.NotStarted,
+                            is com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep.Complete -> {
+                                configProgressBar.visibility = android.view.View.GONE
+                                configProgressText.visibility = android.view.View.GONE
+                            }
+                            is com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep.Error -> {
+                                configProgressBar.visibility = android.view.View.GONE
+                                configProgressText.visibility = android.view.View.VISIBLE
+                                configProgressText.text = "Error: ${step.message}"
+                            }
+                            else -> {
+                                configProgressBar.visibility = android.view.View.VISIBLE
+                                configProgressText.visibility = android.view.View.VISIBLE
+                                configProgressText.text = when (step) {
+                                    is com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep.SendingHandshake -> "Sending handshake..."
+                                    is com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep.WaitingForConfig -> "Waiting for config..."
+                                    is com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep.DownloadingConfig -> "Downloading: Device Config..."
+                                    is com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep.DownloadingModuleConfig -> "Downloading: Module Config..."
+                                    is com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep.DownloadingChannel -> "Downloading: Channel Info..."
+                                    is com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep.DownloadingNodeInfo -> "Downloading: Node Info..."
+                                    is com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep.DownloadingMyInfo -> "Downloading: My Info..."
+                                    else -> "Downloading config..."
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 

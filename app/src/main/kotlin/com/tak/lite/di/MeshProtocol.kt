@@ -26,6 +26,7 @@ sealed interface MeshProtocol {
     )
     fun setUserLocationCallback(callback: (LatLng) -> Unit)
     fun sendBulkAnnotationDeletions(ids: List<String>)
+    val configDownloadStep: StateFlow<MeshtasticBluetoothProtocol.ConfigDownloadStep>? get() = null
 }
 
 class Layer2MeshProtocolAdapter(private val impl: MeshNetworkProtocol) : MeshProtocol {
@@ -48,6 +49,7 @@ class Layer2MeshProtocolAdapter(private val impl: MeshNetworkProtocol) : MeshPro
     override fun sendBulkAnnotationDeletions(ids: List<String>) {
         // No-op or TODO: Not supported for Layer2 mesh
     }
+    override val configDownloadStep: StateFlow<MeshtasticBluetoothProtocol.ConfigDownloadStep>? get() = null
 }
 
 class MeshtasticBluetoothProtocolAdapter(val impl: MeshtasticBluetoothProtocol) : MeshProtocol {
@@ -74,4 +76,5 @@ class MeshtasticBluetoothProtocolAdapter(val impl: MeshtasticBluetoothProtocol) 
     }
     override fun setUserLocationCallback(callback: (LatLng) -> Unit) = impl.setUserLocationCallback(callback)
     override fun sendBulkAnnotationDeletions(ids: List<String>) = impl.sendBulkAnnotationDeletions(ids)
+    override val configDownloadStep: StateFlow<MeshtasticBluetoothProtocol.ConfigDownloadStep> get() = impl.configDownloadStep
 } 

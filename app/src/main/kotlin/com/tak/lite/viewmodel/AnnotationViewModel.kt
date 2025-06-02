@@ -115,7 +115,6 @@ class AnnotationViewModel @Inject constructor(
                 shape = newShape ?: current.shape,
                 color = newColor ?: current.color
             )
-            annotationRepository.removeAnnotation(id)
             annotationRepository.addAnnotation(updated)
         }
     }
@@ -127,7 +126,6 @@ class AnnotationViewModel @Inject constructor(
                 style = newStyle ?: current.style,
                 color = newColor ?: current.color
             )
-            annotationRepository.removeAnnotation(id)
             annotationRepository.addAnnotation(updated)
         }
     }
@@ -141,8 +139,13 @@ class AnnotationViewModel @Inject constructor(
                 is MapAnnotation.Area -> current.copy(expirationTime = expirationTime)
                 is MapAnnotation.Deletion -> current // Don't modify deletions
             }
-            annotationRepository.removeAnnotation(annotationId)
             annotationRepository.addAnnotation(updated)
+        }
+    }
+    
+    fun removeAnnotationsBulk(annotationIds: List<String>) {
+        viewModelScope.launch {
+            annotationRepository.sendBulkAnnotationDeletions(annotationIds)
         }
     }
 }

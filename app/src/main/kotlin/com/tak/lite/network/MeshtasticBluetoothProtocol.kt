@@ -49,6 +49,23 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     private val handshakeComplete = AtomicBoolean(false)
     private val configNonce = AtomicInteger((System.currentTimeMillis() % Int.MAX_VALUE).toInt())
 
+    // Add config download progress reporting
+    sealed class ConfigDownloadStep {
+        object NotStarted : ConfigDownloadStep()
+        object WaitingForInitialDrain : ConfigDownloadStep()
+        object SendingHandshake : ConfigDownloadStep()
+        object WaitingForConfig : ConfigDownloadStep()
+        object DownloadingConfig : ConfigDownloadStep()
+        object DownloadingModuleConfig : ConfigDownloadStep()
+        object DownloadingChannel : ConfigDownloadStep()
+        object DownloadingNodeInfo : ConfigDownloadStep()
+        object DownloadingMyInfo : ConfigDownloadStep()
+        object Complete : ConfigDownloadStep()
+        data class Error(val message: String) : ConfigDownloadStep()
+    }
+    private val _configDownloadStep = MutableStateFlow<ConfigDownloadStep>(ConfigDownloadStep.NotStarted)
+    val configDownloadStep: StateFlow<ConfigDownloadStep> = _configDownloadStep.asStateFlow()
+
     init {
         deviceManager.setPacketListener { data ->
             handleIncomingPacket(data)
@@ -60,10 +77,12 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             _peers.value = emptyList()
             connectedNodeId = null
             handshakeComplete.set(false)
+            _configDownloadStep.value = ConfigDownloadStep.NotStarted
         }
         // Listen for initial drain complete to trigger handshake
         deviceManager.setInitialDrainCompleteCallback {
             Log.i(TAG, "Initial FROMRADIO drain complete, starting config handshake.")
+            _configDownloadStep.value = ConfigDownloadStep.SendingHandshake
             startConfigHandshake()
         }
     }
@@ -162,6 +181,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         handshakeComplete.set(false)
         val nonce = configNonce.incrementAndGet()
         Log.i(TAG, "Starting Meshtastic config handshake with nonce=$nonce")
+        _configDownloadStep.value = ConfigDownloadStep.SendingHandshake
         val toRadio = com.geeksville.mesh.MeshProtos.ToRadio.newBuilder()
             .setWantConfigId(nonce)
             .build()
@@ -174,14 +194,17 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                 deviceManager.reliableWrite(toRadioChar, toRadioBytes) { result ->
                     result.onSuccess { success ->
                         Log.i(TAG, "Sent want_config_id handshake packet: $success")
+                        _configDownloadStep.value = ConfigDownloadStep.WaitingForConfig
                         // Start handshake drain loop
                         drainFromRadioUntilHandshakeComplete()
                     }.onFailure { error ->
                         Log.e(TAG, "Failed to send want_config_id: ${error.message}")
+                        _configDownloadStep.value = ConfigDownloadStep.Error("Failed to send handshake: ${error.message}")
                     }
                 }
             } else {
                 Log.e(TAG, "GATT/service/ToRadio characteristic missing, cannot send handshake.")
+                _configDownloadStep.value = ConfigDownloadStep.Error("GATT/service/ToRadio characteristic missing")
             }
         }
     }
@@ -198,8 +221,10 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                     kotlinx.coroutines.delay(200)
                 }
                 Log.i(TAG, "Handshake complete.")
+                _configDownloadStep.value = ConfigDownloadStep.Complete
             } else {
                 Log.e(TAG, "GATT/service/FROMRADIO characteristic missing, cannot drain during handshake.")
+                _configDownloadStep.value = ConfigDownloadStep.Error("GATT/service/FROMRADIO characteristic missing")
             }
         }
     }
@@ -216,20 +241,25 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             when (fromRadio.payloadVariantCase) {
                 com.geeksville.mesh.MeshProtos.FromRadio.PayloadVariantCase.CONFIG -> {
                     Log.i(TAG, "Received CONFIG during handshake.")
+                    _configDownloadStep.value = ConfigDownloadStep.DownloadingConfig
                 }
                 com.geeksville.mesh.MeshProtos.FromRadio.PayloadVariantCase.MODULECONFIG -> {
                     Log.i(TAG, "Received MODULECONFIG during handshake.")
+                    _configDownloadStep.value = ConfigDownloadStep.DownloadingModuleConfig
                 }
                 com.geeksville.mesh.MeshProtos.FromRadio.PayloadVariantCase.CHANNEL -> {
                     Log.i(TAG, "Received CHANNEL during handshake.")
+                    _configDownloadStep.value = ConfigDownloadStep.DownloadingChannel
                 }
                 com.geeksville.mesh.MeshProtos.FromRadio.PayloadVariantCase.NODE_INFO -> {
                     Log.i(TAG, "Received NODE_INFO during handshake.")
+                    _configDownloadStep.value = ConfigDownloadStep.DownloadingNodeInfo
                 }
                 com.geeksville.mesh.MeshProtos.FromRadio.PayloadVariantCase.MY_INFO -> {
                     val myInfo = fromRadio.myInfo
                     connectedNodeId = myInfo.myNodeNum.toString()
                     Log.d(TAG, "Received MyNodeInfo, nodeId: $connectedNodeId")
+                    _configDownloadStep.value = ConfigDownloadStep.DownloadingMyInfo
                 }
                 com.geeksville.mesh.MeshProtos.FromRadio.PayloadVariantCase.CONFIG_COMPLETE_ID -> {
                     val completeId = fromRadio.configCompleteId
@@ -237,6 +267,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                     if (completeId == configNonce.get()) {
                         handshakeComplete.set(true)
                         Log.i(TAG, "Meshtastic config handshake complete!")
+                        _configDownloadStep.value = ConfigDownloadStep.Complete
                         // Subscribe to FROMNUM notifications only after handshake is complete
                         deviceManager.subscribeToFromNumNotifications()
                     } else {

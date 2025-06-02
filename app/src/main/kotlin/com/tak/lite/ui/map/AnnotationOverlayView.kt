@@ -945,9 +945,9 @@ class AnnotationOverlayView @JvmOverloads constructor(
 
     // Draw a solid green dot with white border and shadow for peer locations
     private fun drawPeerLocationDot(canvas: Canvas, point: PointF) {
-        val dotRadius = 24f
-        val borderRadius = 28f
-        val shadowRadius = 32f
+        val dotRadius = 19f // Reduced from 24f
+        val borderRadius = 22f // Reduced from 28f
+        val shadowRadius = 25f // Reduced from 32f
         // Draw shadow
         val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#33000000")

@@ -146,7 +146,7 @@ class AnnotationFragment : Fragment() {
                                     selected.forEach { viewModel.setAnnotationExpiration(it.id, System.currentTimeMillis() + action.millis) }
                                 }
                                 is BulkEditAction.Delete -> {
-                                    selected.forEach { viewModel.removeAnnotation(it.id) }
+                                    viewModel.removeAnnotationsBulk(selected.map { it.id })
                                 }
                             }
                             annotationOverlayView.hideLassoMenu()
