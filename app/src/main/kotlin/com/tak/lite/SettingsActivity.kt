@@ -22,6 +22,7 @@ import com.tak.lite.ui.map.MapController
 import kotlinx.coroutines.launch
 import java.util.UUID
 import androidx.appcompat.app.AppCompatDelegate
+import android.content.Context
 
 class SettingsActivity : AppCompatActivity() {
     private lateinit var mapModeSpinner: AutoCompleteTextView
@@ -130,10 +131,19 @@ class SettingsActivity : AppCompatActivity() {
                 bluetoothStatusText.text = "Not connected"
                 updateBluetoothButtonState()
             } else {
-                if (hasBluetoothPermissions()) {
-                    showBluetoothScanDialog(bluetoothDeviceManager)
-                } else {
-                    requestBluetoothPermissions()
+                when {
+                    !isBluetoothEnabled() -> {
+                        promptEnableBluetooth()
+                    }
+                    !isLocationEnabled() -> {
+                        promptEnableLocation()
+                    }
+                    !hasBluetoothPermissions() -> {
+                        requestBluetoothPermissions()
+                    }
+                    else -> {
+                        showBluetoothScanDialog(bluetoothDeviceManager)
+                    }
                 }
             }
         }
@@ -350,6 +360,46 @@ class SettingsActivity : AppCompatActivity() {
             window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         } else {
             window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
+    private fun isBluetoothEnabled(): Boolean {
+        val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager
+        val adapter = bluetoothManager.adapter
+        return adapter != null && adapter.isEnabled
+    }
+
+    private fun isLocationEnabled(): Boolean {
+        val locationManager = getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
+        return locationManager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) ||
+                locationManager.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER)
+    }
+
+    private fun promptEnableBluetooth() {
+        val enableBtIntent = android.content.Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_ENABLE)
+        startActivityForResult(enableBtIntent, 2001)
+    }
+
+    private fun promptEnableLocation() {
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Enable Location")
+            .setMessage("Location services are required to scan for Bluetooth devices. Please enable location.")
+            .setPositiveButton("Open Settings") { _, _ ->
+                startActivity(android.content.Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 2001) {
+            if (isBluetoothEnabled()) {
+                // Optionally, retry connection or inform user
+                bluetoothStatusText.text = "Bluetooth enabled. You can now connect."
+            } else {
+                bluetoothStatusText.text = "Bluetooth must be enabled to connect."
+            }
         }
     }
 } 
