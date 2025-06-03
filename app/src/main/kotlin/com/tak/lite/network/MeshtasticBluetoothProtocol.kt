@@ -48,6 +48,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     private var connectedNodeId: String? = null
     private val handshakeComplete = AtomicBoolean(false)
     private val configNonce = AtomicInteger((System.currentTimeMillis() % Int.MAX_VALUE).toInt())
+    private val nodeInfoMap = ConcurrentHashMap<String, com.geeksville.mesh.MeshProtos.NodeInfo>()
 
     // Add config download progress reporting
     sealed class ConfigDownloadStep {
@@ -65,6 +66,9 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     }
     private val _configDownloadStep = MutableStateFlow<ConfigDownloadStep>(ConfigDownloadStep.NotStarted)
     val configDownloadStep: StateFlow<ConfigDownloadStep> = _configDownloadStep.asStateFlow()
+
+    // Add a callback for packet size errors
+    var onPacketTooLarge: ((Int, Int) -> Unit)? = null // (actualSize, maxSize)
 
     init {
         deviceManager.setPacketListener { data ->
@@ -92,11 +96,13 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         Log.d(TAG, "sendPacket: Attempting to send packet of size ${data.size} bytes")
         if (data.size > MAX_SAFE_PACKET) {
             Log.e(TAG, "sendPacket: Data size ${data.size} exceeds safe MTU payload ($MAX_SAFE_PACKET), not sending.")
+            onPacketTooLarge?.invoke(data.size, MAX_SAFE_PACKET)
             return
         }
         val MAXPACKET = 256
         if (data.size > MAXPACKET) {
             Log.e(TAG, "sendPacket: Data size ${data.size} exceeds MAXPACKET ($MAXPACKET), not sending.")
+            onPacketTooLarge?.invoke(data.size, MAXPACKET)
             return
         }
         // Wrap the MeshPacket bytes in a ToRadio message
@@ -254,6 +260,9 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                 com.geeksville.mesh.MeshProtos.FromRadio.PayloadVariantCase.NODE_INFO -> {
                     Log.i(TAG, "Received NODE_INFO during handshake.")
                     _configDownloadStep.value = ConfigDownloadStep.DownloadingNodeInfo
+                    val nodeInfo = fromRadio.nodeInfo
+                    val nodeNum = nodeInfo.num.toString()
+                    nodeInfoMap[nodeNum] = nodeInfo
                 }
                 com.geeksville.mesh.MeshProtos.FromRadio.PayloadVariantCase.MY_INFO -> {
                     val myInfo = fromRadio.myInfo
@@ -300,12 +309,17 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                                 val lng = position.longitudeI / 1e7
                                 Log.d(TAG, "Parsed position from peer $peerId: lat=$lat, lng=$lng")
                                 peerLocations[peerId] = org.maplibre.android.geometry.LatLng(lat, lng)
+                                // Update last seen for node info
+                                nodeInfoMap[peerId]?.let { info ->
+                                    val updated = info.toBuilder().setLastHeard((System.currentTimeMillis() / 1000).toInt()).build()
+                                    nodeInfoMap[peerId] = updated
+                                }
                                 peerLocationCallback?.invoke(peerLocations.toMap())
                                 if (isOwnNode(peerId)) {
                                     userLocationCallback?.invoke(org.maplibre.android.geometry.LatLng(lat, lng))
                                 }
                             } catch (e: Exception) {
-                                Log.e(TAG, "Failed to parse position: ${e.message}")
+                                Log.e(TAG, "Failed to parse position: "+e.message)
                             }
                         } else if (decoded.portnum == com.geeksville.mesh.Portnums.PortNum.ATAK_PLUGIN) {
                             // Try to parse as bulk deletion
@@ -391,6 +405,10 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         if (batch.isNotEmpty()) {
             sendPacket(com.tak.lite.util.MeshAnnotationInterop.bulkDeleteToMeshData(batch, nickname, battery).toByteArray())
         }
+    }
+
+    fun getNodeInfoForPeer(peerId: String): com.geeksville.mesh.MeshProtos.NodeInfo? {
+        return nodeInfoMap[peerId]
     }
 
     data class ConnectionMetrics(

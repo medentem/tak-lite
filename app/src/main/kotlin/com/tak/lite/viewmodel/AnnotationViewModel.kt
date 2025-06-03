@@ -48,15 +48,7 @@ class AnnotationViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(selectedShape = shape)
     }
     
-    fun setCurrentLineStyle(style: LineStyle) {
-        currentLineStyle = style
-    }
-    
-    fun setCurrentArrowHead(arrow: Boolean) {
-        currentArrowHead = arrow
-    }
-    
-    fun addPointOfInterest(position: LatLng, nickname: String? = null, battery: Int? = null) {
+    fun addPointOfInterest(position: LatLng, nickname: String? = null) {
         viewModelScope.launch {
             val annotation = MapAnnotation.PointOfInterest(
                 creatorId = nickname ?: "local", // Use nickname if available
@@ -69,27 +61,14 @@ class AnnotationViewModel @Inject constructor(
         }
     }
     
-    fun addLine(points: List<LatLng>) {
+    fun addLine(points: List<LatLng>, nickname: String? = null) {
         viewModelScope.launch {
             val annotation = MapAnnotation.Line(
-                creatorId = "local", // TODO: Replace with actual user ID
+                creatorId = nickname ?: "local", // Use nickname if available
                 color = currentColor,
                 points = points.map { LatLngSerializable.fromMapLibreLatLng(it) },
                 style = currentLineStyle,
                 arrowHead = currentArrowHead,
-                expirationTime = null
-            )
-            annotationRepository.addAnnotation(annotation)
-        }
-    }
-    
-    fun addArea(center: LatLng, radius: Double) {
-        viewModelScope.launch {
-            val annotation = MapAnnotation.Area(
-                creatorId = "local", // TODO: Replace with actual user ID
-                color = currentColor,
-                center = LatLngSerializable.fromMapLibreLatLng(center),
-                radius = radius,
                 expirationTime = null
             )
             annotationRepository.addAnnotation(annotation)
@@ -102,18 +81,13 @@ class AnnotationViewModel @Inject constructor(
         }
     }
     
-    fun clearAnnotations() {
-        viewModelScope.launch {
-            annotationRepository.clearAnnotations()
-        }
-    }
-    
     fun updatePointOfInterest(id: String, newShape: PointShape? = null, newColor: AnnotationColor? = null) {
         viewModelScope.launch {
             val current = annotationRepository.annotations.value.filterIsInstance<MapAnnotation.PointOfInterest>().find { it.id == id } ?: return@launch
             val updated = current.copy(
                 shape = newShape ?: current.shape,
-                color = newColor ?: current.color
+                color = newColor ?: current.color,
+                timestamp = System.currentTimeMillis()
             )
             annotationRepository.addAnnotation(updated)
         }
@@ -124,7 +98,8 @@ class AnnotationViewModel @Inject constructor(
             val current = annotationRepository.annotations.value.filterIsInstance<MapAnnotation.Line>().find { it.id == id } ?: return@launch
             val updated = current.copy(
                 style = newStyle ?: current.style,
-                color = newColor ?: current.color
+                color = newColor ?: current.color,
+                timestamp = System.currentTimeMillis()
             )
             annotationRepository.addAnnotation(updated)
         }

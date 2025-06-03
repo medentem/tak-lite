@@ -27,6 +27,7 @@ import kotlin.math.hypot
 import kotlin.math.sin
 import kotlin.math.sqrt
 import com.tak.lite.util.haversine
+import com.geeksville.mesh.MeshProtos
 
 class AnnotationOverlayView @JvmOverloads constructor(
     context: Context,
@@ -89,6 +90,12 @@ class AnnotationOverlayView @JvmOverloads constructor(
         invalidate()
     }
 
+    // Callback for peer dot taps
+    interface OnPeerDotTapListener {
+        fun onPeerDotTapped(peerId: String, screenPosition: PointF)
+    }
+    var peerDotTapListener: OnPeerDotTapListener? = null
+
     var fanMenuView: FanMenuView? = null
 
     // --- Lasso Selection State ---
@@ -111,7 +118,18 @@ class AnnotationOverlayView @JvmOverloads constructor(
     private var labelPoiIdToShow: String? = null
     private var labelDismissHandler: Handler? = null
     private val LABEL_DISPLAY_DURATION = 8000L // 3 seconds
+    // --- Peer popover state ---
+    private var peerPopoverPeerId: String? = null
+    private var peerPopoverNodeInfo: MeshProtos.NodeInfo? = null
+    private var peerPopoverDismissHandler: Handler? = null
+    private val PEER_POPOVER_DISPLAY_DURATION = 8000L
     
+    private var userLocation: LatLng? = null
+    fun setUserLocation(location: LatLng?) {
+        userLocation = location
+        invalidate()
+    }
+
     init {
         timerHandler.post(timerRunnable)
     }
@@ -363,6 +381,15 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     strokeWidth = 10f
                 }
                 canvas.drawCircle(pointF.x, pointF.y, 24f, highlightPaint)
+            }
+        }
+
+        // Draw peer popover if active
+        peerPopoverPeerId?.let { peerId ->
+            val latLng = peerLocations[peerId]
+            val pos = latLng?.let { projection?.toScreenLocation(it) }?.let { PointF(it.x, it.y) }
+            if (pos != null) {
+                drawPeerPopover(canvas, peerId, peerPopoverNodeInfo, pos)
             }
         }
     }
@@ -780,6 +807,12 @@ class AnnotationOverlayView @JvmOverloads constructor(
                         quickTapDownPos = null
                         return true // Intercept only if touching a line
                     }
+                    // Check for peer dot tap
+                    val peerId = findPeerDotAt(event.x, event.y)
+                    if (peerId != null) {
+                        peerDotTapListener?.onPeerDotTapped(peerId, PointF(event.x, event.y))
+                        return true
+                    }
                     longPressCandidate = null
                     longPressLineCandidate = null
                     // Do NOT hide label when tapping elsewhere
@@ -1053,15 +1086,12 @@ class AnnotationOverlayView @JvmOverloads constructor(
         val min = ageSec / 60
         val sec = ageSec % 60
         val ageStr = if (min > 0) "${min}m ${sec}s old" else "${sec}s old"
-        val lat = annotation.position.latitude
-        val lon = annotation.position.longitude
+        val lat = annotation.position.lt
+        val lon = annotation.position.lng
         val coordStr = String.format("%.5f, %.5f", lat, lon)
         // --- Distance ---
-        val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-        val userLat = prefs.getFloat("last_lat", Float.NaN).toDouble()
-        val userLon = prefs.getFloat("last_lon", Float.NaN).toDouble()
-        val distStr = if (!userLat.isNaN() && !userLon.isNaN()) {
-            val distMeters = haversine(lat, lon, userLat, userLon)
+        val distStr = if (userLocation != null) {
+            val distMeters = haversine(lat, lon, userLocation!!.latitude, userLocation!!.longitude)
             val distMiles = distMeters / 1609.344
             String.format("%.1fmi away", distMiles)
         } else {
@@ -1111,6 +1141,105 @@ class AnnotationOverlayView @JvmOverloads constructor(
         var textY = rectTop + (rectHeight - blockHeight) / 2 - fontMetrics.ascent
         for (line in lines) {
             canvas.drawText(line, point.x, textY, textPaint)
+            textY += lineHeight + 8 // 8px between lines
+        }
+    }
+
+    // Helper to find a peer dot at a screen position
+    private fun findPeerDotAt(x: Float, y: Float): String? {
+        for ((peerId, latLng) in peerLocations) {
+            val point = projection?.toScreenLocation(latLng) ?: continue
+            val dx = x - point.x
+            val dy = y - point.y
+            if (hypot(dx.toDouble(), dy.toDouble()) < 40) {
+                return peerId
+            }
+        }
+        return null
+    }
+
+    fun showPeerPopover(peerId: String, nodeInfo: MeshProtos.NodeInfo?) {
+        peerPopoverPeerId = peerId
+        peerPopoverNodeInfo = nodeInfo
+        peerPopoverDismissHandler?.removeCallbacksAndMessages(null)
+        peerPopoverDismissHandler = Handler(Looper.getMainLooper())
+        peerPopoverDismissHandler?.postDelayed({
+            peerPopoverPeerId = null
+            peerPopoverNodeInfo = null
+            invalidate()
+        }, PEER_POPOVER_DISPLAY_DURATION.toLong())
+        invalidate()
+    }
+
+    private fun drawPeerPopover(canvas: Canvas, peerId: String, nodeInfo: MeshProtos.NodeInfo?, pos: PointF) {
+        // Compose info lines
+        val lines = mutableListOf<String>()
+        val user = nodeInfo?.user
+        val shortName = user?.shortName ?: "(unknown)"
+        // val longName = user?.longName ?: ""
+        if (shortName.isNotBlank()) lines.add(shortName)
+        // if (longName.isNotBlank() && longName != shortName) lines.add(longName)
+        val coords = peerLocations[peerId]
+        coords?.let { lines.add(String.format("%.5f, %.5f", it.latitude, it.longitude)) }
+        // Add distance from user location if available
+        if (coords != null && userLocation != null) {
+            val distMeters = haversine(coords.latitude, coords.longitude, userLocation!!.latitude, userLocation!!.longitude)
+            val distMiles = distMeters / 1609.344
+            lines.add(String.format("%.1f mi away", distMiles))
+        }
+        val lastSeen = nodeInfo?.lastHeard?.toLong() ?: 0L
+        if (lastSeen > 0) {
+            val now = System.currentTimeMillis() / 1000
+            val ageSec = now - lastSeen
+            val min = ageSec / 60
+            val sec = ageSec % 60
+            val ageStr = if (min > 0) "Last seen ${min}m ${sec}s ago" else "Last seen ${sec}s ago"
+            lines.add(ageStr)
+        }
+        if (lines.isEmpty()) lines.add(peerId)
+        // Draw pill background and text (similar to drawPoiLabel)
+        val textSize = 24f
+        val padding = 24f
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            this.textSize = textSize
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.DEFAULT_BOLD
+        }
+        // Measure max width
+        var maxWidth = 0
+        lines.forEach { line ->
+            val bounds = android.graphics.Rect()
+            textPaint.getTextBounds(line, 0, line.length, bounds)
+            if (bounds.width() > maxWidth) maxWidth = bounds.width()
+        }
+        val fontMetrics = textPaint.fontMetrics
+        val lineHeight = (fontMetrics.descent - fontMetrics.ascent).toInt()
+        val totalHeight = lineHeight * lines.size + (lines.size - 1) * 8 + (padding * 2)
+        val rectWidth = maxWidth + (padding * 2)
+        val rectHeight = totalHeight.toFloat()
+        val rectLeft = pos.x - rectWidth / 2
+        val rectTop = pos.y - 60f - rectHeight // 60px above dot
+        val rectRight = pos.x + rectWidth / 2
+        val rectBottom = rectTop + rectHeight
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(200, 0, 0, 0)
+            style = Paint.Style.FILL
+        }
+        canvas.drawRoundRect(
+            rectLeft,
+            rectTop,
+            rectRight,
+            rectBottom,
+            rectHeight / 2,
+            rectHeight / 2,
+            bgPaint
+        )
+        // Center the block of text vertically in the pill
+        val blockHeight = lineHeight * lines.size + (lines.size - 1) * 8
+        var textY = rectTop + (rectHeight - blockHeight) / 2 - fontMetrics.ascent
+        for (line in lines) {
+            canvas.drawText(line, pos.x, textY, textPaint)
             textY += lineHeight + 8 // 8px between lines
         }
     }

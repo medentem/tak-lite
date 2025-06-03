@@ -84,11 +84,11 @@ enum class LineStyle {
 
 @Serializable
 data class LatLngSerializable(
-    val latitude: Double,
-    val longitude: Double
+    val lt: Double,
+    val lng: Double
 ) {
     fun toMapLibreLatLng(): org.maplibre.android.geometry.LatLng {
-        return org.maplibre.android.geometry.LatLng(latitude, longitude)
+        return org.maplibre.android.geometry.LatLng(lt, lng)
     }
     
     companion object {

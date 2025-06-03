@@ -8,6 +8,9 @@ import kotlinx.coroutines.flow.combine
 import javax.inject.Inject
 import javax.inject.Singleton
 import org.maplibre.android.geometry.LatLng
+import com.geeksville.mesh.MeshProtos
+import com.tak.lite.di.MeshtasticBluetoothProtocolAdapter
+import com.tak.lite.network.MeshProtocolProvider
 
 @Singleton
 class MeshNetworkRepository @Inject constructor(
@@ -42,5 +45,12 @@ class MeshNetworkRepository @Inject constructor(
     
     fun setLocalNickname(nickname: String) {
         meshNetworkService.setLocalNickname(nickname)
+    }
+    
+    suspend fun getNodeInfo(peerId: String): MeshProtos.NodeInfo? {
+        val protocol = MeshProtocolProvider.getProtocol()
+        return if (protocol is MeshtasticBluetoothProtocolAdapter) {
+            protocol.impl.getNodeInfoForPeer(peerId)
+        } else null
     }
 } 

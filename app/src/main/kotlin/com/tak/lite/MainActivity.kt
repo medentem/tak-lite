@@ -533,6 +533,18 @@ class MainActivity : AppCompatActivity(), com.tak.lite.ui.map.ElevationChartBott
         locationSourcePreference = prefs.getString("location_source_preference", "AUTO") ?: "AUTO"
 
         updateLocationSourceLogic() // Ensure logic is set on startup
+
+        // After protocol is initialized (ensure this is after setContentView)
+        val meshProtocol = com.tak.lite.network.MeshProtocolProvider.getProtocol()
+        if (meshProtocol is com.tak.lite.di.MeshtasticBluetoothProtocolAdapter) {
+            meshProtocol.impl.onPacketTooLarge = { actual, max ->
+                runOnUiThread {
+                    val msg = "Annotation is too large to send (${actual} bytes, max allowed is ${max} bytes). Try simplifying or splitting it."
+                    val rootView = findViewById<View>(android.R.id.content)
+                    com.google.android.material.snackbar.Snackbar.make(rootView, msg, com.google.android.material.snackbar.Snackbar.LENGTH_LONG).show()
+                }
+            }
+        }
     }
 
     private fun observeMeshNetworkState() {

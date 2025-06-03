@@ -1,7 +1,7 @@
 package com.tak.lite.repository
 
 import com.tak.lite.model.MapAnnotation
-import com.tak.lite.di.MeshProtocol
+import com.tak.lite.network.MeshProtocolProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -12,8 +12,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
-import com.tak.lite.network.MeshProtocolProvider
-import kotlinx.coroutines.flow.collect
 
 @Singleton
 class AnnotationRepository @Inject constructor() {

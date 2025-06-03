@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import org.maplibre.android.geometry.LatLng
+import com.geeksville.mesh.MeshProtos
 
 @HiltViewModel
 class MeshNetworkViewModel @Inject constructor(
@@ -63,6 +64,10 @@ class MeshNetworkViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         meshNetworkRepository.cleanup()
+    }
+    
+    suspend fun getNodeInfo(peerId: String): MeshProtos.NodeInfo? {
+        return meshNetworkRepository.getNodeInfo(peerId)
     }
 }
 

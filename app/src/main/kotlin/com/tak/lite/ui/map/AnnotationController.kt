@@ -109,7 +109,7 @@ class AnnotationController(
                 Log.d("AnnotationController", "fanMenuView.onMenuDismissed for POI")
                 fanMenuView.visibility = View.GONE
             }
-        }, screenSize, org.maplibre.android.geometry.LatLng(poi.position.latitude, poi.position.longitude))
+        }, screenSize, org.maplibre.android.geometry.LatLng(poi.position.lt, poi.position.lng))
         Log.d("AnnotationController", "Calling fanMenuView.bringToFront for POI")
         fanMenuView.bringToFront()
         fanMenuView.visibility = View.VISIBLE
@@ -147,7 +147,7 @@ class AnnotationController(
         )
         val screenSize = PointF(binding.root.width.toFloat(), binding.root.height.toFloat())
         Log.d("AnnotationController", "Calling fanMenuView.showAt for LINE with options: $options at $center")
-        val lineLatLng = line.points.firstOrNull()?.let { org.maplibre.android.geometry.LatLng(it.latitude, it.longitude) }
+        val lineLatLng = line.points.firstOrNull()?.let { org.maplibre.android.geometry.LatLng(it.lt, it.lng) }
         fanMenuView.showAt(center, options, object : FanMenuView.OnOptionSelectedListener {
             override fun onOptionSelected(option: FanMenuView.Option): Boolean {
                 when (option) {

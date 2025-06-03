@@ -28,6 +28,7 @@ import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
+import com.geeksville.mesh.MeshProtos
 
 @AndroidEntryPoint
 class AnnotationFragment : Fragment() {
@@ -126,6 +127,11 @@ class AnnotationFragment : Fragment() {
                     annotationController.syncAnnotationOverlayView(mapController?.mapLibreMap)
                 }
             }
+            viewLifecycleOwner.lifecycleScope.launch {
+                meshNetworkViewModel.userLocation.collectLatest { location ->
+                    annotationOverlayView.setUserLocation(location)
+                }
+            }
 
             annotationOverlayView.lassoSelectionListener = object : AnnotationOverlayView.LassoSelectionListener {
                 override fun onLassoSelectionLongPress(selected: List<com.tak.lite.model.MapAnnotation>, screenPosition: android.graphics.PointF) {
@@ -153,6 +159,15 @@ class AnnotationFragment : Fragment() {
                             setLassoMode(false)
                             (activity as? MainActivity)?.resetLassoFab()
                         }
+                    }
+                }
+            }
+
+            annotationOverlayView.peerDotTapListener = object : AnnotationOverlayView.OnPeerDotTapListener {
+                override fun onPeerDotTapped(peerId: String, screenPosition: PointF) {
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        val nodeInfo: MeshProtos.NodeInfo? = meshNetworkViewModel.getNodeInfo(peerId)
+                        annotationOverlayView.showPeerPopover(peerId, nodeInfo)
                     }
                 }
             }

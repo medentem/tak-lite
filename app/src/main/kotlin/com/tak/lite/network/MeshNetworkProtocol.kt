@@ -861,7 +861,7 @@ class MeshNetworkProtocol @Inject constructor(
                 "peerLocations" -> {
                     // Update peer locations
                     stateSync.peerLocations.forEach { (peerId, location) ->
-                        peerLocations[peerId] = LatLng(location.latitude, location.longitude)
+                        peerLocations[peerId] = LatLng(location.lt, location.lng)
                     }
                     peerLocationCallback?.invoke(peerLocations.toMap())
                 }
@@ -890,7 +890,7 @@ class MeshNetworkProtocol @Inject constructor(
         // Update all state
         _channels.value = stateSync.channels
         stateSync.peerLocations.forEach { (peerId, location) ->
-            peerLocations[peerId] = LatLng(location.latitude, location.longitude)
+            peerLocations[peerId] = LatLng(location.lt, location.lng)
         }
         _annotations.value = stateSync.annotations
         

@@ -35,7 +35,8 @@ object MeshAnnotationInterop {
         pliAltitude: Int? = null,
         pliSpeed: Int? = null,
         pliCourse: Int? = null,
-        chatMessage: String? = null
+        chatMessage: String? = null,
+        channel: Int? = null
     ): MeshProtos.Data {
         Log.d(TAG, "mapAnnotationToMeshData called with annotation=$annotation, nickname=$nickname, groupRole=$groupRole, groupTeam=$groupTeam, batteryLevel=$batteryLevel, pliLatitude=$pliLatitude, pliLongitude=$pliLongitude, pliAltitude=$pliAltitude, pliSpeed=$pliSpeed, pliCourse=$pliCourse, chatMessage=$chatMessage")
         val jsonString = when (annotation) {
@@ -62,7 +63,10 @@ object MeshAnnotationInterop {
                     "c" to annotation.creatorId,
                     "ts" to annotation.timestamp,
                     "cl" to colorShort,
-                    "p" to mapOf("a" to pos.latitude, "o" to pos.longitude),
+                    "p" to mapOf(
+                        "a" to (pos.lt * 1e5).toLong(),
+                        "o" to (pos.lng * 1e5).toLong()
+                    ),
                     "s" to shapeShort
                 )
                 annotation.expirationTime?.let { map["e"] = it }
@@ -97,8 +101,24 @@ object MeshAnnotationInterop {
                     LineStyle.DASHED -> "d"
                     else -> "s"
                 }
-                val pointsArr = annotation.points.map { pt ->
-                    mapOf("a" to pt.latitude, "o" to pt.longitude)
+                // Delta encoding with 5 decimal places
+                val absPoints = annotation.points.map { pt ->
+                    listOf(
+                        (pt.lt * 1e5).toLong(),
+                        (pt.lng * 1e5).toLong()
+                    )
+                }
+                val pointsArr = if (absPoints.isNotEmpty()) {
+                    val deltas = mutableListOf<List<Long>>()
+                    deltas.add(absPoints[0]) // first point absolute
+                    for (i in 1 until absPoints.size) {
+                        val prev = absPoints[i - 1]
+                        val curr = absPoints[i]
+                        deltas.add(listOf(curr[0] - prev[0], curr[1] - prev[1]))
+                    }
+                    deltas
+                } else {
+                    emptyList()
                 }
                 val map = mutableMapOf<String, Any>(
                     "t" to "line",
@@ -116,13 +136,9 @@ object MeshAnnotationInterop {
                         is String -> kotlinx.serialization.json.JsonPrimitive(v)
                         is Number -> kotlinx.serialization.json.JsonPrimitive(v)
                         is List<*> -> kotlinx.serialization.json.JsonArray(v.map { pt ->
-                            val m = pt as Map<String, Any>
-                            kotlinx.serialization.json.JsonObject(m.mapValues { (_, vv) ->
-                                when (vv) {
-                                    is String -> kotlinx.serialization.json.JsonPrimitive(vv)
-                                    is Number -> kotlinx.serialization.json.JsonPrimitive(vv)
-                                    else -> kotlinx.serialization.json.JsonNull
-                                }
+                            val arr = pt as List<Long>
+                            kotlinx.serialization.json.JsonArray(arr.map { n ->
+                                kotlinx.serialization.json.JsonPrimitive(n)
                             })
                         })
                         is Map<*, *> -> {
@@ -154,7 +170,10 @@ object MeshAnnotationInterop {
                     "c" to annotation.creatorId,
                     "ts" to annotation.timestamp,
                     "cl" to colorShort,
-                    "ctr" to mapOf("a" to center.latitude, "o" to center.longitude),
+                    "ctr" to mapOf(
+                        "a" to (center.lt * 1e5).toLong(),
+                        "o" to (center.lng * 1e5).toLong()
+                    ),
                     "r" to annotation.radius
                 )
                 annotation.expirationTime?.let { map["e"] = it }
@@ -215,8 +234,8 @@ object MeshAnnotationInterop {
         }
         if (pliLatitude != null && pliLongitude != null) {
             val pliBuilder = ATAKProtos.PLI.newBuilder()
-                .setLatitudeI((pliLatitude * 1e7).toInt())
-                .setLongitudeI((pliLongitude * 1e7).toInt())
+                .setLatitudeI((pliLatitude * 1e5).toInt())
+                .setLongitudeI((pliLongitude * 1e5).toInt())
             pliAltitude?.let { pliBuilder.altitude = it }
             pliSpeed?.let { pliBuilder.speed = it }
             pliCourse?.let { pliBuilder.course = it }
@@ -226,6 +245,10 @@ object MeshAnnotationInterop {
         if (!chatMessage.isNullOrBlank()) {
             takPacketBuilder.chat = ATAKProtos.GeoChat.newBuilder().setMessage(chatMessage).build()
             Log.d(TAG, "Set chat message: $chatMessage")
+        }
+        if (channel != null) {
+            takPacketBuilder
+            Log.d(TAG, "Set channel: $channel")
         }
         val data = MeshProtos.Data.newBuilder()
             .setPortnum(com.geeksville.mesh.Portnums.PortNum.ATAK_PLUGIN)
@@ -262,8 +285,9 @@ object MeshAnnotationInterop {
                             else -> AnnotationColor.GREEN
                         }
                         val posObj = json["p"]?.jsonObject
-                        val lat = posObj?.get("a")?.jsonPrimitive?.doubleOrNull ?: 0.0
-                        val lon = posObj?.get("o")?.jsonPrimitive?.doubleOrNull ?: 0.0
+                        // Integer decoding with 5 decimal places
+                        val lat = posObj?.get("a")?.jsonPrimitive?.longOrNull?.toDouble()?.div(1e5) ?: 0.0
+                        val lon = posObj?.get("o")?.jsonPrimitive?.longOrNull?.toDouble()?.div(1e5) ?: 0.0
                         val shapeShort = json["s"]?.jsonPrimitive?.content ?: "c"
                         val shape = when (shapeShort) {
                             "c" -> PointShape.CIRCLE
@@ -295,11 +319,30 @@ object MeshAnnotationInterop {
                             "b" -> AnnotationColor.BLACK
                             else -> AnnotationColor.GREEN
                         }
-                        val pointsArr = json["pts"]?.jsonArray?.map { pt ->
-                            val obj = pt.jsonObject
-                            val lat = obj["a"]?.jsonPrimitive?.doubleOrNull ?: 0.0
-                            val lon = obj["o"]?.jsonPrimitive?.doubleOrNull ?: 0.0
-                            com.tak.lite.model.LatLngSerializable(lat, lon)
+                        // Delta decoding with 5 decimal places
+                        val pointsArr = json["pts"]?.jsonArray?.let { arr ->
+                            val decoded = mutableListOf<com.tak.lite.model.LatLngSerializable>()
+                            var lastLat: Long? = null
+                            var lastLon: Long? = null
+                            for ((i, pt) in arr.withIndex()) {
+                                val pair = pt.jsonArray
+                                val lat = pair[0].jsonPrimitive.longOrNull ?: 0L
+                                val lon = pair[1].jsonPrimitive.longOrNull ?: 0L
+                                if (i == 0) {
+                                    // first point is absolute
+                                    decoded.add(com.tak.lite.model.LatLngSerializable(lat.toDouble() / 1e5, lon.toDouble() / 1e5))
+                                    lastLat = lat
+                                    lastLon = lon
+                                } else {
+                                    // delta from previous
+                                    val newLat = (lastLat ?: 0L) + lat
+                                    val newLon = (lastLon ?: 0L) + lon
+                                    decoded.add(com.tak.lite.model.LatLngSerializable(newLat.toDouble() / 1e5, newLon.toDouble() / 1e5))
+                                    lastLat = newLat
+                                    lastLon = newLon
+                                }
+                            }
+                            decoded
                         } ?: emptyList()
                         val styleShort = json["st"]?.jsonPrimitive?.content ?: "s"
                         val style = when (styleShort) {
@@ -333,8 +376,9 @@ object MeshAnnotationInterop {
                             else -> AnnotationColor.GREEN
                         }
                         val centerObj = json["ctr"]?.jsonObject
-                        val lat = centerObj?.get("a")?.jsonPrimitive?.doubleOrNull ?: 0.0
-                        val lon = centerObj?.get("o")?.jsonPrimitive?.doubleOrNull ?: 0.0
+                        // Integer decoding with 5 decimal places
+                        val lat = centerObj?.get("a")?.jsonPrimitive?.longOrNull?.toDouble()?.div(1e5) ?: 0.0
+                        val lon = centerObj?.get("o")?.jsonPrimitive?.longOrNull?.toDouble()?.div(1e5) ?: 0.0
                         val radius = json["r"]?.jsonPrimitive?.doubleOrNull ?: 0.0
                         val expirationTime = json["e"]?.jsonPrimitive?.longOrNull
                         MapAnnotation.Area(
@@ -389,9 +433,10 @@ object MeshAnnotationInterop {
             takPacketBuilder.status = ATAKProtos.Status.newBuilder().setBattery(batteryLevel).build()
             Log.d(TAG, "Set status with battery: $batteryLevel")
         }
+        // Integer encoding with 5 decimal places for PLI
         val pliBuilder = ATAKProtos.PLI.newBuilder()
-            .setLatitudeI((pliLatitude * 1e7).toInt())
-            .setLongitudeI((pliLongitude * 1e7).toInt())
+            .setLatitudeI((pliLatitude * 1e5).toInt())
+            .setLongitudeI((pliLongitude * 1e5).toInt())
         pliAltitude?.let { pliBuilder.altitude = it }
         pliSpeed?.let { pliBuilder.speed = it }
         pliCourse?.let { pliBuilder.course = it }
