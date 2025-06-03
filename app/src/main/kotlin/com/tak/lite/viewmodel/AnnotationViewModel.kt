@@ -109,9 +109,9 @@ class AnnotationViewModel @Inject constructor(
         viewModelScope.launch {
             val current = annotationRepository.annotations.value.find { it.id == annotationId } ?: return@launch
             val updated = when (current) {
-                is MapAnnotation.PointOfInterest -> current.copy(expirationTime = expirationTime)
-                is MapAnnotation.Line -> current.copy(expirationTime = expirationTime)
-                is MapAnnotation.Area -> current.copy(expirationTime = expirationTime)
+                is MapAnnotation.PointOfInterest -> current.copy(expirationTime = expirationTime, timestamp = System.currentTimeMillis())
+                is MapAnnotation.Line -> current.copy(expirationTime = expirationTime, timestamp = System.currentTimeMillis())
+                is MapAnnotation.Area -> current.copy(expirationTime = expirationTime, timestamp = System.currentTimeMillis())
                 is MapAnnotation.Deletion -> current // Don't modify deletions
             }
             annotationRepository.addAnnotation(updated)
