@@ -45,7 +45,8 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     private val peersMap = ConcurrentHashMap<String, MeshPeer>()
     private val _peers = MutableStateFlow<List<MeshPeer>>(emptyList())
     val peers: StateFlow<List<MeshPeer>> = _peers.asStateFlow()
-    private var connectedNodeId: String? = null
+    var connectedNodeId: String? = null
+        private set
     private val handshakeComplete = AtomicBoolean(false)
     private val configNonce = AtomicInteger((System.currentTimeMillis() % Int.MAX_VALUE).toInt())
     private val nodeInfoMap = ConcurrentHashMap<String, com.geeksville.mesh.MeshProtos.NodeInfo>()
@@ -69,6 +70,12 @@ class MeshtasticBluetoothProtocol @Inject constructor(
 
     // Add a callback for packet size errors
     var onPacketTooLarge: ((Int, Int) -> Unit)? = null // (actualSize, maxSize)
+
+    // Reuse PacketSummary from MeshNetworkProtocol if possible, else redefine here
+    // data class PacketSummary(...)
+
+    private val _packetSummaries = MutableStateFlow<List<com.tak.lite.network.PacketSummary>>(emptyList())
+    val packetSummaries: StateFlow<List<com.tak.lite.network.PacketSummary>> = _packetSummaries.asStateFlow()
 
     init {
         deviceManager.setPacketListener { data ->
@@ -237,7 +244,8 @@ class MeshtasticBluetoothProtocol @Inject constructor(
 
     // Call this when you receive a packet from the device
     fun handleIncomingPacket(data: ByteArray) {
-        Log.d(TAG, "handleIncomingPacket called with data: ${data.size} bytes: ${data.joinToString(", ", limit = 16)}")
+        Log.d(TAG, "handleIncomingPacket called with data: "+
+            "${data.size} bytes: ${data.joinToString(", ", limit = 16)}")
         if (data.size > 252) {
             Log.e(TAG, "handleIncomingPacket: Received packet size ${data.size} exceeds safe MTU payload (252 bytes)")
         }
@@ -302,6 +310,41 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                         )
                         _peers.value = peersMap.values.toList()
                         Log.d(TAG, "Updated peer marker for $peerId")
+                        // Add to packet summary flow
+                        val peerNickname = nodeInfoMap[peerId]?.user?.shortName
+                            ?.takeIf { it.isNotBlank() }
+                            ?: nodeInfoMap[peerId]?.user?.longName
+                            ?.takeIf { it.isNotBlank() }
+                            ?: peersMap[peerId]?.nickname
+                        val packetTypeString = when (fromRadio.payloadVariantCase) {
+                            com.geeksville.mesh.MeshProtos.FromRadio.PayloadVariantCase.PACKET -> {
+                                if (meshPacket.hasDecoded()) {
+                                    val portnum = meshPacket.decoded.portnum
+                                    when (portnum) {
+                                        com.geeksville.mesh.Portnums.PortNum.POSITION_APP -> "Position Update"
+                                        com.geeksville.mesh.Portnums.PortNum.ATAK_PLUGIN -> "Annotation"
+                                        else -> "Packet (Portnum: $portnum)"
+                                    }
+                                } else {
+                                    "Packet (Undecoded)"
+                                }
+                            }
+                            com.geeksville.mesh.MeshProtos.FromRadio.PayloadVariantCase.CONFIG -> "Config"
+                            com.geeksville.mesh.MeshProtos.FromRadio.PayloadVariantCase.MODULECONFIG -> "Module Config"
+                            com.geeksville.mesh.MeshProtos.FromRadio.PayloadVariantCase.CHANNEL -> "Channel"
+                            com.geeksville.mesh.MeshProtos.FromRadio.PayloadVariantCase.NODE_INFO -> "Node Info"
+                            com.geeksville.mesh.MeshProtos.FromRadio.PayloadVariantCase.MY_INFO -> "My Info"
+                            com.geeksville.mesh.MeshProtos.FromRadio.PayloadVariantCase.CONFIG_COMPLETE_ID -> "Config Complete"
+                            else -> fromRadio.payloadVariantCase.name
+                        }
+                        val summary = com.tak.lite.network.PacketSummary(
+                            packetType = packetTypeString,
+                            peerId = peerId,
+                            peerNickname = peerNickname,
+                            timestamp = System.currentTimeMillis()
+                        )
+                        val updated = (_packetSummaries.value + summary).takeLast(3)
+                        _packetSummaries.value = updated
                         if (decoded.portnum == com.geeksville.mesh.Portnums.PortNum.POSITION_APP) {
                             try {
                                 val position = com.geeksville.mesh.MeshProtos.Position.parseFrom(decoded.payload)

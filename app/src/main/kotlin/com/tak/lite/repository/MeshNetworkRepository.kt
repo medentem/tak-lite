@@ -11,10 +11,12 @@ import org.maplibre.android.geometry.LatLng
 import com.geeksville.mesh.MeshProtos
 import com.tak.lite.di.MeshtasticBluetoothProtocolAdapter
 import com.tak.lite.network.MeshProtocolProvider
+import com.tak.lite.network.PacketSummary
 
 @Singleton
 class MeshNetworkRepository @Inject constructor(
-    private val meshNetworkService: MeshNetworkService
+    private val meshNetworkService: MeshNetworkService,
+    private val meshProtocolProvider: MeshProtocolProvider
 ) {
     val networkState: Flow<MeshNetworkState>
         get() = meshNetworkService.networkState
@@ -30,6 +32,9 @@ class MeshNetworkRepository @Inject constructor(
     
     val isDeviceLocationStale: Flow<Boolean>
         get() = meshNetworkService.isDeviceLocationStale
+    
+    val packetSummaries: Flow<List<PacketSummary>>
+        get() = meshNetworkService.packetSummaries
     
     fun sendLocationUpdate(latitude: Double, longitude: Double) {
         meshNetworkService.sendLocationUpdate(latitude, longitude)
@@ -47,9 +52,12 @@ class MeshNetworkRepository @Inject constructor(
         meshNetworkService.setLocalNickname(nickname)
     }
     
-    suspend fun getNodeInfo(peerId: String): MeshProtos.NodeInfo? {
-        val protocol = MeshProtocolProvider.getProtocol()
-        return if (protocol is MeshtasticBluetoothProtocolAdapter) {
+    val selfId: String?
+        get() = meshProtocolProvider.protocol.value.localNodeIdOrNickname
+    
+    suspend fun getNodeInfo(peerId: String): com.geeksville.mesh.MeshProtos.NodeInfo? {
+        val protocol = meshProtocolProvider.protocol.value
+        return if (protocol is com.tak.lite.di.MeshtasticBluetoothProtocolAdapter) {
             protocol.impl.getNodeInfoForPeer(peerId)
         } else null
     }

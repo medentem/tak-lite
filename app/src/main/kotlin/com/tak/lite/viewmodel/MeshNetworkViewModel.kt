@@ -14,6 +14,8 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import org.maplibre.android.geometry.LatLng
 import com.geeksville.mesh.MeshProtos
+import com.tak.lite.network.PacketSummary
+import kotlinx.coroutines.flow.collect
 
 @HiltViewModel
 class MeshNetworkViewModel @Inject constructor(
@@ -28,6 +30,12 @@ class MeshNetworkViewModel @Inject constructor(
     
     val userLocation: StateFlow<org.maplibre.android.geometry.LatLng?> = meshNetworkRepository.userLocation as StateFlow<org.maplibre.android.geometry.LatLng?>
     val isDeviceLocationStale: StateFlow<Boolean> = meshNetworkRepository.isDeviceLocationStale as StateFlow<Boolean>
+    
+    private val _phoneLocation = MutableStateFlow<LatLng?>(null)
+    val phoneLocation: StateFlow<LatLng?> = _phoneLocation.asStateFlow()
+    
+    private val _packetSummaries = MutableStateFlow<List<PacketSummary>>(emptyList())
+    val packetSummaries: StateFlow<List<PacketSummary>> = _packetSummaries.asStateFlow()
     
     init {
         viewModelScope.launch {
@@ -46,8 +54,13 @@ class MeshNetworkViewModel @Inject constructor(
         }
         viewModelScope.launch {
             meshNetworkRepository.peerLocations.collect { locations ->
-                _peerLocations.value = locations
+                val selfId = meshNetworkRepository.selfId
+                val filtered = if (selfId != null) locations.filterKeys { it != selfId } else locations
+                _peerLocations.value = filtered
             }
+        }
+        viewModelScope.launch {
+            meshNetworkRepository.packetSummaries.collect { _packetSummaries.value = it }
         }
     }
     
@@ -59,6 +72,10 @@ class MeshNetworkViewModel @Inject constructor(
     
     fun setLocalNickname(nickname: String) {
         meshNetworkRepository.setLocalNickname(nickname)
+    }
+    
+    fun setPhoneLocation(latLng: LatLng) {
+        _phoneLocation.value = latLng
     }
     
     override fun onCleared() {

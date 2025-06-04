@@ -27,6 +27,9 @@ sealed interface MeshProtocol {
     fun setUserLocationCallback(callback: (LatLng) -> Unit)
     fun sendBulkAnnotationDeletions(ids: List<String>)
     val configDownloadStep: StateFlow<MeshtasticBluetoothProtocol.ConfigDownloadStep>? get() = null
+    val requiresAppLocationSend: Boolean
+    val localNodeIdOrNickname: String?
+    val packetSummaries: StateFlow<List<com.tak.lite.network.PacketSummary>>
 }
 
 class Layer2MeshProtocolAdapter(private val impl: MeshNetworkProtocol) : MeshProtocol {
@@ -50,6 +53,11 @@ class Layer2MeshProtocolAdapter(private val impl: MeshNetworkProtocol) : MeshPro
         // No-op or TODO: Not supported for Layer2 mesh
     }
     override val configDownloadStep: StateFlow<MeshtasticBluetoothProtocol.ConfigDownloadStep>? get() = null
+    override val requiresAppLocationSend: Boolean = true
+    override val localNodeIdOrNickname: String?
+        get() = impl.localNickname
+    override val packetSummaries: StateFlow<List<com.tak.lite.network.PacketSummary>>
+        get() = impl.packetSummaries
 }
 
 class MeshtasticBluetoothProtocolAdapter(val impl: MeshtasticBluetoothProtocol) : MeshProtocol {
@@ -77,4 +85,9 @@ class MeshtasticBluetoothProtocolAdapter(val impl: MeshtasticBluetoothProtocol) 
     override fun setUserLocationCallback(callback: (LatLng) -> Unit) = impl.setUserLocationCallback(callback)
     override fun sendBulkAnnotationDeletions(ids: List<String>) = impl.sendBulkAnnotationDeletions(ids)
     override val configDownloadStep: StateFlow<MeshtasticBluetoothProtocol.ConfigDownloadStep> get() = impl.configDownloadStep
-} 
+    override val requiresAppLocationSend: Boolean = false
+    override val localNodeIdOrNickname: String?
+        get() = impl.connectedNodeId
+    override val packetSummaries: StateFlow<List<com.tak.lite.network.PacketSummary>>
+        get() = impl.packetSummaries
+}

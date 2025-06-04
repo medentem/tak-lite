@@ -40,6 +40,12 @@ import android.animation.ObjectAnimator
 import android.content.res.Configuration
 import androidx.lifecycle.repeatOnLifecycle
 import android.app.AlertDialog
+import javax.inject.Inject
+import android.content.Intent
+import android.os.Build
+import androidx.core.content.ContextCompat
+import androidx.core.app.ActivityCompat
+import com.tak.lite.service.MeshForegroundService
 
 val DEFAULT_US_CENTER = LatLng(39.8283, -98.5795)
 const val DEFAULT_US_ZOOM = 4.0
@@ -98,9 +104,16 @@ class MainActivity : AppCompatActivity(), com.tak.lite.ui.map.ElevationChartBott
 
     private lateinit var lassoToolFab: com.google.android.material.floatingactionbutton.FloatingActionButton
     private var isLassoActive = false
-
-    private var locationSourcePreference: String = "AUTO"
+    
     private var isDeviceLocationStale: Boolean = true
+
+    private val REQUEST_CODE_ALL_PERMISSIONS = 4001
+
+    @Inject lateinit var meshProtocolProvider: com.tak.lite.network.MeshProtocolProvider
+
+    private lateinit var packetSummaryOverlay: FrameLayout
+    private lateinit var packetSummaryList: LinearLayout
+    private var packetSummaryHideJob: kotlinx.coroutines.Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -244,12 +257,12 @@ class MainActivity : AppCompatActivity(), com.tak.lite.ui.map.ElevationChartBott
             onLocationUpdate = { location ->
                 val currentZoom = mapController.mapLibreMap?.cameraPosition?.zoom?.toFloat() ?: DEFAULT_US_ZOOM.toFloat()
                 saveLastLocation(location.latitude, location.longitude, currentZoom)
-                // Only send phone location if allowed by preference
-                if (shouldUsePhoneLocation()) {
+                // Only send phone location if required by protocol
+                if (meshProtocolProvider.protocol.value.requiresAppLocationSend) {
                     viewModel.sendLocationUpdate(location.latitude, location.longitude)
                 }
                 // --- Feed location to MapLibre location component for tracking mode ---
-                mapController.mapLibreMap?.locationComponent?.forceLocationUpdate(location)
+                mapController.updateUserLocation(location)
                 if (isTrackingLocation) {
                     mapController.mapLibreMap?.locationComponent?.cameraMode = org.maplibre.android.location.modes.CameraMode.TRACKING
                 }
@@ -261,6 +274,8 @@ class MainActivity : AppCompatActivity(), com.tak.lite.ui.map.ElevationChartBott
                     locationSourceLabel.text = "Phone"
                     locationSourceLabel.setTextColor(Color.parseColor("#2196F3"))
                 }
+                // --- NEW: propagate phone location to ViewModel ---
+                viewModel.setPhoneLocation(org.maplibre.android.geometry.LatLng(location.latitude, location.longitude))
             },
             onPermissionDenied = {
                 Toast.makeText(this, "Location permission not granted", Toast.LENGTH_SHORT).show()
@@ -530,18 +545,106 @@ class MainActivity : AppCompatActivity(), com.tak.lite.ui.map.ElevationChartBott
             }
         }
 
-        locationSourcePreference = prefs.getString("location_source_preference", "AUTO") ?: "AUTO"
-
-        updateLocationSourceLogic() // Ensure logic is set on startup
-
         // After protocol is initialized (ensure this is after setContentView)
-        val meshProtocol = com.tak.lite.network.MeshProtocolProvider.getProtocol()
+        val meshProtocol = meshProtocolProvider.protocol.value
         if (meshProtocol is com.tak.lite.di.MeshtasticBluetoothProtocolAdapter) {
             meshProtocol.impl.onPacketTooLarge = { actual, max ->
                 runOnUiThread {
                     val msg = "Annotation is too large to send (${actual} bytes, max allowed is ${max} bytes). Try simplifying or splitting it."
                     val rootView = findViewById<View>(android.R.id.content)
                     com.google.android.material.snackbar.Snackbar.make(rootView, msg, com.google.android.material.snackbar.Snackbar.LENGTH_LONG).show()
+                }
+            }
+        }
+
+        // --- Start MeshForegroundService if background processing is enabled and permissions are granted ---
+        val backgroundEnabled = prefs.getBoolean("background_processing_enabled", false)
+        if (backgroundEnabled) {
+            val BLUETOOTH_PERMISSIONS = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                arrayOf(
+                    android.Manifest.permission.BLUETOOTH_SCAN,
+                    android.Manifest.permission.BLUETOOTH_CONNECT
+                )
+            } else {
+                arrayOf(
+                    android.Manifest.permission.BLUETOOTH,
+                    android.Manifest.permission.BLUETOOTH_ADMIN,
+                    android.Manifest.permission.ACCESS_FINE_LOCATION
+                )
+            }
+            val neededPermissions = mutableListOf<String>()
+            if (BLUETOOTH_PERMISSIONS.any { ContextCompat.checkSelfPermission(this, it) != android.content.pm.PackageManager.PERMISSION_GRANTED }) {
+                neededPermissions.addAll(BLUETOOTH_PERMISSIONS)
+            }
+            if (Build.VERSION.SDK_INT >= 34 &&
+                ContextCompat.checkSelfPermission(this, "android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE") != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                neededPermissions.add("android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE")
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                neededPermissions.add(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
+            if (neededPermissions.isNotEmpty()) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    neededPermissions.toTypedArray(),
+                    REQUEST_CODE_ALL_PERMISSIONS
+                )
+                // Don't start service yet, wait for permission result
+                return
+            }
+            val hasBluetoothPermissions = BLUETOOTH_PERMISSIONS.all {
+                ContextCompat.checkSelfPermission(this, it) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            }
+            val hasFgServicePermission = if (Build.VERSION.SDK_INT >= 34) {
+                ContextCompat.checkSelfPermission(this, "android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE") == android.content.pm.PackageManager.PERMISSION_GRANTED
+            } else true
+            if (hasBluetoothPermissions && hasFgServicePermission) {
+                ContextCompat.startForegroundService(
+                    this,
+                    Intent(this, MeshForegroundService::class.java)
+                )
+            }
+        }
+
+        // After setContentView in onCreate
+        packetSummaryOverlay = findViewById(R.id.packetSummaryOverlay)
+        packetSummaryList = findViewById(R.id.packetSummaryList)
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                viewModel.packetSummaries.collectLatest { summaries ->
+                    val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
+                    val showSummary = prefs.getBoolean("show_packet_summary", false)
+                    if (!showSummary || summaries.isEmpty()) {
+                        packetSummaryOverlay.visibility = View.GONE
+                        return@collectLatest
+                    }
+                    // Update overlay
+                    packetSummaryList.removeAllViews()
+                    val now = System.currentTimeMillis()
+                    for (summary in summaries.reversed()) {
+                        val agoMs = now - summary.timestamp
+                        val agoSec = agoMs / 1000
+                        val min = agoSec / 60
+                        val sec = agoSec % 60
+                        val peer = summary.peerNickname ?: summary.peerId
+                        val text = "Received ${summary.packetType} from $peer ${if (min > 0) "$min min " else ""}$sec sec ago."
+                        val tv = TextView(this@MainActivity).apply {
+                            setTextColor(Color.WHITE)
+                            textSize = 12f
+                            setPadding(0, 0, 0, 2)
+                            setText(text)
+                        }
+                        packetSummaryList.addView(tv)
+                    }
+                    packetSummaryOverlay.visibility = View.VISIBLE
+                    // Cancel any previous hide job
+                    packetSummaryHideJob?.cancel()
+                    packetSummaryHideJob = launch {
+                        delay(5000)
+                        packetSummaryOverlay.visibility = View.GONE
+                    }
                 }
             }
         }
@@ -660,6 +763,39 @@ class MainActivity : AppCompatActivity(), com.tak.lite.ui.map.ElevationChartBott
                 locationController.startLocationUpdates()
             } else {
                 Toast.makeText(this, "Permissions required for app functionality", Toast.LENGTH_LONG).show()
+            }
+        } else if (requestCode == REQUEST_CODE_ALL_PERMISSIONS) {
+            if (grantResults.isNotEmpty() && grantResults.all { it == android.content.pm.PackageManager.PERMISSION_GRANTED }) {
+                val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
+                val backgroundEnabled = prefs.getBoolean("background_processing_enabled", false)
+                if (backgroundEnabled) {
+                    val BLUETOOTH_PERMISSIONS = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        arrayOf(
+                            android.Manifest.permission.BLUETOOTH_SCAN,
+                            android.Manifest.permission.BLUETOOTH_CONNECT
+                        )
+                    } else {
+                        arrayOf(
+                            android.Manifest.permission.BLUETOOTH,
+                            android.Manifest.permission.BLUETOOTH_ADMIN,
+                            android.Manifest.permission.ACCESS_FINE_LOCATION
+                        )
+                    }
+                    val hasBluetoothPermissions = BLUETOOTH_PERMISSIONS.all {
+                        ContextCompat.checkSelfPermission(this, it) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                    }
+                    val hasFgServicePermission = if (Build.VERSION.SDK_INT >= 34) {
+                        ContextCompat.checkSelfPermission(this, "android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE") == android.content.pm.PackageManager.PERMISSION_GRANTED
+                    } else true
+                    if (hasBluetoothPermissions && hasFgServicePermission) {
+                        ContextCompat.startForegroundService(
+                            this,
+                            Intent(this, MeshForegroundService::class.java)
+                        )
+                    }
+                }
+            } else {
+                Toast.makeText(this, "All permissions are required to enable background processing.", Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -949,52 +1085,4 @@ class MainActivity : AppCompatActivity(), com.tak.lite.ui.map.ElevationChartBott
     }
 
     override fun getMapController(): com.tak.lite.ui.map.MapController? = mapController
-
-    private fun updateLocationSourceLogic() {
-        when (locationSourcePreference) {
-            "AUTO" -> {
-                // Default: prefer device, fallback to phone (current behavior)
-                locationController.isDeviceLocationActive = !isDeviceLocationStale
-            }
-            "DEVICE_ONLY" -> {
-                // Only use device location, ignore phone location updates
-                locationController.isDeviceLocationActive = true
-            }
-            "PHONE_ONLY" -> {
-                // Only use phone location, ignore device location updates
-                locationController.isDeviceLocationActive = false
-            }
-        }
-        // Optionally update overlays/UI to reflect forced source
-        updateLocationSourceOverlayForPreference()
-    }
-
-    private fun updateLocationSourceOverlayForPreference() {
-        when (locationSourcePreference) {
-            "DEVICE_ONLY" -> {
-                locationSourceOverlay.visibility = View.VISIBLE
-                locationSourceIcon.setImageResource(R.drawable.ic_baseline_my_location_24)
-                locationSourceIcon.setColorFilter(Color.parseColor("#4CAF50")) // Green
-                locationSourceLabel.text = "Device (Forced)"
-                locationSourceLabel.setTextColor(Color.parseColor("#4CAF50"))
-            }
-            "PHONE_ONLY" -> {
-                locationSourceOverlay.visibility = View.VISIBLE
-                locationSourceIcon.setImageResource(R.drawable.ic_baseline_my_location_24)
-                locationSourceIcon.setColorFilter(Color.parseColor("#2196F3")) // Blue
-                locationSourceLabel.text = "Phone (Forced)"
-                locationSourceLabel.setTextColor(Color.parseColor("#2196F3"))
-            }
-            // AUTO: handled by normal staleness logic
-        }
-    }
-
-    private fun shouldUsePhoneLocation(): Boolean {
-        return when (locationSourcePreference) {
-            "AUTO" -> isDeviceLocationStale
-            "DEVICE_ONLY" -> false
-            "PHONE_ONLY" -> true
-            else -> isDeviceLocationStale
-        }
-    }
 }

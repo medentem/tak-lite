@@ -14,16 +14,18 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class AnnotationRepository @Inject constructor() {
+class AnnotationRepository @Inject constructor(
+    private val meshProtocolProvider: MeshProtocolProvider
+) {
     private val _annotations = MutableStateFlow<List<MapAnnotation>>(emptyList())
     val annotations: StateFlow<List<MapAnnotation>> = _annotations.asStateFlow()
     
     // Create a coroutine scope for the repository
     private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
-    private var meshProtocol = MeshProtocolProvider.getProtocol()
+    private var meshProtocol = meshProtocolProvider.protocol.value
     private var protocolJob = repositoryScope.launch {
-        MeshProtocolProvider.protocol.collect { newProtocol ->
+        meshProtocolProvider.protocol.collect { newProtocol ->
             if (meshProtocol !== newProtocol) {
                 meshProtocol = newProtocol
                 meshProtocol.setAnnotationCallback { annotation ->

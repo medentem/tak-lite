@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import android.graphics.PointF
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
+import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
 import com.tak.lite.MainActivity
 import com.tak.lite.R
@@ -37,7 +38,7 @@ class AnnotationFragment : Fragment() {
     private val binding get() = _binding!!
 
     private val viewModel: AnnotationViewModel by viewModels()
-    private val meshNetworkViewModel: MeshNetworkViewModel by viewModels()
+    private val meshNetworkViewModel: MeshNetworkViewModel by activityViewModels()
     private lateinit var annotationController: AnnotationController
     private lateinit var annotationOverlayView: AnnotationOverlayView
     private lateinit var fanMenuView: FanMenuView
@@ -129,7 +130,17 @@ class AnnotationFragment : Fragment() {
             }
             viewLifecycleOwner.lifecycleScope.launch {
                 meshNetworkViewModel.userLocation.collectLatest { location ->
-                    annotationOverlayView.setUserLocation(location)
+                    annotationOverlayView.setDeviceLocation(location)
+                }
+            }
+            viewLifecycleOwner.lifecycleScope.launch {
+                meshNetworkViewModel.phoneLocation.collectLatest { location ->
+                    annotationOverlayView.setPhoneLocation(location)
+                }
+            }
+            viewLifecycleOwner.lifecycleScope.launch {
+                meshNetworkViewModel.isDeviceLocationStale.collectLatest { isStale ->
+                    annotationOverlayView.setDeviceLocationStaleness(isStale)
                 }
             }
 

@@ -2,46 +2,40 @@ package com.tak.lite.network
 
 import android.content.Context
 import android.content.SharedPreferences
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import com.tak.lite.di.Layer2MeshProtocolAdapter
 import com.tak.lite.di.MeshProtocol
 import com.tak.lite.di.MeshtasticBluetoothProtocolAdapter
+import javax.inject.Inject
+import javax.inject.Singleton
 
-object MeshProtocolProvider {
-    private lateinit var prefs: SharedPreferences
-    private lateinit var _protocol: MutableStateFlow<MeshProtocol>
-    val protocol: StateFlow<MeshProtocol> get() {
-        check(:: _protocol.isInitialized) { "MeshProtocolProvider must be initialized before use" }
-        return _protocol.asStateFlow()
-    }
+@Singleton
+class MeshProtocolProvider @Inject constructor(
+    @ApplicationContext private val context: Context
+) {
+    private val prefs: SharedPreferences = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+    private val bluetoothDeviceManager = BluetoothDeviceManager(context)
+    private val _protocol = MutableStateFlow(createProtocol(prefs.getString("mesh_network_type", "Layer 2")))
+    val protocol: StateFlow<MeshProtocol> = _protocol.asStateFlow()
 
-    private var bluetoothDeviceManager: BluetoothDeviceManager? = null
-    fun getBluetoothDeviceManager(): BluetoothDeviceManager? = bluetoothDeviceManager
-
-    fun initialize(context: Context) {
-        prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-        bluetoothDeviceManager = BluetoothDeviceManager(context)
-        _protocol = MutableStateFlow(createProtocol(context, prefs.getString("mesh_network_type", "Layer 2")))
+    init {
         prefs.registerOnSharedPreferenceChangeListener { _, key ->
             if (key == "mesh_network_type") {
-                _protocol.value = createProtocol(context, prefs.getString("mesh_network_type", "Layer 2"))
+                _protocol.value = createProtocol(prefs.getString("mesh_network_type", "Layer 2"))
             }
         }
     }
 
-    private fun createProtocol(context: Context, type: String?): MeshProtocol {
+    private fun createProtocol(type: String?): MeshProtocol {
         return if (type == "Meshtastic") {
-            val manager = bluetoothDeviceManager ?: BluetoothDeviceManager(context)
-            MeshtasticBluetoothProtocolAdapter(MeshtasticBluetoothProtocol(manager, context))
+            MeshtasticBluetoothProtocolAdapter(MeshtasticBluetoothProtocol(bluetoothDeviceManager, context))
         } else {
             Layer2MeshProtocolAdapter(MeshNetworkProtocol(context))
         }
     }
 
-    fun getProtocol(): MeshProtocol {
-        check(:: _protocol.isInitialized) { "MeshProtocolProvider must be initialized before use" }
-        return _protocol.value
-    }
+    fun getBluetoothDeviceManager(): BluetoothDeviceManager = bluetoothDeviceManager
 } 

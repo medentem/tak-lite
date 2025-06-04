@@ -38,6 +38,9 @@ class MapController(
     private var onStyleChanged: (() -> Unit)? = null
     private var onMapTypeChanged: ((MapType) -> Unit)? = null
 
+    private var isLocationComponentActivated = false
+    private var pendingLocation: android.location.Location? = null
+
     fun setOnStyleChangedCallback(callback: (() -> Unit)?) {
         this.onStyleChanged = callback
     }
@@ -867,6 +870,13 @@ class MapController(
             locationComponent.cameraMode = org.maplibre.android.location.modes.CameraMode.NONE
             locationComponent.renderMode = org.maplibre.android.location.modes.RenderMode.COMPASS
 
+            isLocationComponentActivated = true
+            // Apply any pending location
+            pendingLocation?.let {
+                locationComponent.forceLocationUpdate(it)
+                pendingLocation = null
+            }
+
             // Add camera move listener to disable tracking when user pans
             map.addOnCameraMoveStartedListener { reason ->
                 if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) {
@@ -912,6 +922,16 @@ class MapController(
         } catch (e: Exception) {
             android.util.Log.e("OfflineTiles", "Failed to download terrain-dem tile $zoom/$x/$y: ${e.message}")
             false
+        }
+    }
+
+    fun updateUserLocation(location: android.location.Location) {
+        val map = mapLibreMap ?: return
+        val locationComponent = map.locationComponent
+        if (isLocationComponentActivated) {
+            locationComponent.forceLocationUpdate(location)
+        } else {
+            pendingLocation = location
         }
     }
 } 

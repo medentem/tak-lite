@@ -125,8 +125,23 @@ class AnnotationOverlayView @JvmOverloads constructor(
     private val PEER_POPOVER_DISPLAY_DURATION = 8000L
     
     private var userLocation: LatLng? = null
+    private var deviceLocation: LatLng? = null
+    private var phoneLocation: LatLng? = null
+    private var isDeviceLocationStale: Boolean = false
     fun setUserLocation(location: LatLng?) {
         userLocation = location
+        invalidate()
+    }
+    fun setDeviceLocation(location: LatLng?) {
+        deviceLocation = location
+        invalidate()
+    }
+    fun setPhoneLocation(location: LatLng?) {
+        phoneLocation = location
+        invalidate()
+    }
+    fun setDeviceLocationStaleness(stale: Boolean) {
+        isDeviceLocationStale = stale
         invalidate()
     }
 
@@ -217,6 +232,41 @@ class AnnotationOverlayView @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         if (projection == null) return
+
+        android.util.Log.d("AnnotationOverlayView", "onDraw: deviceLocation=$deviceLocation, phoneLocation=$phoneLocation")
+
+        // Always draw device location if present
+        if (deviceLocation != null) {
+            val devicePt = projection?.toScreenLocation(deviceLocation!!)
+            android.util.Log.d("AnnotationOverlayView", "onDraw: devicePt=$devicePt")
+            if (devicePt != null) {
+                // Draw device location as blue dot with green or gray outline based on staleness
+                drawDeviceLocationDot(canvas, PointF(devicePt.x, devicePt.y), isDeviceLocationStale)
+                // Draw dotted line to phone location if present
+                if (phoneLocation != null) {
+                    val phonePt = projection?.toScreenLocation(phoneLocation!!)
+                    android.util.Log.d("AnnotationOverlayView", "onDraw: phonePt=$phonePt")
+                    if (phonePt != null) {
+                        val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                            color = Color.parseColor("#2196F3") // Blue
+                            style = Paint.Style.STROKE;
+                            strokeWidth = 8f
+                            pathEffect = DashPathEffect(floatArrayOf(24f, 16f), 0f)
+                        }
+                        canvas.drawLine(devicePt.x, devicePt.y, phonePt.x, phonePt.y, linePaint)
+                        android.util.Log.d("AnnotationOverlayView", "onDraw: drew dotted line from $devicePt to $phonePt")
+                    } else {
+                        android.util.Log.d("AnnotationOverlayView", "onDraw: phonePt is null, cannot draw line")
+                    }
+                } else {
+                    android.util.Log.d("AnnotationOverlayView", "onDraw: phoneLocation is null, not drawing line")
+                }
+            } else {
+                android.util.Log.d("AnnotationOverlayView", "onDraw: devicePt is null, cannot draw dot or line")
+            }
+        } else {
+            android.util.Log.d("AnnotationOverlayView", "onDraw: deviceLocation is null, not drawing dot or line")
+        }
 
         // Draw temporary polyline for line drawing
         tempLinePoints?.let { points ->
@@ -816,6 +866,9 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     longPressCandidate = null
                     longPressLineCandidate = null
                     // Do NOT hide label when tapping elsewhere
+                    // --- Global quick tap for popover dismiss ---
+                    globalQuickTapDownTime = System.currentTimeMillis()
+                    globalQuickTapDownPos = PointF(event.x, event.y)
                     return false // Let the map handle the event
                 }
                 MotionEvent.ACTION_UP -> {
@@ -833,6 +886,16 @@ class AnnotationOverlayView @JvmOverloads constructor(
                             showPoiLabel(candidate.id)
                         }
                     }
+                    // --- Global quick tap for popover dismiss ---
+                    val upTime = System.currentTimeMillis()
+                    val upPos = PointF(event.x, event.y)
+                    val duration = upTime - (globalQuickTapDownTime ?: 0L)
+                    val moved = globalQuickTapDownPos?.let { hypot((upPos.x - it.x).toDouble(), (upPos.y - it.y).toDouble()) > 40 } ?: false
+                    if (duration < 300 && !moved && (labelPoiIdToShow != null || peerPopoverPeerId != null)) {
+                        hideAllPopovers()
+                    }
+                    globalQuickTapDownTime = null
+                    globalQuickTapDownPos = null
                     longPressCandidate = null
                     longPressLineCandidate = null
                     quickTapCandidate = null
@@ -848,6 +911,8 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     quickTapCandidate = null
                     quickTapDownTime = null
                     quickTapDownPos = null
+                    globalQuickTapDownTime = null
+                    globalQuickTapDownPos = null
                 }
                 MotionEvent.ACTION_MOVE -> {
                     android.util.Log.d("AnnotationOverlayView", "ACTION_MOVE: event.x=${event.x}, event.y=${event.y}")
@@ -978,9 +1043,9 @@ class AnnotationOverlayView @JvmOverloads constructor(
 
     // Draw a solid green dot with white border and shadow for peer locations
     private fun drawPeerLocationDot(canvas: Canvas, point: PointF) {
-        val dotRadius = 19f // Reduced from 24f
-        val borderRadius = 22f // Reduced from 28f
-        val shadowRadius = 25f // Reduced from 32f
+        val dotRadius = 13f
+        val borderRadius = 18f
+        val shadowRadius = 20f
         // Draw shadow
         val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#33000000")
@@ -1077,6 +1142,10 @@ class AnnotationOverlayView @JvmOverloads constructor(
     private var quickTapCandidate: MapAnnotation.PointOfInterest? = null
     private var quickTapDownTime: Long? = null
     private var quickTapDownPos: PointF? = null
+
+    // --- Global quick tap state for dismissing popovers ---
+    private var globalQuickTapDownTime: Long? = null
+    private var globalQuickTapDownPos: PointF? = null
 
     private fun drawPoiLabel(canvas: Canvas, point: PointF, annotation: MapAnnotation.PointOfInterest) {
         // --- Compose label text ---
@@ -1242,5 +1311,63 @@ class AnnotationOverlayView @JvmOverloads constructor(
             canvas.drawText(line, pos.x, textY, textPaint)
             textY += lineHeight + 8 // 8px between lines
         }
+    }
+
+    private fun drawDeviceLocationDot(canvas: Canvas, point: PointF, isStale: Boolean) {
+        val dotRadius = 13f
+        val borderRadius = 18f
+        val shadowRadius = 20f
+        // Draw shadow
+        val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#33000000")
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(point.x, point.y + 4f, shadowRadius, shadowPaint)
+        // Draw outline: green if fresh, gray if stale
+        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (isStale) Color.GRAY else Color.parseColor("#4CAF50")
+            style = Paint.Style.STROKE
+            strokeWidth = 6f
+        }
+        canvas.drawCircle(point.x, point.y, borderRadius, borderPaint)
+        // Draw blue fill
+        val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#2196F3") // Blue
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(point.x, point.y, dotRadius, fillPaint)
+    }
+
+    private fun drawPhoneLocationDot(canvas: Canvas, point: PointF) {
+        // Draw as a solid blue dot (or use existing user dot logic)
+        val dotRadius = 19f
+        val borderRadius = 22f
+        val shadowRadius = 25f
+        // Draw shadow
+        val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#33000000")
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(point.x, point.y + 4f, shadowRadius, shadowPaint)
+        // Draw white border
+        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(point.x, point.y, borderRadius, borderPaint)
+        // Draw solid blue dot
+        val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#2196F3") // Blue
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(point.x, point.y, dotRadius, fillPaint)
+    }
+
+    fun hideAllPopovers() {
+        hidePoiLabel()
+        peerPopoverPeerId = null
+        peerPopoverNodeInfo = null
+        peerPopoverDismissHandler?.removeCallbacksAndMessages(null)
+        invalidate()
     }
 } 

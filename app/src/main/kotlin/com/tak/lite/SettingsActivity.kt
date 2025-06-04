@@ -23,8 +23,16 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 import androidx.appcompat.app.AppCompatDelegate
 import android.content.Context
+import com.tak.lite.service.MeshForegroundService
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
+import android.os.PowerManager
+import android.provider.Settings
+import android.content.Intent
 
+@AndroidEntryPoint
 class SettingsActivity : AppCompatActivity() {
+    @Inject lateinit var meshProtocolProvider: com.tak.lite.network.MeshProtocolProvider
     private lateinit var mapModeSpinner: AutoCompleteTextView
     private lateinit var endBeepSwitch: SwitchMaterial
     private lateinit var minLineSegmentDistEditText: com.google.android.material.textfield.TextInputEditText
@@ -61,6 +69,10 @@ class SettingsActivity : AppCompatActivity() {
     private var isBluetoothConnected: Boolean = false
     private lateinit var configProgressBar: android.widget.ProgressBar
     private lateinit var configProgressText: android.widget.TextView
+    private lateinit var backgroundProcessingSwitch: com.google.android.material.switchmaterial.SwitchMaterial
+    private val REQUEST_CODE_FOREGROUND_SERVICE_CONNECTED_DEVICE = 2003
+    private val REQUEST_CODE_NOTIFICATION_PERMISSION = 3001
+    private val REQUEST_CODE_ALL_PERMISSIONS = 4001
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -83,6 +95,7 @@ class SettingsActivity : AppCompatActivity() {
         simulatedPeersCountLayout = findViewById(R.id.simulatedPeersCountLayout)
         configProgressBar = findViewById(R.id.configProgressBar)
         configProgressText = findViewById(R.id.configProgressText)
+        backgroundProcessingSwitch = findViewById(R.id.backgroundProcessingSwitch)
 
         // Setup map mode spinner
         val adapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, mapModeOptions)
@@ -124,11 +137,11 @@ class SettingsActivity : AppCompatActivity() {
 
         updateBluetoothButtonState()
 
-        val bluetoothDeviceManager = MeshProtocolProvider.getBluetoothDeviceManager()
+        val bluetoothDeviceManager = meshProtocolProvider.getBluetoothDeviceManager()
 
         bluetoothConnectButton.setOnClickListener {
             if (isBluetoothConnected) {
-                bluetoothDeviceManager?.disconnect()
+                bluetoothDeviceManager.disconnect()
             } else {
                 when {
                     !isBluetoothEnabled() -> {
@@ -164,12 +177,12 @@ class SettingsActivity : AppCompatActivity() {
             // Show/hide the connect button based on selection
             bluetoothConnectButton.visibility = if (selectedType == "Meshtastic") android.view.View.VISIBLE else android.view.View.GONE
             if (selectedType != "Meshtastic" && isBluetoothConnected) {
-                bluetoothDeviceManager?.disconnect()
+                bluetoothDeviceManager.disconnect()
             }
         }
 
         // Listen for connection state changes
-        bluetoothDeviceManager?.connectionState?.let { stateFlow ->
+        bluetoothDeviceManager.connectionState.let { stateFlow ->
             lifecycleScope.launch {
                 repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
                     stateFlow.collect { state ->
@@ -242,20 +255,8 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
-        val locationSourceSpinner = findViewById<com.google.android.material.textfield.MaterialAutoCompleteTextView>(R.id.locationSourceSpinner)
-        val locationSourceOptions = listOf("Auto (Prefer Device)", "Device Only", "Phone Only")
-        val locationSourceValues = listOf("AUTO", "DEVICE_ONLY", "PHONE_ONLY")
-        val locationSourceAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, locationSourceOptions)
-        locationSourceSpinner.setAdapter(locationSourceAdapter)
-        val savedLocationSource = prefs.getString("location_source_preference", "AUTO")
-        val locationSourceIndex = locationSourceValues.indexOf(savedLocationSource).takeIf { it >= 0 } ?: 0
-        locationSourceSpinner.setText(locationSourceOptions[locationSourceIndex], false)
-        locationSourceSpinner.setOnItemClickListener { _, _, position, _ ->
-            prefs.edit().putString("location_source_preference", locationSourceValues[position]).apply()
-        }
-
         // Observe config download progress if available
-        val protocol = MeshProtocolProvider.protocol.value
+        val protocol = meshProtocolProvider.protocol.value
         protocol.configDownloadStep?.let { stepFlow ->
             lifecycleScope.launch {
                 repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
@@ -289,6 +290,49 @@ class SettingsActivity : AppCompatActivity() {
                     }
                 }
             }
+        }
+
+        // Setup background processing switch
+        val backgroundEnabled = prefs.getBoolean("background_processing_enabled", false)
+        backgroundProcessingSwitch.isChecked = backgroundEnabled
+        backgroundProcessingSwitch.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean("background_processing_enabled", isChecked).apply()
+            if (isChecked) {
+                val neededPermissions = mutableListOf<String>()
+                if (!hasBluetoothPermissions()) {
+                    neededPermissions.addAll(BLUETOOTH_PERMISSIONS)
+                }
+                if (Build.VERSION.SDK_INT >= 34 &&
+                    ContextCompat.checkSelfPermission(this, "android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE") != PackageManager.PERMISSION_GRANTED) {
+                    neededPermissions.add("android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE")
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                    neededPermissions.add(Manifest.permission.POST_NOTIFICATIONS)
+                }
+                if (neededPermissions.isNotEmpty()) {
+                    ActivityCompat.requestPermissions(
+                        this,
+                        neededPermissions.toTypedArray(),
+                        REQUEST_CODE_ALL_PERMISSIONS
+                    )
+                    return@setOnCheckedChangeListener
+                }
+                androidx.core.content.ContextCompat.startForegroundService(
+                    this,
+                    android.content.Intent(this, MeshForegroundService::class.java)
+                )
+                promptDisableBatteryOptimizationsIfNeeded()
+            } else {
+                stopService(android.content.Intent(this, MeshForegroundService::class.java))
+            }
+        }
+
+        val showPacketSummarySwitch = findViewById<SwitchMaterial>(R.id.showPacketSummarySwitch)
+        val showPacketSummaryEnabled = prefs.getBoolean("show_packet_summary", false)
+        showPacketSummarySwitch.isChecked = showPacketSummaryEnabled
+        showPacketSummarySwitch.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean("show_packet_summary", isChecked).apply()
         }
     }
 
@@ -368,6 +412,28 @@ class SettingsActivity : AppCompatActivity() {
             } else {
                 bluetoothStatusText.text = "Bluetooth permissions are required to connect."
             }
+        } else if (requestCode == REQUEST_CODE_ALL_PERMISSIONS) {
+            if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+                androidx.core.content.ContextCompat.startForegroundService(
+                    this,
+                    android.content.Intent(this, MeshForegroundService::class.java)
+                )
+                promptDisableBatteryOptimizationsIfNeeded()
+            } else {
+                android.widget.Toast.makeText(this, "All permissions are required to enable background processing.", android.widget.Toast.LENGTH_LONG).show()
+                backgroundProcessingSwitch.isChecked = false
+            }
+        } else if (requestCode == REQUEST_CODE_FOREGROUND_SERVICE_CONNECTED_DEVICE) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                androidx.core.content.ContextCompat.startForegroundService(
+                    this,
+                    android.content.Intent(this, MeshForegroundService::class.java)
+                )
+                promptDisableBatteryOptimizationsIfNeeded()
+            } else {
+                android.widget.Toast.makeText(this, "Background processing permission denied.", android.widget.Toast.LENGTH_LONG).show()
+                backgroundProcessingSwitch.isChecked = false
+            }
         }
     }
 
@@ -434,6 +500,18 @@ class SettingsActivity : AppCompatActivity() {
                 bluetoothStatusText.text = "Bluetooth enabled. You can now connect."
             } else {
                 bluetoothStatusText.text = "Bluetooth must be enabled to connect."
+            }
+        }
+    }
+
+    private fun promptDisableBatteryOptimizationsIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            val packageName = packageName
+            if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                intent.data = android.net.Uri.parse("package:$packageName")
+                startActivity(intent)
             }
         }
     }

@@ -109,6 +109,8 @@ class BluetoothDeviceManager(private val context: Context) {
         initialDrainCompleteCallback = callback
     }
 
+    private var userInitiatedDisconnect = false
+
     private fun enqueueBleOperation(op: BleOperation) {
         bleQueue.add(op)
         processNextBleOperation()
@@ -377,6 +379,11 @@ class BluetoothDeviceManager(private val context: Context) {
                     failAllPendingOperations(Exception("Disconnected"))
                     lostConnectionCallback?.invoke()
                     // BLE stack bug handling
+                    if (userInitiatedDisconnect) {
+                        Log.i("BluetoothDeviceManager", "User-initiated disconnect; not scheduling reconnect.")
+                        userInitiatedDisconnect = false
+                        return
+                    }
                     when (status) {
                         133 -> {
                             Log.e("BluetoothDeviceManager", "GATT_ERROR (133) encountered. Closing GATT and retrying with autoConnect=true.")
@@ -605,6 +612,7 @@ class BluetoothDeviceManager(private val context: Context) {
     }
 
     fun disconnect() {
+        userInitiatedDisconnect = true
         bluetoothGatt?.disconnect()
         // Do not close or set state here; let onConnectionStateChange handle it
     }

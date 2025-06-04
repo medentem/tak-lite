@@ -92,6 +92,13 @@ data class Layer2AnnotationPacket(
     val annotation: MapAnnotation
 )
 
+data class PacketSummary(
+    val packetType: String,
+    val peerId: String,
+    val peerNickname: String?,
+    val timestamp: Long
+)
+
 class MeshNetworkProtocol @Inject constructor(
     @ApplicationContext private val context: Context,
     private val coroutineContext: CoroutineContext = Dispatchers.IO
@@ -127,7 +134,8 @@ class MeshNetworkProtocol @Inject constructor(
     
     private val json = Json { ignoreUnknownKeys = true }
     
-    private var localNickname: String = ""
+    var localNickname: String = ""
+        private set
     
     private var annotationProvider: (() -> List<MapAnnotation>)? = null
     
@@ -164,6 +172,9 @@ class MeshNetworkProtocol @Inject constructor(
     val connectionMetrics: StateFlow<ConnectionMetrics> = _connectionMetrics.asStateFlow()
     
     private var userLocationCallback: ((LatLng) -> Unit)? = null
+    
+    private val _packetSummaries = MutableStateFlow<List<PacketSummary>>(emptyList())
+    val packetSummaries: StateFlow<List<PacketSummary>> = _packetSummaries.asStateFlow()
     
     @Serializable
     data class CachedPeer(
@@ -384,6 +395,19 @@ class MeshNetworkProtocol @Inject constructor(
                     // Remove from pending acks
                     pendingAcks.remove(header.sequenceNumber)
                 }
+            }
+            
+            // Add to packet summary flow (ignore ACKs)
+            if (header.packetType != PacketType.ACK) {
+                val peerNickname = peersMap[peerId]?.nickname
+                val summary = PacketSummary(
+                    packetType = header.packetType.toString(),
+                    peerId = peerId,
+                    peerNickname = peerNickname,
+                    timestamp = System.currentTimeMillis()
+                )
+                val updated = (_packetSummaries.value + summary).takeLast(3)
+                _packetSummaries.value = updated
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error handling packet: ${e.message}")

@@ -18,12 +18,17 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 import kotlin.math.*
 import android.content.SharedPreferences
+import dagger.hilt.android.AndroidEntryPoint
+import com.tak.lite.network.PacketSummary
+import kotlinx.coroutines.flow.asStateFlow
 
 @Singleton
-class MeshNetworkService @Inject constructor() {
+class MeshNetworkService @Inject constructor(
+    private val meshProtocolProvider: MeshProtocolProvider
+) {
     private val scope = CoroutineScope(Dispatchers.Main)
     private var protocolJob: Job? = null
-    private var meshProtocol: MeshProtocol = MeshProtocolProvider.getProtocol()
+    private var meshProtocol: com.tak.lite.di.MeshProtocol = meshProtocolProvider.protocol.value
     private val _networkState = MutableStateFlow<MeshNetworkState>(MeshNetworkState.Disconnected)
     val networkState: StateFlow<MeshNetworkState> = _networkState
     private val _peerLocations = MutableStateFlow<Map<String, LatLng>>(emptyMap())
@@ -40,7 +45,7 @@ class MeshNetworkService @Inject constructor() {
         method.invoke(null) as? Context
     } catch (e: Exception) { null }
 
-    private val bluetoothDeviceManager = MeshProtocolProvider.getBluetoothDeviceManager()
+    private val bluetoothDeviceManager = meshProtocolProvider.getBluetoothDeviceManager()
     private val _isDeviceLocationStale = MutableStateFlow(false)
     val isDeviceLocationStale: StateFlow<Boolean> = _isDeviceLocationStale
 
@@ -49,10 +54,13 @@ class MeshNetworkService @Inject constructor() {
     private val simulatedPeers = mutableMapOf<String, LatLng>()
     private var lastSimSettings: Pair<Boolean, Int>? = null
 
+    private val _packetSummaries = MutableStateFlow<List<PacketSummary>>(emptyList())
+    val packetSummaries: StateFlow<List<PacketSummary>> = _packetSummaries.asStateFlow()
+
     init {
         // Observe protocol changes
         protocolJob = scope.launch {
-            MeshProtocolProvider.protocol.collect { newProtocol: MeshProtocol ->
+            meshProtocolProvider.protocol.collect { newProtocol: MeshProtocol ->
                 if (meshProtocol !== newProtocol) {
                     meshProtocol = newProtocol
                     meshProtocol.setPeerLocationCallback { locations: Map<String, LatLng> ->
@@ -60,6 +68,10 @@ class MeshNetworkService @Inject constructor() {
                     }
                     // Set user location callback for new protocol
                     setUserLocationCallbackForProtocol(meshProtocol)
+                }
+                // Observe packet summaries from the protocol
+                launch {
+                    newProtocol.packetSummaries.collect { _packetSummaries.value = it }
                 }
             }
         }
@@ -86,22 +98,6 @@ class MeshNetworkService @Inject constructor() {
                 val now = System.currentTimeMillis()
                 val stale = now - lastDeviceLocationTimestamp > STALE_THRESHOLD_MS
                 _isDeviceLocationStale.value = stale
-                if (stale) {
-                    // Device location is stale, fallback to phone GPS
-                    appContext?.let { context ->
-                        val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
-                        try {
-                            val location = suspendCancellableCoroutine<Location?> { cont ->
-                                fusedLocationClient.lastLocation
-                                    .addOnSuccessListener { cont.resume(it, null) }
-                                    .addOnFailureListener { cont.resume(null, null) }
-                            }
-                            location?.let {
-                                _userLocation.value = org.maplibre.android.geometry.LatLng(it.latitude, it.longitude)
-                            }
-                        } catch (_: Exception) {}
-                    }
-                }
             }
         }
     }
