@@ -10,13 +10,13 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.tak.lite.R
-import com.tak.lite.data.model.AudioChannel
+import com.tak.lite.data.model.Channel
 
 class TalkGroupAdapter(
-    private val onGroupSelected: (AudioChannel) -> Unit,
+    private val onGroupSelected: (Channel) -> Unit,
     private val getUserName: (String) -> String = { it }, // Maps user ID to display name
-    private val getIsActive: (AudioChannel) -> Boolean = { false }
-) : ListAdapter<AudioChannel, TalkGroupAdapter.TalkGroupViewHolder>(TalkGroupDiffCallback()) {
+    private val getIsActive: (Channel) -> Boolean = { false }
+) : ListAdapter<Channel, TalkGroupAdapter.TalkGroupViewHolder>(TalkGroupDiffCallback()) {
 
     private val expandedGroups = mutableSetOf<String>()
     private var activeGroupId: String? = null
@@ -71,7 +71,7 @@ class TalkGroupAdapter(
         private val membersList: TextView = itemView.findViewById(R.id.membersList)
         private val groupIndicator: ImageView = itemView.findViewById(R.id.groupIndicator)
 
-        fun bind(group: AudioChannel) {
+        fun bind(group: Channel) {
             groupName.text = group.name
             memberCount.text = "${group.members.size} members"
 
@@ -119,11 +119,11 @@ class TalkGroupAdapter(
         }
     }
 
-    private class TalkGroupDiffCallback : DiffUtil.ItemCallback<AudioChannel>() {
-        override fun areItemsTheSame(oldItem: AudioChannel, newItem: AudioChannel): Boolean {
+    private class TalkGroupDiffCallback : DiffUtil.ItemCallback<Channel>() {
+        override fun areItemsTheSame(oldItem: Channel, newItem: Channel): Boolean {
             return oldItem.id == newItem.id
         }
-        override fun areContentsTheSame(oldItem: AudioChannel, newItem: AudioChannel): Boolean {
+        override fun areContentsTheSame(oldItem: Channel, newItem: Channel): Boolean {
             return oldItem == newItem
         }
     }

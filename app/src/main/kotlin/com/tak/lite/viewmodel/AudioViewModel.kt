@@ -2,7 +2,7 @@ package com.tak.lite.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.tak.lite.data.model.AudioChannel
+import com.tak.lite.data.model.Channel
 import com.tak.lite.data.model.AudioSettings
 import com.tak.lite.network.Layer2MeshNetworkManagerImpl
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -17,8 +17,8 @@ class AudioViewModel @Inject constructor(
     private val meshNetworkManager: Layer2MeshNetworkManagerImpl
 ) : ViewModel() {
 
-    private val _channels = MutableStateFlow<List<AudioChannel>>(emptyList())
-    val channels: StateFlow<List<AudioChannel>> = _channels.asStateFlow()
+    private val _channels = MutableStateFlow<List<Channel>>(emptyList())
+    val channels: StateFlow<List<Channel>> = _channels.asStateFlow()
 
     private val _settings = MutableStateFlow(AudioSettings())
     val settings: StateFlow<AudioSettings> = _settings.asStateFlow()

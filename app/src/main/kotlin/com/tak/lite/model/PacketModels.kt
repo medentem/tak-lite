@@ -38,7 +38,7 @@ data class StateVersion(
 data class StateSyncMessage(
     val type: String = "STATE_SYNC",
     val version: StateVersion,
-    val channels: List<com.tak.lite.data.model.AudioChannel>,
+    val channels: List<com.tak.lite.data.model.Channel>,
     val peerLocations: Map<String, LatLngSerializable>,
     val annotations: List<MapAnnotation>,
     val partialUpdate: Boolean = false,

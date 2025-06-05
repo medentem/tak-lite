@@ -1,5 +1,6 @@
 package com.tak.lite.di
 
+import com.tak.lite.data.model.Channel
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PacketSummary
 import com.tak.lite.network.MeshPeer
@@ -17,7 +18,7 @@ interface MeshProtocol {
     fun setLocalNickname(nickname: String)
     fun sendStateSync(
         toIp: String,
-        channels: List<com.tak.lite.data.model.AudioChannel>,
+        channels: List<Channel>,
         peerLocations: Map<String, LatLng>,
         annotations: List<MapAnnotation>,
         partialUpdate: Boolean = false,

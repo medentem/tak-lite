@@ -100,7 +100,7 @@ class Layer2MeshNetworkProtocol @Inject constructor(
     
     private var meshNetworkManager: Layer2MeshNetworkManager? = null
     
-    private val _channels = MutableStateFlow<List<com.tak.lite.data.model.AudioChannel>>(emptyList())
+    private val _channels = MutableStateFlow<List<com.tak.lite.data.model.Channel>>(emptyList())
     private val _annotations = MutableStateFlow<List<MapAnnotation>>(emptyList())
     
     val channels = _channels.asStateFlow()
@@ -571,7 +571,7 @@ class Layer2MeshNetworkProtocol @Inject constructor(
 
     override fun sendStateSync(
         toIp: String,
-        channels: List<com.tak.lite.data.model.AudioChannel>,
+        channels: List<com.tak.lite.data.model.Channel>,
         peerLocations: Map<String, LatLng>,
         annotations: List<MapAnnotation>,
         partialUpdate: Boolean,

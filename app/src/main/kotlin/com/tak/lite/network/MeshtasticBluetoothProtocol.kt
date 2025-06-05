@@ -4,7 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.geeksville.mesh.MeshProtos
 import com.geeksville.mesh.MeshProtos.ToRadio
-import com.tak.lite.data.model.AudioChannel
+import com.tak.lite.data.model.Channel
 import com.tak.lite.di.MeshProtocol
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PacketSummary
@@ -159,7 +159,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
 
     override fun sendStateSync(
         toIp: String,
-        channels: List<AudioChannel>,
+        channels: List<Channel>,
         peerLocations: Map<String, LatLng>,
         annotations: List<MapAnnotation>,
         partialUpdate: Boolean,

@@ -59,7 +59,7 @@ class ChannelManagementActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun showEditChannelDialog(channel: com.tak.lite.data.model.AudioChannel) {
+    private fun showEditChannelDialog(channel: com.tak.lite.data.model.Channel) {
         val editText = EditText(this)
         editText.setText(channel.name)
         editText.setSelection(channel.name.length)
@@ -78,7 +78,7 @@ class ChannelManagementActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun showDeleteChannelDialog(channel: com.tak.lite.data.model.AudioChannel) {
+    private fun showDeleteChannelDialog(channel: com.tak.lite.data.model.Channel) {
         MaterialAlertDialogBuilder(this)
             .setTitle("Delete Channel")
             .setMessage("Are you sure you want to delete channel '${channel.name}'?")
