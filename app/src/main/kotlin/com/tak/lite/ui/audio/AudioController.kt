@@ -148,24 +148,24 @@ class AudioController(
         val groupAudioButton = activity.findViewById<ImageButton>(R.id.groupAudioButton)
         groupAudioButton.setOnClickListener {
             val rootView = activity.findViewById<View>(android.R.id.content) as? FrameLayout ?: return@setOnClickListener
-            val overlayTag = "TalkGroupOverlay"
+            val overlayTag = "ChannelOverlay"
             if (rootView.findViewWithTag<View>(overlayTag) == null) {
-                val overlay = activity.layoutInflater.inflate(R.layout.talk_group_overlay, rootView, false)
+                val overlay = activity.layoutInflater.inflate(R.layout.channel_overlay, rootView, false)
                 overlay.tag = overlayTag
-                val overlayWidth = activity.resources.getDimensionPixelSize(R.dimen.talk_group_overlay_width)
+                val overlayWidth = activity.resources.getDimensionPixelSize(R.dimen.channel_overlay_width)
                 val params = FrameLayout.LayoutParams(overlayWidth, FrameLayout.LayoutParams.MATCH_PARENT)
                 params.gravity = android.view.Gravity.END
                 overlay.layoutParams = params
                 overlay.translationX = overlayWidth.toFloat()
                 rootView.addView(overlay)
                 overlay.animate().translationX(0f).setDuration(300).start()
-                overlay.findViewById<View>(R.id.closeTalkGroupOverlayButton)?.setOnClickListener {
+                overlay.findViewById<View>(R.id.closeChannelOverlayButton)?.setOnClickListener {
                     overlay.animate().translationX(overlayWidth.toFloat()).setDuration(300).withEndAction {
                         rootView.removeView(overlay)
                     }.start()
                 }
-                val talkGroupList = overlay.findViewById<RecyclerView>(R.id.talkGroupList)
-                val talkGroupAdapter = TalkGroupAdapter(
+                val channelList = overlay.findViewById<RecyclerView>(R.id.channelList)
+                val channelAdapter = ChannelAdapter(
                     onGroupSelected = { channel ->
                         audioViewModel.selectChannel(channel.id)
                         overlay.animate().translationX(overlayWidth.toFloat()).setDuration(300).withEndAction {
@@ -175,14 +175,14 @@ class AudioController(
                     getUserName = { userId -> peerIdToNickname[userId] ?: userId },
                     getIsActive = { channel -> audioViewModel.settings.value.selectedChannelId == channel.id }
                 )
-                talkGroupList.layoutManager = LinearLayoutManager(activity)
-                talkGroupList.adapter = talkGroupAdapter
+                channelList.layoutManager = LinearLayoutManager(activity)
+                channelList.adapter = channelAdapter
                 lifecycleScope.launch {
                     audioViewModel.channels.collectLatest { channels ->
-                        talkGroupAdapter.submitList(channels)
+                        channelAdapter.submitList(channels)
                     }
                 }
-                overlay.findViewById<View>(R.id.addTalkGroupButton)?.setOnClickListener {
+                overlay.findViewById<View>(R.id.addChannelButton)?.setOnClickListener {
                     showAddChannelDialog()
                 }
                 overlay.findViewById<View>(R.id.manageChannelsButton)?.setOnClickListener {

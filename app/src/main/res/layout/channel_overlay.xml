@@ -23,7 +23,7 @@
             android:orientation="horizontal"
             android:gravity="end">
             <ImageButton
-                android:id="@+id/closeTalkGroupOverlayButton"
+                android:id="@+id/closeChannelOverlayButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:src="@android:drawable/ic_menu_close_clear_cancel"
@@ -34,24 +34,24 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Talk Groups"
+            android:text="Channels"
             android:textSize="20sp"
             android:textStyle="bold"
             android:textColor="?android:attr/textColorPrimary"
             android:layout_marginTop="8dp" />
 
         <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/talkGroupList"
+            android:id="@+id/channelList"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
             android:layout_marginTop="8dp" />
 
         <Button
-            android:id="@+id/addTalkGroupButton"
+            android:id="@+id/addChannelButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Add Group"
+            android:text="Add Channel"
             android:layout_marginTop="8dp" />
 
         <Button

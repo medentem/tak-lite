@@ -12,11 +12,11 @@ import androidx.recyclerview.widget.RecyclerView
 import com.tak.lite.R
 import com.tak.lite.data.model.Channel
 
-class TalkGroupAdapter(
+class ChannelAdapter(
     private val onGroupSelected: (Channel) -> Unit,
     private val getUserName: (String) -> String = { it }, // Maps user ID to display name
     private val getIsActive: (Channel) -> Boolean = { false }
-) : ListAdapter<Channel, TalkGroupAdapter.TalkGroupViewHolder>(TalkGroupDiffCallback()) {
+) : ListAdapter<Channel, ChannelAdapter.ChannelViewHolder>(ChannelDiffCallback()) {
 
     private val expandedGroups = mutableSetOf<String>()
     private var activeGroupId: String? = null
@@ -24,13 +24,13 @@ class TalkGroupAdapter(
     private var receivingGroupId: String? = null
     private val animators = mutableMapOf<String, AnimatorSet>()
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): TalkGroupViewHolder {
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ChannelViewHolder {
         val view = LayoutInflater.from(parent.context)
-            .inflate(R.layout.item_talk_group, parent, false)
-        return TalkGroupViewHolder(view)
+            .inflate(R.layout.item_channel, parent, false)
+        return ChannelViewHolder(view)
     }
 
-    override fun onBindViewHolder(holder: TalkGroupViewHolder, position: Int) {
+    override fun onBindViewHolder(holder: ChannelViewHolder, position: Int) {
         holder.bind(getItem(position))
     }
 
@@ -64,7 +64,7 @@ class TalkGroupAdapter(
         }
     }
 
-    inner class TalkGroupViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+    inner class ChannelViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val groupName: TextView = itemView.findViewById(R.id.groupName)
         private val memberCount: TextView = itemView.findViewById(R.id.groupMemberCount)
         private val expandIcon: ImageView = itemView.findViewById(R.id.expandIcon)
@@ -119,7 +119,7 @@ class TalkGroupAdapter(
         }
     }
 
-    private class TalkGroupDiffCallback : DiffUtil.ItemCallback<Channel>() {
+    private class ChannelDiffCallback : DiffUtil.ItemCallback<Channel>() {
         override fun areItemsTheSame(oldItem: Channel, newItem: Channel): Boolean {
             return oldItem.id == newItem.id
         }
