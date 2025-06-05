@@ -116,6 +116,96 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
+                        android:text="Background Processing"
+                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                        android:paddingBottom="8dp" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/backgroundProcessingSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Enable Background Processing (keep mesh connection active when app is in background)" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardElevation="2dp"
+                app:cardCornerRadius="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Keep Screen Awake"
+                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                        android:paddingBottom="8dp" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/keepScreenAwakeSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Prevent the screen from sleeping while app is open"
+                        android:paddingTop="4dp"
+                        android:paddingBottom="4dp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+            
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="8dp"
+                app:cardElevation="2dp"
+                app:cardCornerRadius="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Show Packet Summary"
+                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                        android:paddingBottom="8dp" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/showPacketSummarySwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Show overlay with last 3 received packets"
+                        android:paddingTop="4dp"
+                        android:paddingBottom="4dp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardElevation="2dp"
+                app:cardCornerRadius="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:text="Map Settings"
                         android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
                         android:paddingBottom="8dp" />
@@ -179,97 +269,6 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="End of Transmission Beep"
-                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
-                        android:paddingBottom="8dp" />
-
-                    <com.google.android.material.switchmaterial.SwitchMaterial
-                        android:id="@+id/endBeepSwitch"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Enable double beep at end of transmission"
-                        android:paddingTop="4dp"
-                        android:paddingBottom="4dp" />
-
-                    <com.google.android.material.card.MaterialCardView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:layout_marginBottom="8dp"
-                        app:cardElevation="2dp"
-                        app:cardCornerRadius="16dp">
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="vertical"
-                            android:padding="16dp">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Show Packet Summary"
-                                android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
-                                android:paddingBottom="8dp" />
-
-                            <com.google.android.material.switchmaterial.SwitchMaterial
-                                android:id="@+id/showPacketSummarySwitch"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Show overlay with last 3 received packets"
-                                android:paddingTop="4dp"
-                                android:paddingBottom="4dp" />
-                        </LinearLayout>
-                    </com.google.android.material.card.MaterialCardView>
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                app:cardElevation="2dp"
-                app:cardCornerRadius="16dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Keep Screen Awake"
-                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
-                        android:paddingBottom="8dp" />
-
-                    <com.google.android.material.switchmaterial.SwitchMaterial
-                        android:id="@+id/keepScreenAwakeSwitch"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Prevent the screen from sleeping while app is open"
-                        android:paddingTop="4dp"
-                        android:paddingBottom="4dp" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                app:cardElevation="2dp"
-                app:cardCornerRadius="16dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
                         android:text="Minimum Show Line Segment Dist. (miles)"
                         android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
                         android:paddingBottom="8dp" />
@@ -287,6 +286,36 @@
                             android:inputType="numberDecimal"
                             android:hint="e.g. 1.0" />
                     </com.google.android.material.textfield.TextInputLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardElevation="2dp"
+                app:cardCornerRadius="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="End of Transmission Beep"
+                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                        android:paddingBottom="8dp" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/endBeepSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Enable double beep at end of transmission"
+                        android:paddingTop="4dp"
+                        android:paddingBottom="4dp" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
@@ -333,35 +362,6 @@
                     </com.google.android.material.textfield.TextInputLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
-
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                app:cardElevation="2dp"
-                app:cardCornerRadius="16dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Background Processing"
-                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
-                        android:paddingBottom="8dp" />
-
-                    <com.google.android.material.switchmaterial.SwitchMaterial
-                        android:id="@+id/backgroundProcessingSwitch"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="Enable Background Processing (keep mesh connection active when app is in background)" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
         </LinearLayout>
     </ScrollView>
 
