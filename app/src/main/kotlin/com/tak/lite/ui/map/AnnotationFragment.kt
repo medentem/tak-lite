@@ -1,35 +1,26 @@
 package com.tak.lite.ui.map
 
+import android.graphics.PointF
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.graphics.PointF
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.viewModels
 import androidx.fragment.app.activityViewModels
+import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
+import com.geeksville.mesh.MeshProtos
 import com.tak.lite.MainActivity
 import com.tak.lite.R
-import com.tak.lite.data.model.AnnotationType
 import com.tak.lite.databinding.FragmentAnnotationBinding
 import com.tak.lite.model.AnnotationColor
-import com.tak.lite.model.LineStyle
 import com.tak.lite.model.PointShape
 import com.tak.lite.viewmodel.AnnotationUiState
 import com.tak.lite.viewmodel.AnnotationViewModel
 import com.tak.lite.viewmodel.MeshNetworkViewModel
-import com.tak.lite.ui.map.AnnotationController
-import com.tak.lite.ui.map.FanMenuView
-import com.tak.lite.ui.map.BulkEditAction
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import org.maplibre.android.geometry.LatLng
-import org.maplibre.android.maps.MapLibreMap
-import org.maplibre.android.maps.MapView
-import org.maplibre.android.maps.Style
-import com.geeksville.mesh.MeshProtos
 
 @AndroidEntryPoint
 class AnnotationFragment : Fragment() {
@@ -42,13 +33,9 @@ class AnnotationFragment : Fragment() {
     private lateinit var annotationController: AnnotationController
     private lateinit var annotationOverlayView: AnnotationOverlayView
     private lateinit var fanMenuView: FanMenuView
-    private var currentType: AnnotationType = AnnotationType.POINT
     private var currentColor: AnnotationColor = AnnotationColor.GREEN
     private var currentShape: PointShape = PointShape.CIRCLE
     private var isDrawing = false
-    private var startPoint: LatLng? = null
-    private var currentLineStyle: LineStyle = LineStyle.SOLID
-    private var currentArrowHead: Boolean = true
 
     override fun onCreateView(
         inflater: LayoutInflater,

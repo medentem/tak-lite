@@ -1,10 +1,15 @@
 package com.tak.lite
 
+import android.animation.AnimatorSet
+import android.animation.ObjectAnimator
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.os.Build
 import android.os.Bundle
 import android.view.MotionEvent
 import android.view.View
@@ -16,10 +21,14 @@ import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.tak.lite.databinding.ActivityMainBinding
+import com.tak.lite.service.MeshForegroundService
 import com.tak.lite.ui.audio.AudioController
 import com.tak.lite.ui.location.LocationController
 import com.tak.lite.ui.location.LocationSource
@@ -35,17 +44,7 @@ import kotlinx.coroutines.launch
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
-import android.animation.AnimatorSet
-import android.animation.ObjectAnimator
-import android.content.res.Configuration
-import androidx.lifecycle.repeatOnLifecycle
-import android.app.AlertDialog
 import javax.inject.Inject
-import android.content.Intent
-import android.os.Build
-import androidx.core.content.ContextCompat
-import androidx.core.app.ActivityCompat
-import com.tak.lite.service.MeshForegroundService
 
 val DEFAULT_US_CENTER = LatLng(39.8283, -98.5795)
 const val DEFAULT_US_ZOOM = 4.0

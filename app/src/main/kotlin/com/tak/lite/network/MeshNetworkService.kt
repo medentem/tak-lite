@@ -1,8 +1,6 @@
 package com.tak.lite.network
 
 import android.content.Context
-import android.location.Location
-import com.google.android.gms.location.LocationServices
 import com.tak.lite.di.MeshProtocol
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -10,17 +8,15 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.maplibre.android.geometry.LatLng
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlin.coroutines.resume
-import kotlin.math.*
-import android.content.SharedPreferences
-import dagger.hilt.android.AndroidEntryPoint
-import com.tak.lite.network.PacketSummary
-import kotlinx.coroutines.flow.asStateFlow
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 @Singleton
 class MeshNetworkService @Inject constructor(

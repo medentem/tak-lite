@@ -2,14 +2,19 @@ package com.tak.lite
 
 import android.Manifest
 import android.bluetooth.BluetoothDevice
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.Button
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -17,18 +22,12 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.tak.lite.network.BluetoothDeviceManager
-import com.tak.lite.network.MeshProtocolProvider
+import com.tak.lite.service.MeshForegroundService
 import com.tak.lite.ui.map.MapController
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import java.util.UUID
-import androidx.appcompat.app.AppCompatDelegate
-import android.content.Context
-import com.tak.lite.service.MeshForegroundService
-import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
-import android.os.PowerManager
-import android.provider.Settings
-import android.content.Intent
 
 @AndroidEntryPoint
 class SettingsActivity : AppCompatActivity() {

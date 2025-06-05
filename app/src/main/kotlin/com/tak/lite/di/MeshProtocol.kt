@@ -2,11 +2,10 @@ package com.tak.lite.di
 
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.network.MeshNetworkProtocol
-import com.tak.lite.network.MeshtasticBluetoothProtocol
-import org.maplibre.android.geometry.LatLng
-import android.bluetooth.BluetoothDevice
 import com.tak.lite.network.MeshPeer
+import com.tak.lite.network.MeshtasticBluetoothProtocol
 import kotlinx.coroutines.flow.StateFlow
+import org.maplibre.android.geometry.LatLng
 
 sealed interface MeshProtocol {
     val peers: StateFlow<List<MeshPeer>>

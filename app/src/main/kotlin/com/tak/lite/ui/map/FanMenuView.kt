@@ -6,19 +6,16 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.PointF
 import android.util.AttributeSet
+import android.util.Log
 import android.view.MotionEvent
 import android.view.View
-import com.tak.lite.model.PointShape
 import com.tak.lite.model.AnnotationColor
-import kotlin.math.asin
+import com.tak.lite.model.PointShape
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
-import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.sin
 import kotlin.math.sqrt
-import android.util.Log
 
 class FanMenuView @JvmOverloads constructor(
     context: Context,

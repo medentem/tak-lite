@@ -1,11 +1,12 @@
 package com.tak.lite.ui.map
 
-import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.PointF
+import android.util.Log
 import android.view.View
 import android.widget.Toast
+import androidx.fragment.app.Fragment
 import com.tak.lite.databinding.ActivityMainBinding
 import com.tak.lite.model.AnnotationColor
 import com.tak.lite.model.LineStyle
@@ -16,8 +17,6 @@ import org.maplibre.android.annotations.Marker
 import org.maplibre.android.annotations.Polygon
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
-import android.util.Log
-import androidx.fragment.app.Fragment
 
 class AnnotationController(
     private val fragment: Fragment,

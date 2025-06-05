@@ -1,7 +1,6 @@
 package com.tak.lite
 
 import android.app.Application
-import com.tak.lite.network.MeshProtocolProvider
 import dagger.hilt.android.HiltAndroidApp
 
 @HiltAndroidApp

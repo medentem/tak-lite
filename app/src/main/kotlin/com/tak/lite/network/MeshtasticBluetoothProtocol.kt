@@ -41,7 +41,6 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     private val _annotations = MutableStateFlow<List<MapAnnotation>>(emptyList())
     val annotations: StateFlow<List<MapAnnotation>> = _annotations.asStateFlow()
     private val _connectionMetrics = MutableStateFlow(ConnectionMetrics())
-    val connectionMetrics: StateFlow<ConnectionMetrics> = _connectionMetrics.asStateFlow()
     private val peersMap = ConcurrentHashMap<String, MeshPeer>()
     private val _peers = MutableStateFlow<List<MeshPeer>>(emptyList())
     val peers: StateFlow<List<MeshPeer>> = _peers.asStateFlow()
@@ -54,7 +53,6 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     // Add config download progress reporting
     sealed class ConfigDownloadStep {
         object NotStarted : ConfigDownloadStep()
-        object WaitingForInitialDrain : ConfigDownloadStep()
         object SendingHandshake : ConfigDownloadStep()
         object WaitingForConfig : ConfigDownloadStep()
         object DownloadingConfig : ConfigDownloadStep()
@@ -70,9 +68,6 @@ class MeshtasticBluetoothProtocol @Inject constructor(
 
     // Add a callback for packet size errors
     var onPacketTooLarge: ((Int, Int) -> Unit)? = null // (actualSize, maxSize)
-
-    // Reuse PacketSummary from MeshNetworkProtocol if possible, else redefine here
-    // data class PacketSummary(...)
 
     private val _packetSummaries = MutableStateFlow<List<com.tak.lite.network.PacketSummary>>(emptyList())
     val packetSummaries: StateFlow<List<com.tak.lite.network.PacketSummary>> = _packetSummaries.asStateFlow()

@@ -2,8 +2,10 @@ package com.tak.lite.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.geeksville.mesh.MeshProtos
 import com.tak.lite.network.MeshNetworkState
 import com.tak.lite.network.MeshPeer
+import com.tak.lite.network.PacketSummary
 import com.tak.lite.repository.MeshNetworkRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -11,11 +13,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 import org.maplibre.android.geometry.LatLng
-import com.geeksville.mesh.MeshProtos
-import com.tak.lite.network.PacketSummary
-import kotlinx.coroutines.flow.collect
+import javax.inject.Inject
 
 @HiltViewModel
 class MeshNetworkViewModel @Inject constructor(

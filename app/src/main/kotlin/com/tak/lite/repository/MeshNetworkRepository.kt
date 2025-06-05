@@ -3,15 +3,12 @@ package com.tak.lite.repository
 import com.tak.lite.network.MeshNetworkService
 import com.tak.lite.network.MeshNetworkState
 import com.tak.lite.network.MeshPeer
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
-import javax.inject.Inject
-import javax.inject.Singleton
-import org.maplibre.android.geometry.LatLng
-import com.geeksville.mesh.MeshProtos
-import com.tak.lite.di.MeshtasticBluetoothProtocolAdapter
 import com.tak.lite.network.MeshProtocolProvider
 import com.tak.lite.network.PacketSummary
+import kotlinx.coroutines.flow.Flow
+import org.maplibre.android.geometry.LatLng
+import javax.inject.Inject
+import javax.inject.Singleton
 
 @Singleton
 class MeshNetworkRepository @Inject constructor(

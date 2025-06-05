@@ -1,27 +1,31 @@
 package com.tak.lite.network
 
 import android.content.Context
-import android.util.Log
-import com.tak.lite.model.MapAnnotation
-import kotlinx.coroutines.*
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
-import java.net.*
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
-import kotlin.coroutines.CoroutineContext
-import org.maplibre.android.geometry.LatLng
-import kotlinx.serialization.Serializable
-import com.tak.lite.model.LatLngSerializable
 import android.net.Network
-import java.io.File
+import android.util.Log
+import com.tak.lite.model.LatLngSerializable
+import com.tak.lite.model.MapAnnotation
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import com.tak.lite.util.DeviceController
-import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import org.maplibre.android.geometry.LatLng
+import java.io.File
+import java.net.DatagramPacket
+import java.net.DatagramSocket
+import java.net.InetAddress
+import java.nio.ByteBuffer
 import javax.inject.Inject
-import kotlinx.serialization.decodeFromString
+import kotlin.coroutines.CoroutineContext
 
 @Serializable
 data class PacketHeader(

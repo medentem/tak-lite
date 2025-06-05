@@ -14,6 +14,7 @@ import android.os.Looper
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
+import com.geeksville.mesh.MeshProtos
 import com.tak.lite.data.model.AnnotationCluster
 import com.tak.lite.model.AnnotationColor
 import com.tak.lite.model.LineStyle
@@ -26,8 +27,6 @@ import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
 import kotlin.math.sqrt
-import com.tak.lite.util.haversine
-import com.geeksville.mesh.MeshProtos
 
 class AnnotationOverlayView @JvmOverloads constructor(
     context: Context,
