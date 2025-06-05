@@ -4,7 +4,10 @@ import android.content.Context
 import android.util.Log
 import com.geeksville.mesh.MeshProtos
 import com.geeksville.mesh.MeshProtos.ToRadio
+import com.tak.lite.data.model.AudioChannel
+import com.tak.lite.di.MeshProtocol
 import com.tak.lite.model.MapAnnotation
+import com.tak.lite.model.PacketSummary
 import com.tak.lite.util.DeviceController
 import com.tak.lite.util.MeshAnnotationInterop
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -26,7 +29,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     private val deviceManager: BluetoothDeviceManager,
     @ApplicationContext private val context: Context,
     private val coroutineContext: CoroutineContext = Dispatchers.IO
-) {
+) : MeshProtocol {
     private val TAG = "MeshtasticBluetoothProtocol"
     // Official Meshtastic Service UUIDs and Characteristics
     private val MESHTASTIC_SERVICE_UUID: UUID = UUID.fromString("6ba1b218-15a8-461f-9fa8-5dcae273eafd")
@@ -43,7 +46,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     private val _connectionMetrics = MutableStateFlow(ConnectionMetrics())
     private val peersMap = ConcurrentHashMap<String, MeshPeer>()
     private val _peers = MutableStateFlow<List<MeshPeer>>(emptyList())
-    val peers: StateFlow<List<MeshPeer>> = _peers.asStateFlow()
+    override val peers: StateFlow<List<MeshPeer>> = _peers.asStateFlow()
     var connectedNodeId: String? = null
         private set
     private val handshakeComplete = AtomicBoolean(false)
@@ -64,13 +67,16 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         data class Error(val message: String) : ConfigDownloadStep()
     }
     private val _configDownloadStep = MutableStateFlow<ConfigDownloadStep>(ConfigDownloadStep.NotStarted)
-    val configDownloadStep: StateFlow<ConfigDownloadStep> = _configDownloadStep.asStateFlow()
+    override val configDownloadStep: StateFlow<ConfigDownloadStep> = _configDownloadStep.asStateFlow()
+    override val requiresAppLocationSend: Boolean = false
+    override val localNodeIdOrNickname: String?
+        get() = connectedNodeId
 
     // Add a callback for packet size errors
     var onPacketTooLarge: ((Int, Int) -> Unit)? = null // (actualSize, maxSize)
 
-    private val _packetSummaries = MutableStateFlow<List<com.tak.lite.network.PacketSummary>>(emptyList())
-    val packetSummaries: StateFlow<List<com.tak.lite.network.PacketSummary>> = _packetSummaries.asStateFlow()
+    private val _packetSummaries = MutableStateFlow<List<PacketSummary>>(emptyList())
+    override val packetSummaries: StateFlow<List<PacketSummary>> = _packetSummaries.asStateFlow()
 
     init {
         deviceManager.setPacketListener { data ->
@@ -135,19 +141,38 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         }
     }
 
-    fun setAnnotationCallback(callback: (MapAnnotation) -> Unit) {
+    override fun setAnnotationCallback(callback: (MapAnnotation) -> Unit) {
         annotationCallback = callback
     }
 
-    fun setPeerLocationCallback(callback: (Map<String, LatLng>) -> Unit) {
+    override fun setPeerLocationCallback(callback: (Map<String, LatLng>) -> Unit) {
         peerLocationCallback = callback
     }
 
-    fun setUserLocationCallback(callback: (LatLng) -> Unit) {
+    override fun sendAudioData(audioData: ByteArray, channelId: String) {
+        TODO("Not yet implemented")
+    }
+
+    override fun setLocalNickname(nickname: String) {
+        TODO("Not yet implemented")
+    }
+
+    override fun sendStateSync(
+        toIp: String,
+        channels: List<AudioChannel>,
+        peerLocations: Map<String, LatLng>,
+        annotations: List<MapAnnotation>,
+        partialUpdate: Boolean,
+        updateFields: Set<String>
+    ) {
+        TODO("Not yet implemented")
+    }
+
+    override fun setUserLocationCallback(callback: (LatLng) -> Unit) {
         userLocationCallback = callback
     }
 
-    fun sendLocationUpdate(latitude: Double, longitude: Double) {
+    override fun sendLocationUpdate(latitude: Double, longitude: Double) {
         // Only send location data, not an annotation
         val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
         val nickname = prefs.getString("nickname", null)
@@ -166,7 +191,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         sendPacket(packet.toByteArray())
     }
 
-    fun sendAnnotation(annotation: MapAnnotation) {
+    override fun sendAnnotation(annotation: MapAnnotation) {
         Log.d(TAG, "Preparing to send annotation: $annotation")
         val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
         val nickname = prefs.getString("nickname", null)
@@ -332,7 +357,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                             com.geeksville.mesh.MeshProtos.FromRadio.PayloadVariantCase.CONFIG_COMPLETE_ID -> "Config Complete"
                             else -> fromRadio.payloadVariantCase.name
                         }
-                        val summary = com.tak.lite.network.PacketSummary(
+                        val summary = PacketSummary(
                             packetType = packetTypeString,
                             peerId = peerId,
                             peerNickname = peerNickname,
@@ -417,7 +442,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     /**
      * Send a bulk deletion of annotation IDs as a single packet, batching as many as will fit under 252 bytes.
      */
-    fun sendBulkAnnotationDeletions(ids: List<String>) {
+    override fun sendBulkAnnotationDeletions(ids: List<String>) {
         if (ids.isEmpty()) return
         val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
         val nickname = prefs.getString("nickname", null)

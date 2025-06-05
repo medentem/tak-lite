@@ -1,8 +1,8 @@
 package com.tak.lite.di
 
 import android.content.Context
-import com.tak.lite.network.MeshNetworkManager
-import com.tak.lite.network.MeshNetworkManagerImpl
+import com.tak.lite.network.Layer2MeshNetworkManager
+import com.tak.lite.network.Layer2MeshNetworkManagerImpl
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -18,7 +18,7 @@ object NetworkProvidesModule {
     @Singleton
     fun provideMeshNetworkManager(
         @ApplicationContext context: Context
-    ): MeshNetworkManager {
-        return MeshNetworkManagerImpl(context)
+    ): Layer2MeshNetworkManager {
+        return Layer2MeshNetworkManagerImpl(context)
     }
 }

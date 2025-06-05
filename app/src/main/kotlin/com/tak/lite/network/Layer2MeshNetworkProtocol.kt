@@ -3,8 +3,18 @@ package com.tak.lite.network
 import android.content.Context
 import android.net.Network
 import android.util.Log
+import com.tak.lite.di.MeshProtocol
+import com.tak.lite.model.ConnectionMetrics
+import com.tak.lite.model.DiscoveryPacket
 import com.tak.lite.model.LatLngSerializable
+import com.tak.lite.model.Layer2AnnotationPacket
+import com.tak.lite.model.Layer2LocationPacket
 import com.tak.lite.model.MapAnnotation
+import com.tak.lite.model.PacketHeader
+import com.tak.lite.model.PacketSummary
+import com.tak.lite.model.PacketType
+import com.tak.lite.model.StateSyncMessage
+import com.tak.lite.model.StateVersion
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -27,86 +37,10 @@ import java.nio.ByteBuffer
 import javax.inject.Inject
 import kotlin.coroutines.CoroutineContext
 
-@Serializable
-data class PacketHeader(
-    val sequenceNumber: Long,
-    val packetType: PacketType,
-    val timestamp: Long = System.currentTimeMillis(),
-    val channelId: String? = null
-)
-
-enum class PacketType {
-    DISCOVERY,
-    LOCATION,
-    ANNOTATION,
-    AUDIO,
-    STATE_SYNC,
-    ACK
-}
-
-data class ConnectionMetrics(
-    val packetLoss: Float = 0f,
-    val latency: Long = 0L,
-    val jitter: Long = 0L,
-    val lastUpdate: Long = System.currentTimeMillis(),
-    val networkQuality: Float = 1.0f
-)
-
-@Serializable
-data class StateVersion(
-    val version: Long,
-    val timestamp: Long = System.currentTimeMillis(),
-    val peerId: String
-)
-
-@Serializable
-data class StateSyncMessage(
-    val type: String = "STATE_SYNC",
-    val version: StateVersion,
-    val channels: List<com.tak.lite.data.model.AudioChannel>,
-    val peerLocations: Map<String, LatLngSerializable>,
-    val annotations: List<MapAnnotation>,
-    val partialUpdate: Boolean = false,
-    val updateFields: Set<String> = emptySet()
-)
-
-@Serializable
-data class DiscoveryPacket(
-    val type: String = "TAK_LITE_DISCOVERY",
-    val nickname: String? = null,
-    val capabilities: Set<String> = emptySet(),
-    val knownPeers: Set<String> = emptySet(),
-    val networkQuality: Float = 1.0f,
-    val lastStateVersion: Long = 0
-)
-
-// Add Layer 2 data models
-@Serializable
-data class Layer2LocationPacket(
-    val type: String = "location",
-    val peerId: String,
-    val latitude: Double,
-    val longitude: Double,
-    val timestamp: Long
-)
-
-@Serializable
-data class Layer2AnnotationPacket(
-    val type: String = "annotation",
-    val annotation: MapAnnotation
-)
-
-data class PacketSummary(
-    val packetType: String,
-    val peerId: String,
-    val peerNickname: String?,
-    val timestamp: Long
-)
-
-class MeshNetworkProtocol @Inject constructor(
+class Layer2MeshNetworkProtocol @Inject constructor(
     @ApplicationContext private val context: Context,
     private val coroutineContext: CoroutineContext = Dispatchers.IO
-) {
+) : MeshProtocol {
     private val TAG = "MeshNetworkProtocol"
     private val DISCOVERY_PORT = 5000
     private val ANNOTATION_PORT = 5001
@@ -129,7 +63,7 @@ class MeshNetworkProtocol @Inject constructor(
     
     private val peersMap = mutableMapOf<String, MeshPeer>()
     private val _peers = MutableStateFlow<List<MeshPeer>>(emptyList())
-    val peers: StateFlow<List<MeshPeer>> = _peers.asStateFlow()
+    override val peers: StateFlow<List<MeshPeer>> = _peers.asStateFlow()
     private var peerUpdateCallback: ((List<MeshPeer>) -> Unit)? = null
     private var annotationCallback: ((MapAnnotation) -> Unit)? = null
     
@@ -164,7 +98,7 @@ class MeshNetworkProtocol @Inject constructor(
     private val multicastGroups = mutableSetOf<String>()
     private val networkTopology = mutableMapOf<String, Set<String>>()
     
-    private var meshNetworkManager: MeshNetworkManager? = null
+    private var meshNetworkManager: Layer2MeshNetworkManager? = null
     
     private val _channels = MutableStateFlow<List<com.tak.lite.data.model.AudioChannel>>(emptyList())
     private val _annotations = MutableStateFlow<List<MapAnnotation>>(emptyList())
@@ -178,7 +112,7 @@ class MeshNetworkProtocol @Inject constructor(
     private var userLocationCallback: ((LatLng) -> Unit)? = null
     
     private val _packetSummaries = MutableStateFlow<List<PacketSummary>>(emptyList())
-    val packetSummaries: StateFlow<List<PacketSummary>> = _packetSummaries.asStateFlow()
+    override val packetSummaries: StateFlow<List<PacketSummary>> = _packetSummaries.asStateFlow()
     
     @Serializable
     data class CachedPeer(
@@ -493,11 +427,11 @@ class MeshNetworkProtocol @Inject constructor(
         if (removed) _peers.value = peersMap.values.toList()
     }
     
-    fun setAnnotationCallback(callback: (MapAnnotation) -> Unit) {
+    override fun setAnnotationCallback(callback: (MapAnnotation) -> Unit) {
         annotationCallback = callback
     }
     
-    fun setPeerLocationCallback(callback: (Map<String, LatLng>) -> Unit) {
+    override fun setPeerLocationCallback(callback: (Map<String, LatLng>) -> Unit) {
         peerLocationCallback = callback
     }
     
@@ -515,7 +449,7 @@ class MeshNetworkProtocol @Inject constructor(
         stateRebroadcastJob?.cancel()
     }
     
-    fun sendLocationUpdate(latitude: Double, longitude: Double) {
+    override fun sendLocationUpdate(latitude: Double, longitude: Double) {
         CoroutineScope(Dispatchers.IO).launch {
             val context = context.applicationContext
             val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
@@ -531,7 +465,7 @@ class MeshNetworkProtocol @Inject constructor(
         }
     }
     
-    fun sendAnnotation(annotation: MapAnnotation) {
+    override fun sendAnnotation(annotation: MapAnnotation) {
         CoroutineScope(Dispatchers.IO).launch {
             val packet = Layer2AnnotationPacket(
                 annotation = annotation
@@ -552,7 +486,7 @@ class MeshNetworkProtocol @Inject constructor(
         }
     }
     
-    fun sendAudioData(audioData: ByteArray, channelId: String = "default") {
+    override fun sendAudioData(audioData: ByteArray, channelId: String) {
         CoroutineScope(Dispatchers.IO).launch {
             sendToAllPeers(audioData, DISCOVERY_PORT + 2, PacketType.AUDIO, channelId = channelId)
         }
@@ -631,17 +565,17 @@ class MeshNetworkProtocol @Inject constructor(
         }
     }
     
-    fun setLocalNickname(nickname: String) {
+    override fun setLocalNickname(nickname: String) {
         localNickname = nickname
     }
-    
-    fun sendStateSync(
+
+    override fun sendStateSync(
         toIp: String,
         channels: List<com.tak.lite.data.model.AudioChannel>,
         peerLocations: Map<String, LatLng>,
         annotations: List<MapAnnotation>,
-        partialUpdate: Boolean = false,
-        updateFields: Set<String> = emptySet()
+        partialUpdate: Boolean,
+        updateFields: Set<String>
     ) {
         // Increment version
         currentStateVersion = currentStateVersion.copy(
@@ -965,7 +899,7 @@ class MeshNetworkProtocol @Inject constructor(
             meshNetworkManager?.let { manager ->
                 val channelId = header.channelId ?: "default"
                 synchronized(manager) {
-                    val buffer = (manager as? MeshNetworkManagerImpl)?.audioBuffers?.getOrPut(channelId) { mutableListOf() }
+                    val buffer = (manager as? Layer2MeshNetworkManagerImpl)?.audioBuffers?.getOrPut(channelId) { mutableListOf() }
                     buffer?.add(payload)
                 }
             }
@@ -975,15 +909,20 @@ class MeshNetworkProtocol @Inject constructor(
         }
     }
 
-    fun setMeshNetworkManager(manager: MeshNetworkManager) {
-        meshNetworkManager = manager
-    }
-
     private fun handleOwnLocationUpdate(lat: Double, lng: Double) {
         userLocationCallback?.invoke(LatLng(lat, lng))
     }
 
-    fun setUserLocationCallback(callback: (LatLng) -> Unit) {
+    override fun setUserLocationCallback(callback: (LatLng) -> Unit) {
         userLocationCallback = callback
     }
+
+    override fun sendBulkAnnotationDeletions(ids: List<String>) {
+        TODO("Not yet implemented")
+    }
+
+    override val requiresAppLocationSend: Boolean = true
+
+    override val localNodeIdOrNickname: String
+        get() = localNickname
 } 

@@ -1,13 +1,13 @@
 package com.tak.lite.di
 
 import com.tak.lite.model.MapAnnotation
-import com.tak.lite.network.MeshNetworkProtocol
+import com.tak.lite.model.PacketSummary
 import com.tak.lite.network.MeshPeer
 import com.tak.lite.network.MeshtasticBluetoothProtocol
 import kotlinx.coroutines.flow.StateFlow
 import org.maplibre.android.geometry.LatLng
 
-sealed interface MeshProtocol {
+interface MeshProtocol {
     val peers: StateFlow<List<MeshPeer>>
     fun sendAnnotation(annotation: MapAnnotation)
     fun sendLocationUpdate(latitude: Double, longitude: Double)
@@ -28,65 +28,5 @@ sealed interface MeshProtocol {
     val configDownloadStep: StateFlow<MeshtasticBluetoothProtocol.ConfigDownloadStep>? get() = null
     val requiresAppLocationSend: Boolean
     val localNodeIdOrNickname: String?
-    val packetSummaries: StateFlow<List<com.tak.lite.network.PacketSummary>>
-}
-
-class Layer2MeshProtocolAdapter(private val impl: MeshNetworkProtocol) : MeshProtocol {
-    override val peers: StateFlow<List<MeshPeer>> get() = impl.peers
-    override fun sendAnnotation(annotation: MapAnnotation) = impl.sendAnnotation(annotation)
-    override fun sendLocationUpdate(latitude: Double, longitude: Double) = impl.sendLocationUpdate(latitude, longitude)
-    override fun setAnnotationCallback(callback: (MapAnnotation) -> Unit) = impl.setAnnotationCallback(callback)
-    override fun setPeerLocationCallback(callback: (Map<String, LatLng>) -> Unit) = impl.setPeerLocationCallback(callback)
-    override fun sendAudioData(audioData: ByteArray, channelId: String) = impl.sendAudioData(audioData, channelId)
-    override fun sendStateSync(
-        toIp: String,
-        channels: List<com.tak.lite.data.model.AudioChannel>,
-        peerLocations: Map<String, LatLng>,
-        annotations: List<MapAnnotation>,
-        partialUpdate: Boolean,
-        updateFields: Set<String>
-    ) = impl.sendStateSync(toIp, channels, peerLocations, annotations, partialUpdate, updateFields)
-    override fun setLocalNickname(nickname: String) = impl.setLocalNickname(nickname)
-    override fun setUserLocationCallback(callback: (LatLng) -> Unit) = impl.setUserLocationCallback(callback)
-    override fun sendBulkAnnotationDeletions(ids: List<String>) {
-        // No-op or TODO: Not supported for Layer2 mesh
-    }
-    override val configDownloadStep: StateFlow<MeshtasticBluetoothProtocol.ConfigDownloadStep>? get() = null
-    override val requiresAppLocationSend: Boolean = true
-    override val localNodeIdOrNickname: String?
-        get() = impl.localNickname
-    override val packetSummaries: StateFlow<List<com.tak.lite.network.PacketSummary>>
-        get() = impl.packetSummaries
-}
-
-class MeshtasticBluetoothProtocolAdapter(val impl: MeshtasticBluetoothProtocol) : MeshProtocol {
-    override val peers: StateFlow<List<MeshPeer>> get() = impl.peers
-    override fun sendAnnotation(annotation: MapAnnotation) = impl.sendAnnotation(annotation)
-    override fun sendLocationUpdate(latitude: Double, longitude: Double) = impl.sendLocationUpdate(latitude, longitude)
-    override fun setAnnotationCallback(callback: (MapAnnotation) -> Unit) = impl.setAnnotationCallback(callback)
-    override fun setPeerLocationCallback(callback: (Map<String, LatLng>) -> Unit) = impl.setPeerLocationCallback(callback)
-    override fun sendAudioData(audioData: ByteArray, channelId: String) {
-        // TODO: Implement audio sending for Bluetooth mesh if/when supported
-    }
-    override fun sendStateSync(
-        toIp: String,
-        channels: List<com.tak.lite.data.model.AudioChannel>,
-        peerLocations: Map<String, LatLng>,
-        annotations: List<MapAnnotation>,
-        partialUpdate: Boolean,
-        updateFields: Set<String>
-    ) {
-        // No-op for Bluetooth
-    }
-    override fun setLocalNickname(nickname: String) {
-        // TODO: Implement nickname setting for Bluetooth mesh if/when supported
-    }
-    override fun setUserLocationCallback(callback: (LatLng) -> Unit) = impl.setUserLocationCallback(callback)
-    override fun sendBulkAnnotationDeletions(ids: List<String>) = impl.sendBulkAnnotationDeletions(ids)
-    override val configDownloadStep: StateFlow<MeshtasticBluetoothProtocol.ConfigDownloadStep> get() = impl.configDownloadStep
-    override val requiresAppLocationSend: Boolean = false
-    override val localNodeIdOrNickname: String?
-        get() = impl.connectedNodeId
-    override val packetSummaries: StateFlow<List<com.tak.lite.network.PacketSummary>>
-        get() = impl.packetSummaries
+    val packetSummaries: StateFlow<List<PacketSummary>>
 }

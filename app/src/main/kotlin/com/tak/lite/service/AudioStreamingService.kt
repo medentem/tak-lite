@@ -22,9 +22,9 @@ import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.tak.lite.data.model.AudioSettings
-import com.tak.lite.network.MeshNetworkManager
 import com.tak.lite.audio.JitterBuffer
 import com.tak.lite.audio.AudioFeedbackManager
+import com.tak.lite.network.Layer2MeshNetworkManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
@@ -73,7 +73,7 @@ class AudioStreamingService : Service() {
     private var isDestroying = false  // Flag to prevent multiple beeps in onDestroy
 
     @Inject
-    lateinit var meshNetworkManager: MeshNetworkManager
+    lateinit var meshNetworkManager: Layer2MeshNetworkManager
 
     override fun onBind(intent: Intent?): IBinder? {
         return null

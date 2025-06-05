@@ -23,10 +23,10 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class MeshNetworkManagerImpl @Inject constructor(
+class Layer2MeshNetworkManagerImpl @Inject constructor(
     @ApplicationContext private val context: Context
-) : MeshNetworkManager {
-    private val TAG = "MeshNetworkManager"
+) : Layer2MeshNetworkManager {
+    private val TAG = "Layer2MeshNetworkManager"
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
@@ -63,7 +63,7 @@ class MeshNetworkManagerImpl @Inject constructor(
     private val prefs: SharedPreferences = context.getSharedPreferences("audio_channels_prefs", Context.MODE_PRIVATE)
     private val json = Json { ignoreUnknownKeys = true }
 
-    private var meshProtocol: MeshNetworkProtocol? = null
+    private var meshProtocol: Layer2MeshNetworkProtocol? = null
 
     private val _isReceivingAudio = MutableStateFlow(false)
     val receivingAudioFlow: StateFlow<Boolean> = _isReceivingAudio.asStateFlow()

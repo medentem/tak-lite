@@ -4,7 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tak.lite.data.model.AudioChannel
 import com.tak.lite.data.model.AudioSettings
-import com.tak.lite.network.MeshNetworkManagerImpl
+import com.tak.lite.network.Layer2MeshNetworkManagerImpl
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -14,7 +14,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class AudioViewModel @Inject constructor(
-    private val meshNetworkManager: MeshNetworkManagerImpl
+    private val meshNetworkManager: Layer2MeshNetworkManagerImpl
 ) : ViewModel() {
 
     private val _channels = MutableStateFlow<List<AudioChannel>>(emptyList())
@@ -23,8 +23,8 @@ class AudioViewModel @Inject constructor(
     private val _settings = MutableStateFlow(AudioSettings())
     val settings: StateFlow<AudioSettings> = _settings.asStateFlow()
 
-    private val _connectionState = MutableStateFlow(MeshNetworkManagerImpl.ConnectionState.DISCONNECTED)
-    val connectionState: StateFlow<MeshNetworkManagerImpl.ConnectionState> = _connectionState.asStateFlow()
+    private val _connectionState = MutableStateFlow(Layer2MeshNetworkManagerImpl.ConnectionState.DISCONNECTED)
+    val connectionState: StateFlow<Layer2MeshNetworkManagerImpl.ConnectionState> = _connectionState.asStateFlow()
 
     private val _isTransmitting = MutableStateFlow(false)
     val isTransmitting: StateFlow<Boolean> = _isTransmitting.asStateFlow()

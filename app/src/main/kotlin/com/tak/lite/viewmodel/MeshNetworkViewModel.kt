@@ -3,9 +3,9 @@ package com.tak.lite.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.geeksville.mesh.MeshProtos
+import com.tak.lite.model.PacketSummary
 import com.tak.lite.network.MeshNetworkState
 import com.tak.lite.network.MeshPeer
-import com.tak.lite.network.PacketSummary
 import com.tak.lite.repository.MeshNetworkRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow

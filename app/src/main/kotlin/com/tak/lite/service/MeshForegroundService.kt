@@ -21,6 +21,7 @@ import kotlinx.coroutines.launch
 import android.content.Context
 import android.app.PendingIntent
 import com.tak.lite.MainActivity
+import com.tak.lite.model.PacketSummary
 
 @AndroidEntryPoint
 class MeshForegroundService : Service() {
@@ -70,7 +71,7 @@ class MeshForegroundService : Service() {
         )
     }
 
-    private fun updateNotificationWithSummary(summaries: List<com.tak.lite.network.PacketSummary>) {
+    private fun updateNotificationWithSummary(summaries: List<PacketSummary>) {
         val now = System.currentTimeMillis()
         val summaryText = summaries.reversed().joinToString("\n") { summary ->
             val agoMs = now - summary.timestamp

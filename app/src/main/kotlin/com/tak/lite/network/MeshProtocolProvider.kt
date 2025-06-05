@@ -6,9 +6,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import com.tak.lite.di.Layer2MeshProtocolAdapter
 import com.tak.lite.di.MeshProtocol
-import com.tak.lite.di.MeshtasticBluetoothProtocolAdapter
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -31,9 +29,9 @@ class MeshProtocolProvider @Inject constructor(
 
     private fun createProtocol(type: String?): MeshProtocol {
         return if (type == "Meshtastic") {
-            MeshtasticBluetoothProtocolAdapter(MeshtasticBluetoothProtocol(bluetoothDeviceManager, context))
+            MeshtasticBluetoothProtocol(bluetoothDeviceManager, context)
         } else {
-            Layer2MeshProtocolAdapter(MeshNetworkProtocol(context))
+            Layer2MeshNetworkProtocol(context)
         }
     }
 
