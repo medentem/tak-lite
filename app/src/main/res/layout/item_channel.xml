@@ -3,58 +3,68 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:padding="16dp"
+    android:padding="12dp"
     android:background="?attr/selectableItemBackground">
 
-    <TextView
-        android:id="@+id/channelName"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:textSize="16sp"
-        android:textColor="?android:attr/textColorPrimary"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toStartOf="@id/channelIndicator"
-        app:layout_constraintTop_toTopOf="parent" />
-
-    <TextView
-        android:id="@+id/memberCount"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textSize="14sp"
-        android:textColor="?android:attr/textColorSecondary"
-        android:layout_marginTop="4dp"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/channelName" />
-
-    <TextView
-        android:id="@+id/roleIndicator"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textSize="12sp"
-        android:textColor="?android:attr/textColorSecondary"
-        android:background="@drawable/bg_role_indicator"
-        android:paddingHorizontal="8dp"
-        android:paddingVertical="2dp"
-        android:layout_marginTop="4dp"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/memberCount" />
-
+    <!-- Active channel indicator -->
     <View
-        android:id="@+id/defaultIndicator"
+        android:id="@+id/activeChannelIndicator"
         android:layout_width="4dp"
         android:layout_height="0dp"
-        android:background="?attr/colorPrimary"
+        android:background="@color/green_500"
         android:visibility="gone"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent" />
 
+    <!-- Channel name -->
+    <TextView
+        android:id="@+id/channelName"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:textColor="?android:attr/textColorPrimary"
+        android:layout_marginStart="8dp"
+        app:layout_constraintStart_toEndOf="@id/activeChannelIndicator"
+        app:layout_constraintEnd_toStartOf="@id/audioIndicator"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- Role and precision info -->
+    <TextView
+        android:id="@+id/channelInfo"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:textSize="12sp"
+        android:textColor="?android:attr/textColorSecondary"
+        android:layout_marginStart="8dp"
+        android:layout_marginTop="2dp"
+        app:layout_constraintStart_toEndOf="@id/activeChannelIndicator"
+        app:layout_constraintEnd_toStartOf="@id/audioIndicator"
+        app:layout_constraintTop_toBottomOf="@id/channelName" />
+
+    <!-- Recent message -->
+    <TextView
+        android:id="@+id/recentMessage"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:textSize="14sp"
+        android:textColor="?android:attr/textColorPrimary"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:layout_marginStart="8dp"
+        android:layout_marginTop="4dp"
+        app:layout_constraintStart_toEndOf="@id/activeChannelIndicator"
+        app:layout_constraintEnd_toStartOf="@id/audioIndicator"
+        app:layout_constraintTop_toBottomOf="@id/channelInfo" />
+
+    <!-- Audio indicator -->
     <ImageView
-        android:id="@+id/channelIndicator"
-        android:layout_width="24dp"
-        android:layout_height="24dp"
-        android:src="@drawable/ic_radio_button_checked"
-        android:tint="?attr/colorPrimary"
+        android:id="@+id/audioIndicator"
+        android:layout_width="16dp"
+        android:layout_height="16dp"
+        android:src="@drawable/ic_volume_up"
+        android:alpha="0.5"
         android:visibility="gone"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent"

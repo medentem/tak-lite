@@ -21,11 +21,8 @@ class ChannelAdapter(
 ) : ListAdapter<IChannel, ChannelAdapter.ChannelViewHolder>(ChannelDiffCallback()) {
     private val TAG = "ChannelAdapter"
 
-    private val expandedGroups = mutableSetOf<String>()
     private var activeGroupId: String? = null
-    private var transmittingGroupId: String? = null
     private var receivingGroupId: String? = null
-    private val animators = mutableMapOf<String, AnimatorSet>()
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ChannelViewHolder {
         val view = LayoutInflater.from(parent.context)
@@ -55,17 +52,6 @@ class ChannelAdapter(
         }
     }
 
-    fun setTransmittingGroup(groupId: String?) {
-        if (transmittingGroupId != groupId) {
-            Log.d(TAG, "Setting transmitting group from $transmittingGroupId to $groupId")
-            val oldPosition = currentList.indexOfFirst { it.id == transmittingGroupId }
-            val newPosition = currentList.indexOfFirst { it.id == groupId }
-            transmittingGroupId = groupId
-            if (oldPosition != -1) notifyItemChanged(oldPosition)
-            if (newPosition != -1) notifyItemChanged(newPosition)
-        }
-    }
-
     fun setReceivingGroup(groupId: String?) {
         if (receivingGroupId != groupId) {
             Log.d(TAG, "Setting receiving group from $receivingGroupId to $groupId")
@@ -79,59 +65,46 @@ class ChannelAdapter(
 
     inner class ChannelViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val channelName: TextView = itemView.findViewById(R.id.channelName)
-        private val memberCount: TextView = itemView.findViewById(R.id.memberCount)
-        private val channelIndicator: ImageView = itemView.findViewById(R.id.channelIndicator)
-        private val defaultIndicator: View = itemView.findViewById(R.id.defaultIndicator)
-        private val roleIndicator: TextView = itemView.findViewById(R.id.roleIndicator)
+        private val channelInfo: TextView = itemView.findViewById(R.id.channelInfo)
+        private val recentMessage: TextView = itemView.findViewById(R.id.recentMessage)
+        private val audioIndicator: ImageView = itemView.findViewById(R.id.audioIndicator)
+        private val activeChannelIndicator: View = itemView.findViewById(R.id.activeChannelIndicator)
 
         fun bind(channel: IChannel) {
             Log.d(TAG, "Binding channel view for: ${channel.name}")
+            
+            // Set channel name
             channelName.text = channel.name
-            memberCount.text = "${channel.members.size} members"
+
+            // Set channel info (role and precision)
+            val infoText = buildString {
+                if (channel is MeshtasticChannel) {
+                    append(when (channel.role) {
+                        MeshtasticChannel.ChannelRole.PRIMARY -> "Primary"
+                        MeshtasticChannel.ChannelRole.SECONDARY -> "Secondary"
+                        MeshtasticChannel.ChannelRole.DISABLED -> "Disabled"
+                    })
+                }
+                // Add precision info if available
+                channel.precision?.let { precision ->
+                    append(" • ${precision}ft")
+                }
+            }
+            channelInfo.text = infoText
+
+            // Set recent message if available
+            channel.lastMessage?.let { message ->
+                recentMessage.text = "${message.senderShortName}: ${message.content}"
+            } ?: run {
+                recentMessage.text = "No messages"
+            }
+
+            // Handle active state
             val isActive = getIsActive(channel)
-            Log.d(TAG, "Channel ${channel.name} active state: $isActive")
-            channelIndicator.visibility = if (isActive) View.VISIBLE else View.GONE
-            defaultIndicator.visibility = if (channel.isDefault) View.VISIBLE else View.GONE
+            activeChannelIndicator.visibility = if (isActive) View.VISIBLE else View.GONE
 
-            // Handle Meshtastic channel role display
-            if (channel is MeshtasticChannel) {
-                roleIndicator.visibility = View.VISIBLE
-                roleIndicator.text = when (channel.role) {
-                    MeshtasticChannel.ChannelRole.PRIMARY -> "Primary"
-                    MeshtasticChannel.ChannelRole.SECONDARY -> "Secondary"
-                    MeshtasticChannel.ChannelRole.DISABLED -> "Disabled"
-                }
-                Log.d(TAG, "Channel ${channel.name} role: ${channel.role}")
-            } else {
-                roleIndicator.visibility = View.GONE
-            }
-
-            // Handle transmitting/receiving animation
-            val shouldAnimate = channel.id == transmittingGroupId || channel.id == receivingGroupId
-            if (shouldAnimate) {
-                if (animators[channel.id] == null) {
-                    val animator = AnimatorSet()
-                    animator.playTogether(
-                        android.animation.ObjectAnimator.ofFloat(channelIndicator, "scaleX", 1f, 1.2f).apply {
-                            duration = 1000
-                            repeatCount = android.animation.ValueAnimator.INFINITE
-                            repeatMode = android.animation.ValueAnimator.REVERSE
-                        },
-                        android.animation.ObjectAnimator.ofFloat(channelIndicator, "scaleY", 1f, 1.2f).apply {
-                            duration = 1000
-                            repeatCount = android.animation.ValueAnimator.INFINITE
-                            repeatMode = android.animation.ValueAnimator.REVERSE
-                        }
-                    )
-                    animator.start()
-                    animators[channel.id] = animator
-                }
-            } else {
-                animators[channel.id]?.cancel()
-                animators.remove(channel.id)
-                channelIndicator.scaleX = 1f
-                channelIndicator.scaleY = 1f
-            }
+            // Handle audio indicator
+            audioIndicator.visibility = if (channel.id == receivingGroupId) View.VISIBLE else View.GONE
 
             itemView.setOnClickListener {
                 Log.d(TAG, "Channel clicked: ${channel.name}")

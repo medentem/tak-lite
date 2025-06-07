@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.geeksville.mesh.MeshProtos
 import com.geeksville.mesh.MeshProtos.ToRadio
+import com.tak.lite.data.model.ChannelMessage
 import com.tak.lite.data.model.IChannel
 import com.tak.lite.data.model.MeshtasticChannel
 import com.tak.lite.di.MeshProtocol
@@ -81,6 +82,8 @@ class MeshtasticBluetoothProtocol @Inject constructor(
 
     private val _channels = MutableStateFlow<List<MeshtasticChannel>>(emptyList())
     override val channels: StateFlow<List<MeshtasticChannel>> = _channels.asStateFlow()
+
+    private val channelLastMessages = ConcurrentHashMap<String, ChannelMessage>()
 
     override suspend fun createChannel(name: String) {
     }
@@ -445,6 +448,8 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                                     Log.d(TAG, "Received ATAK_PLUGIN message from $peerId but failed to parse annotation")
                                 }
                             }
+                        } else if (decoded.portnum == com.geeksville.mesh.Portnums.PortNum.TEXT_MESSAGE_APP) {
+                            handleTextMeshPacket(decoded, peerId, peerNickname, meshPacket)
                         } else {
                             Log.d(TAG, "Ignored packet from $peerId with portnum: ${decoded.portnum}")
                         }
@@ -458,6 +463,34 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing incoming packet: ${e.message}", e)
+        }
+    }
+
+    private fun handleTextMeshPacket(decoded: com.geeksville.mesh.MeshProtos.Data, peerId: String, peerNickname: String?, packet: com.geeksville.mesh.MeshProtos.MeshPacket) {
+        try {
+            val content = decoded.payload.toString(Charsets.UTF_8)
+            val channelId = packet.channel.toString()
+            
+            // Use peerNickname if available, otherwise fall back to peerId
+            val senderShortName = peerNickname ?: peerId
+            
+            val message = ChannelMessage(senderShortName, content)
+            channelLastMessages[channelId] = message
+
+            // Update the channel in the list with the new message
+            val currentChannels = _channels.value.toMutableList()
+            val channelIndex = currentChannels.indexOfFirst { it.id == channelId }
+            if (channelIndex != -1) {
+                val channel = currentChannels[channelIndex]
+                if (channel is MeshtasticChannel) {
+                    currentChannels[channelIndex] = channel.copy(lastMessage = message)
+                    _channels.value = currentChannels
+                }
+            }
+            
+            Log.d(TAG, "Parsed text message from $senderShortName: $content")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to parse text message: ${e.message}")
         }
     }
 
@@ -511,8 +544,9 @@ class MeshtasticBluetoothProtocol @Inject constructor(
 
     private fun handleChannelUpdate(channel: com.geeksville.mesh.ChannelProtos.Channel) {
         Log.d(TAG, "Received channel update from device: id=${channel.settings.id}, name=${channel.settings.name}, role=${channel.role}")
+        val channelId = "${channel.index}_${channel.settings.name}"
         val meshtasticChannel = MeshtasticChannel(
-            id = "${channel.index}_${channel.settings.name}",  // Create unique ID from index and name
+            id = channelId,
             name = channel.settings.name,
             isDefault = channel.index == 0,
             isActive = channel.role == com.geeksville.mesh.ChannelProtos.Channel.Role.PRIMARY,
@@ -526,20 +560,19 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             uplinkEnabled = channel.settings.uplinkEnabled,
             downlinkEnabled = channel.settings.downlinkEnabled,
             positionPrecision = channel.settings.moduleSettings.positionPrecision,
-            isClientMuted = channel.settings.moduleSettings.isClientMuted
+            isClientMuted = channel.settings.moduleSettings.isClientMuted,
+            lastMessage = channelLastMessages[channelId]
         )
 
         Log.d(TAG, "Created MeshtasticChannel: ${meshtasticChannel.name} (${meshtasticChannel.id})")
         Log.d(TAG, "Current channels before update: ${_channels.value.map { "${it.name} (${it.id})" }}")
 
         val currentChannels = _channels.value.toMutableList()
-        val existingIndex = currentChannels.indexOfFirst { it.id == meshtasticChannel.id }
-        if (existingIndex >= 0) {
+        val existingIndex = currentChannels.indexOfFirst { it.id == channelId }
+        if (existingIndex != -1) {
             currentChannels[existingIndex] = meshtasticChannel
-            Log.d(TAG, "Updated existing channel: ${meshtasticChannel.name}")
         } else {
             currentChannels.add(meshtasticChannel)
-            Log.d(TAG, "Added new channel: ${meshtasticChannel.name}")
         }
         _channels.value = currentChannels
         Log.d(TAG, "Current channels after update: ${_channels.value.map { "${it.name} (${it.id})" }}")

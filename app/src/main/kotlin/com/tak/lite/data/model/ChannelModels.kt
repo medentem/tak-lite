@@ -3,6 +3,16 @@ package com.tak.lite.data.model
 import kotlinx.serialization.Serializable
 
 /**
+ * Represents a message in a channel
+ */
+@Serializable
+data class ChannelMessage(
+    val senderShortName: String,
+    val content: String,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+/**
  * Base interface for all channel implementations
  */
 interface IChannel {
@@ -11,6 +21,8 @@ interface IChannel {
     val isDefault: Boolean
     val isActive: Boolean
     val members: List<String>
+    val precision: Int?
+    val lastMessage: ChannelMessage?
 }
 
 /**
@@ -22,7 +34,9 @@ data class Layer2Channel(
     override val name: String,
     override val isDefault: Boolean = false,
     override val isActive: Boolean = false,
-    override val members: List<String> = emptyList()
+    override val members: List<String> = emptyList(),
+    override val precision: Int? = null,
+    override val lastMessage: ChannelMessage? = null
 ) : IChannel
 
 /**
@@ -40,8 +54,12 @@ data class MeshtasticChannel(
     val uplinkEnabled: Boolean = false,
     val downlinkEnabled: Boolean = false,
     val positionPrecision: Int = 0,
-    val isClientMuted: Boolean = false
+    val isClientMuted: Boolean = false,
+    override val lastMessage: ChannelMessage? = null
 ) : IChannel {
+    override val precision: Int?
+        get() = positionPrecision
+
     enum class ChannelRole {
         DISABLED,
         PRIMARY,
@@ -68,6 +86,7 @@ data class MeshtasticChannel(
         if (downlinkEnabled != other.downlinkEnabled) return false
         if (positionPrecision != other.positionPrecision) return false
         if (isClientMuted != other.isClientMuted) return false
+        if (lastMessage != other.lastMessage) return false
 
         return true
     }
@@ -84,6 +103,7 @@ data class MeshtasticChannel(
         result = 31 * result + downlinkEnabled.hashCode()
         result = 31 * result + positionPrecision
         result = 31 * result + isClientMuted.hashCode()
+        result = 31 * result + (lastMessage?.hashCode() ?: 0)
         return result
     }
 }

@@ -10,4 +10,5 @@
     <color name="ic_launcher_background">#FFFFFF</color>
     <color name="ptt_button_default">#4CAF50</color>  <!-- Material Design Green -->
     <color name="splash_background">#222222</color>
+    <color name="green_500">#4CAF50</color>
 </resources> 
