@@ -4,7 +4,8 @@ import android.content.Context
 import android.util.Log
 import com.geeksville.mesh.MeshProtos
 import com.geeksville.mesh.MeshProtos.ToRadio
-import com.tak.lite.data.model.Channel
+import com.tak.lite.data.model.IChannel
+import com.tak.lite.data.model.MeshtasticChannel
 import com.tak.lite.di.MeshProtocol
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PacketSummary
@@ -78,6 +79,20 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     private val _packetSummaries = MutableStateFlow<List<PacketSummary>>(emptyList())
     override val packetSummaries: StateFlow<List<PacketSummary>> = _packetSummaries.asStateFlow()
 
+    private val _channels = MutableStateFlow<List<MeshtasticChannel>>(emptyList())
+    override val channels: StateFlow<List<MeshtasticChannel>> = _channels.asStateFlow()
+
+    override suspend fun createChannel(name: String) {
+    }
+
+    override fun deleteChannel(channelId: String) {
+    }
+
+    override suspend fun selectChannel(channelId: String) {
+    }
+
+    private var selectedChannelId: String? = null
+
     init {
         deviceManager.setPacketListener { data ->
             handleIncomingPacket(data)
@@ -150,7 +165,14 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     }
 
     override fun sendAudioData(audioData: ByteArray, channelId: String) {
-        TODO("Not yet implemented")
+        val channel = _channels.value.find { it.id == channelId }
+        if (channel == null) {
+            Log.e(TAG, "Cannot send audio data: Channel $channelId not found")
+            return
+        }
+
+        // TODO: Implement audio data sending using Meshtastic protocol
+        // This will need to use the appropriate port number and encryption based on the channel settings
     }
 
     override fun setLocalNickname(nickname: String) {
@@ -159,7 +181,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
 
     override fun sendStateSync(
         toIp: String,
-        channels: List<Channel>,
+        channels: List<IChannel>,
         peerLocations: Map<String, LatLng>,
         annotations: List<MapAnnotation>,
         partialUpdate: Boolean,
@@ -224,6 +246,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             val service = gatt?.getService(MESHTASTIC_SERVICE_UUID)
             val toRadioChar = service?.getCharacteristic(TORADIO_CHARACTERISTIC_UUID)
             if (gatt != null && service != null && toRadioChar != null) {
+                Log.d(TAG, "Sending want_config_id handshake packet")
                 deviceManager.reliableWrite(toRadioChar, toRadioBytes) { result ->
                     result.onSuccess { success ->
                         Log.i(TAG, "Sent want_config_id handshake packet: $success")
@@ -236,7 +259,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                     }
                 }
             } else {
-                Log.e(TAG, "GATT/service/ToRadio characteristic missing, cannot send handshake.")
+                Log.e(TAG, "GATT/service/ToRadio characteristic missing, cannot send handshake. GATT: ${gatt != null}, Service: ${service != null}, ToRadioChar: ${toRadioChar != null}")
                 _configDownloadStep.value = ConfigDownloadStep.Error("GATT/service/ToRadio characteristic missing")
             }
         }
@@ -282,8 +305,12 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                     _configDownloadStep.value = ConfigDownloadStep.DownloadingModuleConfig
                 }
                 com.geeksville.mesh.MeshProtos.FromRadio.PayloadVariantCase.CHANNEL -> {
-                    Log.i(TAG, "Received CHANNEL during handshake.")
-                    _configDownloadStep.value = ConfigDownloadStep.DownloadingChannel
+                    Log.i(TAG, "Received CHANNEL update.")
+                    if (!handshakeComplete.get()) {
+                        _configDownloadStep.value = ConfigDownloadStep.DownloadingChannel
+                    }
+                    // Handle the channel update regardless of handshake state
+                    handleChannelUpdate(fromRadio.channel)
                 }
                 com.geeksville.mesh.MeshProtos.FromRadio.PayloadVariantCase.NODE_INFO -> {
                     Log.i(TAG, "Received NODE_INFO during handshake.")
@@ -481,4 +508,47 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         val lastUpdate: Long = System.currentTimeMillis(),
         val networkQuality: Float = 1.0f
     )
+
+    private fun handleChannelUpdate(channel: com.geeksville.mesh.ChannelProtos.Channel) {
+        Log.d(TAG, "Received channel update from device: id=${channel.settings.id}, name=${channel.settings.name}, role=${channel.role}")
+        val meshtasticChannel = MeshtasticChannel(
+            id = "${channel.index}_${channel.settings.name}",  // Create unique ID from index and name
+            name = channel.settings.name,
+            isDefault = channel.index == 0,
+            isActive = channel.role == com.geeksville.mesh.ChannelProtos.Channel.Role.PRIMARY,
+            members = emptyList(), // TODO: Track members based on node info
+            role = when (channel.role) {
+                com.geeksville.mesh.ChannelProtos.Channel.Role.PRIMARY -> MeshtasticChannel.ChannelRole.PRIMARY
+                com.geeksville.mesh.ChannelProtos.Channel.Role.SECONDARY -> MeshtasticChannel.ChannelRole.SECONDARY
+                else -> MeshtasticChannel.ChannelRole.DISABLED
+            },
+            psk = channel.settings.psk.toByteArray(),
+            uplinkEnabled = channel.settings.uplinkEnabled,
+            downlinkEnabled = channel.settings.downlinkEnabled,
+            positionPrecision = channel.settings.moduleSettings.positionPrecision,
+            isClientMuted = channel.settings.moduleSettings.isClientMuted
+        )
+
+        Log.d(TAG, "Created MeshtasticChannel: ${meshtasticChannel.name} (${meshtasticChannel.id})")
+        Log.d(TAG, "Current channels before update: ${_channels.value.map { "${it.name} (${it.id})" }}")
+
+        val currentChannels = _channels.value.toMutableList()
+        val existingIndex = currentChannels.indexOfFirst { it.id == meshtasticChannel.id }
+        if (existingIndex >= 0) {
+            currentChannels[existingIndex] = meshtasticChannel
+            Log.d(TAG, "Updated existing channel: ${meshtasticChannel.name}")
+        } else {
+            currentChannels.add(meshtasticChannel)
+            Log.d(TAG, "Added new channel: ${meshtasticChannel.name}")
+        }
+        _channels.value = currentChannels
+        Log.d(TAG, "Current channels after update: ${_channels.value.map { "${it.name} (${it.id})" }}")
+        Log.d(TAG, "Channel flow has ${_channels.value.size} channels: ${_channels.value.map { "${it.name} (${it.id})" }}")
+
+        // If this is the primary channel, select it
+        if (meshtasticChannel.role == MeshtasticChannel.ChannelRole.PRIMARY) {
+            selectedChannelId = meshtasticChannel.id
+            Log.d(TAG, "Set primary channel to: ${meshtasticChannel.name}")
+        }
+    }
 } 

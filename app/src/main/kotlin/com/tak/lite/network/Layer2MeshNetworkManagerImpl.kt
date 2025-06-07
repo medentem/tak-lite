@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
 import com.tak.lite.audio.AudioCodecManager
+import com.tak.lite.data.model.Layer2Channel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -48,7 +49,7 @@ class Layer2MeshNetworkManagerImpl @Inject constructor(
 
     private val _channels = MutableStateFlow(
         listOf(
-            com.tak.lite.data.model.Channel(
+            Layer2Channel(
                 id = "all",
                 name = "All",
                 isDefault = true,
@@ -57,7 +58,7 @@ class Layer2MeshNetworkManagerImpl @Inject constructor(
             )
         )
     )
-    val channels: StateFlow<List<com.tak.lite.data.model.Channel>> = _channels
+    val channels: StateFlow<List<Layer2Channel>> = _channels
     private var selectedChannelId: String = "all"
 
     private val prefs: SharedPreferences = context.getSharedPreferences("audio_channels_prefs", Context.MODE_PRIVATE)
@@ -74,7 +75,7 @@ class Layer2MeshNetworkManagerImpl @Inject constructor(
         val saved = prefs.getString("channels_json", null)
         if (saved != null) {
             try {
-                val loaded = json.decodeFromString<List<com.tak.lite.data.model.Channel>>(saved)
+                val loaded = json.decodeFromString<List<Layer2Channel>>(saved)
                 if (loaded.isNotEmpty()) {
                     _channels.value = loaded
                     selectedChannelId = loaded.find { it.isActive }?.id ?: loaded.first().id
@@ -274,7 +275,7 @@ class Layer2MeshNetworkManagerImpl @Inject constructor(
 
     fun createChannel(name: String) {
         val newId = name.lowercase().replace(" ", "_") + System.currentTimeMillis()
-        val newChannel = com.tak.lite.data.model.Channel(
+        val newChannel = Layer2Channel(
             id = newId,
             name = name,
             isDefault = false,

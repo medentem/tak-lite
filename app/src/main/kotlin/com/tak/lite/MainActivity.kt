@@ -31,11 +31,12 @@ import com.tak.lite.databinding.ActivityMainBinding
 import com.tak.lite.network.MeshtasticBluetoothProtocol
 import com.tak.lite.service.MeshForegroundService
 import com.tak.lite.ui.audio.AudioController
+import com.tak.lite.ui.channel.ChannelController
 import com.tak.lite.ui.location.LocationController
 import com.tak.lite.ui.location.LocationSource
 import com.tak.lite.ui.map.AnnotationFragment
 import com.tak.lite.ui.map.FanMenuView
-import com.tak.lite.viewmodel.AudioViewModel
+import com.tak.lite.viewmodel.ChannelViewModel
 import com.tak.lite.viewmodel.MeshNetworkUiState
 import com.tak.lite.viewmodel.MeshNetworkViewModel
 import dagger.hilt.android.AndroidEntryPoint
@@ -59,10 +60,11 @@ class MainActivity : AppCompatActivity(), com.tak.lite.ui.map.ElevationChartBott
     private val PERMISSIONS_REQUEST_CODE = 100
     private val viewModel: MeshNetworkViewModel by viewModels()
     private val peerIdToNickname = mutableMapOf<String, String?>()
-    private val audioViewModel: AudioViewModel by viewModels()
+    private val channelViewModel: ChannelViewModel by viewModels()
     private lateinit var mapController: com.tak.lite.ui.map.MapController
     private lateinit var locationController: LocationController
     private lateinit var audioController: AudioController
+    private lateinit var channelController: ChannelController
     private val peerMarkers = mutableMapOf<String, org.maplibre.android.annotations.Marker>()
     private val peerLastSeen = mutableMapOf<String, Long>()
     private lateinit var locationSourceOverlay: FrameLayout
@@ -317,13 +319,17 @@ class MainActivity : AppCompatActivity(), com.tak.lite.ui.map.ElevationChartBott
 
         audioController = AudioController(
             activity = this,
-            binding = binding,
-            audioViewModel = audioViewModel,
-            lifecycleScope = lifecycleScope
+            binding = binding
         )
         audioController.setupAudioUI()
         audioController.setupPTTButton()
-        audioController.setupGroupAudioButton(peerIdToNickname)
+
+        channelController = ChannelController(
+            activity = this,
+            channelViewModel = channelViewModel,
+            lifecycleScope = lifecycleScope
+        )
+        channelController.setupChannelButton(peerIdToNickname)
 
         observeMeshNetworkState()
 

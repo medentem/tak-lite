@@ -1,6 +1,6 @@
 package com.tak.lite.di
 
-import com.tak.lite.data.model.Channel
+import com.tak.lite.data.model.IChannel
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PacketSummary
 import com.tak.lite.network.MeshPeer
@@ -10,6 +10,13 @@ import org.maplibre.android.geometry.LatLng
 
 interface MeshProtocol {
     val peers: StateFlow<List<MeshPeer>>
+    val channels: StateFlow<List<IChannel>>
+    
+    // Channel operations
+    suspend fun createChannel(name: String)
+    fun deleteChannel(channelId: String)
+    suspend fun selectChannel(channelId: String)
+    
     fun sendAnnotation(annotation: MapAnnotation)
     fun sendLocationUpdate(latitude: Double, longitude: Double)
     fun setAnnotationCallback(callback: (MapAnnotation) -> Unit)
@@ -18,7 +25,7 @@ interface MeshProtocol {
     fun setLocalNickname(nickname: String)
     fun sendStateSync(
         toIp: String,
-        channels: List<Channel>,
+        channels: List<IChannel>,
         peerLocations: Map<String, LatLng>,
         annotations: List<MapAnnotation>,
         partialUpdate: Boolean = false,

@@ -3,6 +3,7 @@ package com.tak.lite.network
 import android.content.Context
 import android.net.Network
 import android.util.Log
+import com.tak.lite.data.model.IChannel
 import com.tak.lite.di.MeshProtocol
 import com.tak.lite.model.ConnectionMetrics
 import com.tak.lite.model.DiscoveryPacket
@@ -100,10 +101,10 @@ class Layer2MeshNetworkProtocol @Inject constructor(
     
     private var meshNetworkManager: Layer2MeshNetworkManager? = null
     
-    private val _channels = MutableStateFlow<List<com.tak.lite.data.model.Channel>>(emptyList())
+    private val _channels = MutableStateFlow<List<IChannel>>(emptyList())
     private val _annotations = MutableStateFlow<List<MapAnnotation>>(emptyList())
     
-    val channels = _channels.asStateFlow()
+    override val channels: StateFlow<List<IChannel>> = _channels.asStateFlow()
     val annotations = _annotations.asStateFlow()
     
     private val _connectionMetrics = MutableStateFlow(ConnectionMetrics())
@@ -571,7 +572,7 @@ class Layer2MeshNetworkProtocol @Inject constructor(
 
     override fun sendStateSync(
         toIp: String,
-        channels: List<com.tak.lite.data.model.Channel>,
+        channels: List<IChannel>,
         peerLocations: Map<String, LatLng>,
         annotations: List<MapAnnotation>,
         partialUpdate: Boolean,
@@ -925,4 +926,16 @@ class Layer2MeshNetworkProtocol @Inject constructor(
 
     override val localNodeIdOrNickname: String
         get() = localNickname
+
+    override suspend fun createChannel(name: String) {
+        // No-op for Layer 2
+    }
+
+    override fun deleteChannel(channelId: String) {
+        // No-op for Layer 2
+    }
+
+    override suspend fun selectChannel(channelId: String) {
+        // No-op for Layer 2
+    }
 } 

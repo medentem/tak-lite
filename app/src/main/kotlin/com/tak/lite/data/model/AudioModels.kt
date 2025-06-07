@@ -3,7 +3,7 @@ package com.tak.lite.data.model
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class AudioSettings(
+data class ChannelSettings(
     val isMuted: Boolean = false,
     val volume: Int = 50, // 0-100
     val selectedChannelId: String? = null,

@@ -2,6 +2,7 @@ package com.tak.lite.network
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -14,23 +15,30 @@ import javax.inject.Singleton
 class MeshProtocolProvider @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+    private val TAG = "MeshProtocolProvider"
     private val prefs: SharedPreferences = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
     private val bluetoothDeviceManager = BluetoothDeviceManager(context)
     private val _protocol = MutableStateFlow(createProtocol(prefs.getString("mesh_network_type", "Layer 2")))
     val protocol: StateFlow<MeshProtocol> = _protocol.asStateFlow()
 
     init {
+        Log.d(TAG, "Initializing MeshProtocolProvider with initial protocol: ${_protocol.value.javaClass.simpleName}")
         prefs.registerOnSharedPreferenceChangeListener { _, key ->
             if (key == "mesh_network_type") {
-                _protocol.value = createProtocol(prefs.getString("mesh_network_type", "Layer 2"))
+                val newType = prefs.getString("mesh_network_type", "Layer 2")
+                Log.d(TAG, "Mesh network type changed to: $newType")
+                _protocol.value = createProtocol(newType)
+                Log.d(TAG, "Created new protocol: ${_protocol.value.javaClass.simpleName}")
             }
         }
     }
 
     private fun createProtocol(type: String?): MeshProtocol {
         return if (type == "Meshtastic") {
+            Log.d(TAG, "Creating MeshtasticBluetoothProtocol")
             MeshtasticBluetoothProtocol(bluetoothDeviceManager, context)
         } else {
+            Log.d(TAG, "Creating Layer2MeshNetworkProtocol")
             Layer2MeshNetworkProtocol(context)
         }
     }

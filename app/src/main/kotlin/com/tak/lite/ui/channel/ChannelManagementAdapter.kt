@@ -1,4 +1,4 @@
-package com.tak.lite.ui.audio
+package com.tak.lite.ui.channel
 
 import android.view.LayoutInflater
 import android.view.View
@@ -10,13 +10,13 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.tak.lite.R
-import com.tak.lite.data.model.Channel
+import com.tak.lite.data.model.IChannel
 
 class ChannelManagementAdapter(
-    private val onEdit: (Channel) -> Unit,
-    private val onDelete: (Channel) -> Unit,
-    private val getIsActive: (Channel) -> Boolean = { false }
-) : ListAdapter<Channel, ChannelManagementAdapter.ChannelViewHolder>(ChannelDiffCallback()) {
+    private val onEdit: (IChannel) -> Unit,
+    private val onDelete: (IChannel) -> Unit,
+    private val getIsActive: (IChannel) -> Boolean = { false }
+) : ListAdapter<IChannel, ChannelManagementAdapter.ChannelViewHolder>(ChannelDiffCallback()) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ChannelViewHolder {
         val view = LayoutInflater.from(parent.context)
@@ -36,7 +36,7 @@ class ChannelManagementAdapter(
         private val deleteButton: ImageButton = itemView.findViewById(R.id.deleteButton)
         private val defaultIndicator: View = itemView.findViewById(R.id.defaultIndicator)
 
-        fun bind(channel: Channel) {
+        fun bind(channel: IChannel) {
             channelName.text = channel.name
             memberCount.text = "${channel.members.size} members"
             channelIndicator.visibility = if (getIsActive(channel)) View.VISIBLE else View.GONE
@@ -48,11 +48,11 @@ class ChannelManagementAdapter(
         }
     }
 
-    private class ChannelDiffCallback : DiffUtil.ItemCallback<Channel>() {
-        override fun areItemsTheSame(oldItem: Channel, newItem: Channel): Boolean {
+    private class ChannelDiffCallback : DiffUtil.ItemCallback<IChannel>() {
+        override fun areItemsTheSame(oldItem: IChannel, newItem: IChannel): Boolean {
             return oldItem.id == newItem.id
         }
-        override fun areContentsTheSame(oldItem: Channel, newItem: Channel): Boolean {
+        override fun areContentsTheSame(oldItem: IChannel, newItem: IChannel): Boolean {
             return oldItem == newItem
         }
     }

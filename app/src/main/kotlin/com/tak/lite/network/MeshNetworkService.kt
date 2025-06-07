@@ -1,6 +1,7 @@
 package com.tak.lite.network
 
 import android.content.Context
+import com.tak.lite.data.model.IChannel
 import com.tak.lite.di.MeshProtocol
 import com.tak.lite.model.PacketSummary
 import kotlinx.coroutines.CoroutineScope
@@ -54,6 +55,22 @@ class MeshNetworkService @Inject constructor(
     private val _packetSummaries = MutableStateFlow<List<PacketSummary>>(emptyList())
     val packetSummaries: StateFlow<List<PacketSummary>> = _packetSummaries.asStateFlow()
 
+    // Channel operations
+    private val _channels = MutableStateFlow<List<IChannel>>(emptyList())
+    val channels: StateFlow<List<IChannel>> get() = _channels.asStateFlow()
+
+    suspend fun createChannel(name: String) {
+        meshProtocol.createChannel(name)
+    }
+
+    fun deleteChannel(channelId: String) {
+        meshProtocol.deleteChannel(channelId)
+    }
+
+    suspend fun selectChannel(channelId: String) {
+        meshProtocol.selectChannel(channelId)
+    }
+
     init {
         // Observe protocol changes
         protocolJob = scope.launch {
@@ -69,6 +86,9 @@ class MeshNetworkService @Inject constructor(
                 // Observe packet summaries from the protocol
                 launch {
                     newProtocol.packetSummaries.collect { _packetSummaries.value = it }
+                }
+                launch {
+                    newProtocol.channels.collect { _channels.value = it }
                 }
             }
         }

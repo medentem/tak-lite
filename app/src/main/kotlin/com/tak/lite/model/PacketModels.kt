@@ -1,5 +1,6 @@
 package com.tak.lite.model
 
+import com.tak.lite.data.model.IChannel
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -38,7 +39,7 @@ data class StateVersion(
 data class StateSyncMessage(
     val type: String = "STATE_SYNC",
     val version: StateVersion,
-    val channels: List<com.tak.lite.data.model.Channel>,
+    val channels: List<IChannel>,
     val peerLocations: Map<String, LatLngSerializable>,
     val annotations: List<MapAnnotation>,
     val partialUpdate: Boolean = false,

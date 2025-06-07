@@ -53,7 +53,7 @@
             </intent-filter>
         </activity>
 
-        <activity android:name=".ui.audio.ChannelManagementActivity" />
+        <activity android:name=".ui.channel.ChannelManagementActivity" />
         <activity android:name=".SettingsActivity" />
     </application>
 </manifest> 

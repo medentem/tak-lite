@@ -21,7 +21,7 @@ import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
-import com.tak.lite.data.model.AudioSettings
+import com.tak.lite.data.model.ChannelSettings
 import com.tak.lite.audio.JitterBuffer
 import com.tak.lite.audio.AudioFeedbackManager
 import com.tak.lite.network.Layer2MeshNetworkManager
@@ -85,7 +85,7 @@ class AudioStreamingService : Service() {
         val selectedChannelId = intent?.getStringExtra("selectedChannelId")
         val isPTTHeld = intent?.getBooleanExtra("isPTTHeld", false) ?: false
         Log.d("Waveform", "AudioStreamingService onStartCommand called, isPTTHeld=$isPTTHeld, isMuted=$isMuted, selectedChannelId=$selectedChannelId, isStreaming=$isStreaming")
-        val settings = AudioSettings(
+        val settings = ChannelSettings(
             isMuted = isMuted,
             volume = volume,
             selectedChannelId = selectedChannelId,
@@ -118,7 +118,7 @@ class AudioStreamingService : Service() {
         startForeground(NOTIFICATION_ID, notification)
     }
 
-    private fun startStreaming(settings: AudioSettings) {
+    private fun startStreaming(settings: ChannelSettings) {
         Log.d("Waveform", "startStreaming called, isStreaming=$isStreaming, isPTTHeld=${settings.isPTTHeld}")
         if (isStreaming) {
             Log.d("Waveform", "Already streaming, ignoring start request")

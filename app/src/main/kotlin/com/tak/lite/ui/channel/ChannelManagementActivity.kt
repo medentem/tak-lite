@@ -1,4 +1,4 @@
-package com.tak.lite.ui.audio
+package com.tak.lite.ui.channel
 
 import android.os.Bundle
 import android.widget.EditText
@@ -10,14 +10,15 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.tak.lite.R
-import com.tak.lite.viewmodel.AudioViewModel
+import com.tak.lite.data.model.IChannel
+import com.tak.lite.viewmodel.ChannelViewModel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class ChannelManagementActivity : AppCompatActivity() {
-    private val viewModel: AudioViewModel by viewModels()
+    private val viewModel: ChannelViewModel by viewModels()
     private lateinit var adapter: ChannelManagementAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -59,7 +60,7 @@ class ChannelManagementActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun showEditChannelDialog(channel: com.tak.lite.data.model.Channel) {
+    private fun showEditChannelDialog(channel: IChannel) {
         val editText = EditText(this)
         editText.setText(channel.name)
         editText.setSelection(channel.name.length)
@@ -78,7 +79,7 @@ class ChannelManagementActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun showDeleteChannelDialog(channel: com.tak.lite.data.model.Channel) {
+    private fun showDeleteChannelDialog(channel: IChannel) {
         MaterialAlertDialogBuilder(this)
             .setTitle("Delete Channel")
             .setMessage("Are you sure you want to delete channel '${channel.name}'?")
