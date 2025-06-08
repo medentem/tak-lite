@@ -230,6 +230,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         val packet = MeshProtos.MeshPacket.newBuilder()
             .setTo(0xffffffffL.toInt())
             .setDecoded(data)
+            .setChannel(selectedChannelIndex)
             .build()
         sendPacket(packet.toByteArray())
     }
@@ -247,6 +248,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         val packet = MeshProtos.MeshPacket.newBuilder()
             .setTo(0xffffffffL.toInt())
             .setDecoded(data)
+            .setChannel(selectedChannelIndex)
             .build()
         Log.d(TAG, "Sending annotation: $annotation as packet bytes: "+
             packet.toByteArray().joinToString(", ", limit = 16))
@@ -544,7 +546,12 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             val size = data.toByteArray().size
             if (size > 252 && batch.isNotEmpty()) {
                 // Send current batch
-                sendPacket(com.tak.lite.util.MeshAnnotationInterop.bulkDeleteToMeshData(batch, nickname, battery).toByteArray())
+                val packet = MeshProtos.MeshPacket.newBuilder()
+                    .setTo(0xffffffffL.toInt())
+                    .setDecoded(com.tak.lite.util.MeshAnnotationInterop.bulkDeleteToMeshData(batch, nickname, battery))
+                    .setChannel(selectedChannelIndex)
+                    .build()
+                sendPacket(packet.toByteArray())
                 batch = mutableListOf(id)
             } else if (size > 252) {
                 // Single ID is too large (should not happen), skip
@@ -554,7 +561,12 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             }
         }
         if (batch.isNotEmpty()) {
-            sendPacket(com.tak.lite.util.MeshAnnotationInterop.bulkDeleteToMeshData(batch, nickname, battery).toByteArray())
+            val packet = MeshProtos.MeshPacket.newBuilder()
+                .setTo(0xffffffffL.toInt())
+                .setDecoded(com.tak.lite.util.MeshAnnotationInterop.bulkDeleteToMeshData(batch, nickname, battery))
+                .setChannel(selectedChannelIndex)
+                .build()
+            sendPacket(packet.toByteArray())
         }
     }
 
