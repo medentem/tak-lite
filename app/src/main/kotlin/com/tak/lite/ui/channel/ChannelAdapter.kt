@@ -13,6 +13,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.tak.lite.R
 import com.tak.lite.data.model.IChannel
 import com.tak.lite.data.model.MeshtasticChannel
+import com.tak.lite.util.PositionPrecisionUtils
 
 class ChannelAdapter(
     private val onGroupSelected: (IChannel) -> Unit,
@@ -87,7 +88,9 @@ class ChannelAdapter(
                 }
                 // Add precision info if available
                 channel.precision?.let { precision ->
-                    append(" • ${precision}ft")
+                    PositionPrecisionUtils.formatPrecision(precision)?.let { formattedPrecision ->
+                        append(" • $formattedPrecision")
+                    }
                 }
             }
             channelInfo.text = infoText

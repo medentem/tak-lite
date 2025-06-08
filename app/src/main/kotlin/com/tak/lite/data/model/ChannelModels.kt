@@ -22,6 +22,7 @@ interface IChannel {
     val members: List<String>
     val precision: Int?
     val lastMessage: ChannelMessage?
+    val index: Int
 }
 
 /**
@@ -34,7 +35,8 @@ data class Layer2Channel(
     override val isDefault: Boolean = false,
     override val members: List<String> = emptyList(),
     override val precision: Int? = null,
-    override val lastMessage: ChannelMessage? = null
+    override val lastMessage: ChannelMessage? = null,
+    override val index: Int = 0
 ) : IChannel
 
 /**
@@ -52,7 +54,8 @@ data class MeshtasticChannel(
     val downlinkEnabled: Boolean = false,
     val positionPrecision: Int = 0,
     val isClientMuted: Boolean = false,
-    override val lastMessage: ChannelMessage? = null
+    override val lastMessage: ChannelMessage? = null,
+    override val index: Int = 0
 ) : IChannel {
     override val precision: Int?
         get() = positionPrecision
@@ -83,6 +86,7 @@ data class MeshtasticChannel(
         if (positionPrecision != other.positionPrecision) return false
         if (isClientMuted != other.isClientMuted) return false
         if (lastMessage != other.lastMessage) return false
+        if (index != other.index) return false
 
         return true
     }

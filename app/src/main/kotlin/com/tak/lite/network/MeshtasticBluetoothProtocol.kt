@@ -13,6 +13,7 @@ import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PacketSummary
 import com.tak.lite.util.DeviceController
 import com.tak.lite.util.MeshAnnotationInterop
+import com.tak.lite.util.PositionPrecisionUtils
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -99,6 +100,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     private val channelLastMessages = ConcurrentHashMap<String, ChannelMessage>()
 
     private var selectedChannelId: String? = null
+    private var selectedChannelIndex: Int = 0  // Default to primary channel (index 0)
 
     init {
         deviceManager.setPacketListener { data ->
@@ -565,9 +567,11 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         }
         Log.d(TAG, "Received channel update from device: id=${channel.settings.id}, name=${channel.settings.name}, role=${channel.role}")
         val channelId = "${channel.index}_${channel.settings.name}"
+        
         val meshtasticChannel = MeshtasticChannel(
             id = channelId,
             name = channel.settings.name,
+            index = channel.index,
             isDefault = channel.index == 0,
             members = emptyList(), // TODO: Track members based on node info
             role = when (channel.role) {
@@ -598,7 +602,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         Log.d(TAG, "Channel flow has ${_channels.value.size} channels: ${_channels.value.map { "${it.name} (${it.id})" }}")
 
         // If this is the first channel (index 0) and no channel is selected, select it
-        if (channel.index == 0 && selectedChannelId == null) {
+        if (channel.index == 0 && selectedChannelId.isNullOrEmpty()) {
             selectedChannelId = meshtasticChannel.id
             Log.d(TAG, "Set default channel to: ${meshtasticChannel.name}")
         }
@@ -607,5 +611,16 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     override suspend fun selectChannel(channelId: String) {
         Log.d(TAG, "Selecting channel: $channelId")
         selectedChannelId = channelId
+        
+        // Find the channel and set its index
+        val channel = _channels.value.find { it.id == channelId }
+        if (channel != null) {
+            selectedChannelIndex = channel.index
+            Log.d(TAG, "Set selected channel index to: $selectedChannelIndex")
+        } else {
+            Log.w(TAG, "Could not find channel with ID: $channelId, defaulting to index 0")
+            // fallback to the first channel
+            selectedChannelIndex = 0
+        }
     }
 } 
