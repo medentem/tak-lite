@@ -355,6 +355,16 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                         _configDownloadStep.value = ConfigDownloadStep.Complete
                         // Subscribe to FROMNUM notifications only after handshake is complete
                         deviceManager.subscribeToFromNumNotifications()
+                        
+                        // Restore selected channel from preferences after handshake is complete
+                        val prefs = context.getSharedPreferences("channel_prefs", Context.MODE_PRIVATE)
+                        val savedChannelId = prefs.getString("selected_channel_id", null)
+                        if (savedChannelId != null) {
+                            Log.d(TAG, "Restoring saved channel selection: $savedChannelId")
+                            CoroutineScope(coroutineContext).launch {
+                                selectChannel(savedChannelId)
+                            }
+                        }
                     } else {
                         Log.w(TAG, "Received stale config_complete_id: $completeId")
                     }
