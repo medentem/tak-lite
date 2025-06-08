@@ -32,12 +32,12 @@ class ChannelAdapter(
 
     override fun onBindViewHolder(holder: ChannelViewHolder, position: Int) {
         val channel = getItem(position)
-        Log.d(TAG, "Binding channel: ${channel.name}")
+        Log.d(TAG, "Binding channel: ${channel.name} (${channel.id})")
         holder.bind(channel)
     }
 
     override fun submitList(list: List<IChannel>?) {
-        Log.d(TAG, "Submitting new channel list: ${list?.map { it.name }}")
+        Log.d(TAG, "Submitting new channel list: ${list?.map { "${it.name} (${it.id})" }}")
         super.submitList(list)
     }
 
@@ -71,7 +71,7 @@ class ChannelAdapter(
         private val activeChannelIndicator: View = itemView.findViewById(R.id.activeChannelIndicator)
 
         fun bind(channel: IChannel) {
-            Log.d(TAG, "Binding channel view for: ${channel.name}")
+            Log.d(TAG, "Binding channel view for: ${channel.name} (${channel.id})")
             
             // Set channel name
             channelName.text = channel.name
@@ -99,15 +99,16 @@ class ChannelAdapter(
                 recentMessage.text = "No messages"
             }
 
-            // Handle active state
+            // Handle active state - use getIsActive callback to determine if this channel is active
             val isActive = getIsActive(channel)
+            Log.d(TAG, "Channel ${channel.name} (${channel.id}) active state: $isActive")
             activeChannelIndicator.visibility = if (isActive) View.VISIBLE else View.GONE
 
             // Handle audio indicator
             audioIndicator.visibility = if (channel.id == receivingGroupId) View.VISIBLE else View.GONE
 
             itemView.setOnClickListener {
-                Log.d(TAG, "Channel clicked: ${channel.name}")
+                Log.d(TAG, "Channel clicked: ${channel.name} (${channel.id})")
                 onGroupSelected(channel)
             }
         }

@@ -19,7 +19,6 @@ interface IChannel {
     val id: String
     val name: String
     val isDefault: Boolean
-    val isActive: Boolean
     val members: List<String>
     val precision: Int?
     val lastMessage: ChannelMessage?
@@ -33,7 +32,6 @@ data class Layer2Channel(
     override val id: String,
     override val name: String,
     override val isDefault: Boolean = false,
-    override val isActive: Boolean = false,
     override val members: List<String> = emptyList(),
     override val precision: Int? = null,
     override val lastMessage: ChannelMessage? = null
@@ -47,7 +45,6 @@ data class MeshtasticChannel(
     override val id: String,
     override val name: String,
     override val isDefault: Boolean = false,
-    override val isActive: Boolean = false,
     override val members: List<String> = emptyList(),
     val role: ChannelRole = ChannelRole.DISABLED,
     val psk: ByteArray? = null,
@@ -75,7 +72,6 @@ data class MeshtasticChannel(
         if (id != other.id) return false
         if (name != other.name) return false
         if (isDefault != other.isDefault) return false
-        if (isActive != other.isActive) return false
         if (members != other.members) return false
         if (role != other.role) return false
         if (psk != null) {
@@ -95,7 +91,6 @@ data class MeshtasticChannel(
         var result = id.hashCode()
         result = 31 * result + name.hashCode()
         result = 31 * result + isDefault.hashCode()
-        result = 31 * result + isActive.hashCode()
         result = 31 * result + members.hashCode()
         result = 31 * result + role.hashCode()
         result = 31 * result + (psk?.contentHashCode() ?: 0)

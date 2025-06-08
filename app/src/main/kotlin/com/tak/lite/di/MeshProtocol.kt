@@ -8,9 +8,16 @@ import com.tak.lite.network.MeshtasticBluetoothProtocol
 import kotlinx.coroutines.flow.StateFlow
 import org.maplibre.android.geometry.LatLng
 
+sealed class MeshConnectionState {
+    object Connected : MeshConnectionState()
+    object Disconnected : MeshConnectionState()
+    data class Error(val message: String) : MeshConnectionState()
+}
+
 interface MeshProtocol {
     val peers: StateFlow<List<MeshPeer>>
     val channels: StateFlow<List<IChannel>>
+    val connectionState: StateFlow<MeshConnectionState>
     
     // Channel operations
     suspend fun createChannel(name: String)
@@ -35,6 +42,7 @@ interface MeshProtocol {
     fun sendBulkAnnotationDeletions(ids: List<String>)
     val configDownloadStep: StateFlow<MeshtasticBluetoothProtocol.ConfigDownloadStep>? get() = null
     val requiresAppLocationSend: Boolean
+    val allowsChannelManagement: Boolean
     val localNodeIdOrNickname: String?
     val packetSummaries: StateFlow<List<PacketSummary>>
 }

@@ -58,4 +58,9 @@ class ChannelViewModel @Inject constructor(
             channelRepository.selectChannel(channelId)
         }
     }
+
+    fun resetChannelSelection() {
+        Log.d(TAG, "Resetting channel selection")
+        channelRepository.resetChannelSelection()
+    }
 } 

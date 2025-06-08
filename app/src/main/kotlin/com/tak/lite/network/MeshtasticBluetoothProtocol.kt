@@ -7,6 +7,7 @@ import com.geeksville.mesh.MeshProtos.ToRadio
 import com.tak.lite.data.model.ChannelMessage
 import com.tak.lite.data.model.IChannel
 import com.tak.lite.data.model.MeshtasticChannel
+import com.tak.lite.di.MeshConnectionState
 import com.tak.lite.di.MeshProtocol
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PacketSummary
@@ -71,6 +72,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     private val _configDownloadStep = MutableStateFlow<ConfigDownloadStep>(ConfigDownloadStep.NotStarted)
     override val configDownloadStep: StateFlow<ConfigDownloadStep> = _configDownloadStep.asStateFlow()
     override val requiresAppLocationSend: Boolean = false
+    override val allowsChannelManagement: Boolean = false
     override val localNodeIdOrNickname: String?
         get() = connectedNodeId
 
@@ -83,16 +85,18 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     private val _channels = MutableStateFlow<List<MeshtasticChannel>>(emptyList())
     override val channels: StateFlow<List<MeshtasticChannel>> = _channels.asStateFlow()
 
-    private val channelLastMessages = ConcurrentHashMap<String, ChannelMessage>()
+    private val _connectionState = MutableStateFlow<MeshConnectionState>(MeshConnectionState.Disconnected)
+    override val connectionState: StateFlow<MeshConnectionState> = _connectionState.asStateFlow()
 
     override suspend fun createChannel(name: String) {
+        TODO("Not yet implemented")
     }
 
     override fun deleteChannel(channelId: String) {
+        TODO("Not yet implemented")
     }
 
-    override suspend fun selectChannel(channelId: String) {
-    }
+    private val channelLastMessages = ConcurrentHashMap<String, ChannelMessage>()
 
     private var selectedChannelId: String? = null
 
@@ -108,12 +112,24 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             connectedNodeId = null
             handshakeComplete.set(false)
             _configDownloadStep.value = ConfigDownloadStep.NotStarted
+            // Don't clear selectedChannelId on connection loss
         }
         // Listen for initial drain complete to trigger handshake
         deviceManager.setInitialDrainCompleteCallback {
             Log.i(TAG, "Initial FROMRADIO drain complete, starting config handshake.")
             _configDownloadStep.value = ConfigDownloadStep.SendingHandshake
             startConfigHandshake()
+        }
+        // Observe Bluetooth connection state
+        CoroutineScope(coroutineContext).launch {
+            deviceManager.connectionState.collect { state ->
+                _connectionState.value = when (state) {
+                    is BluetoothDeviceManager.ConnectionState.Connected -> MeshConnectionState.Connected
+                    is BluetoothDeviceManager.ConnectionState.Connecting -> MeshConnectionState.Connected // Still consider connecting as connected for UI purposes
+                    is BluetoothDeviceManager.ConnectionState.Disconnected -> MeshConnectionState.Disconnected
+                    is BluetoothDeviceManager.ConnectionState.Failed -> MeshConnectionState.Error(state.reason)
+                }
+            }
         }
     }
 
@@ -543,13 +559,16 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     )
 
     private fun handleChannelUpdate(channel: com.geeksville.mesh.ChannelProtos.Channel) {
+        if (channel.settings.name.isNullOrEmpty()) {
+            Log.d(TAG, "Ignoring channel update with null or empty name")
+            return
+        }
         Log.d(TAG, "Received channel update from device: id=${channel.settings.id}, name=${channel.settings.name}, role=${channel.role}")
         val channelId = "${channel.index}_${channel.settings.name}"
         val meshtasticChannel = MeshtasticChannel(
             id = channelId,
             name = channel.settings.name,
             isDefault = channel.index == 0,
-            isActive = channel.role == com.geeksville.mesh.ChannelProtos.Channel.Role.PRIMARY,
             members = emptyList(), // TODO: Track members based on node info
             role = when (channel.role) {
                 com.geeksville.mesh.ChannelProtos.Channel.Role.PRIMARY -> MeshtasticChannel.ChannelRole.PRIMARY
@@ -578,10 +597,15 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         Log.d(TAG, "Current channels after update: ${_channels.value.map { "${it.name} (${it.id})" }}")
         Log.d(TAG, "Channel flow has ${_channels.value.size} channels: ${_channels.value.map { "${it.name} (${it.id})" }}")
 
-        // If this is the primary channel, select it
-        if (meshtasticChannel.role == MeshtasticChannel.ChannelRole.PRIMARY) {
+        // If this is the first channel (index 0) and no channel is selected, select it
+        if (channel.index == 0 && selectedChannelId == null) {
             selectedChannelId = meshtasticChannel.id
-            Log.d(TAG, "Set primary channel to: ${meshtasticChannel.name}")
+            Log.d(TAG, "Set default channel to: ${meshtasticChannel.name}")
         }
+    }
+
+    override suspend fun selectChannel(channelId: String) {
+        Log.d(TAG, "Selecting channel: $channelId")
+        selectedChannelId = channelId
     }
 } 

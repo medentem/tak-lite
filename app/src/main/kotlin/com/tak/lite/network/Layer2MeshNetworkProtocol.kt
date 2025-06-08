@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Network
 import android.util.Log
 import com.tak.lite.data.model.IChannel
+import com.tak.lite.di.MeshConnectionState
 import com.tak.lite.di.MeshProtocol
 import com.tak.lite.model.ConnectionMetrics
 import com.tak.lite.model.DiscoveryPacket
@@ -115,6 +116,9 @@ class Layer2MeshNetworkProtocol @Inject constructor(
     private val _packetSummaries = MutableStateFlow<List<PacketSummary>>(emptyList())
     override val packetSummaries: StateFlow<List<PacketSummary>> = _packetSummaries.asStateFlow()
     
+    private val _connectionState = MutableStateFlow<MeshConnectionState>(MeshConnectionState.Disconnected)
+    override val connectionState: StateFlow<MeshConnectionState> = _connectionState.asStateFlow()
+    
     @Serializable
     data class CachedPeer(
         val id: String,
@@ -166,6 +170,8 @@ class Layer2MeshNetworkProtocol @Inject constructor(
         peerUpdateCallback = callback
         loadPeerCache()
         
+        _connectionState.value = MeshConnectionState.Connected
+        
         discoveryJob = CoroutineScope(coroutineContext).launch {
             while (isActive) {
                 try {
@@ -173,6 +179,7 @@ class Layer2MeshNetworkProtocol @Inject constructor(
                     delay(currentDiscoveryInterval)
                 } catch (e: Exception) {
                     Log.e(TAG, "Error during discovery: ", e)
+                    _connectionState.value = MeshConnectionState.Error(e.message ?: "Unknown error during discovery")
                 }
             }
         }
@@ -448,6 +455,7 @@ class Layer2MeshNetworkProtocol @Inject constructor(
         peerLocations.clear()
         peerLocationCallback = null
         stateRebroadcastJob?.cancel()
+        _connectionState.value = MeshConnectionState.Disconnected
     }
     
     override fun sendLocationUpdate(latitude: Double, longitude: Double) {
@@ -923,6 +931,8 @@ class Layer2MeshNetworkProtocol @Inject constructor(
     }
 
     override val requiresAppLocationSend: Boolean = true
+
+    override val allowsChannelManagement: Boolean = true
 
     override val localNodeIdOrNickname: String
         get() = localNickname

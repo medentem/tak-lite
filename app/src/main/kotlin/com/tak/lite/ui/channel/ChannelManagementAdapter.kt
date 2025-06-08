@@ -1,5 +1,6 @@
 package com.tak.lite.ui.channel
 
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -39,7 +40,12 @@ class ChannelManagementAdapter(
         fun bind(channel: IChannel) {
             channelName.text = channel.name
             memberCount.text = "${channel.members.size} members"
-            channelIndicator.visibility = if (getIsActive(channel)) View.VISIBLE else View.GONE
+            
+            // Use getIsActive callback to determine if this channel is active
+            val isActive = getIsActive(channel)
+            Log.d("ChannelManagementAdapter", "Channel ${channel.name} active state: $isActive")
+            channelIndicator.visibility = if (isActive) View.VISIBLE else View.GONE
+            
             defaultIndicator.visibility = if (channel.isDefault) View.VISIBLE else View.GONE
             editButton.visibility = if (channel.isDefault) View.GONE else View.VISIBLE
             deleteButton.visibility = if (channel.isDefault) View.GONE else View.VISIBLE

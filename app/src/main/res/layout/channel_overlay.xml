@@ -11,82 +11,104 @@
     app:cardCornerRadius="0dp"
     app:cardBackgroundColor="?attr/colorSurface">
 
-    <LinearLayout
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical">
+        android:layout_height="match_parent">
 
-        <!-- Header Section -->
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="16dp"
-            android:background="?attr/colorSurface">
+            android:layout_height="match_parent"
+            android:orientation="vertical">
 
+            <!-- Header Section -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
+                android:orientation="vertical"
+                android:padding="16dp"
+                android:background="?attr/colorSurface">
 
-                <TextView
-                    android:layout_width="0dp"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="Channels"
-                    android:textSize="20sp"
-                    android:textStyle="bold"
-                    android:textColor="?android:attr/textColorPrimary" />
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
 
-                <ImageButton
-                    android:id="@+id/closeChannelOverlayButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:src="@android:drawable/ic_menu_close_clear_cancel"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="Close" />
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Channels"
+                        android:textSize="20sp"
+                        android:textStyle="bold"
+                        android:textColor="?android:attr/textColorPrimary" />
+
+                    <ImageButton
+                        android:id="@+id/closeChannelOverlayButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:src="@android:drawable/ic_menu_close_clear_cancel"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="Close" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginTop="12dp"
+                    android:background="?android:attr/listDivider" />
             </LinearLayout>
 
-            <View
+            <!-- Channel List -->
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/channelList"
                 android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:layout_marginTop="12dp"
-                android:background="?android:attr/listDivider" />
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:clipToPadding="false"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp" />
+
+            <!-- Bottom Buttons -->
+            <ViewStub
+                android:id="@+id/channelManagementButtons"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout="@layout/channel_management_buttons" />
         </LinearLayout>
 
-        <!-- Channel List -->
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/channelList"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:clipToPadding="false"
-            android:paddingTop="8dp"
-            android:paddingBottom="8dp" />
-
-        <!-- Bottom Buttons -->
+        <!-- Disabled State Overlay -->
         <LinearLayout
+            android:id="@+id/disabledOverlay"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
             android:orientation="vertical"
-            android:padding="16dp"
-            android:background="?attr/colorSurface">
+            android:gravity="center"
+            android:background="#80000000"
+            android:visibility="gone">
 
-            <Button
-                android:id="@+id/addChannelButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Add Channel"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+            <ImageView
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:src="@android:drawable/ic_dialog_alert"
+                android:tint="@android:color/white"
+                android:layout_marginBottom="16dp"/>
 
-            <Button
-                android:id="@+id/manageChannelsButton"
-                android:layout_width="match_parent"
+            <TextView
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Manage Channels"
-                android:layout_marginTop="8dp"
-                style="@style/Widget.MaterialComponents.Button.TextButton" />
+                android:text="No Device Connected"
+                android:textColor="@android:color/white"
+                android:textSize="16sp"
+                android:textStyle="bold"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Connect to a device to manage channels"
+                android:textColor="@android:color/white"
+                android:textSize="14sp"
+                android:layout_marginTop="8dp"/>
         </LinearLayout>
-    </LinearLayout>
+    </FrameLayout>
 </androidx.cardview.widget.CardView> 

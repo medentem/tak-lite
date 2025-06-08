@@ -327,7 +327,8 @@ class MainActivity : AppCompatActivity(), com.tak.lite.ui.map.ElevationChartBott
         channelController = ChannelController(
             activity = this,
             channelViewModel = channelViewModel,
-            lifecycleScope = lifecycleScope
+            lifecycleScope = lifecycleScope,
+            meshProtocolProvider = meshProtocolProvider
         )
         channelController.setupChannelButton(peerIdToNickname)
 

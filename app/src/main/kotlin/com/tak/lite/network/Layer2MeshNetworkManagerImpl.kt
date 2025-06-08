@@ -53,7 +53,6 @@ class Layer2MeshNetworkManagerImpl @Inject constructor(
                 id = "all",
                 name = "All",
                 isDefault = true,
-                isActive = true,
                 members = emptyList() // Could be filled with all peer IDs if needed
             )
         )
@@ -78,7 +77,7 @@ class Layer2MeshNetworkManagerImpl @Inject constructor(
                 val loaded = json.decodeFromString<List<Layer2Channel>>(saved)
                 if (loaded.isNotEmpty()) {
                     _channels.value = loaded
-                    selectedChannelId = loaded.find { it.isActive }?.id ?: loaded.first().id
+                    selectedChannelId = loaded.first().id
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load channels from prefs", e)
@@ -254,7 +253,6 @@ class Layer2MeshNetworkManagerImpl @Inject constructor(
 
     fun selectChannel(channelId: String) {
         selectedChannelId = channelId
-        _channels.value = _channels.value.map { it.copy(isActive = it.id == channelId) }
         Log.d(TAG, "Selected channel: $channelId")
     }
 
@@ -279,7 +277,6 @@ class Layer2MeshNetworkManagerImpl @Inject constructor(
             id = newId,
             name = name,
             isDefault = false,
-            isActive = false,
             members = emptyList()
         )
         _channels.value += newChannel
