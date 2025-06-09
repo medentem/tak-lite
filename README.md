@@ -13,6 +13,7 @@ A situational awareness Android application designed for use with mesh network d
   - Easy longpress-and-drag fan menu to drop and edit annotations
   - Optionally expire annotations and POIs
   - View elevation chart for lines
+- Text messaging
 - Push-to-Talk (PTT) real-time VOIP audio communication (WebRTC-based)
 - Mesh network integration (meshtastic or doodle labs)
 - Offline map tile support
