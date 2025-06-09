@@ -14,4 +14,9 @@
     <style name="Theme.TakLite.Splash" parent="Theme.TakLite">
         <item name="android:windowBackground">@color/splash_background</item>
     </style>
+    <style name="Theme.TakLite.Dialog" parent="ThemeOverlay.MaterialComponents.Dialog.Alert">
+        <item name="android:windowBackground">@android:color/white</item>
+        <item name="android:windowMinWidthMajor">90%</item>
+        <item name="android:windowMinWidthMinor">90%</item>
+    </style>
 </resources> 

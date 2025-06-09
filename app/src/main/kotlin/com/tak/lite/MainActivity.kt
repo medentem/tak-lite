@@ -11,6 +11,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.MotionEvent
 import android.view.View
 import android.widget.FrameLayout
@@ -111,6 +112,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
     private val REQUEST_CODE_ALL_PERMISSIONS = 4001
 
     @Inject lateinit var meshProtocolProvider: com.tak.lite.network.MeshProtocolProvider
+    @Inject lateinit var billingManager: com.tak.lite.util.BillingManager
 
     private lateinit var packetSummaryOverlay: FrameLayout
     private lateinit var packetSummaryList: LinearLayout
@@ -120,6 +122,21 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        // Check trial status and show purchase dialog if needed
+        lifecycleScope.launch {
+            repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                billingManager.isPremium.collectLatest { isPremium ->
+                    Log.d("MainActivity", "Premium status changed: $isPremium")
+                    if (!isPremium && billingManager.shouldShowPurchaseDialog()) {
+                        // Delay showing the dialog to let the app load
+                        delay(2000)
+                        showPurchaseDialog()
+                        billingManager.markPurchaseDialogShown()
+                    }
+                }
+            }
+        }
 
         // Initialize FAB menu views
         fabMenuContainer = findViewById(R.id.fabMenuContainer)
@@ -199,19 +216,23 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
                     locationSourceLabel.text = "Phone"
                     locationSourceLabel.setTextColor(Color.parseColor("#2196F3"))
                 }
-                // Try to get current location and zoom to it if available
-                locationController.getLastKnownLocation { location ->
-                    if (location != null) {
-                        val latLng = org.maplibre.android.geometry.LatLng(location.latitude, location.longitude)
-                        val currentZoom = map.cameraPosition.zoom
-                        map.moveCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(latLng, currentZoom))
-                        saveLastLocation(location.latitude, location.longitude, currentZoom.toFloat())
+                // Only try to get location if we have permissions
+                if (androidx.core.app.ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED ||
+                    androidx.core.app.ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    // Try to get current location and zoom to it if available
+                    locationController.getLastKnownLocation { location ->
+                        if (location != null) {
+                            val latLng = org.maplibre.android.geometry.LatLng(location.latitude, location.longitude)
+                            val currentZoom = map.cameraPosition.zoom
+                            map.moveCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(latLng, currentZoom))
+                            saveLastLocation(location.latitude, location.longitude, currentZoom.toFloat())
+                        }
                     }
-                }
-                map.addOnCameraMoveStartedListener { reason ->
-                    if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) {
-                        isTrackingLocation = false
-                        map.locationComponent.cameraMode = org.maplibre.android.location.modes.CameraMode.NONE
+                    map.addOnCameraMoveStartedListener { reason ->
+                        if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) {
+                            isTrackingLocation = false
+                            map.locationComponent.cameraMode = org.maplibre.android.location.modes.CameraMode.NONE
+                        }
                     }
                 }
             },
@@ -767,6 +788,18 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
             if (grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
                 binding.pttButton.isEnabled = true
                 locationController.startLocationUpdates()
+                // Re-initialize map's location component now that we have permissions
+                mapController.mapLibreMap?.let { map ->
+                    map.style?.let { style ->
+                        val locationComponent = map.locationComponent
+                        locationComponent.activateLocationComponent(
+                            org.maplibre.android.location.LocationComponentActivationOptions.builder(this, style).build()
+                        )
+                        locationComponent.isLocationComponentEnabled = true
+                        locationComponent.cameraMode = org.maplibre.android.location.modes.CameraMode.NONE
+                        locationComponent.renderMode = org.maplibre.android.location.modes.RenderMode.COMPASS
+                    }
+                }
             } else {
                 Toast.makeText(this, "Permissions required for app functionality", Toast.LENGTH_LONG).show()
             }
@@ -1091,4 +1124,14 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
     }
 
     override fun getMapController(): com.tak.lite.ui.map.MapController? = mapController
+
+    private fun showPurchaseDialog() {
+        val dialog = com.tak.lite.ui.PurchaseDialog()
+        dialog.show(supportFragmentManager, "purchase_dialog")
+    }
+
+    // Add this method to be called from settings
+    fun showPurchaseOptions() {
+        showPurchaseDialog()
+    }
 }

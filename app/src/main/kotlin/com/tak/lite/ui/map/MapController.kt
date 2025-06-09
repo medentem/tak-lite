@@ -64,9 +64,26 @@ class MapController(
             } else {
                 map.moveCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(defaultCenter, defaultZoom))
             }
+            // Set the style based on the current map type first
             setStyleForCurrentViewport(map)
-            map.setStyle(org.maplibre.android.maps.Style.Builder().fromUri("asset://styles/style.json")) {
-                setupLocationComponent(map)
+            // Initialize location component after style is set, but only if we have permissions
+            if (androidx.core.app.ActivityCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED ||
+                androidx.core.app.ActivityCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                map.style?.let { style ->
+                    val locationComponent = map.locationComponent
+                    locationComponent.activateLocationComponent(
+                        org.maplibre.android.location.LocationComponentActivationOptions.builder(context, style).build()
+                    )
+                    locationComponent.isLocationComponentEnabled = true
+                    locationComponent.cameraMode = org.maplibre.android.location.modes.CameraMode.NONE
+                    locationComponent.renderMode = org.maplibre.android.location.modes.RenderMode.COMPASS
+                    isLocationComponentActivated = true
+                    // Apply any pending location
+                    pendingLocation?.let {
+                        locationComponent.forceLocationUpdate(it)
+                        pendingLocation = null
+                    }
+                }
             }
             onMapReady(map)
         }
@@ -692,7 +709,6 @@ class MapController(
             }
         }
         map.setStyle(org.maplibre.android.maps.Style.Builder().fromJson(styleJson)) {
-            setupLocationComponent(map)
             onStyleChanged?.invoke()
             // Force a redraw of the annotation overlay
             map.addOnCameraMoveListener {
