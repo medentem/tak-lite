@@ -137,6 +137,23 @@ class Layer2MeshNetworkProtocol @Inject constructor(
                 val jsonString = cacheFile.readText()
                 val cachedPeers = json.decodeFromString<Map<String, CachedPeer>>(jsonString)
                 peerCache.putAll(cachedPeers)
+                
+                // Restore peers from cache
+                cachedPeers.forEach { (peerId, cachedPeer) ->
+                    // Only restore peers that haven't expired
+                    if (System.currentTimeMillis() - cachedPeer.lastSeen < PEER_TIMEOUT_MS) {
+                        peersMap[peerId] = MeshPeer(
+                            id = peerId,
+                            ipAddress = cachedPeer.ipAddress,
+                            lastSeen = cachedPeer.lastSeen,
+                            nickname = cachedPeer.nickname,
+                            capabilities = cachedPeer.capabilities,
+                            networkQuality = cachedPeer.networkQuality,
+                            lastStateVersion = cachedPeer.lastStateVersion
+                        )
+                    }
+                }
+                _peers.value = peersMap.values.toList()
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error loading peer cache: ${e.message}")
@@ -146,7 +163,19 @@ class Layer2MeshNetworkProtocol @Inject constructor(
     private fun savePeerCache() {
         try {
             val cacheFile = File(context.filesDir, PEER_CACHE_FILE)
-            val jsonString = json.encodeToString(peerCache)
+            // Convert current peers to cached format
+            val peersToCache = peersMap.mapValues { (_, peer) ->
+                CachedPeer(
+                    id = peer.id,
+                    ipAddress = peer.ipAddress,
+                    nickname = peer.nickname,
+                    lastSeen = peer.lastSeen,
+                    capabilities = peer.capabilities,
+                    networkQuality = peer.networkQuality,
+                    lastStateVersion = peer.lastStateVersion
+                )
+            }
+            val jsonString = json.encodeToString(peersToCache)
             cacheFile.writeText(jsonString)
         } catch (e: Exception) {
             Log.e(TAG, "Error saving peer cache: ${e.message}")
@@ -369,7 +398,10 @@ class Layer2MeshNetworkProtocol @Inject constructor(
                 id = peerId,
                 ipAddress = packet.address.hostAddress,
                 lastSeen = System.currentTimeMillis(),
-                nickname = discoveryInfo.nickname
+                nickname = discoveryInfo.nickname,
+                capabilities = discoveryInfo.capabilities,
+                networkQuality = discoveryInfo.networkQuality,
+                lastStateVersion = discoveryInfo.lastStateVersion
             )
             // Update peer cache
             peerCache[peerId] = CachedPeer(
@@ -389,6 +421,10 @@ class Layer2MeshNetworkProtocol @Inject constructor(
             cleanupOldPeers()
             // Update discovery interval
             updateDiscoveryInterval()
+            // Save cache periodically
+            if (System.currentTimeMillis() % 60000 < 1000) { // Save roughly every minute
+                savePeerCache()
+            }
             // Trigger state sync if needed
             if (discoveryInfo.lastStateVersion < currentStateVersion.version) {
                 sendStateSync(
