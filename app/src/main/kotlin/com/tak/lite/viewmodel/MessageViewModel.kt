@@ -15,8 +15,7 @@ import javax.inject.Inject
 @HiltViewModel
 class MessageViewModel @Inject constructor(
     private val channelRepository: ChannelRepository,
-    private val messageRepository: MessageRepository,
-    private val meshProtocolProvider: MeshProtocolProvider
+    private val messageRepository: MessageRepository
 ) : ViewModel() {
     private val TAG = "MessageViewModel"
 
@@ -31,23 +30,12 @@ class MessageViewModel @Inject constructor(
     }
 
     fun getCurrentUserShortName(): String? {
-        val protocol = meshProtocolProvider.protocol.value
-        val nodeId = protocol.localNodeIdOrNickname
-        if (protocol is com.tak.lite.network.MeshtasticBluetoothProtocol) {
-            return protocol.getNodeInfoForPeer(nodeId ?: "")?.user?.shortName
-        }
-        return nodeId
+        return messageRepository.getCurrentUserShortName()
     }
 
     fun sendMessage(channelId: String, content: String) {
         viewModelScope.launch {
-            try {
-                // Just send the message through the protocol
-                val protocol = meshProtocolProvider.protocol.value
-                protocol.sendTextMessage(channelId, content)
-            } catch (e: Exception) {
-                Log.e(TAG, "Error sending message: ${e.message}")
-            }
+            messageRepository.sendMessage(channelId, content)
         }
     }
 } 

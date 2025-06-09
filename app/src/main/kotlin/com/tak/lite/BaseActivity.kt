@@ -13,6 +13,5 @@ abstract class BaseActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // The repository will be injected by Hilt and start observing messages
     }
 } 
