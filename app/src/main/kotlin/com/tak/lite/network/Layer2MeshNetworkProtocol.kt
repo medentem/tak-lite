@@ -930,6 +930,14 @@ class Layer2MeshNetworkProtocol @Inject constructor(
         TODO("Not yet implemented")
     }
 
+    override fun sendTextMessage(channelId: String, content: String) {
+        TODO("Not yet implemented")
+    }
+
+    override fun getChannelName(channelId: String): String? {
+        TODO("Not yet implemented")
+    }
+
     override val requiresAppLocationSend: Boolean = true
 
     override val allowsChannelManagement: Boolean = true

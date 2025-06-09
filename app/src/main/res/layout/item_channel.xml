@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:padding="12dp"
+    android:padding="16dp"
     android:background="?attr/selectableItemBackground">
 
     <!-- Active channel indicator -->
@@ -13,21 +13,23 @@
         android:layout_height="0dp"
         android:background="@color/green_500"
         android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent" />
+        app:layout_constraintTop_toTopOf="parent" />
 
     <!-- Channel name -->
     <TextView
         android:id="@+id/channelName"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:layout_marginEnd="8dp"
+        android:textColor="?android:attr/textColorPrimary"
         android:textSize="16sp"
         android:textStyle="bold"
-        android:textColor="?android:attr/textColorPrimary"
-        android:layout_marginStart="8dp"
+        android:layout_marginTop="8dp"
+        app:layout_constraintEnd_toStartOf="@id/messageButton"
         app:layout_constraintStart_toEndOf="@id/activeChannelIndicator"
-        app:layout_constraintEnd_toStartOf="@id/audioIndicator"
         app:layout_constraintTop_toTopOf="parent" />
 
     <!-- Role and precision info -->
@@ -35,12 +37,13 @@
         android:id="@+id/channelInfo"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:textSize="12sp"
-        android:textColor="?android:attr/textColorSecondary"
         android:layout_marginStart="8dp"
+        android:layout_marginEnd="8dp"
+        android:textColor="?android:attr/textColorSecondary"
+        android:textSize="14sp"
         android:layout_marginTop="2dp"
+        app:layout_constraintEnd_toStartOf="@id/messageButton"
         app:layout_constraintStart_toEndOf="@id/activeChannelIndicator"
-        app:layout_constraintEnd_toStartOf="@id/audioIndicator"
         app:layout_constraintTop_toBottomOf="@id/channelName" />
 
     <!-- Recent message -->
@@ -48,26 +51,41 @@
         android:id="@+id/recentMessage"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:textSize="14sp"
-        android:textColor="?android:attr/textColorPrimary"
-        android:maxLines="1"
-        android:ellipsize="end"
         android:layout_marginStart="8dp"
+        android:layout_marginEnd="8dp"
         android:layout_marginTop="4dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="?android:attr/textColorTertiary"
+        android:textSize="14sp"
+        app:layout_constraintEnd_toStartOf="@id/messageButton"
         app:layout_constraintStart_toEndOf="@id/activeChannelIndicator"
-        app:layout_constraintEnd_toStartOf="@id/audioIndicator"
         app:layout_constraintTop_toBottomOf="@id/channelInfo" />
 
     <!-- Audio indicator -->
     <ImageView
         android:id="@+id/audioIndicator"
-        android:layout_width="16dp"
-        android:layout_height="16dp"
-        android:src="@drawable/ic_volume_up"
-        android:alpha="0.5"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_marginStart="8dp"
+        android:src="@android:drawable/ic_lock_silent_mode_off"
         android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@id/recentMessage"
+        app:layout_constraintStart_toEndOf="@id/recentMessage"
+        app:layout_constraintTop_toTopOf="@id/recentMessage" />
+
+    <ImageButton
+        android:id="@+id/messageButton"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:background="@android:color/transparent"
+        android:contentDescription="Open Messages"
+        android:src="@drawable/ic_chat_bubble_outline"
+        android:tint="?android:attr/textColorSecondary"
+        android:alpha="0.7"
+        android:padding="6dp"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent" />
+        app:layout_constraintTop_toTopOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout> 

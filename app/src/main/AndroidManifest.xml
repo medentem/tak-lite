@@ -55,5 +55,9 @@
 
         <activity android:name=".ui.channel.ChannelManagementActivity" />
         <activity android:name=".SettingsActivity" />
+        <activity
+            android:name=".ui.message.MessageActivity"
+            android:exported="false"
+            android:theme="@style/Theme.TakLite" />
     </application>
 </manifest> 

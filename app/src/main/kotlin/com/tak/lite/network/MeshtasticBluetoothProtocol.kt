@@ -7,13 +7,13 @@ import com.geeksville.mesh.MeshProtos.ToRadio
 import com.tak.lite.data.model.ChannelMessage
 import com.tak.lite.data.model.IChannel
 import com.tak.lite.data.model.MeshtasticChannel
+import com.tak.lite.data.model.MessageStatus
 import com.tak.lite.di.MeshConnectionState
 import com.tak.lite.di.MeshProtocol
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PacketSummary
 import com.tak.lite.util.DeviceController
 import com.tak.lite.util.MeshAnnotationInterop
-import com.tak.lite.util.PositionPrecisionUtils
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +28,7 @@ import javax.inject.Inject
 import kotlin.coroutines.CoroutineContext
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CompletableDeferred
 
 class MeshtasticBluetoothProtocol @Inject constructor(
     private val deviceManager: BluetoothDeviceManager,
@@ -40,6 +41,23 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     private val FROMRADIO_CHARACTERISTIC_UUID: UUID = UUID.fromString("2c55e69e-4993-11ed-b878-0242ac120002")
     private val TORADIO_CHARACTERISTIC_UUID: UUID = UUID.fromString("f75c76d2-129e-4dad-a1dd-7866124401e7")
     private val FROMNUM_CHARACTERISTIC_UUID: UUID = UUID.fromString("ed9da18c-a800-4f66-a670-aa7547e34453")
+
+    private var currentPacketId: Long = 0
+
+    /**
+     * Generate a unique packet ID (if we know enough to do so - otherwise return 0 so the device will do it)
+     */
+    @Synchronized
+    private fun generatePacketId(): Int {
+        val numPacketIds = ((1L shl 32) - 1) // A mask for only the valid packet ID bits, either 255 or maxint
+
+        currentPacketId++
+
+        currentPacketId = currentPacketId and 0xffffffff // keep from exceeding 32 bits
+
+        // Use modulus and +1 to ensure we skip 0 on any values we return
+        return ((currentPacketId % numPacketIds) + 1L).toInt()
+    }
 
     private var annotationCallback: ((MapAnnotation) -> Unit)? = null
     private var peerLocationCallback: ((Map<String, LatLng>) -> Unit)? = null
@@ -89,18 +107,22 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     private val _connectionState = MutableStateFlow<MeshConnectionState>(MeshConnectionState.Disconnected)
     override val connectionState: StateFlow<MeshConnectionState> = _connectionState.asStateFlow()
 
-    override suspend fun createChannel(name: String) {
-        TODO("Not yet implemented")
-    }
-
-    override fun deleteChannel(channelId: String) {
-        TODO("Not yet implemented")
-    }
+    private val _channelMessages = MutableStateFlow<Map<String, List<ChannelMessage>>>(emptyMap())
+    val channelMessages: StateFlow<Map<String, List<ChannelMessage>>> = _channelMessages.asStateFlow()
 
     private val channelLastMessages = ConcurrentHashMap<String, ChannelMessage>()
 
     private var selectedChannelId: String? = null
     private var selectedChannelIndex: Int = 0  // Default to primary channel (index 0)
+
+    // Add request ID counter for message tracking
+    private val requestIdCounter = AtomicInteger(0)
+    private val pendingMessages = ConcurrentHashMap<Int, ChannelMessage>()
+
+    // Add a map to track pending queue responses
+    private val pendingQueueResponses = ConcurrentHashMap<Int, CompletableDeferred<Int>>()
+    // Store the last sent message to associate with the next QueueStatus
+    private var lastSentMessage: ChannelMessage? = null
 
     init {
         deviceManager.setPacketListener { data ->
@@ -208,7 +230,8 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         partialUpdate: Boolean,
         updateFields: Set<String>
     ) {
-        TODO("Not yet implemented")
+        // noop - we don't do full state sync in meshtastic
+        return
     }
 
     override fun setUserLocationCallback(callback: (LatLng) -> Unit) {
@@ -231,6 +254,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             .setTo(0xffffffffL.toInt())
             .setDecoded(data)
             .setChannel(selectedChannelIndex)
+            .setId(generatePacketId())
             .build()
         sendPacket(packet.toByteArray())
     }
@@ -249,6 +273,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             .setTo(0xffffffffL.toInt())
             .setDecoded(data)
             .setChannel(selectedChannelIndex)
+            .setId(generatePacketId())
             .build()
         Log.d(TAG, "Sending annotation: $annotation as packet bytes: "+
             packet.toByteArray().joinToString(", ", limit = 16))
@@ -297,7 +322,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                 while (!handshakeComplete.get()) {
                     deviceManager.aggressiveDrainFromRadio(gatt, fromRadioChar)
                     // Wait a short time before next drain attempt to avoid tight loop
-                    kotlinx.coroutines.delay(200)
+                    kotlinx.coroutines.delay(100)
                 }
                 Log.i(TAG, "Handshake complete.")
                 _configDownloadStep.value = ConfigDownloadStep.Complete
@@ -380,7 +405,8 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                     Log.d(TAG, "Parsed MeshPacket: $meshPacket")
                     if (meshPacket.hasDecoded()) {
                         val decoded = meshPacket.decoded
-                        val peerId = meshPacket.from.toString()
+                        // Convert node IDs to unsigned for consistent handling
+                        val peerId = (meshPacket.from.toLong() and 0xFFFFFFFFL).toString()
                         Log.d(TAG, "Decoded payload from peer $peerId: $decoded")
                         peersMap[peerId] = MeshPeer(
                             id = peerId,
@@ -403,6 +429,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                                     when (portnum) {
                                         com.geeksville.mesh.Portnums.PortNum.POSITION_APP -> "Position Update"
                                         com.geeksville.mesh.Portnums.PortNum.ATAK_PLUGIN -> "Annotation"
+                                        com.geeksville.mesh.Portnums.PortNum.ROUTING_APP -> "Routing"
                                         else -> "Packet (Portnum: $portnum)"
                                     }
                                 } else {
@@ -425,7 +452,20 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                         )
                         val updated = (_packetSummaries.value + summary).takeLast(3)
                         _packetSummaries.value = updated
-                        if (decoded.portnum == com.geeksville.mesh.Portnums.PortNum.POSITION_APP) {
+
+                        // Handle routing packets for message status updates
+                        if (decoded.portnum == com.geeksville.mesh.Portnums.PortNum.ROUTING_APP) {
+                            try {
+                                val routing = com.geeksville.mesh.MeshProtos.Routing.parseFrom(decoded.payload)
+                                // Get requestId from the decoded data and convert to unsigned
+                                val requestId = decoded.requestId
+                                handleRoutingPacket(routing, peerId, requestId)
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to parse routing packet: ${e.message}")
+                            }
+                        } else if (decoded.portnum == com.geeksville.mesh.Portnums.PortNum.TEXT_MESSAGE_APP) {
+                            handleTextMeshPacket(decoded, peerId, peerNickname, meshPacket)
+                        } else if (decoded.portnum == com.geeksville.mesh.Portnums.PortNum.POSITION_APP) {
                             try {
                                 val position = com.geeksville.mesh.MeshProtos.Position.parseFrom(decoded.payload)
                                 val lat = position.latitudeI / 1e7
@@ -478,14 +518,15 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                                     Log.d(TAG, "Received ATAK_PLUGIN message from $peerId but failed to parse annotation")
                                 }
                             }
-                        } else if (decoded.portnum == com.geeksville.mesh.Portnums.PortNum.TEXT_MESSAGE_APP) {
-                            handleTextMeshPacket(decoded, peerId, peerNickname, meshPacket)
                         } else {
                             Log.d(TAG, "Ignored packet from $peerId with portnum: ${decoded.portnum}")
                         }
                     } else {
                         Log.d(TAG, "MeshPacket has no decoded payload")
                     }
+                }
+                com.geeksville.mesh.MeshProtos.FromRadio.PayloadVariantCase.QUEUESTATUS -> {
+                    handleQueueStatus(fromRadio.queueStatus)
                 }
                 else -> {
                     Log.d(TAG, "Ignored packet with payloadVariantCase: ${fromRadio.payloadVariantCase}")
@@ -498,22 +539,62 @@ class MeshtasticBluetoothProtocol @Inject constructor(
 
     private fun handleTextMeshPacket(decoded: com.geeksville.mesh.MeshProtos.Data, peerId: String, peerNickname: String?, packet: com.geeksville.mesh.MeshProtos.MeshPacket) {
         try {
+            Log.d(TAG, "Handling TEXT_MESSAGE_APP packet. peerId: $peerId, peerNickname: $peerNickname")
             val content = decoded.payload.toString(Charsets.UTF_8)
-            val channelId = packet.channel.toString()
+            val channelIndex = packet.channel
+            
+            // Find the channel with matching index to get the channelId
+            val channel = _channels.value.find { it.index == channelIndex }
+            if (channel == null) {
+                Log.e(TAG, "Could not find channel with index $channelIndex")
+                return
+            }
+            val channelId = channel.id
+            
+            // Check if this is a message from our own node
+            if (isOwnNode(peerId)) {
+                Log.d(TAG, "Ignoring message from our own node")
+                return
+            }
             
             // Use peerNickname if available, otherwise fall back to peerId
             val senderShortName = peerNickname ?: peerId
             
-            val message = ChannelMessage(senderShortName, content)
+            // Check if this is a message we sent (by checking requestId)
+            val requestId = decoded.requestId
+            if (requestId != 0) {  // 0 means no requestId
+                val existingMessage = pendingMessages[requestId]
+                if (existingMessage != null) {
+                    // This is a message we sent, don't add it again
+                    Log.d(TAG, "Received our own message back with requestId $requestId, not adding to channel messages")
+                    return
+                }
+            }
+            
+            val message = ChannelMessage(
+                senderShortName = senderShortName,
+                content = content,
+                timestamp = System.currentTimeMillis(),
+                channelId = channelId
+            )
+
+            // Update channel messages
+            val currentMessages = _channelMessages.value.toMutableMap()
+            val channelMessages = currentMessages[channelId]?.toMutableList() ?: mutableListOf()
+            channelMessages.add(message)
+            currentMessages[channelId] = channelMessages
+            _channelMessages.value = currentMessages
+            
+            // Update the channel's last message
             channelLastMessages[channelId] = message
 
             // Update the channel in the list with the new message
             val currentChannels = _channels.value.toMutableList()
-            val channelIndex = currentChannels.indexOfFirst { it.id == channelId }
+            val currentChannelsIndex = currentChannels.indexOfFirst { it.id == channelId }
             if (channelIndex != -1) {
-                val channel = currentChannels[channelIndex]
+                val channel = currentChannels[currentChannelsIndex]
                 if (channel is MeshtasticChannel) {
-                    currentChannels[channelIndex] = channel.copy(lastMessage = message)
+                    currentChannels[currentChannelsIndex] = channel.copy(lastMessage = message)
                     _channels.value = currentChannels
                 }
             }
@@ -550,6 +631,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                     .setTo(0xffffffffL.toInt())
                     .setDecoded(com.tak.lite.util.MeshAnnotationInterop.bulkDeleteToMeshData(batch, nickname, battery))
                     .setChannel(selectedChannelIndex)
+                    .setId(generatePacketId())
                     .build()
                 sendPacket(packet.toByteArray())
                 batch = mutableListOf(id)
@@ -565,6 +647,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                 .setTo(0xffffffffL.toInt())
                 .setDecoded(com.tak.lite.util.MeshAnnotationInterop.bulkDeleteToMeshData(batch, nickname, battery))
                 .setChannel(selectedChannelIndex)
+                .setId(generatePacketId())
                 .build()
             sendPacket(packet.toByteArray())
         }
@@ -644,5 +727,152 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             // fallback to the first channel
             selectedChannelIndex = 0
         }
+    }
+
+    // Add helper methods for building mesh packets
+    private fun newMeshPacketTo(to: Int = 0xffffffffL.toInt()): MeshProtos.MeshPacket.Builder {
+        return MeshProtos.MeshPacket.newBuilder()
+            .setTo(to)
+    }
+
+    private fun MeshProtos.MeshPacket.Builder.buildMeshPacket(
+        wantAck: Boolean = false,
+        id: Int = generatePacketId(),
+        hopLimit: Int = 7, // Default hop limit
+        channel: Int = 0,
+        priority: MeshProtos.MeshPacket.Priority = MeshProtos.MeshPacket.Priority.UNSET,
+        initFn: MeshProtos.Data.Builder.() -> Unit
+    ): MeshProtos.MeshPacket {
+        this.wantAck = wantAck
+        this.id = id
+        this.hopLimit = hopLimit
+        this.priority = priority
+        this.channel = channel
+        decoded = MeshProtos.Data.newBuilder().also {
+            initFn(it)
+        }.build()
+        return build()
+    }
+
+    override fun sendTextMessage(channelId: String, content: String) {
+        // Get the channel index from the channel ID
+        val channelIndex = channelId.split("_").firstOrNull()?.toIntOrNull()
+        if (channelIndex == null) {
+            Log.e(TAG, "Invalid channel ID format: $channelId")
+            return
+        }
+
+        val textMessagePacketId = generatePacketId()
+
+        // Create the mesh packet using the new helper method
+        val packet = newMeshPacketTo().buildMeshPacket(
+            id = textMessagePacketId,
+            wantAck = true,
+            channel = channelIndex,
+            priority = MeshProtos.MeshPacket.Priority.RELIABLE
+        ) {
+            portnum = com.geeksville.mesh.Portnums.PortNum.TEXT_MESSAGE_APP
+            payload = com.google.protobuf.ByteString.copyFromUtf8(content)
+            requestId = textMessagePacketId
+        }
+
+        // Get the sender's short name from node info
+        val senderShortName = getNodeInfoForPeer(connectedNodeId ?: "")?.user?.shortName
+            ?: connectedNodeId ?: "Unknown"
+
+        // Create the message object
+        val message = ChannelMessage(
+            senderShortName = senderShortName,
+            content = content,
+            timestamp = System.currentTimeMillis(),
+            status = MessageStatus.SENDING,
+            channelId = channelId,
+            requestId = textMessagePacketId
+        )
+
+        // Store this message as the last sent message
+        lastSentMessage = message
+        pendingMessages[textMessagePacketId] = message
+
+        // Add to channel messages immediately
+        val currentMessages = _channelMessages.value.toMutableMap()
+        val channelMessages = currentMessages[channelId]?.toMutableList() ?: mutableListOf()
+        channelMessages.add(message)
+        currentMessages[channelId] = channelMessages
+        _channelMessages.value = currentMessages
+
+        // Send the packet
+        sendPacket(packet.toByteArray())
+    }
+
+    override fun getChannelName(channelId: String): String? {
+        val channel = _channels.value.find { it.id == channelId }
+        if (channel == null) {
+            Log.e(TAG, "Can't set notification info: Channel $channelId not found")
+            return "Messages"
+        }
+        return channel.name
+    }
+
+    override suspend fun createChannel(name: String) {
+        TODO("Not yet implemented")
+    }
+
+    override fun deleteChannel(channelId: String) {
+        TODO("Not yet implemented")
+    }
+
+    private fun handleRoutingPacket(routing: com.geeksville.mesh.MeshProtos.Routing, fromId: String, requestId: Int) {
+        val isAck = routing.errorReason == com.geeksville.mesh.MeshProtos.Routing.Error.NONE
+
+        // Convert requestId to unsigned int for comparison
+        val unsignedRequestId = requestId.toLong() and 0xFFFFFFFFL
+
+        Log.d(TAG, "Received ROUTING_APP packet - isAck: $isAck, fromId: $fromId, requestId: $requestId (unsigned: $unsignedRequestId)")
+
+        // Find the pending message using the unsigned requestId
+        val message = pendingMessages[unsignedRequestId.toInt()]
+        if (message != null) {
+            val newStatus = when {
+                isAck && fromId == message.senderShortName -> MessageStatus.RECEIVED
+                isAck -> MessageStatus.DELIVERED
+                else -> MessageStatus.ERROR
+            }
+            
+            // Create updated message with new status
+            val updatedMessage = message.copy(status = newStatus)
+            
+            // Update the message in the channel messages
+            val currentMessages = _channelMessages.value.toMutableMap()
+            val channelMessages = currentMessages[message.channelId]?.toMutableList() ?: mutableListOf()
+            val messageIndex = channelMessages.indexOfFirst { it.requestId == unsignedRequestId.toInt() }
+            if (messageIndex != -1) {
+                channelMessages[messageIndex] = updatedMessage
+                currentMessages[message.channelId] = channelMessages
+                _channelMessages.value = currentMessages
+                Log.d(TAG, "Updated message status in channelMessages for requestId $unsignedRequestId to $newStatus")
+            }
+            
+            // For now, remove from pending messages even if there was an error. We don't yet support advanced queueing
+            pendingMessages.remove(unsignedRequestId.toInt())
+            
+            Log.d(TAG, "Updated message status for requestId $unsignedRequestId to $newStatus")
+        }
+    }
+
+    private fun handleQueueStatus(queueStatus: com.geeksville.mesh.MeshProtos.QueueStatus) {
+        Log.d(TAG, "Received QueueStatus: ${queueStatus}")
+        val (success, isFull, meshPacketId) = with(queueStatus) {
+            Triple(res == 0, free == 0, meshPacketId)
+        }
+
+        if (success && isFull) {
+            Log.d(TAG, "Queue is full, waiting for free space")
+            return
+        }
+
+        // Convert meshPacketId to unsigned for consistent handling
+        val unsignedMeshPacketId = meshPacketId.toLong() and 0xFFFFFFFFL
+        Log.d(TAG, "QueueStatus - success: $success, isFull: $isFull, meshPacketId: $meshPacketId (unsigned: $unsignedMeshPacketId)")
     }
 } 

@@ -40,6 +40,9 @@ interface MeshProtocol {
     )
     fun setUserLocationCallback(callback: (LatLng) -> Unit)
     fun sendBulkAnnotationDeletions(ids: List<String>)
+    fun sendTextMessage(channelId: String, content: String)
+    fun getChannelName(channelId: String): String?
+
     val configDownloadStep: StateFlow<MeshtasticBluetoothProtocol.ConfigDownloadStep>? get() = null
     val requiresAppLocationSend: Boolean
     val allowsChannelManagement: Boolean

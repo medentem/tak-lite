@@ -1,10 +1,12 @@
 package com.tak.lite.ui.channel
 
 import android.animation.AnimatorSet
+import android.content.Intent
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
@@ -13,6 +15,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.tak.lite.R
 import com.tak.lite.data.model.IChannel
 import com.tak.lite.data.model.MeshtasticChannel
+import com.tak.lite.ui.message.MessageActivity
 import com.tak.lite.util.PositionPrecisionUtils
 
 class ChannelAdapter(
@@ -70,6 +73,7 @@ class ChannelAdapter(
         private val recentMessage: TextView = itemView.findViewById(R.id.recentMessage)
         private val audioIndicator: ImageView = itemView.findViewById(R.id.audioIndicator)
         private val activeChannelIndicator: View = itemView.findViewById(R.id.activeChannelIndicator)
+        private val messageButton: ImageButton = itemView.findViewById(R.id.messageButton)
 
         fun bind(channel: IChannel) {
             Log.d(TAG, "Binding channel view for: ${channel.name} (${channel.id})")
@@ -109,6 +113,14 @@ class ChannelAdapter(
 
             // Handle audio indicator
             audioIndicator.visibility = if (channel.id == receivingGroupId) View.VISIBLE else View.GONE
+
+            // Handle message button click
+            messageButton.setOnClickListener {
+                val intent = Intent(itemView.context, MessageActivity::class.java).apply {
+                    putExtra("channel_id", channel.id)
+                }
+                itemView.context.startActivity(intent)
+            }
 
             itemView.setOnClickListener {
                 Log.d(TAG, "Channel clicked: ${channel.name} (${channel.id})")
