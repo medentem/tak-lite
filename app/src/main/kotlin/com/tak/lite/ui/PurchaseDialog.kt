@@ -78,18 +78,30 @@ class PurchaseDialog : DialogFragment() {
             productDetails[BillingManager.PRODUCT_ID_TIER_1]?.name ?: "Support Tier 1"
         view.findViewById<TextView>(R.id.tier1Description)?.text = 
             productDetails[BillingManager.PRODUCT_ID_TIER_1]?.description ?: "Basic support tier"
+        view.findViewById<TextView>(R.id.tier1Price)?.text = 
+            productDetails[BillingManager.PRODUCT_ID_TIER_1]?.getFormattedPrice() ?: "$10"
 
         // Update Tier 2
         view.findViewById<TextView>(R.id.tier2Name)?.text = 
             productDetails[BillingManager.PRODUCT_ID_TIER_2]?.name ?: "Support Tier 2"
         view.findViewById<TextView>(R.id.tier2Description)?.text = 
             productDetails[BillingManager.PRODUCT_ID_TIER_2]?.description ?: "Enhanced support tier"
+        view.findViewById<TextView>(R.id.tier2Price)?.text = 
+            productDetails[BillingManager.PRODUCT_ID_TIER_2]?.getFormattedPrice() ?: "$20"
 
         // Update Tier 3
         view.findViewById<TextView>(R.id.tier3Name)?.text = 
             productDetails[BillingManager.PRODUCT_ID_TIER_3]?.name ?: "Support Tier 3"
         view.findViewById<TextView>(R.id.tier3Description)?.text = 
             productDetails[BillingManager.PRODUCT_ID_TIER_3]?.description ?: "Premium support tier"
+        view.findViewById<TextView>(R.id.tier3Price)?.text = 
+            productDetails[BillingManager.PRODUCT_ID_TIER_3]?.getFormattedPrice() ?: "$30"
+    }
+
+    private fun ProductDetails.getFormattedPrice(): String {
+        return subscriptionOfferDetails?.firstOrNull()?.pricingPhases?.pricingPhaseList?.firstOrNull()?.formattedPrice
+            ?: oneTimePurchaseOfferDetails?.formattedPrice
+            ?: "Price not available"
     }
 
     private fun updateUI(view: View, isOffline: Boolean) {

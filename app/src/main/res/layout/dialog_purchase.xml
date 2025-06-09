@@ -43,6 +43,15 @@
                     android:textColor="?attr/colorOnSurface" />
 
                 <TextView
+                    android:id="@+id/tier1Price"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:textColor="?attr/colorPrimary" />
+
+                <TextView
                     android:id="@+id/tier1Description"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -83,6 +92,15 @@
                     android:textColor="?attr/colorOnSurface" />
 
                 <TextView
+                    android:id="@+id/tier2Price"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:textColor="?attr/colorPrimary" />
+
+                <TextView
                     android:id="@+id/tier2Description"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -120,6 +138,15 @@
                     android:textSize="18sp"
                     android:textStyle="bold"
                     android:textColor="?attr/colorOnSurface" />
+
+                <TextView
+                    android:id="@+id/tier3Price"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:textColor="?attr/colorPrimary" />
 
                 <TextView
                     android:id="@+id/tier3Description"
