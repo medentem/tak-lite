@@ -150,7 +150,7 @@ This project is currently in active development. Core features are being impleme
 
 ## Security
 
-- Over-the-air encryption is provided by the Doodle Labs mesh network at Layer 2, ensuring that all data transmitted between devices is encrypted at the network level.
+- Over-the-air encryption is provided by the mesh device - Doodle Labs mesh network at Layer 2 or Meshtastic's channel and PKI encryption - ensuring that all data transmitted between devices is encrypted at the network level.
 - Sensitive API keys are not hardcoded; they are loaded from `local.properties` at build time
 - Proper Android permission handling for location and audio
 - Follows Android security best practices for data storage and network communication
