@@ -1,6 +1,5 @@
 package com.tak.lite.ui.channel
 
-import android.animation.AnimatorSet
 import android.content.Intent
 import android.util.Log
 import android.view.LayoutInflater
@@ -15,7 +14,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.tak.lite.R
 import com.tak.lite.data.model.IChannel
 import com.tak.lite.data.model.MeshtasticChannel
-import com.tak.lite.ui.message.MessageActivity
+import com.tak.lite.MessageActivity
 import com.tak.lite.util.PositionPrecisionUtils
 
 class ChannelAdapter(

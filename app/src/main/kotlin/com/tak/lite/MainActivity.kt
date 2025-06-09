@@ -19,7 +19,6 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.viewModels
-import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -52,7 +51,7 @@ val DEFAULT_US_CENTER = LatLng(39.8283, -98.5795)
 const val DEFAULT_US_ZOOM = 4.0
 
 @AndroidEntryPoint
-class MainActivity : AppCompatActivity(), com.tak.lite.ui.map.ElevationChartBottomSheet.MapControllerProvider {
+class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomSheet.MapControllerProvider {
 
     lateinit var binding: ActivityMainBinding
     private lateinit var mapView: MapView

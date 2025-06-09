@@ -9,7 +9,7 @@ import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.tak.lite.R
-import com.tak.lite.ui.message.MessageActivity
+import com.tak.lite.MessageActivity
 import javax.inject.Inject
 import javax.inject.Singleton
 

@@ -1,22 +1,21 @@
-package com.tak.lite.ui.message
+package com.tak.lite
 
 import android.os.Bundle
 import android.view.MenuItem
 import androidx.activity.viewModels
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
-import com.tak.lite.R
+import com.tak.lite.ui.message.MessageAdapter
 import com.tak.lite.viewmodel.MessageViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
-class MessageActivity : AppCompatActivity() {
+class MessageActivity : BaseActivity() {
     private val viewModel: MessageViewModel by viewModels()
     private lateinit var adapter: MessageAdapter
 
@@ -42,7 +41,7 @@ class MessageActivity : AppCompatActivity() {
         messageList.layoutManager = LinearLayoutManager(this).apply {
             stackFromEnd = true
         }
-        
+
         // Get current user's short name from the protocol
         val currentUserShortName = viewModel.getCurrentUserShortName()
         adapter = MessageAdapter(currentUserShortName)
@@ -106,4 +105,4 @@ class MessageActivity : AppCompatActivity() {
         }
         return super.onOptionsItemSelected(item)
     }
-} 
+}
