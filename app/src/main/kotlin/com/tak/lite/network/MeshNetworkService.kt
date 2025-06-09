@@ -233,5 +233,8 @@ data class MeshPeer(
     val id: String,
     val ipAddress: String,
     val lastSeen: Long,
-    val nickname: String? = null
+    val nickname: String? = null,
+    val capabilities: Set<String> = emptySet(),
+    val networkQuality: Float = 1.0f,
+    val lastStateVersion: Long = 0L
 ) 

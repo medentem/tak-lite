@@ -10,6 +10,7 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.tak.lite.network.MeshProtocolProvider
 import com.tak.lite.R
+import com.tak.lite.repository.MessageRepository
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import android.util.Log
@@ -31,13 +32,15 @@ class MeshForegroundService : Service() {
     }
 
     @Inject lateinit var meshProtocolProvider: MeshProtocolProvider
+    // This needs to be here because it is monitoring for incoming messages
+    @Inject lateinit var messageRepository: MessageRepository
 
     private var packetSummaryJob: Job? = null
 
     override fun onCreate() {
         super.onCreate()
         Log.d("MeshForegroundService", "onCreate called")
-        // Protocol provider is now injected and ready to use
+        // Protocol provider and message repository are now injected and ready to use
         startForegroundServiceNotification()
         observePacketSummaries()
     }
