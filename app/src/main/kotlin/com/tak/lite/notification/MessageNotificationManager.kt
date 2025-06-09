@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.tak.lite.R
 import com.tak.lite.ui.message.MessageActivity
@@ -41,6 +42,7 @@ class MessageNotificationManager @Inject constructor(
     }
 
     fun showMessageNotification(channelId: String, channelName: String, message: String) {
+        Log.d("MessageNotificationManager", "Creating notification for channel: $channelName, message: $message")
         val intent = Intent(context, MessageActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra("channel_id", channelId)
@@ -63,6 +65,7 @@ class MessageNotificationManager @Inject constructor(
             .build()
 
         val notificationManager = context.getSystemService(NotificationManager::class.java)
+        Log.d("MessageNotificationManager", "Posting notification with ID: ${channelId.hashCode()}")
         notificationManager.notify(channelId.hashCode(), notification)
     }
 } 

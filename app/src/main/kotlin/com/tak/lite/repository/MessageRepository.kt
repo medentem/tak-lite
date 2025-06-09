@@ -49,6 +49,7 @@ class MessageRepository @Inject constructor(
     }
 
     fun addMessage(channelId: String, message: ChannelMessage) {
+        Log.d("MessageRepository", "Adding message: channelId=$channelId, content=${message.content}")
         val currentMessages = _messages.value.toMutableMap()
         val channelMessages = currentMessages[channelId]?.toMutableList() ?: mutableListOf()
         channelMessages.add(message)
@@ -57,15 +58,19 @@ class MessageRepository @Inject constructor(
 
         // Get channel name from protocol
         val channelName = meshProtocolProvider.protocol.value.getChannelName(channelId) ?: channelId
+        Log.d("MessageRepository", "Channel name: $channelName")
         
         // Show notification if we have permission
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || 
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+            Log.d("MessageRepository", "Showing notification for message")
             messageNotificationManager.showMessageNotification(
                 channelId = channelId,
                 channelName = channelName,
                 message = message.content
             )
+        } else {
+            Log.d("MessageRepository", "No notification permission, skipping notification")
         }
     }
 

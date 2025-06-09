@@ -550,6 +550,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                 return
             }
             val channelId = channel.id
+            Log.d(TAG, "Found channel: $channelId (${channel.name})")
             
             // Check if this is a message from our own node
             if (isOwnNode(peerId)) {
@@ -575,8 +576,10 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                 senderShortName = senderShortName,
                 content = content,
                 timestamp = System.currentTimeMillis(),
-                channelId = channelId
+                channelId = channelId,
+                status = MessageStatus.RECEIVED
             )
+            Log.d(TAG, "Created message object: sender=$senderShortName, content=$content")
 
             // Update channel messages
             val currentMessages = _channelMessages.value.toMutableMap()
@@ -584,6 +587,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             channelMessages.add(message)
             currentMessages[channelId] = channelMessages
             _channelMessages.value = currentMessages
+            Log.d(TAG, "Updated channel messages, new count: ${channelMessages.size}")
             
             // Update the channel's last message
             channelLastMessages[channelId] = message
@@ -596,12 +600,13 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                 if (channel is MeshtasticChannel) {
                     currentChannels[currentChannelsIndex] = channel.copy(lastMessage = message)
                     _channels.value = currentChannels
+                    Log.d(TAG, "Updated channel with new last message")
                 }
             }
             
-            Log.d(TAG, "Parsed text message from $senderShortName: $content")
+            Log.d(TAG, "Successfully processed text message from $senderShortName: $content")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to parse text message: ${e.message}")
+            Log.e(TAG, "Failed to parse text message: ${e.message}", e)
         }
     }
 
