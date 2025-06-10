@@ -495,4 +495,4 @@ class AnnotationController(
             Toast.makeText(fragment.requireContext(), "Cannot draw line: $errorMsg", Toast.LENGTH_SHORT).show()
         }
     }
-} 
+}   
