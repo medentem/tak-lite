@@ -1,5 +1,6 @@
 package com.tak.lite.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.geeksville.mesh.MeshProtos
@@ -55,11 +56,17 @@ class MeshNetworkViewModel @Inject constructor(
             meshNetworkRepository.peerLocations.collect { locations ->
                 val selfId = meshNetworkRepository.selfId
                 val filtered = if (selfId != null) locations.filterKeys { it != selfId } else locations
+                Log.d("MeshNetworkViewModel", "Received peer locations: ${locations.size} total, ${filtered.size} after filtering, simulated=${filtered.keys.count { it.startsWith("sim_peer_") }}")
                 _peerLocations.value = filtered
             }
         }
         viewModelScope.launch {
             meshNetworkRepository.packetSummaries.collect { _packetSummaries.value = it }
+        }
+        viewModelScope.launch {
+            meshNetworkRepository.userLocation.collect { location ->
+                Log.d("MeshNetworkViewModel", "User location updated: $location")
+            }
         }
     }
     

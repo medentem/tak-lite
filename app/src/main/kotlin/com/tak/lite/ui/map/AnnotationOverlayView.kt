@@ -72,6 +72,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
     interface OnPoiLongPressListener {
         fun onPoiLongPressed(poiId: String, screenPosition: PointF)
         fun onLineLongPressed(lineId: String, screenPosition: PointF)
+        fun onPeerLongPressed(peerId: String, screenPosition: PointF)
     }
     var poiLongPressListener: OnPoiLongPressListener? = null
     var annotationController: AnnotationController? = null
@@ -81,6 +82,8 @@ class AnnotationOverlayView @JvmOverloads constructor(
     private var longPressDownPos: PointF? = null
     private var longPressLineCandidate: MapAnnotation.Line? = null
     private var longPressLineDownPos: PointF? = null
+    private var longPressPeerCandidate: String? = null
+    private var longPressPeerDownPos: PointF? = null
 
     // --- Peer Location Dot Support ---
     private var peerLocations: Map<String, LatLng> = emptyMap()
@@ -832,6 +835,9 @@ class AnnotationOverlayView @JvmOverloads constructor(
                         // --- Clear LINE handler state ---
                         longPressLineCandidate = null
                         longPressLineDownPos = null
+                        // --- Clear PEER handler state ---
+                        longPressPeerCandidate = null
+                        longPressPeerDownPos = null
                         return true // Intercept only if touching a POI
                     }
                     // Check for line long press
@@ -854,17 +860,36 @@ class AnnotationOverlayView @JvmOverloads constructor(
                         quickTapCandidate = null
                         quickTapDownTime = null
                         quickTapDownPos = null
+                        // --- Clear PEER handler state ---
+                        longPressPeerCandidate = null
+                        longPressPeerDownPos = null
                         return true // Intercept only if touching a line
                     }
-                    // Check for peer dot tap
+                    // Check for peer dot tap/long press
                     val peerId = findPeerDotAt(event.x, event.y)
                     if (peerId != null) {
-                        peerDotTapListener?.onPeerDotTapped(peerId, PointF(event.x, event.y))
-                        return true
+                        android.util.Log.d("AnnotationOverlayView", "ACTION_DOWN on PEER: event.x=${event.x}, event.y=${event.y}")
+                        longPressPeerCandidate = peerId
+                        longPressPeerDownPos = PointF(event.x, event.y)
+                        android.util.Log.d("AnnotationOverlayView", "Set longPressPeerDownPos: $longPressPeerDownPos for PEER $peerId")
+                        longPressHandler = Handler(Looper.getMainLooper())
+                        longPressRunnable = Runnable {
+                            android.util.Log.d("AnnotationOverlayView", "Long-press triggered for PEER $peerId at $longPressPeerDownPos")
+                            poiLongPressListener?.onPeerLongPressed(peerId, longPressPeerDownPos!!)
+                            longPressPeerCandidate = null
+                        }
+                        longPressHandler?.postDelayed(longPressRunnable!!, 500)
+                        // --- Clear POI handler state ---
+                        longPressCandidate = null
+                        longPressDownPos = null
+                        quickTapCandidate = null
+                        quickTapDownTime = null
+                        quickTapDownPos = null
+                        // --- Clear LINE handler state ---
+                        longPressLineCandidate = null
+                        longPressLineDownPos = null
+                        return true // Intercept only if touching a peer
                     }
-                    longPressCandidate = null
-                    longPressLineCandidate = null
-                    // Do NOT hide label when tapping elsewhere
                     // --- Global quick tap for popover dismiss ---
                     globalQuickTapDownTime = System.currentTimeMillis()
                     globalQuickTapDownPos = PointF(event.x, event.y)
@@ -897,6 +922,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     globalQuickTapDownPos = null
                     longPressCandidate = null
                     longPressLineCandidate = null
+                    longPressPeerCandidate = null
                     quickTapCandidate = null
                     quickTapDownTime = null
                     quickTapDownPos = null
@@ -907,6 +933,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     longPressHandler?.removeCallbacks(longPressRunnable!!)
                     longPressCandidate = null
                     longPressLineCandidate = null
+                    longPressPeerCandidate = null
                     quickTapCandidate = null
                     quickTapDownTime = null
                     quickTapDownPos = null
@@ -931,6 +958,15 @@ class AnnotationOverlayView @JvmOverloads constructor(
                             android.util.Log.d("AnnotationOverlayView", "Cancelling long-press handler (moved too far for LINE)")
                             longPressHandler?.removeCallbacks(longPressRunnable!!)
                             longPressLineCandidate = null
+                        }
+                    }
+                    longPressPeerDownPos?.let { down ->
+                        val dist = hypot((event.x - down.x).toDouble(), (event.y - down.y).toDouble())
+                        android.util.Log.d("AnnotationOverlayView", "PEER move: dist=$dist, from=(${"%.2f".format(down.x)}, ${"%.2f".format(down.y)}) to=(${"%.2f".format(event.x)}, ${"%.2f".format(event.y)})")
+                        if (dist > 40) {
+                            android.util.Log.d("AnnotationOverlayView", "Cancelling long-press handler (moved too far for PEER)")
+                            longPressHandler?.removeCallbacks(longPressRunnable!!)
+                            longPressPeerCandidate = null
                         }
                     }
                 }

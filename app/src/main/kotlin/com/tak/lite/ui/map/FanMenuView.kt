@@ -30,6 +30,10 @@ class FanMenuView @JvmOverloads constructor(
         data class LineStyle(val style: com.tak.lite.model.LineStyle) : Option()
         data class Timer(val id: String) : Option()
         data class ElevationChart(val id: String) : Option()
+        data class DirectMessage(val id: String) : Option()
+        data class LocationRequest(val id: String) : Option()
+        data class Info(val id: String) : Option()
+        data class DrawLine(val id: String) : Option()
     }
 
     interface OnOptionSelectedListener {
@@ -203,6 +207,10 @@ class FanMenuView @JvmOverloads constructor(
                     is Option.LineStyle -> drawLineStyleIcon(canvas, x, y, option.style, isSelected, usedIconRadius)
                     is Option.Timer -> drawTimerIcon(canvas, x, y, isSelected, usedIconRadius)
                     is Option.ElevationChart -> drawElevationChartIcon(canvas, x, y, isSelected, usedIconRadius)
+                    is Option.DirectMessage -> drawDirectMessageIcon(canvas, x, y, isSelected, usedIconRadius)
+                    is Option.LocationRequest -> drawLocationRequestIcon(canvas, x, y, isSelected, usedIconRadius)
+                    is Option.Info -> drawInfoIcon(canvas, x, y, isSelected, usedIconRadius)
+                    is Option.DrawLine -> drawDrawLineIcon(canvas, x, y, isSelected, usedIconRadius)
                 }
             }
         }
@@ -481,6 +489,151 @@ class FanMenuView @JvmOverloads constructor(
             style = Paint.Style.FILL
         }
         canvas.drawCircle(points.last().x, points.last().y, iconRadius * 0.16f, dotPaint)
+    }
+
+    private fun drawDirectMessageIcon(canvas: Canvas, x: Float, y: Float, highlight: Boolean, iconRadius: Float) {
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (highlight) Color.YELLOW else Color.WHITE
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(x, y, iconRadius, bgPaint)
+        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (highlight) Color.WHITE else Color.DKGRAY
+            style = Paint.Style.STROKE
+            strokeWidth = 2.5f
+        }
+        canvas.drawCircle(x, y, iconRadius, borderPaint)
+        
+        // Draw simple chat bubble
+        val bubblePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.BLACK
+            style = Paint.Style.STROKE
+            strokeWidth = 2.5f
+        }
+        
+        // Main bubble
+        val bubbleWidth = iconRadius * 1.2f
+        val bubbleHeight = iconRadius * 0.8f
+        val bubbleLeft = x - bubbleWidth / 2
+        val bubbleTop = y - bubbleHeight / 2
+        val bubbleRect = android.graphics.RectF(
+            bubbleLeft,
+            bubbleTop,
+            bubbleLeft + bubbleWidth,
+            bubbleTop + bubbleHeight
+        )
+        canvas.drawRoundRect(bubbleRect, iconRadius * 0.2f, iconRadius * 0.2f, bubblePaint)
+        
+        // Chat bubble tail
+        val path = android.graphics.Path()
+        path.moveTo(x + bubbleWidth * 0.2f, y + bubbleHeight / 2)
+        path.lineTo(x + bubbleWidth * 0.4f, y + bubbleHeight / 2 + iconRadius * 0.2f)
+        path.lineTo(x + bubbleWidth * 0.6f, y + bubbleHeight / 2)
+        canvas.drawPath(path, bubblePaint)
+    }
+
+    private fun drawLocationRequestIcon(canvas: Canvas, x: Float, y: Float, highlight: Boolean, iconRadius: Float) {
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (highlight) Color.YELLOW else Color.WHITE
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(x, y, iconRadius, bgPaint)
+        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (highlight) Color.WHITE else Color.DKGRAY
+            style = Paint.Style.STROKE
+            strokeWidth = 2.5f
+        }
+        canvas.drawCircle(x, y, iconRadius, borderPaint)
+        
+        // Draw simple location pin
+        val pinPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.BLACK
+            style = Paint.Style.STROKE
+            strokeWidth = 2.5f
+        }
+        
+        // Draw pin circle
+        val pinRadius = iconRadius * 0.3f
+        canvas.drawCircle(x, y - pinRadius * 0.2f, pinRadius, pinPaint)
+        
+        // Draw pin stem
+        val path = android.graphics.Path()
+        path.moveTo(x, y + pinRadius * 0.2f)
+        path.lineTo(x - pinRadius * 0.6f, y + pinRadius * 1.2f)
+        path.lineTo(x + pinRadius * 0.6f, y + pinRadius * 1.2f)
+        path.close()
+        canvas.drawPath(path, pinPaint)
+    }
+
+    private fun drawInfoIcon(canvas: Canvas, x: Float, y: Float, highlight: Boolean, iconRadius: Float) {
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (highlight) Color.YELLOW else Color.WHITE
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(x, y, iconRadius, bgPaint)
+        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (highlight) Color.WHITE else Color.DKGRAY
+            style = Paint.Style.STROKE
+            strokeWidth = 2.5f
+        }
+        canvas.drawCircle(x, y, iconRadius, borderPaint)
+        
+        // Draw simple info icon
+        val infoPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.BLACK
+            style = Paint.Style.STROKE
+            strokeWidth = 2.5f
+        }
+        
+        // Draw circle
+        val circleRadius = iconRadius * 0.5f
+        canvas.drawCircle(x, y, circleRadius, infoPaint)
+        
+        // Draw vertical line
+        val lineLength = iconRadius * 0.4f
+        canvas.drawLine(x, y - lineLength * 0.3f, x, y + lineLength * 0.7f, infoPaint)
+        
+        // Draw dot
+        val dotRadius = iconRadius * 0.08f
+        canvas.drawCircle(x, y + lineLength * 0.9f, dotRadius, infoPaint)
+    }
+
+    private fun drawDrawLineIcon(canvas: Canvas, x: Float, y: Float, highlight: Boolean, iconRadius: Float) {
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (highlight) Color.YELLOW else Color.WHITE
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(x, y, iconRadius, bgPaint)
+        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (highlight) Color.WHITE else Color.DKGRAY
+            style = Paint.Style.STROKE
+            strokeWidth = 2.5f
+        }
+        canvas.drawCircle(x, y, iconRadius, borderPaint)
+        
+        // Draw simple line with arrow
+        val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.BLACK
+            style = Paint.Style.STROKE
+            strokeWidth = 2.5f
+            strokeCap = Paint.Cap.ROUND
+        }
+        
+        // Draw the main line
+        val startX = x - iconRadius * 0.6f
+        val startY = y + iconRadius * 0.6f
+        val endX = x + iconRadius * 0.6f
+        val endY = y - iconRadius * 0.6f
+        canvas.drawLine(startX, startY, endX, endY, linePaint)
+        
+        // Draw arrow head
+        val arrowSize = iconRadius * 0.2f
+        val path = android.graphics.Path()
+        path.moveTo(endX, endY)
+        path.lineTo(endX - arrowSize, endY + arrowSize)
+        path.lineTo(endX - arrowSize, endY - arrowSize)
+        path.close()
+        canvas.drawPath(path, linePaint)
     }
 
     // Returns Triple<ringIdx, idxInRing, Ring>

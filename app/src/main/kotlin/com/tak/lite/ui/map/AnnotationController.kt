@@ -7,21 +7,25 @@ import android.util.Log
 import android.view.View
 import android.widget.Toast
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import com.tak.lite.databinding.ActivityMainBinding
 import com.tak.lite.model.AnnotationColor
 import com.tak.lite.model.LineStyle
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PointShape
 import com.tak.lite.viewmodel.AnnotationViewModel
+import com.tak.lite.viewmodel.MeshNetworkViewModel
 import org.maplibre.android.annotations.Marker
 import org.maplibre.android.annotations.Polygon
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
+import kotlinx.coroutines.launch
 
 class AnnotationController(
     private val fragment: Fragment,
     private val binding: ActivityMainBinding,
     private val annotationViewModel: AnnotationViewModel,
+    private val meshNetworkViewModel: MeshNetworkViewModel,
     private val fanMenuView: FanMenuView,
     private val annotationOverlayView: AnnotationOverlayView,
     private val onAnnotationChanged: (() -> Unit)? = null
@@ -60,6 +64,10 @@ class AnnotationController(
             override fun onLineLongPressed(lineId: String, screenPosition: PointF) {
                 Log.d("AnnotationController", "onLineLongPressed: lineId=$lineId, screenPosition=$screenPosition")
                 showLineEditMenu(screenPosition, lineId)
+            }
+            override fun onPeerLongPressed(peerId: String, screenPosition: PointF) {
+                Log.d("AnnotationController", "onPeerLongPressed: peerId=$peerId, screenPosition=$screenPosition")
+                showPeerMenu(screenPosition, peerId)
             }
         }
     }
@@ -406,6 +414,85 @@ class AnnotationController(
             sheet.show(activity.supportFragmentManager, "ElevationChartBottomSheet")
         } else {
             android.util.Log.e("AnnotationController", "Fragment's activity is not a FragmentActivity, cannot show bottom sheet")
+        }
+    }
+
+    fun showPeerMenu(center: PointF, peerId: String) {
+        Log.d("AnnotationController", "showPeerMenu: center=$center, peerId=$peerId")
+        val options = listOf(
+            FanMenuView.Option.DirectMessage(peerId),
+            FanMenuView.Option.LocationRequest(peerId),
+            FanMenuView.Option.Info(peerId),
+            FanMenuView.Option.DrawLine(peerId)
+        )
+        val screenSize = PointF(binding.root.width.toFloat(), binding.root.height.toFloat())
+        Log.d("AnnotationController", "Calling fanMenuView.showAt for PEER with options: $options at $center")
+        val peerLatLng = meshNetworkViewModel.peerLocations.value[peerId]?.let { org.maplibre.android.geometry.LatLng(it.latitude, it.longitude) }
+        fanMenuView.showAt(center, options, object : FanMenuView.OnOptionSelectedListener {
+            override fun onOptionSelected(option: FanMenuView.Option): Boolean {
+                when (option) {
+                    is FanMenuView.Option.DirectMessage -> handleDirectMessage(option.id)
+                    is FanMenuView.Option.LocationRequest -> handleLocationRequest(option.id)
+                    is FanMenuView.Option.Info -> handleViewInfo(option.id)
+                    is FanMenuView.Option.DrawLine -> handleDrawLineToPeer(option.id)
+                    else -> {}
+                }
+                return false
+            }
+            override fun onMenuDismissed() {
+                Log.d("AnnotationController", "fanMenuView.onMenuDismissed for PEER")
+                fanMenuView.visibility = View.GONE
+            }
+        }, screenSize, peerLatLng)
+        Log.d("AnnotationController", "Calling fanMenuView.bringToFront for PEER")
+        fanMenuView.bringToFront()
+        fanMenuView.visibility = View.VISIBLE
+        Log.d("AnnotationController", "fanMenuView.visibility set to VISIBLE for PEER")
+    }
+
+    private fun handleDirectMessage(peerId: String) {
+        // TODO: Implement direct messaging
+        Toast.makeText(fragment.requireContext(), "Direct message to $peerId", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun handleLocationRequest(peerId: String) {
+        // TODO: Implement location request
+        Toast.makeText(fragment.requireContext(), "Requesting location from $peerId", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun handleViewInfo(peerId: String) {
+        // Launch a coroutine to handle the suspend function call
+        (fragment as? androidx.fragment.app.Fragment)?.viewLifecycleOwner?.lifecycleScope?.launch {
+            val nodeInfo = meshNetworkViewModel.getNodeInfo(peerId)
+            annotationOverlayView.showPeerPopover(peerId, nodeInfo)
+        }
+    }
+
+    private fun handleDrawLineToPeer(peerId: String) {
+        val userLocation = meshNetworkViewModel.phoneLocation.value ?: meshNetworkViewModel.userLocation.value
+        val peerLocation = meshNetworkViewModel.peerLocations.value[peerId]
+        Log.d("AnnotationController", "handleDrawLineToPeer: peerId=$peerId")
+        Log.d("AnnotationController", "handleDrawLineToPeer: phoneLocation=$userLocation")
+        Log.d("AnnotationController", "handleDrawLineToPeer: peerLocation=$peerLocation")
+        Log.d("AnnotationController", "handleDrawLineToPeer: all peer locations=${meshNetworkViewModel.peerLocations.value}")
+        
+        if (userLocation != null && peerLocation != null) {
+            // Create a line from user location to peer
+            val points = listOf(
+                userLocation,
+                peerLocation
+            )
+            Log.d("AnnotationController", "handleDrawLineToPeer: Creating line with points=$points")
+            annotationViewModel.addLine(points)
+            Toast.makeText(fragment.requireContext(), "Line drawn to $peerId", Toast.LENGTH_SHORT).show()
+        } else {
+            val errorMsg = when {
+                userLocation == null -> "User location is not available"
+                peerLocation == null -> "Peer location is not available"
+                else -> "Unknown error"
+            }
+            Log.e("AnnotationController", "handleDrawLineToPeer: Cannot draw line: $errorMsg")
+            Toast.makeText(fragment.requireContext(), "Cannot draw line: $errorMsg", Toast.LENGTH_SHORT).show()
         }
     }
 } 

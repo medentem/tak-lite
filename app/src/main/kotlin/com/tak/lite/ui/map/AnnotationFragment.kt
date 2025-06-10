@@ -2,6 +2,7 @@ package com.tak.lite.ui.map
 
 import android.graphics.PointF
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -60,6 +61,7 @@ class AnnotationFragment : Fragment() {
                 fragment = this,
                 binding = mainActivity.binding, // or pass only what's needed
                 annotationViewModel = viewModel,
+                meshNetworkViewModel = meshNetworkViewModel,
                 fanMenuView = fanMenuView,
                 annotationOverlayView = annotationOverlayView,
                 onAnnotationChanged = { annotationController.renderAllAnnotations(mapLibreMap) }
@@ -106,6 +108,7 @@ class AnnotationFragment : Fragment() {
             // Now safe to launch these:
             viewLifecycleOwner.lifecycleScope.launch {
                 meshNetworkViewModel.peerLocations.collectLatest { locations ->
+                    Log.d("AnnotationFragment", "Updating peer locations in overlay: ${locations.size} peers, simulated=${locations.keys.count { it.startsWith("sim_peer_") }}")
                     annotationOverlayView.updatePeerLocations(locations)
                 }
             }
@@ -117,7 +120,7 @@ class AnnotationFragment : Fragment() {
             }
             viewLifecycleOwner.lifecycleScope.launch {
                 meshNetworkViewModel.userLocation.collectLatest { location ->
-                    annotationOverlayView.setDeviceLocation(location)
+                    annotationOverlayView.setUserLocation(location)
                 }
             }
             viewLifecycleOwner.lifecycleScope.launch {

@@ -1,6 +1,7 @@
 package com.tak.lite.network
 
 import android.content.Context
+import android.util.Log
 import com.tak.lite.data.model.IChannel
 import com.tak.lite.di.MeshConnectionState
 import com.tak.lite.di.MeshProtocol
@@ -112,6 +113,7 @@ class MeshNetworkService @Inject constructor(
 
     private fun setUserLocationCallbackForProtocol(protocol: MeshProtocol) {
         protocol.setUserLocationCallback { latLng ->
+            Log.d("MeshNetworkService", "Received user location update from protocol: $latLng")
             _userLocation.value = latLng
             lastDeviceLocationTimestamp = System.currentTimeMillis()
         }
@@ -138,9 +140,11 @@ class MeshNetworkService @Inject constructor(
                 val enabled = prefs?.getBoolean("simulate_peers_enabled", false) ?: false
                 val count = prefs?.getInt("simulated_peers_count", 3)?.coerceIn(1, 10) ?: 3
                 val userLoc = _userLocation.value
+                Log.d("MeshNetworkService", "Simulated peers monitor: enabled=$enabled, count=$count, userLoc=$userLoc")
                 if (enabled && userLoc != null) {
                     // If settings changed, reset peers
                     if (lastSimSettings != Pair(enabled, count) || simulatedPeers.size != count) {
+                        Log.d("MeshNetworkService", "Resetting simulated peers: count=$count")
                         simulatedPeers.clear()
                         repeat(count) { i ->
                             val id = "$simulatedPeerPrefix$i"
@@ -157,10 +161,12 @@ class MeshNetworkService @Inject constructor(
                     // Remove old sim peers
                     merged.keys.removeAll { it.startsWith(simulatedPeerPrefix) }
                     merged.putAll(simulatedPeers)
+                    Log.d("MeshNetworkService", "Updating peer locations with simulated peers: ${simulatedPeers.size} simulated, ${merged.size} total")
                     _peerLocations.value = merged
                 } else {
                     // Remove simulated peers if disabled
                     if (simulatedPeers.isNotEmpty()) {
+                        Log.d("MeshNetworkService", "Removing simulated peers")
                         val merged = _peerLocations.value.toMutableMap()
                         merged.keys.removeAll { it.startsWith(simulatedPeerPrefix) }
                         _peerLocations.value = merged
