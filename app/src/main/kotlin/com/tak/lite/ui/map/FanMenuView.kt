@@ -9,6 +9,7 @@ import android.util.AttributeSet
 import android.util.Log
 import android.view.MotionEvent
 import android.view.View
+import com.tak.lite.R
 import com.tak.lite.model.AnnotationColor
 import com.tak.lite.model.PointShape
 import kotlin.math.atan2
@@ -504,32 +505,17 @@ class FanMenuView @JvmOverloads constructor(
         }
         canvas.drawCircle(x, y, iconRadius, borderPaint)
         
-        // Draw simple chat bubble
-        val bubblePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.BLACK
-            style = Paint.Style.STROKE
-            strokeWidth = 2.5f
-        }
-        
-        // Main bubble
-        val bubbleWidth = iconRadius * 1.2f
-        val bubbleHeight = iconRadius * 0.8f
-        val bubbleLeft = x - bubbleWidth / 2
-        val bubbleTop = y - bubbleHeight / 2
-        val bubbleRect = android.graphics.RectF(
-            bubbleLeft,
-            bubbleTop,
-            bubbleLeft + bubbleWidth,
-            bubbleTop + bubbleHeight
+        // Draw the chat bubble icon from vector drawable
+        val iconSize = iconRadius * 1.6f
+        val icon = context.getDrawable(R.drawable.ic_chat_bubble_outline)
+        icon?.setBounds(
+            (x - iconSize/2).toInt(),
+            (y - iconSize/2).toInt(),
+            (x + iconSize/2).toInt(),
+            (y + iconSize/2).toInt()
         )
-        canvas.drawRoundRect(bubbleRect, iconRadius * 0.2f, iconRadius * 0.2f, bubblePaint)
-        
-        // Chat bubble tail
-        val path = android.graphics.Path()
-        path.moveTo(x + bubbleWidth * 0.2f, y + bubbleHeight / 2)
-        path.lineTo(x + bubbleWidth * 0.4f, y + bubbleHeight / 2 + iconRadius * 0.2f)
-        path.lineTo(x + bubbleWidth * 0.6f, y + bubbleHeight / 2)
-        canvas.drawPath(path, bubblePaint)
+        icon?.setTint(if (highlight) Color.BLACK else Color.DKGRAY)
+        icon?.draw(canvas)
     }
 
     private fun drawLocationRequestIcon(canvas: Canvas, x: Float, y: Float, highlight: Boolean, iconRadius: Float) {
@@ -545,24 +531,17 @@ class FanMenuView @JvmOverloads constructor(
         }
         canvas.drawCircle(x, y, iconRadius, borderPaint)
         
-        // Draw simple location pin
-        val pinPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.BLACK
-            style = Paint.Style.STROKE
-            strokeWidth = 2.5f
-        }
-        
-        // Draw pin circle
-        val pinRadius = iconRadius * 0.3f
-        canvas.drawCircle(x, y - pinRadius * 0.2f, pinRadius, pinPaint)
-        
-        // Draw pin stem
-        val path = android.graphics.Path()
-        path.moveTo(x, y + pinRadius * 0.2f)
-        path.lineTo(x - pinRadius * 0.6f, y + pinRadius * 1.2f)
-        path.lineTo(x + pinRadius * 0.6f, y + pinRadius * 1.2f)
-        path.close()
-        canvas.drawPath(path, pinPaint)
+        // Draw the location icon from vector drawable
+        val iconSize = iconRadius * 1.6f
+        val icon = context.getDrawable(R.drawable.ic_my_location)
+        icon?.setBounds(
+            (x - iconSize/2).toInt(),
+            (y - iconSize/2).toInt(),
+            (x + iconSize/2).toInt(),
+            (y + iconSize/2).toInt()
+        )
+        icon?.setTint(if (highlight) Color.BLACK else Color.DKGRAY)
+        icon?.draw(canvas)
     }
 
     private fun drawInfoIcon(canvas: Canvas, x: Float, y: Float, highlight: Boolean, iconRadius: Float) {
@@ -578,24 +557,17 @@ class FanMenuView @JvmOverloads constructor(
         }
         canvas.drawCircle(x, y, iconRadius, borderPaint)
         
-        // Draw simple info icon
-        val infoPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.BLACK
-            style = Paint.Style.STROKE
-            strokeWidth = 2.5f
-        }
-        
-        // Draw circle
-        val circleRadius = iconRadius * 0.5f
-        canvas.drawCircle(x, y, circleRadius, infoPaint)
-        
-        // Draw vertical line
-        val lineLength = iconRadius * 0.4f
-        canvas.drawLine(x, y - lineLength * 0.3f, x, y + lineLength * 0.7f, infoPaint)
-        
-        // Draw dot
-        val dotRadius = iconRadius * 0.08f
-        canvas.drawCircle(x, y + lineLength * 0.9f, dotRadius, infoPaint)
+        // Draw the info icon from vector drawable
+        val iconSize = iconRadius * 1.6f
+        val icon = context.getDrawable(R.drawable.ic_info_outline)
+        icon?.setBounds(
+            (x - iconSize/2).toInt(),
+            (y - iconSize/2).toInt(),
+            (x + iconSize/2).toInt(),
+            (y + iconSize/2).toInt()
+        )
+        icon?.setTint(if (highlight) Color.BLACK else Color.DKGRAY)
+        icon?.draw(canvas)
     }
 
     private fun drawDrawLineIcon(canvas: Canvas, x: Float, y: Float, highlight: Boolean, iconRadius: Float) {
@@ -611,29 +583,17 @@ class FanMenuView @JvmOverloads constructor(
         }
         canvas.drawCircle(x, y, iconRadius, borderPaint)
         
-        // Draw simple line with arrow
-        val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.BLACK
-            style = Paint.Style.STROKE
-            strokeWidth = 2.5f
-            strokeCap = Paint.Cap.ROUND
-        }
-        
-        // Draw the main line
-        val startX = x - iconRadius * 0.6f
-        val startY = y + iconRadius * 0.6f
-        val endX = x + iconRadius * 0.6f
-        val endY = y - iconRadius * 0.6f
-        canvas.drawLine(startX, startY, endX, endY, linePaint)
-        
-        // Draw arrow head
-        val arrowSize = iconRadius * 0.2f
-        val path = android.graphics.Path()
-        path.moveTo(endX, endY)
-        path.lineTo(endX - arrowSize, endY + arrowSize)
-        path.lineTo(endX - arrowSize, endY - arrowSize)
-        path.close()
-        canvas.drawPath(path, linePaint)
+        // Draw the line drawing icon from vector drawable
+        val iconSize = iconRadius * 1.6f
+        val icon = context.getDrawable(R.drawable.ic_draw_line)
+        icon?.setBounds(
+            (x - iconSize/2).toInt(),
+            (y - iconSize/2).toInt(),
+            (x + iconSize/2).toInt(),
+            (y + iconSize/2).toInt()
+        )
+        icon?.setTint(if (highlight) Color.BLACK else Color.DKGRAY)
+        icon?.draw(canvas)
     }
 
     // Returns Triple<ringIdx, idxInRing, Ring>
