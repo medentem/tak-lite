@@ -452,12 +452,12 @@ class AnnotationController(
 
     private fun handleDirectMessage(peerId: String) {
         // TODO: Implement direct messaging
-        Toast.makeText(fragment.requireContext(), "Direct message to $peerId", Toast.LENGTH_SHORT).show()
+        Toast.makeText(fragment.requireContext(), "Coming soon! Direct message to $peerId", Toast.LENGTH_SHORT).show()
     }
 
     private fun handleLocationRequest(peerId: String) {
         // TODO: Implement location request
-        Toast.makeText(fragment.requireContext(), "Requesting location from $peerId", Toast.LENGTH_SHORT).show()
+        Toast.makeText(fragment.requireContext(), "Coming soon! Requesting location from $peerId", Toast.LENGTH_SHORT).show()
     }
 
     private fun handleViewInfo(peerId: String) {
@@ -495,4 +495,4 @@ class AnnotationController(
             Toast.makeText(fragment.requireContext(), "Cannot draw line: $errorMsg", Toast.LENGTH_SHORT).show()
         }
     }
-}   
+}
