@@ -23,6 +23,7 @@ import android.content.Context
 import android.app.PendingIntent
 import com.tak.lite.MainActivity
 import com.tak.lite.model.PacketSummary
+import kotlinx.coroutines.delay
 
 @AndroidEntryPoint
 class MeshForegroundService : Service() {
@@ -36,6 +37,10 @@ class MeshForegroundService : Service() {
     @Inject lateinit var messageRepository: MessageRepository
 
     private var packetSummaryJob: Job? = null
+    // Hold a strong reference to the protocol instance
+    private var currentProtocol: MeshProtocol? = null
+    private var protocolJob: Job? = null
+    private var notificationUpdateJob: Job? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -43,11 +48,15 @@ class MeshForegroundService : Service() {
         // Protocol provider and message repository are now injected and ready to use
         startForegroundServiceNotification()
         observePacketSummaries()
+        observeProtocolChanges()
+        startPeriodicNotificationUpdates()
     }
 
     private fun observePacketSummaries() {
         packetSummaryJob?.cancel()
-        val protocol = meshProtocolProvider.protocol.value
+        // Get and store a strong reference to the protocol
+        currentProtocol = meshProtocolProvider.protocol.value
+        val protocol = currentProtocol ?: return
         val context = applicationContext
         packetSummaryJob = CoroutineScope(Dispatchers.Default).launch {
             protocol.packetSummaries.collectLatest { summaries ->
@@ -57,6 +66,20 @@ class MeshForegroundService : Service() {
                     updateNotificationWithSummary(summaries)
                 } else {
                     updateNotificationDefault()
+                }
+            }
+        }
+    }
+
+    private fun observeProtocolChanges() {
+        protocolJob?.cancel()
+        protocolJob = CoroutineScope(Dispatchers.Default).launch {
+            meshProtocolProvider.protocol.collect { newProtocol ->
+                if (currentProtocol !== newProtocol) {
+                    Log.d("MeshForegroundService", "Protocol changed, updating reference")
+                    currentProtocol = newProtocol
+                    // Restart packet summary observation with new protocol
+                    observePacketSummaries()
                 }
             }
         }
@@ -108,6 +131,23 @@ class MeshForegroundService : Service() {
         manager.notify(NOTIFICATION_ID, notification)
     }
 
+    private fun startPeriodicNotificationUpdates() {
+        notificationUpdateJob?.cancel()
+        notificationUpdateJob = CoroutineScope(Dispatchers.Default).launch {
+            while (true) {
+                delay(1000) // Update every second
+                val prefs = applicationContext.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+                val showSummary = prefs.getBoolean("show_packet_summary", false)
+                if (showSummary) {
+                    val currentSummaries = currentProtocol?.packetSummaries?.value ?: emptyList()
+                    if (currentSummaries.isNotEmpty()) {
+                        updateNotificationWithSummary(currentSummaries)
+                    }
+                }
+            }
+        }
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d("MeshForegroundService", "onStartCommand called: intent=$intent, flags=$flags, startId=$startId")
         // Optionally handle intent extras for protocol switching, etc.
@@ -140,6 +180,10 @@ class MeshForegroundService : Service() {
     override fun onDestroy() {
         Log.d("MeshForegroundService", "onDestroy called")
         packetSummaryJob?.cancel()
+        protocolJob?.cancel()
+        notificationUpdateJob?.cancel()
+        // Clear the protocol reference
+        currentProtocol = null
         // Optionally clean up protocol if needed
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             stopForeground(STOP_FOREGROUND_REMOVE)
