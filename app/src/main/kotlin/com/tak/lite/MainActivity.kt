@@ -123,6 +123,9 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // Show the connection status bar immediately
+        findViewById<View>(R.id.connectionStatusBar).visibility = View.VISIBLE
+
         // Check trial status and show purchase dialog if needed
         lifecycleScope.launch {
             repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
@@ -680,21 +683,36 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
     private fun observeMeshNetworkState() {
         lifecycleScope.launch {
             viewModel.uiState.collectLatest { state ->
+                Log.d("MainActivity", "Mesh network state changed to: $state")
+                val statusBar = findViewById<View>(R.id.connectionStatusBar)
                 when (state) {
                     is MeshNetworkUiState.Connected -> {
                         peerIdToNickname.clear()
                         for (peer in state.peers) {
                             peerIdToNickname[peer.id] = peer.nickname
                         }
+                        // Hide the connection status bar when connected
+                        statusBar.visibility = View.GONE
+                        Log.d("MainActivity", "Hiding connection status bar - Connected")
                     }
                     is MeshNetworkUiState.Disconnected -> {
                         Toast.makeText(this@MainActivity, "Disconnected from mesh network", Toast.LENGTH_SHORT).show()
                         peerIdToNickname.clear()
+                        // Show the connection status bar when disconnected
+                        statusBar.visibility = View.VISIBLE
+                        Log.d("MainActivity", "Showing connection status bar - Disconnected")
                     }
                     is MeshNetworkUiState.Error -> {
                         Toast.makeText(this@MainActivity, state.message, Toast.LENGTH_LONG).show()
+                        // Show the connection status bar on error
+                        statusBar.visibility = View.VISIBLE
+                        Log.d("MainActivity", "Showing connection status bar - Error: ${state.message}")
                     }
-                    MeshNetworkUiState.Initial -> {}
+                    MeshNetworkUiState.Initial -> {
+                        // Show the connection status bar in initial state
+                        statusBar.visibility = View.VISIBLE
+                        Log.d("MainActivity", "Showing connection status bar - Initial state")
+                    }
                 }
             }
         }

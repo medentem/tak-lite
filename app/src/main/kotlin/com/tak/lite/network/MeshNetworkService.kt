@@ -2,6 +2,7 @@ package com.tak.lite.network
 
 import android.content.Context
 import com.tak.lite.data.model.IChannel
+import com.tak.lite.di.MeshConnectionState
 import com.tak.lite.di.MeshProtocol
 import com.tak.lite.model.PacketSummary
 import kotlinx.coroutines.CoroutineScope
@@ -89,6 +90,16 @@ class MeshNetworkService @Inject constructor(
                 }
                 launch {
                     newProtocol.channels.collect { _channels.value = it }
+                }
+                // Observe connection state from the protocol
+                launch {
+                    newProtocol.connectionState.collect { state ->
+                        _networkState.value = when (state) {
+                            is MeshConnectionState.Connected -> MeshNetworkState.Connected
+                            is MeshConnectionState.Disconnected -> MeshNetworkState.Disconnected
+                            is MeshConnectionState.Error -> MeshNetworkState.Error(state.message)
+                        }
+                    }
                 }
             }
         }
