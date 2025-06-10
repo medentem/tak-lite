@@ -22,6 +22,7 @@ import kotlinx.coroutines.launch
 import android.content.Context
 import android.app.PendingIntent
 import com.tak.lite.MainActivity
+import com.tak.lite.di.MeshConnectionState
 import com.tak.lite.di.MeshProtocol
 import com.tak.lite.model.PacketSummary
 import kotlinx.coroutines.delay
@@ -42,6 +43,7 @@ class MeshForegroundService : Service() {
     private var currentProtocol: MeshProtocol? = null
     private var protocolJob: Job? = null
     private var notificationUpdateJob: Job? = null
+    private var connectionStateJob: Job? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -50,6 +52,7 @@ class MeshForegroundService : Service() {
         startForegroundServiceNotification()
         observePacketSummaries()
         observeProtocolChanges()
+        observeConnectionState()
         startPeriodicNotificationUpdates()
     }
 
@@ -72,6 +75,27 @@ class MeshForegroundService : Service() {
         }
     }
 
+    private fun observeConnectionState() {
+        connectionStateJob?.cancel()
+        currentProtocol = meshProtocolProvider.protocol.value
+        val protocol = currentProtocol ?: return
+        connectionStateJob = CoroutineScope(Dispatchers.Default).launch {
+            protocol.connectionState.collect { state ->
+                when (state) {
+                    is MeshConnectionState.Connected -> {
+                        updateNotificationDefault("Connected to mesh network")
+                    }
+                    is MeshConnectionState.Disconnected -> {
+                        updateNotificationDefault("Disconnected from mesh network")
+                    }
+                    is MeshConnectionState.Error -> {
+                        updateNotificationDefault("Error: ${state.message}")
+                    }
+                }
+            }
+        }
+    }
+
     private fun observeProtocolChanges() {
         protocolJob?.cancel()
         protocolJob = CoroutineScope(Dispatchers.Default).launch {
@@ -81,6 +105,8 @@ class MeshForegroundService : Service() {
                     currentProtocol = newProtocol
                     // Restart packet summary observation with new protocol
                     observePacketSummaries()
+                    // Restart connection state observation with new protocol
+                    observeConnectionState()
                 }
             }
         }
@@ -120,10 +146,10 @@ class MeshForegroundService : Service() {
         manager.notify(NOTIFICATION_ID, notification)
     }
 
-    private fun updateNotificationDefault() {
+    private fun updateNotificationDefault(message: String = "Mesh networking is active in the background") {
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("TAKLite Mesh Connection")
-            .setContentText("Mesh networking is active in the background")
+            .setContentText(message)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setOngoing(true)
             .setContentIntent(getMainActivityPendingIntent())
@@ -183,6 +209,7 @@ class MeshForegroundService : Service() {
         packetSummaryJob?.cancel()
         protocolJob?.cancel()
         notificationUpdateJob?.cancel()
+        connectionStateJob?.cancel()
         // Clear the protocol reference
         currentProtocol = null
         // Optionally clean up protocol if needed
