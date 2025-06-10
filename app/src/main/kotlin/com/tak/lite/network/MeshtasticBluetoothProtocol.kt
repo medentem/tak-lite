@@ -29,6 +29,13 @@ import kotlin.coroutines.CoroutineContext
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CompletableDeferred
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.TimeoutCancellationException
 
 class MeshtasticBluetoothProtocol @Inject constructor(
     private val deviceManager: BluetoothDeviceManager,
@@ -65,7 +72,6 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     private val peerLocations = ConcurrentHashMap<String, LatLng>()
     private val _annotations = MutableStateFlow<List<MapAnnotation>>(emptyList())
     val annotations: StateFlow<List<MapAnnotation>> = _annotations.asStateFlow()
-    private val _connectionMetrics = MutableStateFlow(ConnectionMetrics())
     private val peersMap = ConcurrentHashMap<String, MeshPeer>()
     private val _peers = MutableStateFlow<List<MeshPeer>>(emptyList())
     override val peers: StateFlow<List<MeshPeer>> = _peers.asStateFlow()
@@ -116,13 +122,17 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     private var selectedChannelIndex: Int = 0  // Default to primary channel (index 0)
 
     // Add request ID counter for message tracking
-    private val requestIdCounter = AtomicInteger(0)
     private val pendingMessages = ConcurrentHashMap<Int, ChannelMessage>()
-
-    // Add a map to track pending queue responses
-    private val pendingQueueResponses = ConcurrentHashMap<Int, CompletableDeferred<Int>>()
-    // Store the last sent message to associate with the next QueueStatus
     private var lastSentMessage: ChannelMessage? = null
+
+    // Add queue management structures
+    private val queuedPackets = ConcurrentLinkedQueue<MeshProtos.MeshPacket>()
+    private val queueResponse = ConcurrentHashMap<Int, CompletableDeferred<Boolean>>()
+    private var queueJob: Job? = null
+    private val queueScope = CoroutineScope(coroutineContext + SupervisorJob())
+
+    // Add timeout constant
+    private val PACKET_TIMEOUT_MS = 2 * 60 * 1000L // 2 minutes
 
     init {
         deviceManager.setPacketListener { data ->
@@ -136,7 +146,8 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             connectedNodeId = null
             handshakeComplete.set(false)
             _configDownloadStep.value = ConfigDownloadStep.NotStarted
-            // Don't clear selectedChannelId on connection loss
+            // Stop packet queue on connection loss
+            stopPacketQueue()
         }
         // Listen for initial drain complete to trigger handshake
         deviceManager.setInitialDrainCompleteCallback {
@@ -148,55 +159,154 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         CoroutineScope(coroutineContext).launch {
             deviceManager.connectionState.collect { state ->
                 _connectionState.value = when (state) {
-                    is BluetoothDeviceManager.ConnectionState.Connected -> MeshConnectionState.Connected
-                    is BluetoothDeviceManager.ConnectionState.Connecting -> MeshConnectionState.Connected // Still consider connecting as connected for UI purposes
-                    is BluetoothDeviceManager.ConnectionState.Disconnected -> MeshConnectionState.Disconnected
-                    is BluetoothDeviceManager.ConnectionState.Failed -> MeshConnectionState.Error(state.reason)
+                    is BluetoothDeviceManager.ConnectionState.Connected -> {
+                        // Don't start queue here - wait for handshake completion
+                        MeshConnectionState.Connected
+                    }
+                    is BluetoothDeviceManager.ConnectionState.Connecting -> {
+                        // Stop queue while connecting
+                        stopPacketQueue()
+                        MeshConnectionState.Connected // Still consider connecting as connected for UI purposes
+                    }
+                    is BluetoothDeviceManager.ConnectionState.Disconnected -> {
+                        // Stop queue when disconnected
+                        stopPacketQueue()
+                        MeshConnectionState.Disconnected
+                    }
+                    is BluetoothDeviceManager.ConnectionState.Failed -> {
+                        // Stop queue on failure
+                        stopPacketQueue()
+                        MeshConnectionState.Error(state.reason)
+                    }
                 }
             }
         }
     }
 
-    fun sendPacket(data: ByteArray) {
-        val MAX_SAFE_PACKET = 252 // Based on MTU 255 - 3 bytes ATT header
-        Log.d(TAG, "sendPacket: Attempting to send packet of size ${data.size} bytes")
-        if (data.size > MAX_SAFE_PACKET) {
-            Log.e(TAG, "sendPacket: Data size ${data.size} exceeds safe MTU payload ($MAX_SAFE_PACKET), not sending.")
-            onPacketTooLarge?.invoke(data.size, MAX_SAFE_PACKET)
+    /**
+     * Queue a packet for sending. This is the main entry point for all packet queuing.
+     * @param packet The MeshPacket to queue
+     */
+    private fun queuePacket(packet: MeshProtos.MeshPacket) {
+        Log.d(TAG, "Queueing packet id=${packet.id}, type=${packet.decoded.portnum}")
+        queuedPackets.offer(packet)
+        startPacketQueue()
+    }
+
+    private fun startPacketQueue() {
+        if (queueJob?.isActive == true) return
+        if (!handshakeComplete.get()) {
+            Log.d(TAG, "Not starting packet queue - waiting for handshake completion")
             return
         }
-        val MAXPACKET = 256
-        if (data.size > MAXPACKET) {
-            Log.e(TAG, "sendPacket: Data size ${data.size} exceeds MAXPACKET ($MAXPACKET), not sending.")
-            onPacketTooLarge?.invoke(data.size, MAXPACKET)
-            return
-        }
-        // Wrap the MeshPacket bytes in a ToRadio message
-        val toRadio = ToRadio.newBuilder()
-            .setPacket(MeshProtos.MeshPacket.parseFrom(data))
-            .build()
-        val toRadioBytes = toRadio.toByteArray()
-        Log.d(TAG, "sendPacket: Sending ToRadio ${toRadioBytes.size} bytes: ${toRadioBytes.joinToString(", ", limit = 16)}")
-        CoroutineScope(coroutineContext).launch {
-            try {
-                val gatt = deviceManager.connectedGatt
-                val service = gatt?.getService(MESHTASTIC_SERVICE_UUID)
-                val toRadioChar = service?.getCharacteristic(TORADIO_CHARACTERISTIC_UUID)
-                if (gatt != null && service != null && toRadioChar != null) {
-                    deviceManager.reliableWrite(toRadioChar, toRadioBytes) { result ->
-                        result.onSuccess { success ->
-                            Log.d(TAG, "sendPacket: reliableWrite returned ${success}")
-                        }.onFailure { error ->
-                            Log.e(TAG, "sendPacket: reliableWrite error: ${error.message}")
+        queueJob = queueScope.launch {
+            Log.d(TAG, "Packet queue job started")
+            while (true) {
+                try {
+                    // Take the first packet from the queue
+                    val packet = queuedPackets.poll() ?: break
+                    Log.d(TAG, "Processing queued packet id=${packet.id}")
+                    
+                    // Send packet to radio and wait for response
+                    val future = CompletableDeferred<Boolean>()
+                    queueResponse[packet.id] = future
+                    
+                    try {
+                        sendPacket(packet)
+                        withTimeout(PACKET_TIMEOUT_MS) {
+                            val success = future.await()
+                            Log.d(TAG, "Packet id=${packet.id} processed with success=$success")
                         }
+                    } catch (e: TimeoutCancellationException) {
+                        Log.w(TAG, "Packet id=${packet.id} timed out")
+                        queueResponse.remove(packet.id)?.complete(false)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error processing packet id=${packet.id}", e)
+                        queueResponse.remove(packet.id)?.complete(false)
                     }
-                } else {
-                    Log.e(TAG, "sendPacket: GATT/service/ToRadio characteristic missing, cannot send packet.")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error in packet queue job", e)
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error sending packet: ${e.message}")
             }
         }
+    }
+
+    /**
+     * Send a packet to the Bluetooth device. This should only be called by the queue processor.
+     * Handles both byte array and MeshPacket inputs.
+     * @param data Either a byte array containing a MeshPacket or a MeshPacket directly
+     * @return true if the packet was successfully queued, false otherwise
+     */
+    private fun sendPacket(data: Any): Boolean {
+        val packet: MeshProtos.MeshPacket = when (data) {
+            is ByteArray -> {
+                val MAX_SAFE_PACKET = 252 // Based on MTU 255 - 3 bytes ATT header
+                Log.d(TAG, "sendPacket: Attempting to send packet of size ${data.size} bytes")
+                if (data.size > MAX_SAFE_PACKET) {
+                    Log.e(TAG, "sendPacket: Data size ${data.size} exceeds safe MTU payload ($MAX_SAFE_PACKET), not sending.")
+                    onPacketTooLarge?.invoke(data.size, MAX_SAFE_PACKET)
+                    return false
+                }
+                val MAXPACKET = 256
+                if (data.size > MAXPACKET) {
+                    Log.e(TAG, "sendPacket: Data size ${data.size} exceeds MAXPACKET ($MAXPACKET), not sending.")
+                    onPacketTooLarge?.invoke(data.size, MAXPACKET)
+                    return false
+                }
+                try {
+                    val toRadio = ToRadio.newBuilder()
+                        .setPacket(MeshProtos.MeshPacket.parseFrom(data))
+                        .build()
+                    toRadio.packet ?: throw Exception("Failed to parse MeshPacket from data")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to parse MeshPacket from data", e)
+                    return false
+                }
+            }
+            is MeshProtos.MeshPacket -> data
+            else -> {
+                Log.e(TAG, "Invalid data type for sendPacket: ${data.javaClass}")
+                return false
+            }
+        }
+
+        try {
+            val toRadio = ToRadio.newBuilder()
+                .setPacket(packet)
+                .build()
+            val toRadioBytes = toRadio.toByteArray()
+            
+            val gatt = deviceManager.connectedGatt
+            val service = gatt?.getService(MESHTASTIC_SERVICE_UUID)
+            val toRadioChar = service?.getCharacteristic(TORADIO_CHARACTERISTIC_UUID)
+            
+            if (gatt != null && service != null && toRadioChar != null) {
+                deviceManager.reliableWrite(toRadioChar, toRadioBytes) { result ->
+                    result.onSuccess { success ->
+                        Log.d(TAG, "Packet id=${packet.id} sent successfully")
+                        queueResponse.remove(packet.id)?.complete(success)
+                    }.onFailure { error ->
+                        Log.e(TAG, "Failed to send packet id=${packet.id}", error)
+                        queueResponse.remove(packet.id)?.complete(false)
+                    }
+                }
+                return true
+            } else {
+                Log.e(TAG, "GATT/service/ToRadio characteristic missing, cannot send packet")
+                queueResponse.remove(packet.id)?.complete(false)
+                return false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error sending packet id=${packet.id}", e)
+            queueResponse.remove(packet.id)?.complete(false)
+            return false
+        }
+    }
+
+    // Update the original sendPacket to use the queue system
+    fun sendPacket(data: ByteArray) {
+        val packet = MeshProtos.MeshPacket.parseFrom(data)
+        queuePacket(packet)
     }
 
     override fun setAnnotationCallback(callback: (MapAnnotation) -> Unit) {
@@ -256,7 +366,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             .setChannel(selectedChannelIndex)
             .setId(generatePacketId())
             .build()
-        sendPacket(packet.toByteArray())
+        queuePacket(packet)
     }
 
     override fun sendAnnotation(annotation: MapAnnotation) {
@@ -277,7 +387,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             .build()
         Log.d(TAG, "Sending annotation: $annotation as packet bytes: "+
             packet.toByteArray().joinToString(", ", limit = 16))
-        sendPacket(packet.toByteArray())
+        queuePacket(packet)
     }
 
     private fun startConfigHandshake() {
@@ -392,6 +502,9 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                                 selectChannel(savedChannelId)
                             }
                         }
+
+                        // Start the packet queue now that handshake is complete
+                        startPacketQueue()
                     } else {
                         Log.w(TAG, "Received stale config_complete_id: $completeId")
                     }
@@ -638,7 +751,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                     .setChannel(selectedChannelIndex)
                     .setId(generatePacketId())
                     .build()
-                sendPacket(packet.toByteArray())
+                queuePacket(packet)
                 batch = mutableListOf(id)
             } else if (size > 252) {
                 // Single ID is too large (should not happen), skip
@@ -654,7 +767,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                 .setChannel(selectedChannelIndex)
                 .setId(generatePacketId())
                 .build()
-            sendPacket(packet.toByteArray())
+            queuePacket(packet)
         }
     }
 
@@ -806,8 +919,8 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         currentMessages[channelId] = channelMessages
         _channelMessages.value = currentMessages
 
-        // Send the packet
-        sendPacket(packet.toByteArray())
+        // Queue the packet
+        queuePacket(packet)
     }
 
     override fun getChannelName(channelId: String): String? {
@@ -858,8 +971,11 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                 Log.d(TAG, "Updated message status in channelMessages for requestId $unsignedRequestId to $newStatus")
             }
             
-            // For now, remove from pending messages even if there was an error. We don't yet support advanced queueing
+            // Remove from pending messages
             pendingMessages.remove(unsignedRequestId.toInt())
+            
+            // Complete the queue response if it exists
+            queueResponse.remove(unsignedRequestId.toInt())?.complete(isAck)
             
             Log.d(TAG, "Updated message status for requestId $unsignedRequestId to $newStatus")
         }
@@ -879,5 +995,42 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         // Convert meshPacketId to unsigned for consistent handling
         val unsignedMeshPacketId = meshPacketId.toLong() and 0xFFFFFFFFL
         Log.d(TAG, "QueueStatus - success: $success, isFull: $isFull, meshPacketId: $meshPacketId (unsigned: $unsignedMeshPacketId)")
+
+        // Complete the future for this packet
+        if (meshPacketId != 0) {
+            queueResponse.remove(meshPacketId)?.complete(success)
+            
+            // Update message status if this was a text message
+            val message = pendingMessages[meshPacketId]
+            if (message != null) {
+                val newStatus = if (success) MessageStatus.SENDING else MessageStatus.ERROR
+                val updatedMessage = message.copy(status = newStatus)
+                
+                // Update the message in the channel messages
+                val currentMessages = _channelMessages.value.toMutableMap()
+                val channelMessages = currentMessages[message.channelId]?.toMutableList() ?: mutableListOf()
+                val messageIndex = channelMessages.indexOfFirst { it.requestId == meshPacketId }
+                if (messageIndex != -1) {
+                    channelMessages[messageIndex] = updatedMessage
+                    currentMessages[message.channelId] = channelMessages
+                    _channelMessages.value = currentMessages
+                    Log.d(TAG, "Updated message status in channelMessages for requestId $meshPacketId to $newStatus")
+                }
+            }
+        } else {
+            // If no specific packet ID, complete the last pending response
+            queueResponse.entries.lastOrNull { !it.value.isCompleted }?.value?.complete(success)
+        }
+    }
+
+    private fun stopPacketQueue() {
+        if (queueJob?.isActive == true) {
+            Log.i(TAG, "Stopping packet queue job")
+            queueJob?.cancel()
+            queueJob = null
+            queuedPackets.clear()
+            queueResponse.entries.lastOrNull { !it.value.isCompleted }?.value?.complete(false)
+            queueResponse.clear()
+        }
     }
 } 

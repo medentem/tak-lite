@@ -767,17 +767,6 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
         }
     }
 
-    private fun loadLastUsedMapMode(): com.tak.lite.ui.map.MapController.MapType {
-        val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
-        val modeName = prefs.getString("last_used_map_mode", null)
-        return try {
-            if (modeName != null) com.tak.lite.ui.map.MapController.MapType.valueOf(modeName)
-            else com.tak.lite.ui.map.MapController.MapType.HYBRID
-        } catch (e: Exception) {
-            com.tak.lite.ui.map.MapController.MapType.HYBRID
-        }
-    }
-
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
@@ -1128,10 +1117,5 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
     private fun showPurchaseDialog() {
         val dialog = com.tak.lite.ui.PurchaseDialog()
         dialog.show(supportFragmentManager, "purchase_dialog")
-    }
-
-    // Add this method to be called from settings
-    fun showPurchaseOptions() {
-        showPurchaseDialog()
     }
 }
