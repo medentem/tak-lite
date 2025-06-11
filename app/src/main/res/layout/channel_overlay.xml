@@ -38,7 +38,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="Channels"
+                        android:text="Channels / Chats"
                         android:textSize="20sp"
                         android:textStyle="bold"
                         android:textColor="?android:attr/textColorPrimary" />
@@ -105,7 +105,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Connect to a device to manage channels"
+                android:text="Connect to a device to manage channels / chats"
                 android:textColor="@android:color/white"
                 android:textSize="14sp"
                 android:layout_marginTop="8dp"/>
