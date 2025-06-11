@@ -3,6 +3,7 @@ package com.tak.lite.network
 import android.content.Context
 import android.net.Network
 import android.util.Log
+import com.tak.lite.data.model.DirectMessageChannel
 import com.tak.lite.data.model.IChannel
 import com.tak.lite.di.MeshConnectionState
 import com.tak.lite.di.MeshProtocol
@@ -971,6 +972,22 @@ class Layer2MeshNetworkProtocol @Inject constructor(
     }
 
     override fun getChannelName(channelId: String): String? {
+        TODO("Not yet implemented")
+    }
+
+    override fun sendDirectMessage(peerId: String, content: String, encrypted: Boolean) {
+        TODO("Not yet implemented")
+    }
+
+    override fun getPeerPublicKey(peerId: String): ByteArray? {
+        TODO("Not yet implemented")
+    }
+
+    override fun hasPeerPublicKey(peerId: String): Boolean {
+        TODO("Not yet implemented")
+    }
+
+    override fun getOrCreateDirectMessageChannel(peerId: String): DirectMessageChannel {
         TODO("Not yet implemented")
     }
 

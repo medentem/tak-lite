@@ -42,6 +42,32 @@ class ChannelController @Inject constructor(
             val overlayTag = "ChannelOverlay"
             if (rootView.findViewWithTag<View>(overlayTag) == null) {
                 Log.d("ChannelController", "Creating channel overlay")
+                // Add scrim
+                val scrimTag = "ChannelOverlayScrim"
+                val scrim = View(activity).apply {
+                    tag = scrimTag
+                    setBackgroundColor(0x66000000) // semi-transparent black
+                    layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+                    setOnClickListener {
+                        // Dismiss overlay and scrim
+                        val overlay = rootView.findViewWithTag<View>(overlayTag)
+                        val overlayWidth = activity.resources.getDimensionPixelSize(R.dimen.channel_overlay_width)
+                        overlay?.animate()?.translationX(overlayWidth.toFloat())?.setDuration(300)?.withEndAction {
+                            rootView.removeView(overlay)
+                            rootView.removeView(this)
+                            channelCollectionJob?.cancel()
+                            channelCollectionJob = null
+                            protocolCollectionJob?.cancel()
+                            protocolCollectionJob = null
+                            connectionStateJob?.cancel()
+                            connectionStateJob = null
+                            settingsCollectionJob?.cancel()
+                            settingsCollectionJob = null
+                            currentOverlay = null
+                        }?.start()
+                    }
+                }
+                rootView.addView(scrim)
                 val overlay = activity.layoutInflater.inflate(R.layout.channel_overlay, rootView, false)
                 overlay.tag = overlayTag
                 currentOverlay = overlay
@@ -64,6 +90,9 @@ class ChannelController @Inject constructor(
                     currentOverlay = null
                     overlay.animate().translationX(overlayWidth.toFloat()).setDuration(300).withEndAction {
                         rootView.removeView(overlay)
+                        // Remove scrim as well
+                        val scrimView = rootView.findViewWithTag<View>(scrimTag)
+                        if (scrimView != null) rootView.removeView(scrimView)
                     }.start()
                 }
                 val channelList = overlay.findViewById<RecyclerView>(R.id.channelList)
@@ -72,18 +101,6 @@ class ChannelController @Inject constructor(
                         Log.d("ChannelController", "Channel selected: ${channel.name} (${channel.id})")
                         channelViewModel.selectChannel(channel.id)
                         Log.d("ChannelController", "After selectChannel, settings value: ${channelViewModel.settings.value.selectedChannelId}")
-                        channelCollectionJob?.cancel()
-                        channelCollectionJob = null
-                        protocolCollectionJob?.cancel()
-                        protocolCollectionJob = null
-                        connectionStateJob?.cancel()
-                        connectionStateJob = null
-                        settingsCollectionJob?.cancel()
-                        settingsCollectionJob = null
-                        currentOverlay = null
-                        overlay.animate().translationX(overlayWidth.toFloat()).setDuration(300).withEndAction {
-                            rootView.removeView(overlay)
-                        }.start()
                     },
                     getUserName = { userId -> peerIdToNickname[userId] ?: userId },
                     getIsActive = { channel -> 
@@ -95,6 +112,26 @@ class ChannelController @Inject constructor(
                 channelList.layoutManager = LinearLayoutManager(activity)
                 channelList.adapter = channelAdapter
                 
+                // Add click listener to root view for outside tap dismissal
+                rootView.setOnClickListener {
+                    val overlayWidth = activity.resources.getDimensionPixelSize(R.dimen.channel_overlay_width)
+                    overlay.animate().translationX(overlayWidth.toFloat()).setDuration(300).withEndAction {
+                        rootView.removeView(overlay)
+                        channelCollectionJob?.cancel()
+                        channelCollectionJob = null
+                        protocolCollectionJob?.cancel()
+                        protocolCollectionJob = null
+                        connectionStateJob?.cancel()
+                        connectionStateJob = null
+                        settingsCollectionJob?.cancel()
+                        settingsCollectionJob = null
+                        currentOverlay = null
+                    }.start()
+                }
+                
+                // Prevent clicks on the overlay from propagating to the scrim
+                overlay.setOnClickListener { /* consume clicks */ }
+
                 // Cancel any existing collection
                 channelCollectionJob?.cancel()
                 channelCollectionJob = lifecycleScope.launch {
@@ -141,8 +178,6 @@ class ChannelController @Inject constructor(
                 
                 // Initial connection state
                 updateConnectionState(overlay, meshProtocolProvider.protocol.value.connectionState.value)
-                
-                overlay.setOnClickListener { /* consume clicks */ }
             }
         }
     }

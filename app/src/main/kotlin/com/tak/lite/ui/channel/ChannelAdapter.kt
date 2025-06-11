@@ -123,6 +123,10 @@ class ChannelAdapter(
 
             itemView.setOnClickListener {
                 Log.d(TAG, "Channel clicked: ${channel.name} (${channel.id})")
+                if (!channel.isSelectableForPrimaryTraffic) {
+                    Log.d(TAG, "Channel ${channel.name} is not selectable for primary traffic")
+                    return@setOnClickListener
+                }
                 onGroupSelected(channel)
             }
         }

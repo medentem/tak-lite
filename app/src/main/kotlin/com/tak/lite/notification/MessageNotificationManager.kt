@@ -43,9 +43,8 @@ class MessageNotificationManager @Inject constructor(
 
     fun showMessageNotification(channelId: String, channelName: String, message: String) {
         Log.d("MessageNotificationManager", "Creating notification for channel: $channelName, message: $message")
-        val intent = Intent(context, MessageActivity::class.java).apply {
+        val intent = MessageActivity.createIntent(context, channelId).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra("channel_id", channelId)
         }
         
         val pendingIntent = PendingIntent.getActivity(

@@ -19,6 +19,7 @@ import com.tak.lite.model.PointShape
 import com.tak.lite.viewmodel.AnnotationUiState
 import com.tak.lite.viewmodel.AnnotationViewModel
 import com.tak.lite.viewmodel.MeshNetworkViewModel
+import com.tak.lite.viewmodel.MessageViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -31,6 +32,7 @@ class AnnotationFragment : Fragment() {
 
     private val viewModel: AnnotationViewModel by viewModels()
     private val meshNetworkViewModel: MeshNetworkViewModel by activityViewModels()
+    private val messageViewModel: MessageViewModel by activityViewModels()
     private lateinit var annotationController: AnnotationController
     private lateinit var annotationOverlayView: AnnotationOverlayView
     private lateinit var fanMenuView: FanMenuView
@@ -59,9 +61,10 @@ class AnnotationFragment : Fragment() {
             // All annotation event setup goes here!
             annotationController = AnnotationController(
                 fragment = this,
-                binding = mainActivity.binding, // or pass only what's needed
+                binding = mainActivity.binding,
                 annotationViewModel = viewModel,
                 meshNetworkViewModel = meshNetworkViewModel,
+                messageViewModel = messageViewModel,
                 fanMenuView = fanMenuView,
                 annotationOverlayView = annotationOverlayView,
                 onAnnotationChanged = { annotationController.renderAllAnnotations(mapLibreMap) }

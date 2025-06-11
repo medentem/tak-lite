@@ -4,7 +4,9 @@ import android.content.Context
 import android.util.Log
 import com.geeksville.mesh.MeshProtos
 import com.geeksville.mesh.MeshProtos.ToRadio
+import com.google.protobuf.kotlin.isNotEmpty
 import com.tak.lite.data.model.ChannelMessage
+import com.tak.lite.data.model.DirectMessageChannel
 import com.tak.lite.data.model.IChannel
 import com.tak.lite.data.model.MeshtasticChannel
 import com.tak.lite.data.model.MessageStatus
@@ -107,8 +109,8 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     private val _packetSummaries = MutableStateFlow<List<PacketSummary>>(emptyList())
     override val packetSummaries: StateFlow<List<PacketSummary>> = _packetSummaries.asStateFlow()
 
-    private val _channels = MutableStateFlow<List<MeshtasticChannel>>(emptyList())
-    override val channels: StateFlow<List<MeshtasticChannel>> = _channels.asStateFlow()
+    private val _channels = MutableStateFlow<List<IChannel>>(emptyList())
+    override val channels: StateFlow<List<IChannel>> = _channels.asStateFlow()
 
     private val _connectionState = MutableStateFlow<MeshConnectionState>(MeshConnectionState.Disconnected)
     override val connectionState: StateFlow<MeshConnectionState> = _connectionState.asStateFlow()
@@ -476,6 +478,31 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                     val nodeInfo = fromRadio.nodeInfo
                     val nodeNum = nodeInfo.num.toString()
                     nodeInfoMap[nodeNum] = nodeInfo
+
+                    // Update direct message channel if it exists
+                    val channelId = DirectMessageChannel.createId(nodeNum)
+                    val existingChannel = _channels.value.find { it.id == channelId }
+                    if (existingChannel is DirectMessageChannel) {
+                        // Get updated name from node info
+                        val channelName = nodeInfo.user.longName.takeIf { it.isNotBlank() }
+                            ?: nodeInfo.user.shortName.takeIf { it.isNotBlank() }
+                            ?: nodeNum
+                        
+                        // Create updated channel with new name and PKI status
+                        val updatedChannel = existingChannel.copy(
+                            name = channelName,
+                            isPkiEncrypted = nodeInfo.user.publicKey.isNotEmpty()
+                        )
+                        
+                        // Update in channels collection
+                        val currentChannels = _channels.value.toMutableList()
+                        val channelIndex = currentChannels.indexOfFirst { it.id == channelId }
+                        if (channelIndex != -1) {
+                            currentChannels[channelIndex] = updatedChannel
+                            _channels.value = currentChannels
+                            Log.d(TAG, "Updated direct message channel for node $nodeNum with new name: $channelName")
+                        }
+                    }
                 }
                 com.geeksville.mesh.MeshProtos.FromRadio.PayloadVariantCase.MY_INFO -> {
                     val myInfo = fromRadio.myInfo
@@ -930,6 +957,50 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             return "Messages"
         }
         return channel.name
+    }
+
+    override fun sendDirectMessage(peerId: String, content: String, encrypted: Boolean) {
+        TODO("Not yet implemented")
+    }
+
+    override fun getPeerPublicKey(peerId: String): ByteArray? {
+        TODO("Not yet implemented")
+    }
+
+    override fun hasPeerPublicKey(peerId: String): Boolean {
+        TODO("Not yet implemented")
+    }
+
+    override fun getOrCreateDirectMessageChannel(peerId: String): DirectMessageChannel {
+        val channelId = DirectMessageChannel.createId(peerId)
+        
+        // Check if channel already exists
+        val existingChannel = _channels.value.find { it.id == channelId }
+        if (existingChannel != null && existingChannel is DirectMessageChannel) {
+            return existingChannel
+        }
+        
+        // Get peer's name from node info, fallback to peerId
+        val nodeInfo = nodeInfoMap[peerId]
+        val channelName = nodeInfo?.user?.longName?.takeIf { it.isNotBlank() }
+            ?: nodeInfo?.user?.shortName?.takeIf { it.isNotBlank() }
+            ?: peerId
+        
+        // Create new channel
+        val newChannel = DirectMessageChannel(
+            id = channelId,
+            name = channelName,
+            peerId = peerId,
+            lastMessage = null,
+            isPkiEncrypted = nodeInfo?.user?.publicKey?.isNotEmpty() ?: false
+        )
+        
+        // Add to channels collection
+        val currentChannels = _channels.value.toMutableList()
+        currentChannels.add(newChannel)
+        _channels.value = currentChannels
+        
+        return newChannel
     }
 
     override suspend fun createChannel(name: String) {

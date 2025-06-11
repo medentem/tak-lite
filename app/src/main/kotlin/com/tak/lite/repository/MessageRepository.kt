@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
 import com.tak.lite.data.model.ChannelMessage
+import com.tak.lite.data.model.DirectMessageChannel
 import com.tak.lite.network.MeshProtocolProvider
 import com.tak.lite.notification.MessageNotificationManager
 import kotlinx.coroutines.CoroutineScope
@@ -18,6 +19,7 @@ import javax.inject.Singleton
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewModelScope
+import com.tak.lite.data.model.MessageStatus
 
 @Singleton
 class MessageRepository @Inject constructor(
@@ -27,6 +29,10 @@ class MessageRepository @Inject constructor(
 ) {
     private val _messages = MutableStateFlow<Map<String, List<ChannelMessage>>>(emptyMap())
     val messages: StateFlow<Map<String, List<ChannelMessage>>> = _messages.asStateFlow()
+
+    // Store direct message channels locally
+    private val _directMessageChannels = MutableStateFlow<Map<String, DirectMessageChannel>>(emptyMap())
+    val directMessageChannels: StateFlow<Map<String, DirectMessageChannel>> = _directMessageChannels.asStateFlow()
 
     private val TAG = "MessageRepository"
 
@@ -42,7 +48,10 @@ class MessageRepository @Inject constructor(
                         var previousMessages = _messages.value
                         protocol.channelMessages.collect { channelMessages ->
                             // Check for new messages in each channel
-                            channelMessages.forEach { (channelId, messages) ->
+                                channelMessages.forEach { (channelId, messages) ->
+                                // Skip direct message channels as they are handled separately
+                                if (channelId.startsWith("dm_")) return@forEach
+                                
                                 val previousChannelMessages = previousMessages[channelId] ?: emptyList()
                                 val newMessages = messages.filter { newMessage ->
                                     !previousChannelMessages.any { it.timestamp == newMessage.timestamp && 
@@ -91,11 +100,37 @@ class MessageRepository @Inject constructor(
 
     fun sendMessage(channelId: String, content: String) {
         try {
-            // Just send the message through the protocol
+            // Check if this is a direct message channel
+            if (channelId.startsWith("dm_")) {
+                val peerId = channelId.substring(3) // Remove "dm_" prefix
+                sendDirectMessage(peerId, content)
+                return
+            }
+            
+            // Regular channel message
             val protocol = meshProtocolProvider.protocol.value
             protocol.sendTextMessage(channelId, content)
         } catch (e: Exception) {
             Log.e(TAG, "Error sending message: ${e.message}")
+        }
+    }
+
+    fun getOrCreateDirectMessageChannel(peerId: String, peerLongName: String? = null): DirectMessageChannel {
+        // Regular channel message
+        val protocol = meshProtocolProvider.protocol.value
+        val newChannel = protocol.getOrCreateDirectMessageChannel(peerId)
+
+        return newChannel
+    }
+
+    private fun sendDirectMessage(peerId: String, content: String) {
+        try {
+            val protocol = meshProtocolProvider.protocol.value
+            val isEncrypted = protocol.hasPeerPublicKey(peerId)
+            // Send the message through the protocol
+            protocol.sendDirectMessage(peerId, content, isEncrypted)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error sending direct message: ${e.message}")
         }
     }
 } 

@@ -1,7 +1,13 @@
 package com.tak.lite
 
+import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.view.MenuItem
+import android.view.View
+import android.widget.EditText
+import android.widget.ImageButton
+import android.widget.ImageView
 import androidx.activity.viewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -18,14 +24,28 @@ import kotlinx.coroutines.launch
 class MessageActivity : BaseActivity() {
     private val viewModel: MessageViewModel by viewModels()
     private lateinit var adapter: MessageAdapter
+    private lateinit var messageList: RecyclerView
+    private lateinit var messageInput: EditText
+    private lateinit var sendButton: MaterialButton
+    private lateinit var encryptionIndicator: ImageView
+    private var channelId: String = ""
+
+    companion object {
+        private const val EXTRA_CHANNEL_ID = "channel_id"
+
+        fun createIntent(context: Context, channelId: String): Intent {
+            return Intent(context, MessageActivity::class.java).apply {
+                putExtra(EXTRA_CHANNEL_ID, channelId)
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_message)
 
         // Get channel ID from intent
-        val channelId = intent.getStringExtra("channel_id")
-        if (channelId == null) {
+        channelId = intent.getStringExtra(EXTRA_CHANNEL_ID) ?: run {
             finish()
             return
         }
@@ -36,21 +56,22 @@ class MessageActivity : BaseActivity() {
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         toolbar.setNavigationOnClickListener { finish() }
 
-        // Setup message list
-        val messageList = findViewById<RecyclerView>(R.id.messageList)
-        messageList.layoutManager = LinearLayoutManager(this).apply {
-            stackFromEnd = true
-        }
+        // Initialize views
+        messageList = findViewById(R.id.messageList)
+        messageInput = findViewById(R.id.messageInput)
+        sendButton = findViewById(R.id.sendButton)
+        encryptionIndicator = findViewById(R.id.encryptionIndicator)
 
+        // Setup RecyclerView
         // Get current user's short name from the protocol
         val currentUserShortName = viewModel.getCurrentUserShortName()
         adapter = MessageAdapter(currentUserShortName)
+        messageList.layoutManager = LinearLayoutManager(this).apply {
+            stackFromEnd = true
+        }
         messageList.adapter = adapter
 
-        // Setup message input
-        val messageInput = findViewById<TextInputEditText>(R.id.messageInput)
-        val sendButton = findViewById<MaterialButton>(R.id.sendButton)
-
+        // Setup send button
         sendButton.setOnClickListener {
             val message = messageInput.text?.toString()?.trim()
             if (!message.isNullOrEmpty()) {
@@ -69,10 +90,21 @@ class MessageActivity : BaseActivity() {
             }
         }
 
-        // Set channel name as title
+        // Get channel info and update UI
         lifecycleScope.launch {
-            viewModel.getChannelName(channelId).collectLatest { name ->
-                title = name
+            viewModel.getChannelInfo(channelId).collectLatest { channelInfo ->
+                supportActionBar?.title = channelInfo.name
+                
+                // Show/hide encryption indicator based on whether this is a direct message
+                if (channelId.startsWith("dm_")) {
+                    encryptionIndicator.visibility = View.VISIBLE
+                    encryptionIndicator.setImageResource(
+                        if (channelInfo.isPkiEncrypted) R.drawable.ic_lock
+                        else R.drawable.ic_lock_open
+                    )
+                } else {
+                    encryptionIndicator.visibility = View.GONE
+                }
             }
         }
 

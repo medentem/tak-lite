@@ -79,6 +79,17 @@
 
         </com.google.android.material.card.MaterialCardView>
 
+        <ImageView
+            android:id="@+id/encryptionIndicator"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_marginEnd="16dp"
+            android:src="@drawable/ic_lock"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="@id/messageInputLayout"
+            app:layout_constraintEnd_toEndOf="@id/messageInputLayout"
+            app:layout_constraintTop_toTopOf="@id/messageInputLayout" />
+
     </androidx.constraintlayout.widget.ConstraintLayout>
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout> 

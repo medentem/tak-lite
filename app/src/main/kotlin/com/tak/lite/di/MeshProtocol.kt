@@ -1,5 +1,6 @@
 package com.tak.lite.di
 
+import com.tak.lite.data.model.DirectMessageChannel
 import com.tak.lite.data.model.IChannel
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PacketSummary
@@ -42,6 +43,12 @@ interface MeshProtocol {
     fun sendBulkAnnotationDeletions(ids: List<String>)
     fun sendTextMessage(channelId: String, content: String)
     fun getChannelName(channelId: String): String?
+
+    // Direct message operations
+    fun sendDirectMessage(peerId: String, content: String, encrypted: Boolean = false)
+    fun getPeerPublicKey(peerId: String): ByteArray?
+    fun hasPeerPublicKey(peerId: String): Boolean
+    fun getOrCreateDirectMessageChannel(peerId: String): DirectMessageChannel
 
     val configDownloadStep: StateFlow<MeshtasticBluetoothProtocol.ConfigDownloadStep>? get() = null
     val requiresAppLocationSend: Boolean

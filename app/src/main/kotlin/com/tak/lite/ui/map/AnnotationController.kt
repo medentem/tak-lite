@@ -1,5 +1,6 @@
 package com.tak.lite.ui.map
 
+import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.PointF
@@ -7,7 +8,9 @@ import android.util.Log
 import android.view.View
 import android.widget.Toast
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
+import com.tak.lite.MessageActivity
 import com.tak.lite.databinding.ActivityMainBinding
 import com.tak.lite.model.AnnotationColor
 import com.tak.lite.model.LineStyle
@@ -15,17 +18,21 @@ import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PointShape
 import com.tak.lite.viewmodel.AnnotationViewModel
 import com.tak.lite.viewmodel.MeshNetworkViewModel
+import com.tak.lite.viewmodel.MessageViewModel
 import org.maplibre.android.annotations.Marker
 import org.maplibre.android.annotations.Polygon
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 import kotlinx.coroutines.launch
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 class AnnotationController(
     private val fragment: Fragment,
     private val binding: ActivityMainBinding,
     private val annotationViewModel: AnnotationViewModel,
     private val meshNetworkViewModel: MeshNetworkViewModel,
+    private val messageViewModel: MessageViewModel,
     private val fanMenuView: FanMenuView,
     private val annotationOverlayView: AnnotationOverlayView,
     private val onAnnotationChanged: (() -> Unit)? = null
@@ -451,8 +458,21 @@ class AnnotationController(
     }
 
     private fun handleDirectMessage(peerId: String) {
-        // TODO: Implement direct messaging
-        Toast.makeText(fragment.requireContext(), "Coming soon! Direct message to $peerId", Toast.LENGTH_SHORT).show()
+        fragment.viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val nodeInfo = meshNetworkViewModel.getNodeInfo(peerId)
+                val peerLongName = nodeInfo?.user?.longName
+                
+                // Create or get the direct message channel
+                val channel = messageViewModel.getOrCreateDirectMessageChannel(peerId, peerLongName)
+                
+                // Launch the MessageActivity using the companion object method
+                fragment.requireContext().startActivity(MessageActivity.createIntent(fragment.requireContext(), channel.id))
+            } catch (e: Exception) {
+                Log.e("AnnotationController", "Error handling direct message: ${e.message}", e)
+                Toast.makeText(fragment.requireContext(), "Failed to start direct message", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun handleLocationRequest(peerId: String) {

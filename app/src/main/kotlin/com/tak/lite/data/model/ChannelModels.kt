@@ -36,6 +36,8 @@ interface IChannel {
     val precision: Int?
     val lastMessage: ChannelMessage?
     val index: Int
+    val isPkiEncrypted: Boolean
+    val isSelectableForPrimaryTraffic: Boolean
 }
 
 /**
@@ -49,7 +51,9 @@ data class Layer2Channel(
     override val members: List<String> = emptyList(),
     override val precision: Int? = null,
     override val lastMessage: ChannelMessage? = null,
-    override val index: Int = 0
+    override val index: Int = 0,
+    override val isPkiEncrypted: Boolean = false,
+    override val isSelectableForPrimaryTraffic: Boolean = true
 ) : IChannel
 
 /**
@@ -68,7 +72,9 @@ data class MeshtasticChannel(
     val positionPrecision: Int = 0,
     val isClientMuted: Boolean = false,
     override val lastMessage: ChannelMessage? = null,
-    override val index: Int = 0
+    override val index: Int = 0,
+    override val isPkiEncrypted: Boolean = false,
+    override val isSelectableForPrimaryTraffic: Boolean = true
 ) : IChannel {
     override val precision: Int?
         get() = positionPrecision
@@ -117,6 +123,27 @@ data class MeshtasticChannel(
         result = 31 * result + isClientMuted.hashCode()
         result = 31 * result + (lastMessage?.hashCode() ?: 0)
         return result
+    }
+}
+
+/**
+ * Represents a direct message channel between two peers
+ */
+@Serializable
+data class DirectMessageChannel(
+    override val id: String,  // Format: "dm_${peerId}"
+    override val name: String,  // Peer's longname
+    override val isDefault: Boolean = false,
+    override val members: List<String> = emptyList(),
+    override val precision: Int? = null,
+    override val lastMessage: ChannelMessage? = null,
+    override val index: Int = -1,  // Direct messages don't use channel index
+    override val isPkiEncrypted: Boolean = false,
+    override val isSelectableForPrimaryTraffic: Boolean = false,
+    val peerId: String
+) : IChannel {
+    companion object {
+        fun createId(peerId: String): String = "dm_$peerId"
     }
 }
 
