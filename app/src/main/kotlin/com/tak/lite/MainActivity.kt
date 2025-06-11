@@ -695,6 +695,13 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
                         statusBar.visibility = View.GONE
                         Log.d("MainActivity", "Hiding connection status bar - Connected")
                     }
+                    is MeshNetworkUiState.Connecting -> {
+                        Toast.makeText(this@MainActivity, "Connecting to mesh network...", Toast.LENGTH_SHORT).show()
+                        peerIdToNickname.clear()
+                        // Show the connection status bar when disconnected
+                        statusBar.visibility = View.VISIBLE
+                        Log.d("MainActivity", "Showing connection status bar - Disconnected")
+                    }
                     is MeshNetworkUiState.Disconnected -> {
                         Toast.makeText(this@MainActivity, "Disconnected from mesh network", Toast.LENGTH_SHORT).show()
                         peerIdToNickname.clear()

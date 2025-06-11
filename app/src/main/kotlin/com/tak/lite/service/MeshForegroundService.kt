@@ -85,6 +85,9 @@ class MeshForegroundService : Service() {
                     is MeshConnectionState.Connected -> {
                         updateNotificationDefault("Connected to mesh network")
                     }
+                    is MeshConnectionState.Connecting -> {
+                        updateNotificationDefault("Connecting to mesh network...")
+                    }
                     is MeshConnectionState.Disconnected -> {
                         updateNotificationDefault("Disconnected from mesh network")
                     }

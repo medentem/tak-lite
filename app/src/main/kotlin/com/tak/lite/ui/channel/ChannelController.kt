@@ -186,6 +186,7 @@ class ChannelController @Inject constructor(
         val disabledOverlay = overlay.findViewById<View>(R.id.disabledOverlay)
         disabledOverlay?.visibility = when (state) {
             is MeshConnectionState.Connected -> View.GONE
+            is MeshConnectionState.Connecting -> View.VISIBLE
             is MeshConnectionState.Disconnected -> View.VISIBLE
             is MeshConnectionState.Error -> View.VISIBLE
         }

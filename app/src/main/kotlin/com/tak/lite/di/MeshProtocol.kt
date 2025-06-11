@@ -12,6 +12,7 @@ import org.maplibre.android.geometry.LatLng
 sealed class MeshConnectionState {
     object Connected : MeshConnectionState()
     object Disconnected : MeshConnectionState()
+    object Connecting : MeshConnectionState()
     data class Error(val message: String) : MeshConnectionState()
 }
 

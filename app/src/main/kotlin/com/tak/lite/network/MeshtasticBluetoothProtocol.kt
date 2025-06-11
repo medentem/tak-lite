@@ -142,14 +142,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         }
         deviceManager.setLostConnectionCallback {
             Log.w(TAG, "Lost connection to device. State will be cleared.")
-            peerLocations.clear()
-            _annotations.value = emptyList()
-            _peers.value = emptyList()
-            connectedNodeId = null
-            handshakeComplete.set(false)
-            _configDownloadStep.value = ConfigDownloadStep.NotStarted
-            // Stop packet queue on connection loss
-            stopPacketQueue()
+            cleanupState()
         }
         // Listen for initial drain complete to trigger handshake
         deviceManager.setInitialDrainCompleteCallback {
@@ -162,27 +155,49 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             deviceManager.connectionState.collect { state ->
                 _connectionState.value = when (state) {
                     is BluetoothDeviceManager.ConnectionState.Connected -> {
+                        // Reset handshake state on new connection
+                        handshakeComplete.set(false)
+                        _configDownloadStep.value = ConfigDownloadStep.NotStarted
                         // Don't start queue here - wait for handshake completion
                         MeshConnectionState.Connected
                     }
                     is BluetoothDeviceManager.ConnectionState.Connecting -> {
                         // Stop queue while connecting
                         stopPacketQueue()
-                        MeshConnectionState.Connected // Still consider connecting as connected for UI purposes
+                        MeshConnectionState.Connecting
                     }
                     is BluetoothDeviceManager.ConnectionState.Disconnected -> {
                         // Stop queue when disconnected
                         stopPacketQueue()
+                        cleanupState()
                         MeshConnectionState.Disconnected
                     }
                     is BluetoothDeviceManager.ConnectionState.Failed -> {
                         // Stop queue on failure
                         stopPacketQueue()
+                        cleanupState()
                         MeshConnectionState.Error(state.reason)
                     }
                 }
             }
         }
+    }
+
+    private fun cleanupState() {
+        peerLocations.clear()
+        _annotations.value = emptyList()
+        _peers.value = emptyList()
+        connectedNodeId = null
+        handshakeComplete.set(false)
+        _configDownloadStep.value = ConfigDownloadStep.NotStarted
+        nodeInfoMap.clear()
+        pendingMessages.clear()
+        queuedPackets.clear()
+        queueResponse.clear()
+        channelLastMessages.clear()
+        _channels.value = emptyList()
+        _channelMessages.value = emptyMap()
+        deviceManager.cleanup()
     }
 
     /**

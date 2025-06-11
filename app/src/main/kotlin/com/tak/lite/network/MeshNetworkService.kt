@@ -98,6 +98,7 @@ class MeshNetworkService @Inject constructor(
                         _networkState.value = when (state) {
                             is MeshConnectionState.Connected -> MeshNetworkState.Connected
                             is MeshConnectionState.Disconnected -> MeshNetworkState.Disconnected
+                            is MeshConnectionState.Connecting -> MeshNetworkState.Connecting
                             is MeshConnectionState.Error -> MeshNetworkState.Error(state.message)
                         }
                     }
@@ -243,6 +244,7 @@ class MeshNetworkService @Inject constructor(
 sealed class MeshNetworkState {
     data object Connected : MeshNetworkState()
     data object Disconnected : MeshNetworkState()
+    data object Connecting : MeshNetworkState()
     data class Error(val message: String) : MeshNetworkState()
 }
 

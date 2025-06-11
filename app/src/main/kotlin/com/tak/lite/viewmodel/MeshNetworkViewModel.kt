@@ -45,6 +45,7 @@ class MeshNetworkViewModel @Inject constructor(
             ) { state, peers ->
                 when (state) {
                     is MeshNetworkState.Connected -> MeshNetworkUiState.Connected(peers)
+                    is MeshNetworkState.Connecting -> MeshNetworkUiState.Connecting
                     is MeshNetworkState.Disconnected -> MeshNetworkUiState.Disconnected
                     is MeshNetworkState.Error -> MeshNetworkUiState.Error(state.message)
                 }
@@ -97,6 +98,7 @@ class MeshNetworkViewModel @Inject constructor(
 sealed class MeshNetworkUiState {
     data object Initial : MeshNetworkUiState()
     data object Disconnected : MeshNetworkUiState()
+    data object Connecting : MeshNetworkUiState()
     data class Connected(val peers: List<MeshPeer> = emptyList()) : MeshNetworkUiState()
     data class Error(val message: String) : MeshNetworkUiState()
 } 
