@@ -1,5 +1,6 @@
 package com.tak.lite.di
 
+import com.tak.lite.data.model.ChannelMessage
 import com.tak.lite.data.model.DirectMessageChannel
 import com.tak.lite.data.model.IChannel
 import com.tak.lite.model.MapAnnotation
@@ -17,6 +18,7 @@ sealed class MeshConnectionState {
 }
 
 interface MeshProtocol {
+    val channelMessages: StateFlow<Map<String, List<ChannelMessage>>>
     val peers: StateFlow<List<MeshPeer>>
     val channels: StateFlow<List<IChannel>>
     val connectionState: StateFlow<MeshConnectionState>
@@ -46,9 +48,8 @@ interface MeshProtocol {
     fun getChannelName(channelId: String): String?
 
     // Direct message operations
-    fun sendDirectMessage(peerId: String, content: String, encrypted: Boolean = false)
+    fun sendDirectMessage(peerId: String, content: String)
     fun getPeerPublicKey(peerId: String): ByteArray?
-    fun hasPeerPublicKey(peerId: String): Boolean
     fun getOrCreateDirectMessageChannel(peerId: String): DirectMessageChannel
 
     val configDownloadStep: StateFlow<MeshtasticBluetoothProtocol.ConfigDownloadStep>? get() = null

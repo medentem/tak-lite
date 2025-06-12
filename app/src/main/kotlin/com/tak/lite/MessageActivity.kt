@@ -3,6 +3,7 @@ package com.tak.lite
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.view.MenuItem
 import android.view.View
 import android.widget.EditText
@@ -49,6 +50,7 @@ class MessageActivity : BaseActivity() {
             finish()
             return
         }
+        Log.d("MessageActivity", "Starting MessageActivity with channelId: $channelId")
 
         // Setup toolbar
         val toolbar = findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar)
@@ -92,7 +94,9 @@ class MessageActivity : BaseActivity() {
 
         // Get channel info and update UI
         lifecycleScope.launch {
+            Log.d("MessageActivity", "Starting to observe channel info for channelId: $channelId")
             viewModel.getChannelInfo(channelId).collectLatest { channelInfo ->
+                Log.d("MessageActivity", "Received channel info update - name: ${channelInfo.name}, isPkiEncrypted: ${channelInfo.isPkiEncrypted}")
                 supportActionBar?.title = channelInfo.name
                 
                 // Show/hide encryption indicator based on whether this is a direct message

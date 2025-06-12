@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.geeksville.mesh.MeshProtos
 import com.geeksville.mesh.MeshProtos.ToRadio
+import com.google.protobuf.ByteString
 import com.google.protobuf.kotlin.isNotEmpty
 import com.tak.lite.data.model.ChannelMessage
 import com.tak.lite.data.model.DirectMessageChannel
@@ -50,6 +51,8 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     private val FROMRADIO_CHARACTERISTIC_UUID: UUID = UUID.fromString("2c55e69e-4993-11ed-b878-0242ac120002")
     private val TORADIO_CHARACTERISTIC_UUID: UUID = UUID.fromString("f75c76d2-129e-4dad-a1dd-7866124401e7")
     private val FROMNUM_CHARACTERISTIC_UUID: UUID = UUID.fromString("ed9da18c-a800-4f66-a670-aa7547e34453")
+    private val ERROR_BYTE_STRING: ByteString = ByteString.copyFrom(ByteArray(32) { 0 })
+    private val PKC_CHANNEL_INDEX = 8
 
     private var currentPacketId: Long = 0
 
@@ -116,7 +119,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     override val connectionState: StateFlow<MeshConnectionState> = _connectionState.asStateFlow()
 
     private val _channelMessages = MutableStateFlow<Map<String, List<ChannelMessage>>>(emptyMap())
-    val channelMessages: StateFlow<Map<String, List<ChannelMessage>>> = _channelMessages.asStateFlow()
+    override val channelMessages: StateFlow<Map<String, List<ChannelMessage>>> = _channelMessages.asStateFlow()
 
     private val channelLastMessages = ConcurrentHashMap<String, ChannelMessage>()
 
@@ -491,22 +494,70 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                     Log.i(TAG, "Received NODE_INFO during handshake.")
                     _configDownloadStep.value = ConfigDownloadStep.DownloadingNodeInfo
                     val nodeInfo = fromRadio.nodeInfo
-                    val nodeNum = nodeInfo.num.toString()
-                    nodeInfoMap[nodeNum] = nodeInfo
+                    val nodeNum = (nodeInfo.num.toLong() and 0xFFFFFFFFL).toString()
+                    
+                    // Get existing node info if any
+                    val existingNode = nodeInfoMap[nodeNum]
+                    
+                    // Check if this is a new node or has unknown user
+                    val isNewNode = existingNode == null || 
+                        (existingNode.user.hwModel == com.geeksville.mesh.MeshProtos.HardwareModel.UNSET)
+                    
+                    // Check for public key match
+                    val keyMatch = existingNode?.user?.publicKey?.let { existingKey ->
+                        !existingKey.isNotEmpty() || existingKey == nodeInfo.user.publicKey
+                    } ?: true
+                    
+                    // Update node info with proper key handling
+                    val updatedNodeInfo = if (keyMatch) {
+                        nodeInfo
+                    } else {
+                        Log.w(TAG, "Public key mismatch from ${nodeInfo.user.longName} (${nodeInfo.user.shortName})")
+                        nodeInfo.toBuilder()
+                            .setUser(nodeInfo.user.toBuilder()
+                                .setPublicKey(ERROR_BYTE_STRING)
+                                .build())
+                            .build()
+                    }
+                    
+                    // Update node info map
+                    nodeInfoMap[nodeNum] = updatedNodeInfo
+
+                    // Update peers collection
+                    val peerName = updatedNodeInfo.user.shortName.takeIf { it.isNotBlank() }
+                        ?: updatedNodeInfo.user.longName.takeIf { it.isNotBlank() }
+                        ?: nodeNum
+
+                    // Update peers collection
+                    val longName = updatedNodeInfo.user.longName.takeIf { it.isNotBlank() }
+                        ?: nodeNum
+                    
+                    peersMap[nodeNum] = MeshPeer(
+                        id = nodeNum,
+                        ipAddress = "N/A",
+                        lastSeen = updatedNodeInfo.lastHeard * 1000L, // Convert from seconds to milliseconds
+                        nickname = peerName,
+                        longName = longName,
+                        hasPKC = updatedNodeInfo.user.publicKey.isNotEmpty() &&
+                                updatedNodeInfo.user.publicKey != ERROR_BYTE_STRING
+                    )
+                    _peers.value = peersMap.values.toList()
+                    Log.d(TAG, "Updated peer marker for $nodeNum with name $peerName")
 
                     // Update direct message channel if it exists
                     val channelId = DirectMessageChannel.createId(nodeNum)
                     val existingChannel = _channels.value.find { it.id == channelId }
                     if (existingChannel is DirectMessageChannel) {
                         // Get updated name from node info
-                        val channelName = nodeInfo.user.longName.takeIf { it.isNotBlank() }
-                            ?: nodeInfo.user.shortName.takeIf { it.isNotBlank() }
+                        val channelName = updatedNodeInfo.user.longName.takeIf { it.isNotBlank() }
+                            ?: updatedNodeInfo.user.shortName.takeIf { it.isNotBlank() }
                             ?: nodeNum
                         
                         // Create updated channel with new name and PKI status
                         val updatedChannel = existingChannel.copy(
                             name = channelName,
-                            isPkiEncrypted = nodeInfo.user.publicKey.isNotEmpty()
+                            isPkiEncrypted = updatedNodeInfo.user.publicKey.isNotEmpty() && 
+                                           updatedNodeInfo.user.publicKey != ERROR_BYTE_STRING
                         )
                         
                         // Update in channels collection
@@ -563,12 +614,23 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                         // Convert node IDs to unsigned for consistent handling
                         val peerId = (meshPacket.from.toLong() and 0xFFFFFFFFL).toString()
                         Log.d(TAG, "Decoded payload from peer $peerId: $decoded")
-                        peersMap[peerId] = MeshPeer(
-                            id = peerId,
-                            ipAddress = "N/A",
-                            lastSeen = System.currentTimeMillis(),
-                            nickname = null
-                        )
+                        
+                        // Check if peer already exists
+                        val existingPeer = peersMap[peerId]
+                        if (existingPeer != null) {
+                            // Update lastSeen for existing peer
+                            peersMap[peerId] = existingPeer.copy(lastSeen = System.currentTimeMillis())
+                            Log.d(TAG, "Updated lastSeen for existing peer $peerId")
+                        } else {
+                            // Create new peer for first-time contact
+                            peersMap[peerId] = MeshPeer(
+                                id = peerId,
+                                ipAddress = "N/A",
+                                lastSeen = System.currentTimeMillis(),
+                                nickname = null
+                            )
+                            Log.d(TAG, "Created new peer marker for $peerId")
+                        }
                         _peers.value = peersMap.values.toList()
                         Log.d(TAG, "Updated peer marker for $peerId")
                         // Add to packet summary flow
@@ -907,7 +969,19 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         this.id = id
         this.hopLimit = hopLimit
         this.priority = priority
-        this.channel = channel
+        
+        // Set PKI encryption and public key before building if using PKC channel
+        if (channel == PKC_CHANNEL_INDEX) {
+            this.pkiEncrypted = true
+            // Get the target node's public key from nodeInfoMap
+            val targetNodeId = this.to.toString()
+            nodeInfoMap[targetNodeId]?.user?.publicKey?.let { publicKey ->
+                this.publicKey = publicKey
+            }
+        } else {
+            this.channel = channel
+        }
+        
         decoded = MeshProtos.Data.newBuilder().also {
             initFn(it)
         }.build()
@@ -932,7 +1006,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             priority = MeshProtos.MeshPacket.Priority.RELIABLE
         ) {
             portnum = com.geeksville.mesh.Portnums.PortNum.TEXT_MESSAGE_APP
-            payload = com.google.protobuf.ByteString.copyFromUtf8(content)
+            payload = ByteString.copyFromUtf8(content)
             requestId = textMessagePacketId
         }
 
@@ -974,47 +1048,118 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         return channel.name
     }
 
-    override fun sendDirectMessage(peerId: String, content: String, encrypted: Boolean) {
-        TODO("Not yet implemented")
+    override fun sendDirectMessage(peerId: String, content: String) {
+        Log.d(TAG, "Sending direct message to peer $peerId")
+        // Get the peer's node info to check PKI status
+        val peerNodeInfo = nodeInfoMap[peerId]
+        if (peerNodeInfo == null) {
+            Log.e(TAG, "Cannot send direct message: No node info for peer $peerId")
+            return
+        }
+
+        // Check if both nodes have PKI capability
+        val hasPKC = peerNodeInfo.user.publicKey.isNotEmpty() && 
+                    peerNodeInfo.user.publicKey != ERROR_BYTE_STRING
+        Log.d(TAG, "Peer PKC status: $hasPKC")
+
+        // Determine which channel to use
+        val channelIndex = if (hasPKC) {
+            PKC_CHANNEL_INDEX
+        } else {
+            // Fallback to the peer's channel if no PKI or mismatch
+            peerNodeInfo.channel
+        }
+        Log.d(TAG, "Using channel index: $channelIndex")
+
+        val textMessagePacketId = generatePacketId()
+        Log.d(TAG, "Generated packet ID: $textMessagePacketId")
+
+        // Convert peerId to unsigned int for the packet
+        val peerIdInt = peerId.toLong().toInt() // This preserves the unsigned value
+        Log.d(TAG, "Converted peer ID $peerId to int: $peerIdInt")
+
+        // Create the mesh packet
+        val packet = newMeshPacketTo(peerIdInt).buildMeshPacket(
+            id = textMessagePacketId,
+            wantAck = true,
+            channel = channelIndex,
+            priority = MeshProtos.MeshPacket.Priority.RELIABLE
+        ) {
+            portnum = com.geeksville.mesh.Portnums.PortNum.TEXT_MESSAGE_APP
+            payload = ByteString.copyFromUtf8(content)
+            requestId = textMessagePacketId
+        }
+
+        // Get the sender's short name from node info
+        val senderShortName = getNodeInfoForPeer(connectedNodeId ?: "")?.user?.shortName
+            ?: connectedNodeId ?: "Unknown"
+
+        // Create the message object
+        val message = ChannelMessage(
+            senderShortName = senderShortName,
+            content = content,
+            timestamp = System.currentTimeMillis(),
+            status = MessageStatus.SENDING,
+            channelId = DirectMessageChannel.createId(peerId),
+            requestId = textMessagePacketId
+        )
+
+        // Store this message as the last sent message
+        lastSentMessage = message
+        pendingMessages[textMessagePacketId] = message
+
+        // Add to channel messages immediately
+        val currentMessages = _channelMessages.value.toMutableMap()
+        val channelId = DirectMessageChannel.createId(peerId)
+        val channelMessages = currentMessages[channelId]?.toMutableList() ?: mutableListOf()
+        channelMessages.add(message)
+        currentMessages[channelId] = channelMessages
+        _channelMessages.value = currentMessages
+
+        // Queue the packet
+        queuePacket(packet)
     }
 
     override fun getPeerPublicKey(peerId: String): ByteArray? {
         TODO("Not yet implemented")
     }
 
-    override fun hasPeerPublicKey(peerId: String): Boolean {
-        TODO("Not yet implemented")
-    }
-
     override fun getOrCreateDirectMessageChannel(peerId: String): DirectMessageChannel {
         val channelId = DirectMessageChannel.createId(peerId)
-        
+        val nodeInfo = nodeInfoMap[peerId]
+        val latestName = nodeInfo?.user?.longName?.takeIf { it.isNotBlank() }
+            ?: nodeInfo?.user?.shortName?.takeIf { it.isNotBlank() }
+            ?: peerId
+        val latestPki = nodeInfo?.user?.publicKey?.isNotEmpty() == true && nodeInfo.user?.publicKey != ERROR_BYTE_STRING
+
         // Check if channel already exists
         val existingChannel = _channels.value.find { it.id == channelId }
         if (existingChannel != null && existingChannel is DirectMessageChannel) {
+            // If name or PKI status has changed, update the channel
+            if (existingChannel.name != latestName || existingChannel.isPkiEncrypted != latestPki) {
+                val updatedChannel = existingChannel.copy(name = latestName, isPkiEncrypted = latestPki)
+                val currentChannels = _channels.value.toMutableList()
+                val idx = currentChannels.indexOfFirst { it.id == channelId }
+                if (idx != -1) {
+                    currentChannels[idx] = updatedChannel
+                    _channels.value = currentChannels
+                }
+                return updatedChannel
+            }
             return existingChannel
         }
-        
-        // Get peer's name from node info, fallback to peerId
-        val nodeInfo = nodeInfoMap[peerId]
-        val channelName = nodeInfo?.user?.longName?.takeIf { it.isNotBlank() }
-            ?: nodeInfo?.user?.shortName?.takeIf { it.isNotBlank() }
-            ?: peerId
-        
         // Create new channel
         val newChannel = DirectMessageChannel(
             id = channelId,
-            name = channelName,
+            name = latestName,
             peerId = peerId,
             lastMessage = null,
-            isPkiEncrypted = nodeInfo?.user?.publicKey?.isNotEmpty() ?: false
+            isPkiEncrypted = latestPki
         )
-        
         // Add to channels collection
         val currentChannels = _channels.value.toMutableList()
         currentChannels.add(newChannel)
         _channels.value = currentChannels
-        
         return newChannel
     }
 

@@ -6,25 +6,30 @@ import android.util.Log
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageButton
+import android.widget.TextView
 import androidx.lifecycle.LifecycleCoroutineScope
+import androidx.lifecycle.LifecycleOwner
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.tak.lite.R
+import com.tak.lite.di.MeshConnectionState
+import com.tak.lite.network.MeshPeer
+import com.tak.lite.network.MeshProtocolProvider
+import com.tak.lite.ui.peer.PeerAdapter
 import com.tak.lite.viewmodel.ChannelViewModel
+import com.tak.lite.viewmodel.MessageViewModel
+import com.tak.lite.viewmodel.MeshNetworkViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.Job
-import com.tak.lite.network.MeshProtocolProvider
-import com.tak.lite.di.MeshConnectionState
 import javax.inject.Inject
-import android.view.LayoutInflater
-import android.view.ViewGroup
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 
 class ChannelController @Inject constructor(
     private val activity: Activity,
     private val channelViewModel: ChannelViewModel,
+    private val messageViewModel: MessageViewModel,
+    private val meshNetworkViewModel: MeshNetworkViewModel,
     private val lifecycleScope: LifecycleCoroutineScope,
     private val meshProtocolProvider: MeshProtocolProvider
 ) {
@@ -32,8 +37,10 @@ class ChannelController @Inject constructor(
     private var protocolCollectionJob: Job? = null
     private var connectionStateJob: Job? = null
     private var settingsCollectionJob: Job? = null
+    private var peerCollectionJob: Job? = null
     private var currentOverlay: View? = null
     private var channelAdapter: ChannelAdapter? = null
+    private var peerAdapter: PeerAdapter? = null
 
     fun setupChannelButton(peerIdToNickname: Map<String, String?>) {
         val channelButton = activity.findViewById<ImageButton>(R.id.groupAudioButton)
@@ -63,6 +70,8 @@ class ChannelController @Inject constructor(
                             connectionStateJob = null
                             settingsCollectionJob?.cancel()
                             settingsCollectionJob = null
+                            peerCollectionJob?.cancel()
+                            peerCollectionJob = null
                             currentOverlay = null
                         }?.start()
                     }
@@ -78,6 +87,12 @@ class ChannelController @Inject constructor(
                 overlay.translationX = overlayWidth.toFloat()
                 rootView.addView(overlay)
                 overlay.animate().translationX(0f).setDuration(300).start()
+
+                // Setup peer list button
+                overlay.findViewById<ImageButton>(R.id.peerListButton)?.setOnClickListener {
+                    showPeerList(rootView)
+                }
+
                 overlay.findViewById<View>(R.id.closeChannelOverlayButton)?.setOnClickListener {
                     channelCollectionJob?.cancel()
                     channelCollectionJob = null
@@ -87,6 +102,8 @@ class ChannelController @Inject constructor(
                     connectionStateJob = null
                     settingsCollectionJob?.cancel()
                     settingsCollectionJob = null
+                    peerCollectionJob?.cancel()
+                    peerCollectionJob = null
                     currentOverlay = null
                     overlay.animate().translationX(overlayWidth.toFloat()).setDuration(300).withEndAction {
                         rootView.removeView(overlay)
@@ -125,6 +142,8 @@ class ChannelController @Inject constructor(
                         connectionStateJob = null
                         settingsCollectionJob?.cancel()
                         settingsCollectionJob = null
+                        peerCollectionJob?.cancel()
+                        peerCollectionJob = null
                         currentOverlay = null
                     }.start()
                 }
@@ -182,6 +201,95 @@ class ChannelController @Inject constructor(
         }
     }
 
+    private fun showPeerList(rootView: FrameLayout) {
+        val overlayTag = "PeerListOverlay"
+        if (rootView.findViewWithTag<View>(overlayTag) != null) return
+
+        // Add scrim
+        val scrimTag = "PeerListOverlayScrim"
+        val scrim = View(activity).apply {
+            tag = scrimTag
+            setBackgroundColor(0x00000000) // fully transparent
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+            setOnClickListener {
+                // Dismiss overlay and scrim
+                val overlay = rootView.findViewWithTag<View>(overlayTag)
+                val overlayWidth = activity.resources.getDimensionPixelSize(R.dimen.channel_overlay_width)
+                overlay?.animate()?.translationX(overlayWidth.toFloat())?.setDuration(300)?.withEndAction {
+                    rootView.removeView(overlay)
+                    rootView.removeView(this)
+                    peerCollectionJob?.cancel()
+                    peerCollectionJob = null
+                }?.start()
+            }
+        }
+        rootView.addView(scrim)
+
+        val overlay = activity.layoutInflater.inflate(R.layout.peer_list_overlay, rootView, false)
+        overlay.tag = overlayTag
+        val overlayWidth = activity.resources.getDimensionPixelSize(R.dimen.channel_overlay_width)
+        val params = FrameLayout.LayoutParams(overlayWidth, FrameLayout.LayoutParams.MATCH_PARENT)
+        params.gravity = android.view.Gravity.END
+        overlay.layoutParams = params
+        overlay.translationX = overlayWidth.toFloat()
+        rootView.addView(overlay)
+        overlay.animate().translationX(0f).setDuration(300).start()
+
+        // Setup close button
+        overlay.findViewById<View>(R.id.closePeerListButton)?.setOnClickListener {
+            overlay.animate().translationX(overlayWidth.toFloat()).setDuration(300).withEndAction {
+                rootView.removeView(overlay)
+                // Remove scrim as well
+                val scrimView = rootView.findViewWithTag<View>(scrimTag)
+                if (scrimView != null) rootView.removeView(scrimView)
+                peerCollectionJob?.cancel()
+                peerCollectionJob = null
+            }.start()
+        }
+
+        // Prevent clicks on the overlay from propagating to the scrim
+        overlay.setOnClickListener { /* consume clicks */ }
+
+        // Setup peer list
+        val peerList = overlay.findViewById<RecyclerView>(R.id.peerList)
+        peerAdapter = PeerAdapter(
+            onChatClick = { _: MeshPeer ->
+                // We could close the peer list overlay, but no
+            },
+            messageViewModel = messageViewModel,
+            meshNetworkViewModel = meshNetworkViewModel,
+            lifecycleScope = lifecycleScope
+        )
+        peerList.layoutManager = LinearLayoutManager(activity)
+        peerList.adapter = peerAdapter
+
+        // Observe peers
+        peerCollectionJob?.cancel()
+        peerCollectionJob = lifecycleScope.launch {
+            meshProtocolProvider.protocol.value.peers.collectLatest { peers ->
+                // Filter out our own node and sort peers by last seen time
+                val selfId = meshProtocolProvider.protocol.value.localNodeIdOrNickname
+                val filteredPeers = peers.filter { it.id != selfId }
+                val sortedPeers = filteredPeers.sortedByDescending { it.lastSeen }
+                peerAdapter?.submitList(sortedPeers)
+                
+                // Update peer count in header
+                overlay.findViewById<TextView>(R.id.peerListTitle)?.text = "Peers (${filteredPeers.size})"
+            }
+        }
+
+        // Add periodic refresh for last seen times
+        lifecycleScope.launch {
+            while (true) {
+                delay(10000) // Update every 10 seconds
+                peerAdapter?.notifyDataSetChanged() // This will trigger a rebind of all items
+            }
+        }
+
+        // Update connection state
+        updateConnectionState(overlay, meshProtocolProvider.protocol.value.connectionState.value)
+    }
+
     private fun updateConnectionState(overlay: View, state: MeshConnectionState) {
         val disabledOverlay = overlay.findViewById<View>(R.id.disabledOverlay)
         disabledOverlay?.visibility = when (state) {
@@ -207,6 +315,8 @@ class ChannelController @Inject constructor(
                 connectionStateJob = null
                 settingsCollectionJob?.cancel()
                 settingsCollectionJob = null
+                peerCollectionJob?.cancel()
+                peerCollectionJob = null
                 currentOverlay = null
                 val intent = Intent(activity, ChannelManagementActivity::class.java)
                 activity.startActivity(intent)

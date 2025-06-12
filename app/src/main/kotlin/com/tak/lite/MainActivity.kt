@@ -39,6 +39,7 @@ import com.tak.lite.ui.map.FanMenuView
 import com.tak.lite.viewmodel.ChannelViewModel
 import com.tak.lite.viewmodel.MeshNetworkUiState
 import com.tak.lite.viewmodel.MeshNetworkViewModel
+import com.tak.lite.viewmodel.MessageViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -61,6 +62,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
     private val viewModel: MeshNetworkViewModel by viewModels()
     private val peerIdToNickname = mutableMapOf<String, String?>()
     private val channelViewModel: ChannelViewModel by viewModels()
+    private val messageViewModel: MessageViewModel by viewModels()
     private lateinit var mapController: com.tak.lite.ui.map.MapController
     private lateinit var locationController: LocationController
     private lateinit var audioController: AudioController
@@ -350,6 +352,8 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
         channelController = ChannelController(
             activity = this,
             channelViewModel = channelViewModel,
+            messageViewModel = messageViewModel,
+            meshNetworkViewModel = viewModel,
             lifecycleScope = lifecycleScope,
             meshProtocolProvider = meshProtocolProvider
         )

@@ -35,25 +35,17 @@
                     android:gravity="center_vertical">
 
                     <TextView
+                        android:id="@+id/peerListTitle"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="Channels / Chats"
+                        android:text="Peers (0)"
                         android:textSize="20sp"
                         android:textStyle="bold"
                         android:textColor="?android:attr/textColorPrimary" />
 
                     <ImageButton
-                        android:id="@+id/peerListButton"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:src="@android:drawable/ic_menu_myplaces"
-                        android:background="?attr/selectableItemBackgroundBorderless"
-                        android:contentDescription="View Peers"
-                        android:layout_marginEnd="8dp" />
-
-                    <ImageButton
-                        android:id="@+id/closeChannelOverlayButton"
+                        android:id="@+id/closePeerListButton"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:src="@android:drawable/ic_menu_close_clear_cancel"
@@ -68,9 +60,9 @@
                     android:background="?android:attr/listDivider" />
             </LinearLayout>
 
-            <!-- Channel List -->
+            <!-- Peer List -->
             <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/channelList"
+                android:id="@+id/peerList"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_weight="1"
@@ -78,12 +70,6 @@
                 android:paddingTop="8dp"
                 android:paddingBottom="8dp" />
 
-            <!-- Bottom Buttons -->
-            <ViewStub
-                android:id="@+id/channelManagementButtons"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout="@layout/channel_management_buttons" />
         </LinearLayout>
 
         <!-- Disabled State Overlay -->
@@ -114,7 +100,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Connect to a device to manage channels / chats"
+                android:text="Connect to a device to view peers"
                 android:textColor="@android:color/white"
                 android:textSize="14sp"
                 android:layout_marginTop="8dp"/>

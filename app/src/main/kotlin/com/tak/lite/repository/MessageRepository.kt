@@ -30,10 +30,6 @@ class MessageRepository @Inject constructor(
     private val _messages = MutableStateFlow<Map<String, List<ChannelMessage>>>(emptyMap())
     val messages: StateFlow<Map<String, List<ChannelMessage>>> = _messages.asStateFlow()
 
-    // Store direct message channels locally
-    private val _directMessageChannels = MutableStateFlow<Map<String, DirectMessageChannel>>(emptyMap())
-    val directMessageChannels: StateFlow<Map<String, DirectMessageChannel>> = _directMessageChannels.asStateFlow()
-
     private val TAG = "MessageRepository"
 
     // Create a coroutine scope for the repository
@@ -43,47 +39,41 @@ class MessageRepository @Inject constructor(
         // Observe messages from the protocol
         repositoryScope.launch {
             meshProtocolProvider.protocol.collect { protocol ->
-                when (protocol) {
-                    is com.tak.lite.network.MeshtasticBluetoothProtocol -> {
-                        var previousMessages = _messages.value
-                        protocol.channelMessages.collect { channelMessages ->
-                            // Check for new messages in each channel
-                                channelMessages.forEach { (channelId, messages) ->
-                                // Skip direct message channels as they are handled separately
-                                if (channelId.startsWith("dm_")) return@forEach
-                                
-                                val previousChannelMessages = previousMessages[channelId] ?: emptyList()
-                                val newMessages = messages.filter { newMessage ->
-                                    !previousChannelMessages.any { it.timestamp == newMessage.timestamp && 
-                                                                 it.senderShortName == newMessage.senderShortName &&
-                                                                 it.content == newMessage.content }
-                                }
-                                
-                                // Show notifications for new messages
-                                newMessages.forEach { message ->
-                                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-                                        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
-                                        Log.d(TAG, "Showing notification for new message in channel $channelId")
-                                        val channelName = protocol.getChannelName(channelId) ?: channelId
-                                        messageNotificationManager.showMessageNotification(
-                                            channelId = channelId,
-                                            channelName = channelName,
-                                            message = message.content
-                                        )
-                                    } else {
-                                        Log.d(TAG, "No notification permission, skipping notification")
-                                    }
-                                }
+                // Observe channel messages
+                var previousMessages = _messages.value
+                protocol.channelMessages.collect { channelMessages ->
+                    // Check for new messages in each channel
+                    channelMessages.forEach { (channelId, messages) ->
+                        // Skip direct message channels as they are handled separately
+                        if (channelId.startsWith("dm_")) return@forEach
+
+                        val previousChannelMessages = previousMessages[channelId] ?: emptyList()
+                        val newMessages = messages.filter { newMessage ->
+                            !previousChannelMessages.any { it.timestamp == newMessage.timestamp &&
+                                                         it.senderShortName == newMessage.senderShortName &&
+                                                         it.content == newMessage.content }
+                        }
+
+                        // Show notifications for new messages
+                        newMessages.forEach { message ->
+                            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+                                Log.d(TAG, "Showing notification for new message in channel $channelId")
+                                val channelName = protocol.getChannelName(channelId) ?: channelId
+                                messageNotificationManager.showMessageNotification(
+                                    channelId = channelId,
+                                    channelName = channelName,
+                                    message = message.content
+                                )
+                            } else {
+                                Log.d(TAG, "No notification permission, skipping notification")
                             }
-                            
-                            // Update our messages state
-                            _messages.value = channelMessages
-                            previousMessages = channelMessages
                         }
                     }
-                    else -> {
-                        // Other protocols don't support messages yet
-                    }
+
+                    // Update our messages state
+                    _messages.value = channelMessages
+                    previousMessages = channelMessages
                 }
             }
         }
@@ -126,9 +116,8 @@ class MessageRepository @Inject constructor(
     private fun sendDirectMessage(peerId: String, content: String) {
         try {
             val protocol = meshProtocolProvider.protocol.value
-            val isEncrypted = protocol.hasPeerPublicKey(peerId)
             // Send the message through the protocol
-            protocol.sendDirectMessage(peerId, content, isEncrypted)
+            protocol.sendDirectMessage(peerId, content)
         } catch (e: Exception) {
             Log.e(TAG, "Error sending direct message: ${e.message}")
         }

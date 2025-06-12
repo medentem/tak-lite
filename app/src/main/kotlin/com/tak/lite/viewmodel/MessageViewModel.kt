@@ -31,24 +31,15 @@ class MessageViewModel @Inject constructor(
     }
 
     fun getChannelInfo(channelId: String): Flow<ChannelInfo> {
-        return if (channelId.startsWith("dm_")) {
-            // For direct messages, get info from MessageRepository
-            messageRepository.directMessageChannels.map { channels ->
-                val channel = channels[channelId]
-                ChannelInfo(
-                    name = channel?.name ?: channelId,
-                    isPkiEncrypted = channel?.isPkiEncrypted ?: false
-                )
-            }
-        } else {
-            // For regular channels, get info from ChannelRepository
-            channelRepository.channels.map { channels ->
-                val channel = channels.find { it.id == channelId }
-                ChannelInfo(
-                    name = channel?.name ?: channelId,
-                    isPkiEncrypted = false
-                )
-            }
+        Log.d(TAG, "Getting channel info for channelId: $channelId")
+
+        return channelRepository.channels.map { channels ->
+            val channel = channels.find { it.id == channelId }
+            Log.d(TAG, "Regular channel found: ${channel?.name ?: "null"} for channelId: $channelId")
+            ChannelInfo(
+                name = channel?.name ?: channelId,
+                isPkiEncrypted = channel?.isPkiEncrypted ?: false
+            )
         }
     }
 

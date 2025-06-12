@@ -85,6 +85,7 @@
             android:layout_height="24dp"
             android:layout_marginEnd="16dp"
             android:src="@drawable/ic_lock"
+            android:tint="?android:attr/textColorSecondary"
             android:visibility="gone"
             app:layout_constraintBottom_toBottomOf="@id/messageInputLayout"
             app:layout_constraintEnd_toEndOf="@id/messageInputLayout"

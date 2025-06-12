@@ -3,6 +3,7 @@ package com.tak.lite.network
 import android.content.Context
 import android.net.Network
 import android.util.Log
+import com.tak.lite.data.model.ChannelMessage
 import com.tak.lite.data.model.DirectMessageChannel
 import com.tak.lite.data.model.IChannel
 import com.tak.lite.di.MeshConnectionState
@@ -105,6 +106,9 @@ class Layer2MeshNetworkProtocol @Inject constructor(
     
     private val _channels = MutableStateFlow<List<IChannel>>(emptyList())
     private val _annotations = MutableStateFlow<List<MapAnnotation>>(emptyList())
+
+    private val _channelMessages = MutableStateFlow<Map<String, List<ChannelMessage>>>(emptyMap())
+    override val channelMessages: StateFlow<Map<String, List<ChannelMessage>>> = _channelMessages.asStateFlow()
     
     override val channels: StateFlow<List<IChannel>> = _channels.asStateFlow()
     val annotations = _annotations.asStateFlow()
@@ -975,15 +979,11 @@ class Layer2MeshNetworkProtocol @Inject constructor(
         TODO("Not yet implemented")
     }
 
-    override fun sendDirectMessage(peerId: String, content: String, encrypted: Boolean) {
+    override fun sendDirectMessage(peerId: String, content: String) {
         TODO("Not yet implemented")
     }
 
     override fun getPeerPublicKey(peerId: String): ByteArray? {
-        TODO("Not yet implemented")
-    }
-
-    override fun hasPeerPublicKey(peerId: String): Boolean {
         TODO("Not yet implemented")
     }
 
