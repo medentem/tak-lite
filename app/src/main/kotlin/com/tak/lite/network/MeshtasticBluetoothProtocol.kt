@@ -758,16 +758,6 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         try {
             Log.d(TAG, "Handling TEXT_MESSAGE_APP packet. peerId: $peerId, peerNickname: $peerNickname")
             val content = decoded.payload.toString(Charsets.UTF_8)
-            val channelIndex = packet.channel
-            
-            // Find the channel with matching index to get the channelId
-            val channel = _channels.value.find { it.index == channelIndex }
-            if (channel == null) {
-                Log.e(TAG, "Could not find channel with index $channelIndex")
-                return
-            }
-            val channelId = channel.id
-            Log.d(TAG, "Found channel: $channelId (${channel.name})")
             
             // Check if this is a message from our own node
             if (isOwnNode(peerId)) {
@@ -788,6 +778,23 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                     return
                 }
             }
+
+            // Determine if this is a direct message by checking the "to" field
+            val isDirectMessage = packet.to.toString() == connectedNodeId
+            val channelId = if (isDirectMessage) {
+                // For direct messages, get or create a direct message channel
+                val directChannel = getOrCreateDirectMessageChannel(peerId)
+                directChannel.id
+            } else {
+                // For broadcast messages, use the channel from the packet
+                val channelIndex = packet.channel
+                val channel = _channels.value.find { it.index == channelIndex }
+                if (channel == null) {
+                    Log.e(TAG, "Could not find channel with index $channelIndex")
+                    return
+                }
+                channel.id
+            }
             
             val message = ChannelMessage(
                 senderShortName = senderShortName,
@@ -796,7 +803,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                 channelId = channelId,
                 status = MessageStatus.RECEIVED
             )
-            Log.d(TAG, "Created message object: sender=$senderShortName, content=$content")
+            Log.d(TAG, "Created message object: sender=$senderShortName, content=$content, isDirect=$isDirectMessage")
 
             // Update channel messages
             val currentMessages = _channelMessages.value.toMutableMap()
@@ -812,7 +819,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             // Update the channel in the list with the new message
             val currentChannels = _channels.value.toMutableList()
             val currentChannelsIndex = currentChannels.indexOfFirst { it.id == channelId }
-            if (channelIndex != -1) {
+            if (currentChannelsIndex != -1) {
                 val channel = currentChannels[currentChannelsIndex]
                 if (channel is MeshtasticChannel) {
                     currentChannels[currentChannelsIndex] = channel.copy(lastMessage = message)
