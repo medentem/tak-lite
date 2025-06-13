@@ -66,13 +66,13 @@
         android:id="@+id/zoomToLocationButton"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginTop="64dp"
         android:layout_marginEnd="16dp"
-        android:layout_marginTop="16dp"
         android:contentDescription="Zoom to My Location"
         android:src="@android:drawable/ic_menu_mylocation"
-        app:layout_constraintTop_toTopOf="parent"
+        app:backgroundTint="@android:color/holo_blue_dark"
         app:layout_constraintEnd_toEndOf="parent"
-        app:backgroundTint="@android:color/holo_blue_dark" />
+        app:layout_constraintTop_toTopOf="parent" />
 
     <LinearLayout
         android:id="@+id/lineToolButtonContainer"

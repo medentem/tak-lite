@@ -67,8 +67,6 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
     private lateinit var locationController: LocationController
     private lateinit var audioController: AudioController
     private lateinit var channelController: ChannelController
-    private val peerMarkers = mutableMapOf<String, org.maplibre.android.annotations.Marker>()
-    private val peerLastSeen = mutableMapOf<String, Long>()
     private lateinit var locationSourceOverlay: FrameLayout
     private lateinit var locationSourceIcon: ImageView
     private lateinit var locationSourceLabel: TextView
@@ -360,59 +358,6 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
         channelController.setupChannelButton(peerIdToNickname)
 
         observeMeshNetworkState()
-
-        // Observe peer locations and update markers
-        lifecycleScope.launch {
-            viewModel.peerLocations.collect { locations ->
-                // Update last seen times for active peers
-                locations.keys.forEach { peerId ->
-                    peerLastSeen[peerId] = System.currentTimeMillis()
-                }
-                
-                // Remove markers for peers that are no longer present
-                val currentPeerIds = locations.keys
-                peerMarkers.entries.removeIf { (peerId, marker) ->
-                    if (peerId !in currentPeerIds) {
-                        mapController.mapLibreMap?.removeMarker(marker)
-                        peerLastSeen.remove(peerId)
-                        true
-                    } else {
-                        false
-                    }
-                }
-                
-                // Update or add markers for current peers
-                locations.forEach { (peerId, latLng) ->
-                    val marker = peerMarkers[peerId]
-                    if (marker != null) {
-                        // Update existing marker
-                        marker.position = latLng
-                        updateMarkerColor(marker, peerId)
-                    } else {
-                        // Create new marker
-                        val newMarker = org.maplibre.android.annotations.MarkerOptions()
-                            .setPosition(latLng)
-                            .setTitle(peerIdToNickname[peerId] ?: peerId)
-                            .setIcon(org.maplibre.android.annotations.IconFactory.getInstance(this@MainActivity)
-                                .fromBitmap(createPeerMarkerIcon(Color.GREEN)))
-                        mapController.mapLibreMap?.let { map ->
-                            val addedMarker = map.addMarker(newMarker)
-                            peerMarkers[peerId] = addedMarker
-                        }
-                    }
-                }
-            }
-        }
-
-        // Start a periodic job to update marker colors
-        lifecycleScope.launch {
-            while (true) {
-                delay(1000) // Update every second
-                peerMarkers.forEach { (peerId, marker) ->
-                    updateMarkerColor(marker, peerId)
-                }
-            }
-        }
 
         nicknameButton.setOnClickListener {
             showNicknameDialog()
@@ -889,49 +834,6 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
         super.onDestroy()
         mapController.onDestroy()
         audioController.cleanupAudioUI()
-    }
-
-    private fun createPeerMarkerIcon(color: Int): Bitmap {
-        val size = 24
-        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        val paint = Paint().apply {
-            this.color = color
-            style = Paint.Style.FILL
-            isAntiAlias = true
-        }
-        canvas.drawCircle(size / 2f, size / 2f, size / 2f, paint)
-        return bitmap
-    }
-
-    private fun getMarkerColorForPeer(peerId: String): Int {
-        val lastSeen = peerLastSeen[peerId] ?: return Color.GREEN
-        val now = System.currentTimeMillis()
-        val inactiveTime = now - lastSeen
-        
-        return when {
-            inactiveTime >= 10 * 60 * 1000 -> Color.GRAY // 10 minutes
-            inactiveTime >= 5 * 60 * 1000 -> Color.RED // 5 minutes
-            inactiveTime >= 60 * 1000 -> Color.rgb(255, 165, 0) // Orange for 1 minute
-            else -> Color.GREEN
-        }
-    }
-
-    private fun updateMarkerColor(marker: org.maplibre.android.annotations.Marker, peerId: String) {
-        val lastSeen = peerLastSeen[peerId] ?: return
-        val now = System.currentTimeMillis()
-        val inactiveTime = now - lastSeen
-
-        // Remove marker if inactive for more than 20 minutes
-        if (inactiveTime >= 20 * 60 * 1000) {
-            mapController.mapLibreMap?.removeMarker(marker)
-            peerMarkers.remove(peerId)
-            peerLastSeen.remove(peerId)
-            return
-        }
-
-        val color = getMarkerColorForPeer(peerId)
-        marker.icon = org.maplibre.android.annotations.IconFactory.getInstance(this).fromBitmap(createPeerMarkerIcon(color))
     }
 
     private fun onMapModeToggled() {

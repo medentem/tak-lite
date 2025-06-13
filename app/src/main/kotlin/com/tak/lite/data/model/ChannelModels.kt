@@ -38,6 +38,7 @@ interface IChannel {
     val index: Int
     val isPkiEncrypted: Boolean
     val isSelectableForPrimaryTraffic: Boolean
+    val allowDelete: Boolean
 }
 
 /**
@@ -53,7 +54,8 @@ data class Layer2Channel(
     override val lastMessage: ChannelMessage? = null,
     override val index: Int = 0,
     override val isPkiEncrypted: Boolean = false,
-    override val isSelectableForPrimaryTraffic: Boolean = true
+    override val isSelectableForPrimaryTraffic: Boolean = true,
+    override val allowDelete: Boolean = true
 ) : IChannel
 
 /**
@@ -74,7 +76,8 @@ data class MeshtasticChannel(
     override val lastMessage: ChannelMessage? = null,
     override val index: Int = 0,
     override val isPkiEncrypted: Boolean = false,
-    override val isSelectableForPrimaryTraffic: Boolean = true
+    override val isSelectableForPrimaryTraffic: Boolean = true,
+    override val allowDelete: Boolean = false
 ) : IChannel {
     override val precision: Int?
         get() = positionPrecision
@@ -140,6 +143,7 @@ data class DirectMessageChannel(
     override val index: Int = -1,  // Direct messages don't use channel index
     override val isPkiEncrypted: Boolean = false,
     override val isSelectableForPrimaryTraffic: Boolean = false,
+    override val allowDelete: Boolean = true,
     val peerId: String
 ) : IChannel {
     companion object {

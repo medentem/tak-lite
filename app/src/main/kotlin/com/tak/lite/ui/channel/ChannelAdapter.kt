@@ -19,13 +19,13 @@ import com.tak.lite.util.PositionPrecisionUtils
 
 class ChannelAdapter(
     private val onGroupSelected: (IChannel) -> Unit,
-    private val getUserName: (String) -> String = { it }, // Maps user ID to display name
+    private val onDelete: (IChannel) -> Unit,
     private val getIsActive: (IChannel) -> Boolean = { false }
 ) : ListAdapter<IChannel, ChannelAdapter.ChannelViewHolder>(ChannelDiffCallback()) {
     private val TAG = "ChannelAdapter"
 
-    private var activeGroupId: String? = null
     private var receivingGroupId: String? = null
+    private var itemInDeleteMode: Int = -1
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ChannelViewHolder {
         val view = LayoutInflater.from(parent.context)
@@ -36,34 +36,12 @@ class ChannelAdapter(
     override fun onBindViewHolder(holder: ChannelViewHolder, position: Int) {
         val channel = getItem(position)
         Log.d(TAG, "Binding channel: ${channel.name} (${channel.id})")
-        holder.bind(channel)
+        holder.bind(channel, position == itemInDeleteMode)
     }
 
     override fun submitList(list: List<IChannel>?) {
         Log.d(TAG, "Submitting new channel list: ${list?.map { "${it.name} (${it.id})" }}")
         super.submitList(list)
-    }
-
-    fun setActiveGroup(groupId: String?) {
-        if (activeGroupId != groupId) {
-            Log.d(TAG, "Setting active group from $activeGroupId to $groupId")
-            val oldPosition = currentList.indexOfFirst { it.id == activeGroupId }
-            val newPosition = currentList.indexOfFirst { it.id == groupId }
-            activeGroupId = groupId
-            if (oldPosition != -1) notifyItemChanged(oldPosition)
-            if (newPosition != -1) notifyItemChanged(newPosition)
-        }
-    }
-
-    fun setReceivingGroup(groupId: String?) {
-        if (receivingGroupId != groupId) {
-            Log.d(TAG, "Setting receiving group from $receivingGroupId to $groupId")
-            val oldPosition = currentList.indexOfFirst { it.id == receivingGroupId }
-            val newPosition = currentList.indexOfFirst { it.id == groupId }
-            receivingGroupId = groupId
-            if (oldPosition != -1) notifyItemChanged(oldPosition)
-            if (newPosition != -1) notifyItemChanged(newPosition)
-        }
     }
 
     inner class ChannelViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
@@ -73,8 +51,10 @@ class ChannelAdapter(
         private val audioIndicator: ImageView = itemView.findViewById(R.id.audioIndicator)
         private val activeChannelIndicator: View = itemView.findViewById(R.id.activeChannelIndicator)
         private val messageButton: ImageButton = itemView.findViewById(R.id.messageButton)
+        private val deleteButton: ImageButton = itemView.findViewById(R.id.deleteButton)
+        private val deleteBackground: View = itemView.findViewById(R.id.deleteBackground)
 
-        fun bind(channel: IChannel) {
+        fun bind(channel: IChannel, isInDeleteMode: Boolean) {
             Log.d(TAG, "Binding channel view for: ${channel.name} (${channel.id})")
             
             // Set channel name
@@ -121,7 +101,67 @@ class ChannelAdapter(
                 itemView.context.startActivity(intent)
             }
 
+            // Handle delete mode
+            if (channel.allowDelete) {
+                Log.d(TAG, "Channel allows deletion, isInDeleteMode: $isInDeleteMode")
+                if (isInDeleteMode) {
+                    Log.d(TAG, "Showing delete UI for channel: ${channel.name}")
+                    deleteBackground.visibility = View.VISIBLE
+                    deleteButton.visibility = View.VISIBLE
+                    // Animate the background sliding in from the right
+                    deleteBackground.alpha = 0f
+                    deleteBackground.animate()
+                        .alpha(1f)
+                        .setDuration(200)
+                        .start()
+                } else {
+                    Log.d(TAG, "Hiding delete UI for channel: ${channel.name}")
+                    // Animate the background sliding out to the right
+                    deleteBackground.animate()
+                        .alpha(0f)
+                        .setDuration(200)
+                        .withEndAction {
+                            deleteBackground.visibility = View.GONE
+                            deleteButton.visibility = View.GONE
+                        }
+                        .start()
+                }
+            } else {
+                Log.d(TAG, "Channel does not allow deletion: ${channel.name}")
+                deleteBackground.visibility = View.GONE
+                deleteButton.visibility = View.GONE
+            }
+
+            // Handle delete button
+            deleteButton.setOnClickListener {
+                onDelete(channel)
+                itemInDeleteMode = -1
+                notifyDataSetChanged()
+            }
+
+            // Handle long press for delete mode
+            itemView.setOnLongClickListener {
+                Log.d(TAG, "Long press detected on channel: ${channel.name} (${channel.id}), allowDelete: ${channel.allowDelete}")
+                if (channel.allowDelete) {
+                    itemInDeleteMode = if (itemInDeleteMode == adapterPosition) -1 else adapterPosition
+                    Log.d(TAG, "Setting itemInDeleteMode to: $itemInDeleteMode")
+                    notifyDataSetChanged()
+                    true
+                } else {
+                    Log.d(TAG, "Channel does not allow deletion")
+                    false
+                }
+            }
+
+            // Handle normal click
             itemView.setOnClickListener {
+                if (isInDeleteMode) {
+                    // If in delete mode, just exit delete mode
+                    itemInDeleteMode = -1
+                    notifyDataSetChanged()
+                    return@setOnClickListener
+                }
+                
                 Log.d(TAG, "Channel clicked: ${channel.name} (${channel.id})")
                 if (!channel.isSelectableForPrimaryTraffic) {
                     Log.d(TAG, "Channel ${channel.name} is not selectable for primary traffic")

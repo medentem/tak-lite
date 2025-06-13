@@ -2,90 +2,128 @@
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:padding="16dp"
-    android:background="?attr/selectableItemBackground">
+    android:layout_height="wrap_content">
 
-    <!-- Active channel indicator -->
+    <!-- Delete background that slides in -->
     <View
-        android:id="@+id/activeChannelIndicator"
-        android:layout_width="4dp"
+        android:id="@+id/deleteBackground"
+        android:layout_width="0dp"
         android:layout_height="0dp"
-        android:background="@color/green_500"
+        android:background="@android:color/holo_red_light"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <!-- Channel name -->
-    <TextView
-        android:id="@+id/channelName"
-        android:layout_width="0dp"
+    <!-- Inner container with padding -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginStart="8dp"
-        android:layout_marginEnd="8dp"
-        android:textColor="?android:attr/textColorPrimary"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        android:layout_marginTop="8dp"
-        app:layout_constraintEnd_toStartOf="@id/messageButton"
-        app:layout_constraintStart_toEndOf="@id/activeChannelIndicator"
-        app:layout_constraintTop_toTopOf="parent" />
-
-    <!-- Role and precision info -->
-    <TextView
-        android:id="@+id/channelInfo"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="8dp"
-        android:layout_marginEnd="8dp"
-        android:textColor="?android:attr/textColorSecondary"
-        android:textSize="14sp"
-        android:layout_marginTop="2dp"
-        app:layout_constraintEnd_toStartOf="@id/messageButton"
-        app:layout_constraintStart_toEndOf="@id/activeChannelIndicator"
-        app:layout_constraintTop_toBottomOf="@id/channelName" />
-
-    <!-- Recent message -->
-    <TextView
-        android:id="@+id/recentMessage"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="8dp"
-        android:layout_marginEnd="8dp"
-        android:layout_marginTop="4dp"
-        android:ellipsize="end"
-        android:maxLines="1"
-        android:textColor="?android:attr/textColorTertiary"
-        android:textSize="14sp"
-        app:layout_constraintEnd_toStartOf="@id/messageButton"
-        app:layout_constraintStart_toEndOf="@id/activeChannelIndicator"
-        app:layout_constraintTop_toBottomOf="@id/channelInfo" />
-
-    <!-- Audio indicator -->
-    <ImageView
-        android:id="@+id/audioIndicator"
-        android:layout_width="24dp"
-        android:layout_height="24dp"
-        android:layout_marginStart="8dp"
-        android:src="@android:drawable/ic_lock_silent_mode_off"
-        android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="@id/recentMessage"
-        app:layout_constraintStart_toEndOf="@id/recentMessage"
-        app:layout_constraintTop_toTopOf="@id/recentMessage" />
-
-    <ImageButton
-        android:id="@+id/messageButton"
-        android:layout_width="36dp"
-        android:layout_height="36dp"
-        android:background="@android:color/transparent"
-        android:contentDescription="Open Messages"
-        android:src="@drawable/ic_chat_bubble_outline"
-        android:tint="?android:attr/textColorSecondary"
-        android:alpha="0.7"
-        android:padding="6dp"
+        android:padding="16dp"
+        android:background="?attr/selectableItemBackground"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <!-- Active channel indicator -->
+        <View
+            android:id="@+id/activeChannelIndicator"
+            android:layout_width="4dp"
+            android:layout_height="0dp"
+            android:background="@color/green_500"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <!-- Channel name -->
+        <TextView
+            android:id="@+id/channelName"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp"
+            android:textColor="?android:attr/textColorPrimary"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:layout_marginTop="8dp"
+            app:layout_constraintEnd_toStartOf="@id/messageButton"
+            app:layout_constraintStart_toEndOf="@id/activeChannelIndicator"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <!-- Role and precision info -->
+        <TextView
+            android:id="@+id/channelInfo"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp"
+            android:textColor="?android:attr/textColorSecondary"
+            android:textSize="14sp"
+            android:layout_marginTop="2dp"
+            app:layout_constraintEnd_toStartOf="@id/messageButton"
+            app:layout_constraintStart_toEndOf="@id/activeChannelIndicator"
+            app:layout_constraintTop_toBottomOf="@id/channelName" />
+
+        <!-- Recent message -->
+        <TextView
+            android:id="@+id/recentMessage"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp"
+            android:layout_marginTop="4dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="?android:attr/textColorTertiary"
+            android:textSize="14sp"
+            app:layout_constraintEnd_toStartOf="@id/messageButton"
+            app:layout_constraintStart_toEndOf="@id/activeChannelIndicator"
+            app:layout_constraintTop_toBottomOf="@id/channelInfo" />
+
+        <!-- Audio indicator -->
+        <ImageView
+            android:id="@+id/audioIndicator"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_marginStart="8dp"
+            android:src="@android:drawable/ic_lock_silent_mode_off"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="@id/recentMessage"
+            app:layout_constraintStart_toEndOf="@id/recentMessage"
+            app:layout_constraintTop_toTopOf="@id/recentMessage" />
+
+        <ImageButton
+            android:id="@+id/messageButton"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="@android:color/transparent"
+            android:contentDescription="Open Messages"
+            android:src="@drawable/ic_chat_bubble_outline"
+            android:tint="?android:attr/textColorSecondary"
+            android:alpha="0.7"
+            android:padding="6dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/deleteButton"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <ImageButton
+            android:id="@+id/deleteButton"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="@android:color/transparent"
+            android:contentDescription="Delete Channel"
+            android:src="@android:drawable/ic_menu_delete"
+            android:tint="@android:color/white"
+            android:alpha="0.7"
+            android:padding="6dp"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout> 

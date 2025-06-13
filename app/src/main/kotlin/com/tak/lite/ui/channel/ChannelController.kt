@@ -12,6 +12,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.tak.lite.R
+import com.tak.lite.data.model.IChannel
 import com.tak.lite.di.MeshConnectionState
 import com.tak.lite.network.MeshPeer
 import com.tak.lite.network.MeshProtocolProvider
@@ -119,7 +120,10 @@ class ChannelController @Inject constructor(
                         channelViewModel.selectChannel(channel.id)
                         Log.d("ChannelController", "After selectChannel, settings value: ${channelViewModel.settings.value.selectedChannelId}")
                     },
-                    getUserName = { userId -> peerIdToNickname[userId] ?: userId },
+                    onDelete = { channel ->
+                        Log.d("ChannelController", "Deleting channel: ${channel.name} (${channel.id})")
+                        channelViewModel.deleteChannel(channel.id)
+                    },
                     getIsActive = { channel -> 
                         val isActive = channelViewModel.settings.value.selectedChannelId == channel.id
                         Log.d("ChannelController", "Checking if channel ${channel.name} (${channel.id}) is active. Current selectedChannelId: ${channelViewModel.settings.value.selectedChannelId}, isActive: $isActive")

@@ -1175,7 +1175,42 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     }
 
     override fun deleteChannel(channelId: String) {
-        TODO("Not yet implemented")
+        Log.d(TAG, "Deleting channel: $channelId")
+        
+        // Find the channel to delete
+        val channel = _channels.value.find { it.id == channelId }
+        if (channel == null) {
+            Log.e(TAG, "Cannot delete channel: Channel $channelId not found")
+            return
+        }
+
+        // Only allow deletion of secondary channels for MeshtasticChannel
+        if (channel is MeshtasticChannel) {
+            Log.e(TAG, "Cannot delete Meshtastic channels.")
+        }
+
+        // Remove channel from collection
+        val currentChannels = _channels.value.toMutableList()
+        currentChannels.removeIf { it.id == channelId }
+        _channels.value = currentChannels
+
+        // If this was the selected channel, select the primary channel instead
+        if (channelId == selectedChannelId) {
+            val primaryChannel = currentChannels.find { it is MeshtasticChannel && it.role == MeshtasticChannel.ChannelRole.PRIMARY }
+            if (primaryChannel != null) {
+                CoroutineScope(coroutineContext).launch {
+                    selectChannel(primaryChannel.id)
+                }
+            }
+        }
+
+        // Clean up any messages for this channel
+        val currentMessages = _channelMessages.value.toMutableMap()
+        currentMessages.remove(channelId)
+        _channelMessages.value = currentMessages
+        channelLastMessages.remove(channelId)
+
+        Log.d(TAG, "Channel $channelId deleted successfully")
     }
 
     private fun handleRoutingPacket(routing: com.geeksville.mesh.MeshProtos.Routing, fromId: String, requestId: Int) {
