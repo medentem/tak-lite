@@ -44,4 +44,18 @@ fi
 sed -i '' "s/versionCode $current_code/versionCode $new_code/" $FILE
 sed -i '' "s/versionName \"$current_name\"/versionName \"$new_name\"/" $FILE
 
-echo "Updated to versionCode $new_code, versionName $new_name" 
+echo "Updated to versionCode $new_code, versionName $new_name"
+
+# Git operations
+echo "Committing version changes..."
+git add $FILE
+git commit -m "Bump version to $new_name (code: $new_code)"
+
+echo "Creating tag v$new_name..."
+git tag -a "v$new_name" -m "Release version $new_name"
+
+echo "Pushing changes and tag..."
+git push
+git push origin "v$new_name"
+
+echo "Version bump complete!" 
