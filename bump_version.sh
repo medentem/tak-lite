@@ -51,11 +51,32 @@ echo "Committing version changes..."
 git add $FILE
 git commit -m "Bump version to $new_name (code: $new_code)"
 
+# Get the last tag
+last_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "initial")
+
+# Generate release notes
+echo "Generating release notes..."
+release_notes="## Changes since $last_tag\n\n"
+if [[ "$last_tag" == "initial" ]]; then
+    # If this is the first tag, get all commits
+    commits=$(git log --pretty=format:"- %s (%h)" --reverse)
+else
+    # Get commits between last tag and HEAD
+    commits=$(git log --pretty=format:"- %s (%h)" --reverse "$last_tag..HEAD")
+fi
+
+# Filter out version bump commits and add to release notes
+release_notes+=$(echo "$commits" | grep -v "Bump version to")
+
 echo "Creating tag v$new_name..."
-git tag -a "v$new_name" -m "Release version $new_name"
+git tag -a "v$new_name" -m "Release version $new_name
+
+$release_notes"
 
 echo "Pushing changes and tag..."
 git push
 git push origin "v$new_name"
 
-echo "Version bump complete!" 
+echo "Version bump complete!"
+echo -e "\nRelease notes for v$new_name:"
+echo -e "$release_notes" 
