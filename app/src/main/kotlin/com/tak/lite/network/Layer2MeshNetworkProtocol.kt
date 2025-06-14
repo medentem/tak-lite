@@ -123,6 +123,10 @@ class Layer2MeshNetworkProtocol @Inject constructor(
     
     private val _connectionState = MutableStateFlow<MeshConnectionState>(MeshConnectionState.Disconnected)
     override val connectionState: StateFlow<MeshConnectionState> = _connectionState.asStateFlow()
+
+    private val _localNodeIdOrNickname = MutableStateFlow<String?>(null)
+    override val localNodeIdOrNickname: StateFlow<String?>
+        get() = _localNodeIdOrNickname.asStateFlow()
     
     @Serializable
     data class CachedPeer(
@@ -994,9 +998,6 @@ class Layer2MeshNetworkProtocol @Inject constructor(
     override val requiresAppLocationSend: Boolean = true
 
     override val allowsChannelManagement: Boolean = true
-
-    override val localNodeIdOrNickname: String
-        get() = localNickname
 
     override suspend fun createChannel(name: String) {
         // No-op for Layer 2

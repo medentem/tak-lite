@@ -124,6 +124,7 @@ class AnnotationFragment : Fragment() {
             viewLifecycleOwner.lifecycleScope.launch {
                 meshNetworkViewModel.userLocation.collectLatest { location ->
                     annotationOverlayView.setUserLocation(location)
+                    annotationOverlayView.setDeviceLocation(location)
                 }
             }
             viewLifecycleOwner.lifecycleScope.launch {

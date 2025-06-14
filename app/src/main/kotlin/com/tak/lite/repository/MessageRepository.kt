@@ -81,7 +81,7 @@ class MessageRepository @Inject constructor(
 
     fun getCurrentUserShortName(): String? {
         val protocol = meshProtocolProvider.protocol.value
-        val nodeId = protocol.localNodeIdOrNickname
+        val nodeId = protocol.localNodeIdOrNickname.value
         if (protocol is com.tak.lite.network.MeshtasticBluetoothProtocol) {
             return protocol.getNodeInfoForPeer(nodeId ?: "")?.user?.shortName
         }

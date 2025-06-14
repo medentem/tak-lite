@@ -59,6 +59,13 @@ class AnnotationController(
         }
         annotationOverlayView.setProjection(mapLibreMap?.projection)
         annotationOverlayView.invalidate()
+
+        // Observe the connected node ID
+        fragment.viewLifecycleOwner.lifecycleScope.launch {
+            meshNetworkViewModel.selfId.collect { nodeId ->
+                annotationOverlayView.setConnectedNodeId(nodeId)
+            }
+        }
     }
 
     fun setupPoiLongPressListener() {

@@ -37,6 +37,9 @@ class MeshNetworkViewModel @Inject constructor(
     private val _packetSummaries = MutableStateFlow<List<PacketSummary>>(emptyList())
     val packetSummaries: StateFlow<List<PacketSummary>> = _packetSummaries.asStateFlow()
     
+    private val _selfId = MutableStateFlow<String?>(null)
+    val selfId: StateFlow<String?> = _selfId.asStateFlow()
+    
     init {
         viewModelScope.launch {
             combine(
@@ -55,7 +58,7 @@ class MeshNetworkViewModel @Inject constructor(
         }
         viewModelScope.launch {
             meshNetworkRepository.peerLocations.collect { locations ->
-                val selfId = meshNetworkRepository.selfId
+                val selfId = _selfId.value
                 val filtered = if (selfId != null) locations.filterKeys { it != selfId } else locations
                 Log.d("MeshNetworkViewModel", "Received peer locations: ${locations.size} total, ${filtered.size} after filtering, simulated=${filtered.keys.count { it.startsWith("sim_peer_") }}")
                 _peerLocations.value = filtered
@@ -67,6 +70,11 @@ class MeshNetworkViewModel @Inject constructor(
         viewModelScope.launch {
             meshNetworkRepository.userLocation.collect { location ->
                 Log.d("MeshNetworkViewModel", "User location updated: $location")
+            }
+        }
+        viewModelScope.launch {
+            meshNetworkRepository.selfId.collect { nodeId ->
+                _selfId.value = nodeId
             }
         }
     }

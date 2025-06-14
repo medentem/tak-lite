@@ -103,8 +103,9 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     override val configDownloadStep: StateFlow<ConfigDownloadStep> = _configDownloadStep.asStateFlow()
     override val requiresAppLocationSend: Boolean = false
     override val allowsChannelManagement: Boolean = false
-    override val localNodeIdOrNickname: String?
-        get() = connectedNodeId
+    private val _localNodeIdOrNickname = MutableStateFlow<String?>(null)
+    override val localNodeIdOrNickname: StateFlow<String?>
+        get() = _localNodeIdOrNickname.asStateFlow()
 
     // Add a callback for packet size errors
     var onPacketTooLarge: ((Int, Int) -> Unit)? = null // (actualSize, maxSize)
@@ -187,20 +188,35 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     }
 
     private fun cleanupState() {
-        peerLocations.clear()
-        _annotations.value = emptyList()
-        _peers.value = emptyList()
-        connectedNodeId = null
-        handshakeComplete.set(false)
-        _configDownloadStep.value = ConfigDownloadStep.NotStarted
-        nodeInfoMap.clear()
-        pendingMessages.clear()
-        queuedPackets.clear()
-        queueResponse.clear()
-        channelLastMessages.clear()
-        _channels.value = emptyList()
-        _channelMessages.value = emptyMap()
-        deviceManager.cleanup()
+        Log.d(TAG, "Cleaning up state after disconnection")
+        try {
+            // Stop any ongoing operations first
+            stopPacketQueue()
+            
+            // Clear all state
+            peerLocations.clear()
+            _annotations.value = emptyList()
+            _peers.value = emptyList()
+            connectedNodeId = null
+            handshakeComplete.set(false)
+            _configDownloadStep.value = ConfigDownloadStep.NotStarted
+            nodeInfoMap.clear()
+            pendingMessages.clear()
+            queuedPackets.clear()
+            queueResponse.clear()
+            channelLastMessages.clear()
+            _channels.value = emptyList()
+            _channelMessages.value = emptyMap()
+            
+            // Cleanup device manager last
+            deviceManager.cleanup()
+            
+            Log.d(TAG, "State cleanup completed successfully")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error during state cleanup", e)
+            // Even if cleanup fails, ensure we're in a disconnected state
+            _connectionState.value = MeshConnectionState.Disconnected
+        }
     }
 
     /**
@@ -573,6 +589,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                 com.geeksville.mesh.MeshProtos.FromRadio.PayloadVariantCase.MY_INFO -> {
                     val myInfo = fromRadio.myInfo
                     connectedNodeId = myInfo.myNodeNum.toString()
+                    _localNodeIdOrNickname.value = connectedNodeId
                     Log.d(TAG, "Received MyNodeInfo, nodeId: $connectedNodeId")
                     _configDownloadStep.value = ConfigDownloadStep.DownloadingMyInfo
                 }
@@ -1297,13 +1314,26 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     }
 
     private fun stopPacketQueue() {
-        if (queueJob?.isActive == true) {
-            Log.i(TAG, "Stopping packet queue job")
+        Log.d(TAG, "Stopping packet queue")
+        try {
+            // Cancel the queue job
             queueJob?.cancel()
             queueJob = null
-            queuedPackets.clear()
-            queueResponse.entries.lastOrNull { !it.value.isCompleted }?.value?.complete(false)
+            
+            // Complete any pending responses with failure
+            queueResponse.forEach { (packetId, deferred) ->
+                if (!deferred.isCompleted) {
+                    deferred.complete(false)
+                }
+            }
             queueResponse.clear()
+            
+            // Clear the queue
+            queuedPackets.clear()
+            
+            Log.d(TAG, "Packet queue stopped successfully")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping packet queue", e)
         }
     }
 } 

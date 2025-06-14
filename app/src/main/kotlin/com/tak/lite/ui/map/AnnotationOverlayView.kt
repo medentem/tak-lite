@@ -84,11 +84,21 @@ class AnnotationOverlayView @JvmOverloads constructor(
     private var longPressLineDownPos: PointF? = null
     private var longPressPeerCandidate: String? = null
     private var longPressPeerDownPos: PointF? = null
+    private var peerTapDownTime: Long? = null
+    private var deviceDotTapDownTime: Long? = null
+    private var isDeviceDotCandidate: Boolean = false
 
     // --- Peer Location Dot Support ---
     private var peerLocations: Map<String, LatLng> = emptyMap()
     fun updatePeerLocations(locations: Map<String, LatLng>) {
         this.peerLocations = locations
+        invalidate()
+    }
+
+    // Store the connected node ID
+    private var connectedNodeId: String? = null
+    fun setConnectedNodeId(nodeId: String?) {
+        this.connectedNodeId = nodeId
         invalidate()
     }
 
@@ -124,8 +134,8 @@ class AnnotationOverlayView @JvmOverloads constructor(
     private var peerPopoverPeerId: String? = null
     private var peerPopoverNodeInfo: MeshProtos.NodeInfo? = null
     private var peerPopoverDismissHandler: Handler? = null
-    private val PEER_POPOVER_DISPLAY_DURATION = 8000L
-    
+    private val PEER_POPOVER_DISPLAY_DURATION = 5000L
+
     private var userLocation: LatLng? = null
     private var deviceLocation: LatLng? = null
     private var phoneLocation: LatLng? = null
@@ -838,6 +848,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
                         // --- Clear PEER handler state ---
                         longPressPeerCandidate = null
                         longPressPeerDownPos = null
+                        isDeviceDotCandidate = false
                         return true // Intercept only if touching a POI
                     }
                     // Check for line long press
@@ -863,6 +874,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
                         // --- Clear PEER handler state ---
                         longPressPeerCandidate = null
                         longPressPeerDownPos = null
+                        isDeviceDotCandidate = false
                         return true // Intercept only if touching a line
                     }
                     // Check for peer dot tap/long press
@@ -871,6 +883,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
                         android.util.Log.d("AnnotationOverlayView", "ACTION_DOWN on PEER: event.x=${event.x}, event.y=${event.y}")
                         longPressPeerCandidate = peerId
                         longPressPeerDownPos = PointF(event.x, event.y)
+                        peerTapDownTime = System.currentTimeMillis()
                         android.util.Log.d("AnnotationOverlayView", "Set longPressPeerDownPos: $longPressPeerDownPos for PEER $peerId")
                         longPressHandler = Handler(Looper.getMainLooper())
                         longPressRunnable = Runnable {
@@ -888,7 +901,23 @@ class AnnotationOverlayView @JvmOverloads constructor(
                         // --- Clear LINE handler state ---
                         longPressLineCandidate = null
                         longPressLineDownPos = null
+                        isDeviceDotCandidate = false
                         return true // Intercept only if touching a peer
+                    }
+                    // Check for device location dot tap
+                    if (deviceLocation != null) {
+                        val devicePt = projection?.toScreenLocation(deviceLocation!!)
+                        if (devicePt != null) {
+                            val dx = event.x - devicePt.x
+                            val dy = event.y - devicePt.y
+                            if (hypot(dx.toDouble(), dy.toDouble()) < 40) {
+                                deviceDotTapDownTime = System.currentTimeMillis()
+                                isDeviceDotCandidate = true
+                                quickTapDownTime = System.currentTimeMillis()
+                                quickTapDownPos = PointF(event.x, event.y)
+                                return true // Intercept if touching device dot
+                            }
+                        }
                     }
                     // --- Global quick tap for popover dismiss ---
                     globalQuickTapDownTime = System.currentTimeMillis()
@@ -900,6 +929,16 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     android.util.Log.d("AnnotationOverlayView", "Cancelling long-press handler (ACTION_UP)")
                     longPressHandler?.removeCallbacks(longPressRunnable!!)
                     // Quick tap detection
+                    if (isDeviceDotCandidate) {
+                        val upTime = System.currentTimeMillis()
+                        val upPos = PointF(event.x, event.y)
+                        val duration = upTime - (deviceDotTapDownTime ?: 0L)
+                        val moved = quickTapDownPos?.let { hypot((upPos.x - it.x).toDouble(), (upPos.y - it.y).toDouble()) > 40 } ?: false
+                        if (duration < 300 && !moved) {
+                            // Quick tap detected
+                            // showDeviceDotPopover
+                        }
+                    }
                     quickTapCandidate?.let { candidate ->
                         val upTime = System.currentTimeMillis()
                         val upPos = PointF(event.x, event.y)
@@ -908,6 +947,17 @@ class AnnotationOverlayView @JvmOverloads constructor(
                         if (duration < 300 && !moved) {
                             // Quick tap detected
                             showPoiLabel(candidate.id)
+                        }
+                    }
+                    // Handle peer dot tap
+                    longPressPeerCandidate?.let { peerId ->
+                        val upTime = System.currentTimeMillis()
+                        val upPos = PointF(event.x, event.y)
+                        val duration = upTime - (peerTapDownTime ?: 0L)
+                        val moved = longPressPeerDownPos?.let { hypot((upPos.x - it.x).toDouble(), (upPos.y - it.y).toDouble()) > 40 } ?: false
+                        if (duration < 300 && !moved) {
+                            // Quick tap detected on peer dot
+                            peerDotTapListener?.onPeerDotTapped(peerId, upPos)
                         }
                     }
                     // --- Global quick tap for popover dismiss ---
@@ -926,6 +976,9 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     quickTapCandidate = null
                     quickTapDownTime = null
                     quickTapDownPos = null
+                    peerTapDownTime = null
+                    deviceDotTapDownTime = null
+                    isDeviceDotCandidate = false
                 }
                 MotionEvent.ACTION_CANCEL -> {
                     android.util.Log.d("AnnotationOverlayView", "ACTION_CANCEL: event.x=${event.x}, event.y=${event.y}")
@@ -939,6 +992,8 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     quickTapDownPos = null
                     globalQuickTapDownTime = null
                     globalQuickTapDownPos = null
+                    deviceDotTapDownTime = null
+                    isDeviceDotCandidate = false
                 }
                 MotionEvent.ACTION_MOVE -> {
                     android.util.Log.d("AnnotationOverlayView", "ACTION_MOVE: event.x=${event.x}, event.y=${event.y}")
@@ -1259,6 +1314,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
                 return peerId
             }
         }
+
         return null
     }
 
@@ -1280,17 +1336,25 @@ class AnnotationOverlayView @JvmOverloads constructor(
         val lines = mutableListOf<String>()
         val user = nodeInfo?.user
         val shortName = user?.shortName ?: "(unknown)"
-        // val longName = user?.longName ?: ""
-        if (shortName.isNotBlank()) lines.add(shortName)
-        // if (longName.isNotBlank() && longName != shortName) lines.add(longName)
+        if (shortName.isNotBlank()) {
+            // Add "(Your Device)" suffix if this is the connected node
+            val displayName = if (peerId == connectedNodeId) "$shortName (Your Device)" else shortName
+            lines.add(displayName)
+        }
+
         val coords = peerLocations[peerId]
         coords?.let { lines.add(String.format("%.5f, %.5f", it.latitude, it.longitude)) }
+
+        // Prefer phone location because it updates more frequently
+        val bestLocation = phoneLocation ?: userLocation
+
         // Add distance from user location if available
-        if (coords != null && userLocation != null) {
-            val distMeters = haversine(coords.latitude, coords.longitude, userLocation!!.latitude, userLocation!!.longitude)
+        if (coords != null && bestLocation != null) {
+            val distMeters = haversine(coords.latitude, coords.longitude, bestLocation.latitude, bestLocation.longitude)
             val distMiles = distMeters / 1609.344
             lines.add(String.format("%.1f mi away", distMiles))
         }
+
         val lastSeen = nodeInfo?.lastHeard?.toLong() ?: 0L
         if (lastSeen > 0) {
             val now = System.currentTimeMillis() / 1000
@@ -1366,31 +1430,6 @@ class AnnotationOverlayView @JvmOverloads constructor(
         }
         canvas.drawCircle(point.x, point.y, borderRadius, borderPaint)
         // Draw blue fill
-        val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#2196F3") // Blue
-            style = Paint.Style.FILL
-        }
-        canvas.drawCircle(point.x, point.y, dotRadius, fillPaint)
-    }
-
-    private fun drawPhoneLocationDot(canvas: Canvas, point: PointF) {
-        // Draw as a solid blue dot (or use existing user dot logic)
-        val dotRadius = 19f
-        val borderRadius = 22f
-        val shadowRadius = 25f
-        // Draw shadow
-        val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#33000000")
-            style = Paint.Style.FILL
-        }
-        canvas.drawCircle(point.x, point.y + 4f, shadowRadius, shadowPaint)
-        // Draw white border
-        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.WHITE
-            style = Paint.Style.FILL
-        }
-        canvas.drawCircle(point.x, point.y, borderRadius, borderPaint)
-        // Draw solid blue dot
         val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#2196F3") // Blue
             style = Paint.Style.FILL

@@ -272,7 +272,7 @@ class ChannelController @Inject constructor(
         peerCollectionJob = lifecycleScope.launch {
             meshProtocolProvider.protocol.value.peers.collectLatest { peers ->
                 // Filter out our own node and sort peers by last seen time
-                val selfId = meshProtocolProvider.protocol.value.localNodeIdOrNickname
+                val selfId = meshProtocolProvider.protocol.value.localNodeIdOrNickname.value
                 val filteredPeers = peers.filter { it.id != selfId }
                 val sortedPeers = filteredPeers.sortedByDescending { it.lastSeen }
                 peerAdapter?.submitList(sortedPeers)

@@ -61,6 +61,9 @@ class MeshNetworkService @Inject constructor(
     private val _channels = MutableStateFlow<List<IChannel>>(emptyList())
     val channels: StateFlow<List<IChannel>> get() = _channels.asStateFlow()
 
+    private val _selfId = MutableStateFlow<String?>(null)
+    val selfId: StateFlow<String?> = _selfId.asStateFlow()
+
     suspend fun createChannel(name: String) {
         meshProtocol.createChannel(name)
     }
@@ -101,6 +104,12 @@ class MeshNetworkService @Inject constructor(
                             is MeshConnectionState.Connecting -> MeshNetworkState.Connecting
                             is MeshConnectionState.Error -> MeshNetworkState.Error(state.message)
                         }
+                    }
+                }
+                // Observe localNodeIdOrNickname changes
+                launch {
+                    newProtocol.localNodeIdOrNickname.collect { nodeId ->
+                        _selfId.value = nodeId
                     }
                 }
             }

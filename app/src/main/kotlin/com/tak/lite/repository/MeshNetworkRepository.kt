@@ -7,6 +7,13 @@ import com.tak.lite.network.MeshPeer
 import com.tak.lite.network.MeshProtocolProvider
 import com.tak.lite.network.MeshtasticBluetoothProtocol
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import org.maplibre.android.geometry.LatLng
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -16,6 +23,8 @@ class MeshNetworkRepository @Inject constructor(
     private val meshNetworkService: MeshNetworkService,
     private val meshProtocolProvider: MeshProtocolProvider
 ) {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
     val networkState: Flow<MeshNetworkState>
         get() = meshNetworkService.networkState
     
@@ -34,6 +43,9 @@ class MeshNetworkRepository @Inject constructor(
     val packetSummaries: Flow<List<PacketSummary>>
         get() = meshNetworkService.packetSummaries
     
+    val selfId: StateFlow<String?> get() = meshNetworkService.selfId
+
+    
     fun sendLocationUpdate(latitude: Double, longitude: Double) {
         meshNetworkService.sendLocationUpdate(latitude, longitude)
     }
@@ -49,9 +61,6 @@ class MeshNetworkRepository @Inject constructor(
     fun setLocalNickname(nickname: String) {
         meshNetworkService.setLocalNickname(nickname)
     }
-    
-    val selfId: String?
-        get() = meshProtocolProvider.protocol.value.localNodeIdOrNickname
     
     suspend fun getNodeInfo(peerId: String): com.geeksville.mesh.MeshProtos.NodeInfo? {
         val protocol = meshProtocolProvider.protocol.value
