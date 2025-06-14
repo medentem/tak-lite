@@ -922,7 +922,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         
         val meshtasticChannel = MeshtasticChannel(
             id = channelId,
-            name = if (channel.settings.name.isNullOrEmpty() && channel.role == com.geeksville.mesh.ChannelProtos.Channel.Role.PRIMARY) {
+            name = if ((channel.settings.name.isNullOrEmpty() && channel.role == com.geeksville.mesh.ChannelProtos.Channel.Role.PRIMARY) || channel.settings.name == "LongFast") {
                 "Default (Public)"
             } else {
                 channel.settings.name
