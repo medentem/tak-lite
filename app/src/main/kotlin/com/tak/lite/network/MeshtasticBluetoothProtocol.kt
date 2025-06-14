@@ -912,7 +912,8 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     )
 
     private fun handleChannelUpdate(channel: com.geeksville.mesh.ChannelProtos.Channel) {
-        if (channel.settings.name.isNullOrEmpty()) {
+        // Ignore a non-primary channel without a name. Primary channel without a name is just LongFast
+        if (channel.settings.name.isNullOrEmpty() && channel.role != com.geeksville.mesh.ChannelProtos.Channel.Role.PRIMARY) {
             Log.d(TAG, "Ignoring channel update with null or empty name")
             return
         }
@@ -921,7 +922,11 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         
         val meshtasticChannel = MeshtasticChannel(
             id = channelId,
-            name = channel.settings.name,
+            name = if (channel.settings.name.isNullOrEmpty() && channel.role == com.geeksville.mesh.ChannelProtos.Channel.Role.PRIMARY) {
+                "Default (Public)"
+            } else {
+                channel.settings.name
+            },
             index = channel.index,
             isDefault = channel.index == 0,
             members = emptyList(), // TODO: Track members based on node info

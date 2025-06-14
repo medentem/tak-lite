@@ -619,7 +619,18 @@ class BluetoothDeviceManager(private val context: Context) {
     fun disconnect() {
         userInitiatedDisconnect = true
         resetReconnectState()
-        // No need to call disconnect() here as it's handled in resetReconnectState()
+        // Explicitly close the GATT connection
+        bluetoothGatt?.let { gatt ->
+            try {
+                gatt.disconnect()
+                gatt.close()
+            } catch (e: Exception) {
+                Log.e("BluetoothDeviceManager", "Error during disconnect: ${e.message}")
+            }
+        }
+        bluetoothGatt = null
+        gattCallback = null
+        _connectionState.value = ConnectionState.Disconnected
     }
 
     // Robust reconnect logic

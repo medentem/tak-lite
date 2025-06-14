@@ -70,6 +70,32 @@
                 android:paddingTop="8dp"
                 android:paddingBottom="8dp" />
 
+            <!-- Hidden Peers Divider -->
+            <LinearLayout
+                android:id="@+id/hiddenPeersDivider"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true">
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="?android:attr/listDivider"
+                    android:layout_marginBottom="8dp"/>
+
+                <TextView
+                    android:id="@+id/hiddenPeersText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textColor="?android:attr/textColorSecondary"
+                    android:textSize="14sp"
+                    android:gravity="center"/>
+            </LinearLayout>
+
         </LinearLayout>
 
         <!-- Disabled State Overlay -->

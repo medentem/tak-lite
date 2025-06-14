@@ -42,6 +42,7 @@ class ChannelController @Inject constructor(
     private var currentOverlay: View? = null
     private var channelAdapter: ChannelAdapter? = null
     private var peerAdapter: PeerAdapter? = null
+    private var showOlderPeers = false
 
     fun setupChannelButton(peerIdToNickname: Map<String, String?>) {
         val channelButton = activity.findViewById<ImageButton>(R.id.groupAudioButton)
@@ -266,6 +267,12 @@ class ChannelController @Inject constructor(
         )
         peerList.layoutManager = LinearLayoutManager(activity)
         peerList.adapter = peerAdapter
+
+        // Setup divider click listener
+        peerAdapter?.setOnDividerClickListener {
+            showOlderPeers = !showOlderPeers
+            peerAdapter?.toggleOlderPeers()
+        }
 
         // Observe peers
         peerCollectionJob?.cancel()
