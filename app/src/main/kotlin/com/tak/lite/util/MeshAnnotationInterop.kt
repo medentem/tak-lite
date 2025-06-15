@@ -70,6 +70,7 @@ object MeshAnnotationInterop {
                     "s" to shapeShort
                 )
                 annotation.expirationTime?.let { map["e"] = it }
+                annotation.label?.let { map["l"] = it }
                 kotlinx.serialization.json.Json.encodeToString(kotlinx.serialization.json.JsonObject(map.mapValues { (k, v) ->
                     when (v) {
                         is String -> kotlinx.serialization.json.JsonPrimitive(v)
@@ -297,6 +298,7 @@ object MeshAnnotationInterop {
                             else -> PointShape.CIRCLE
                         }
                         val expirationTime = json["e"]?.jsonPrimitive?.longOrNull
+                        val label = json["l"]?.jsonPrimitive?.content
                         MapAnnotation.PointOfInterest(
                             id = id,
                             creatorId = creatorId,
@@ -304,6 +306,7 @@ object MeshAnnotationInterop {
                             color = color,
                             position = com.tak.lite.model.LatLngSerializable(lat, lon),
                             shape = shape,
+                            label = label,
                             expirationTime = expirationTime
                         )
                     }

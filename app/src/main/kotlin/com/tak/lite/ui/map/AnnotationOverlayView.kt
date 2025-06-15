@@ -1256,7 +1256,14 @@ class AnnotationOverlayView @JvmOverloads constructor(
         } else {
             ""
         }
-        val lines = listOf(ageStr, coordStr, distStr).filter { it.isNotBlank() }
+        // Add custom label if it exists
+        val customLabel = annotation.label
+        val lines = mutableListOf<String>()
+        if (customLabel != null) {
+            lines.add(customLabel)
+        }
+        lines.addAll(listOf(ageStr, coordStr, distStr).filter { it.isNotBlank() })
+
         // --- Draw pill background and text ---
         val textSize = 36f
         val padding = 24f

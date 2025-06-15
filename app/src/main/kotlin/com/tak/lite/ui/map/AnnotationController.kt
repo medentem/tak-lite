@@ -111,6 +111,7 @@ class AnnotationController(
             FanMenuView.Option.Color(AnnotationColor.RED),
             FanMenuView.Option.Color(AnnotationColor.BLACK),
             FanMenuView.Option.Timer(poiId),
+            FanMenuView.Option.Label(poiId),
             FanMenuView.Option.Delete(poiId)
         )
         val screenSize = PointF(binding.root.width.toFloat(), binding.root.height.toFloat())
@@ -121,6 +122,7 @@ class AnnotationController(
                     is FanMenuView.Option.Shape -> updatePoiShape(poi, option.shape)
                     is FanMenuView.Option.Color -> updatePoiColor(poiId, option.color)
                     is FanMenuView.Option.Timer -> setAnnotationExpiration(poiId)
+                    is FanMenuView.Option.Label -> showLabelEditDialog(poiId, poi.label)
                     is FanMenuView.Option.Delete -> deletePoi(option.id)
                     else -> {}
                 }
@@ -130,7 +132,7 @@ class AnnotationController(
                 Log.d("AnnotationController", "fanMenuView.onMenuDismissed for POI")
                 fanMenuView.visibility = View.GONE
             }
-        }, screenSize, org.maplibre.android.geometry.LatLng(poi.position.lt, poi.position.lng))
+        }, screenSize, LatLng(poi.position.lt, poi.position.lng))
         Log.d("AnnotationController", "Calling fanMenuView.bringToFront for POI")
         fanMenuView.bringToFront()
         fanMenuView.visibility = View.VISIBLE
@@ -168,7 +170,7 @@ class AnnotationController(
         )
         val screenSize = PointF(binding.root.width.toFloat(), binding.root.height.toFloat())
         Log.d("AnnotationController", "Calling fanMenuView.showAt for LINE with options: $options at $center")
-        val lineLatLng = line.points.firstOrNull()?.let { org.maplibre.android.geometry.LatLng(it.lt, it.lng) }
+        val lineLatLng = line.points.firstOrNull()?.let { LatLng(it.lt, it.lng) }
         fanMenuView.showAt(center, options, object : FanMenuView.OnOptionSelectedListener {
             override fun onOptionSelected(option: FanMenuView.Option): Boolean {
                 when (option) {
@@ -280,7 +282,7 @@ class AnnotationController(
             FanMenuView.Option.Shape(PointShape.TRIANGLE)
         )
         val screenSize = PointF(binding.root.width.toFloat(), binding.root.height.toFloat())
-        val menuLatLng = pendingPoiLatLng?.let { org.maplibre.android.geometry.LatLng(it.latitude, it.longitude) }
+        val menuLatLng = pendingPoiLatLng?.let { LatLng(it.latitude, it.longitude) }
         fanMenuView.showAt(center, shapeOptions, object : FanMenuView.OnOptionSelectedListener {
             override fun onOptionSelected(option: FanMenuView.Option): Boolean {
                 if (option is FanMenuView.Option.Shape) {
@@ -306,7 +308,7 @@ class AnnotationController(
             FanMenuView.Option.Color(AnnotationColor.BLACK)
         )
         val screenSize = PointF(binding.root.width.toFloat(), binding.root.height.toFloat())
-        val menuLatLng = pendingPoiLatLng?.let { org.maplibre.android.geometry.LatLng(it.latitude, it.longitude) }
+        val menuLatLng = pendingPoiLatLng?.let { LatLng(it.latitude, it.longitude) }
         fanMenuView.showAt(center, colorOptions, object : FanMenuView.OnOptionSelectedListener {
             override fun onOptionSelected(option: FanMenuView.Option): Boolean {
                 if (option is FanMenuView.Option.Color) {
@@ -441,7 +443,7 @@ class AnnotationController(
         )
         val screenSize = PointF(binding.root.width.toFloat(), binding.root.height.toFloat())
         Log.d("AnnotationController", "Calling fanMenuView.showAt for PEER with options: $options at $center")
-        val peerLatLng = meshNetworkViewModel.peerLocations.value[peerId]?.let { org.maplibre.android.geometry.LatLng(it.latitude, it.longitude) }
+        val peerLatLng = meshNetworkViewModel.peerLocations.value[peerId]?.let { LatLng(it.latitude, it.longitude) }
         fanMenuView.showAt(center, options, object : FanMenuView.OnOptionSelectedListener {
             override fun onOptionSelected(option: FanMenuView.Option): Boolean {
                 when (option) {
@@ -533,5 +535,23 @@ class AnnotationController(
             Log.e("AnnotationController", "handleDrawLineToPeer: Cannot draw line: $errorMsg")
             Toast.makeText(fragment.requireContext(), "Cannot draw line: $errorMsg", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun showLabelEditDialog(poiId: String, currentLabel: String?) {
+        val context = fragment.requireContext()
+        val editText = android.widget.EditText(context).apply {
+            setText(currentLabel)
+            filters = arrayOf(android.text.InputFilter.LengthFilter(50)) // Limit label length
+        }
+        
+        androidx.appcompat.app.AlertDialog.Builder(context)
+            .setTitle("Edit Label")
+            .setView(editText)
+            .setPositiveButton("OK") { _, _ ->
+                val newLabel = editText.text.toString().takeIf { it.isNotBlank() }
+                annotationViewModel.updatePointOfInterest(poiId, newLabel = newLabel)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 }

@@ -81,12 +81,13 @@ class AnnotationViewModel @Inject constructor(
         }
     }
     
-    fun updatePointOfInterest(id: String, newShape: PointShape? = null, newColor: AnnotationColor? = null) {
+    fun updatePointOfInterest(id: String, newShape: PointShape? = null, newColor: AnnotationColor? = null, newLabel: String? = null) {
         viewModelScope.launch {
             val current = annotationRepository.annotations.value.filterIsInstance<MapAnnotation.PointOfInterest>().find { it.id == id } ?: return@launch
             val updated = current.copy(
                 shape = newShape ?: current.shape,
                 color = newColor ?: current.color,
+                label = newLabel ?: current.label,
                 timestamp = System.currentTimeMillis()
             )
             annotationRepository.addAnnotation(updated)

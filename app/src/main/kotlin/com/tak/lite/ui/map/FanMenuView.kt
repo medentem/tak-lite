@@ -35,6 +35,7 @@ class FanMenuView @JvmOverloads constructor(
         data class LocationRequest(val id: String) : Option()
         data class Info(val id: String) : Option()
         data class DrawLine(val id: String) : Option()
+        data class Label(val id: String) : Option()
     }
 
     interface OnOptionSelectedListener {
@@ -212,6 +213,7 @@ class FanMenuView @JvmOverloads constructor(
                     is Option.LocationRequest -> drawLocationRequestIcon(canvas, x, y, isSelected, usedIconRadius)
                     is Option.Info -> drawInfoIcon(canvas, x, y, isSelected, usedIconRadius)
                     is Option.DrawLine -> drawDrawLineIcon(canvas, x, y, isSelected, usedIconRadius)
+                    is Option.Label -> drawLabelIcon(canvas, x, y, isSelected, usedIconRadius)
                 }
             }
         }
@@ -594,6 +596,28 @@ class FanMenuView @JvmOverloads constructor(
         )
         icon?.setTint(if (highlight) Color.BLACK else Color.DKGRAY)
         icon?.draw(canvas)
+    }
+
+    private fun drawLabelIcon(canvas: Canvas, x: Float, y: Float, highlight: Boolean, iconRadius: Float) {
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (highlight) Color.YELLOW else Color.WHITE
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(x, y, iconRadius, bgPaint)
+        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (highlight) Color.WHITE else Color.DKGRAY
+            style = Paint.Style.STROKE
+            strokeWidth = 2.5f
+        }
+        canvas.drawCircle(x, y, iconRadius, borderPaint)
+        
+        // Draw label icon
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (highlight) Color.BLACK else Color.DKGRAY
+            textSize = iconRadius * 0.8f
+            textAlign = Paint.Align.CENTER
+        }
+        canvas.drawText("Aa", x, y + textPaint.textSize/3, textPaint)
     }
 
     // Returns Triple<ringIdx, idxInRing, Ring>

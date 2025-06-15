@@ -7,7 +7,6 @@ import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PacketSummary
 import com.tak.lite.network.MeshPeer
 import com.tak.lite.network.MeshtasticBluetoothProtocol
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.maplibre.android.geometry.LatLng
 
@@ -23,6 +22,12 @@ interface MeshProtocol {
     val peers: StateFlow<List<MeshPeer>>
     val channels: StateFlow<List<IChannel>>
     val connectionState: StateFlow<MeshConnectionState>
+    val localNodeIdOrNickname: StateFlow<String?>
+    val packetSummaries: StateFlow<List<PacketSummary>>
+    val configDownloadStep: StateFlow<MeshtasticBluetoothProtocol.ConfigDownloadStep>? get() = null
+
+    val requiresAppLocationSend: Boolean
+    val allowsChannelManagement: Boolean
     
     // Channel operations
     suspend fun createChannel(name: String)
@@ -53,10 +58,4 @@ interface MeshProtocol {
     fun sendDirectMessage(peerId: String, content: String)
     fun getPeerPublicKey(peerId: String): ByteArray?
     fun getOrCreateDirectMessageChannel(peerId: String): DirectMessageChannel
-
-    val configDownloadStep: StateFlow<MeshtasticBluetoothProtocol.ConfigDownloadStep>? get() = null
-    val requiresAppLocationSend: Boolean
-    val allowsChannelManagement: Boolean
-    val localNodeIdOrNickname: StateFlow<String?>
-    val packetSummaries: StateFlow<List<PacketSummary>>
 }

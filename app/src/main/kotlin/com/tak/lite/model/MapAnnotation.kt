@@ -21,6 +21,7 @@ sealed class MapAnnotation {
         override val color: AnnotationColor,
         val position: LatLngSerializable,
         val shape: PointShape,
+        val label: String? = null,
         override val expirationTime: Long? = null
     ) : MapAnnotation()
     
