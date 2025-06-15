@@ -483,8 +483,20 @@ class AnnotationController(
     }
 
     private fun handleLocationRequest(peerId: String) {
-        // TODO: Implement location request
-        Toast.makeText(fragment.requireContext(), "Coming soon! Requesting location from $peerId", Toast.LENGTH_SHORT).show()
+        fragment.viewLifecycleOwner.lifecycleScope.launch {
+            val nodeInfo = meshNetworkViewModel.getNodeInfo(peerId)
+            val peerName = nodeInfo?.user?.shortName ?: nodeInfo?.user?.longName ?: peerId
+            Toast.makeText(fragment.requireContext(), "Waiting for location update from $peerName", Toast.LENGTH_LONG).show()
+            meshNetworkViewModel.requestPeerLocation(peerId, onLocationReceived = { timeout ->
+                fragment.viewLifecycleOwner.lifecycleScope.launch {
+                    if (timeout) {
+                        Toast.makeText(fragment.requireContext(), "$peerName did not respond", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(fragment.requireContext(), "Received updated location for $peerName", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            })
+        }
     }
 
     private fun handleViewInfo(peerId: String) {

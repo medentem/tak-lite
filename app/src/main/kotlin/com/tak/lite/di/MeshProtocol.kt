@@ -47,6 +47,7 @@ interface MeshProtocol {
     fun sendBulkAnnotationDeletions(ids: List<String>)
     fun sendTextMessage(channelId: String, content: String)
     fun getChannelName(channelId: String): String?
+    fun requestPeerLocation(peerId: String, onPeerLocationReceived: (timeout: Boolean) -> Unit)
 
     // Direct message operations
     fun sendDirectMessage(peerId: String, content: String)

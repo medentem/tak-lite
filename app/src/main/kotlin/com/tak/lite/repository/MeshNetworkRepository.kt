@@ -49,6 +49,10 @@ class MeshNetworkRepository @Inject constructor(
     fun sendLocationUpdate(latitude: Double, longitude: Double) {
         meshNetworkService.sendLocationUpdate(latitude, longitude)
     }
+
+    fun requestPeerLocation(peerId: String, onLocationReceived: (timeout: Boolean) -> Unit) {
+        meshNetworkService.requestPeerLocation(peerId, onLocationReceived)
+    }
     
     fun sendAudioData(audioData: ByteArray) {
         meshNetworkService.sendAudioData(audioData)

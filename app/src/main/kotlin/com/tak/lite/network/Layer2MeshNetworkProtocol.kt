@@ -983,6 +983,13 @@ class Layer2MeshNetworkProtocol @Inject constructor(
         TODO("Not yet implemented")
     }
 
+    override fun requestPeerLocation(
+        peerId: String,
+        onPeerLocationReceived: (timeout: Boolean) -> Unit
+    ) {
+        TODO("Not yet implemented")
+    }
+
     override fun sendDirectMessage(peerId: String, content: String) {
         TODO("Not yet implemented")
     }

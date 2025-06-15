@@ -39,6 +39,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.delay
 
 class MeshtasticBluetoothProtocol @Inject constructor(
     private val deviceManager: BluetoothDeviceManager,
@@ -130,6 +131,15 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     // Add request ID counter for message tracking
     private val pendingMessages = ConcurrentHashMap<Int, ChannelMessage>()
     private var lastSentMessage: ChannelMessage? = null
+
+    // Add location request tracking
+    private data class LocationRequest(
+        val peerId: String,
+        val callback: (timeout: Boolean) -> Unit,
+        val timestamp: Long = System.currentTimeMillis()
+    )
+    private val pendingLocationRequests = ConcurrentHashMap<Int, LocationRequest>()
+    private val LOCATION_REQUEST_TIMEOUT_MS = 60_000L // 60 seconds
 
     // Add queue management structures
     private val queuedPackets = ConcurrentLinkedQueue<MeshProtos.MeshPacket>()
@@ -384,6 +394,48 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         userLocationCallback = callback
     }
 
+    override fun requestPeerLocation(
+        peerId: String,
+        onPeerLocationReceived: (timeout: Boolean) -> Unit
+    ) {
+        Log.d(TAG, "Sending location request to peer $peerId")
+        // Get the peer's node info to check PKI status
+        val peerNodeInfo = nodeInfoMap[peerId]
+        if (peerNodeInfo == null) {
+            Log.e(TAG, "Cannot send direct message: No node info for peer $peerId")
+            return
+        }
+
+        // Convert peerId to unsigned int for the packet
+        val peerIdInt = peerId.toLong().toInt() // This preserves the unsigned value
+        // Create the mesh packet using the new helper method
+        val packet = newMeshPacketTo(peerIdInt).buildMeshPacket(
+            channel = peerNodeInfo.channel,
+            priority = MeshProtos.MeshPacket.Priority.BACKGROUND
+        ) {
+            portnum = com.geeksville.mesh.Portnums.PortNum.POSITION_APP
+            wantResponse = true
+        }
+
+        // Store the callback with the packet ID
+        pendingLocationRequests[packet.id] = LocationRequest(peerId, onPeerLocationReceived)
+
+        // Queue the packet
+        queuePacket(packet)
+
+        // Start a timeout coroutine
+        CoroutineScope(coroutineContext).launch {
+            delay(LOCATION_REQUEST_TIMEOUT_MS)
+            // Check if the request is still pending
+            val request = pendingLocationRequests[packet.id]
+            if (request != null) {
+                Log.d(TAG, "Location request to peer $peerId timed out")
+                request.callback(true) // Call with timeout = true
+                pendingLocationRequests.remove(packet.id)
+            }
+        }
+    }
+
     override fun sendLocationUpdate(latitude: Double, longitude: Double) {
         // Only send location data, not an annotation
         val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
@@ -480,7 +532,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     }
 
     // Call this when you receive a packet from the device
-    fun handleIncomingPacket(data: ByteArray) {
+    private fun handleIncomingPacket(data: ByteArray) {
         Log.d(TAG, "handleIncomingPacket called with data: "+
             "${data.size} bytes: ${data.joinToString(", ", limit = 16)}")
         if (data.size > 252) {
@@ -654,7 +706,6 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                         val peerNickname = nodeInfoMap[peerId]?.user?.shortName
                             ?.takeIf { it.isNotBlank() }
                             ?: nodeInfoMap[peerId]?.user?.longName
-                            ?.takeIf { it.isNotBlank() }
                             ?: peersMap[peerId]?.nickname
                         val packetTypeString = when (fromRadio.payloadVariantCase) {
                             com.geeksville.mesh.MeshProtos.FromRadio.PayloadVariantCase.PACKET -> {
@@ -714,6 +765,17 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                                 peerLocationCallback?.invoke(peerLocations.toMap())
                                 if (isOwnNode(peerId)) {
                                     userLocationCallback?.invoke(org.maplibre.android.geometry.LatLng(lat, lng))
+                                }
+
+                                // Check if this is a response to a location request
+                                // Find any pending location requests for this peer
+                                val pendingRequest = pendingLocationRequests.entries.find { (_, request) ->
+                                    request.peerId == peerId
+                                }
+                                if (pendingRequest != null) {
+                                    Log.d(TAG, "Received location response from peer $peerId")
+                                    pendingRequest.value.callback(false) // Call with timeout = false
+                                    pendingLocationRequests.remove(pendingRequest.key)
                                 }
                             } catch (e: Exception) {
                                 Log.e(TAG, "Failed to parse position: "+e.message)

@@ -240,6 +240,10 @@ class MeshNetworkService @Inject constructor(
         meshProtocol.sendAudioData(audioData, channelId)
     }
 
+    fun requestPeerLocation(peerId: String, onLocationReceived: (timeout: Boolean) -> Unit) {
+        meshProtocol.requestPeerLocation(peerId, onLocationReceived)
+    }
+
     fun cleanup() {
         bluetoothDeviceManager?.disconnect()
         _networkState.value = MeshNetworkState.Disconnected

@@ -78,7 +78,11 @@ class MeshNetworkViewModel @Inject constructor(
             }
         }
     }
-    
+
+    fun requestPeerLocation(peerId: String, onLocationReceived: (timeout: Boolean) -> Unit) {
+        meshNetworkRepository.requestPeerLocation(peerId, onLocationReceived)
+    }
+
     fun sendLocationUpdate(latitude: Double, longitude: Double) {
         viewModelScope.launch {
             meshNetworkRepository.sendLocationUpdate(latitude, longitude)
