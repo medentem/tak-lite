@@ -490,9 +490,9 @@ class AnnotationController(
             meshNetworkViewModel.requestPeerLocation(peerId, onLocationReceived = { timeout ->
                 fragment.viewLifecycleOwner.lifecycleScope.launch {
                     if (timeout) {
-                        Toast.makeText(fragment.requireContext(), "$peerName did not respond", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(fragment.requireContext(), "$peerName did not respond", Toast.LENGTH_LONG).show()
                     } else {
-                        Toast.makeText(fragment.requireContext(), "Received updated location for $peerName", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(fragment.requireContext(), "Received updated location for $peerName", Toast.LENGTH_LONG).show()
                     }
                 }
             })
