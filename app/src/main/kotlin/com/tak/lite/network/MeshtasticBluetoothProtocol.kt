@@ -1380,9 +1380,10 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             messageRetryCount.remove(requestId)
             
             val isAck = routing.errorReason == com.geeksville.mesh.MeshProtos.Routing.Error.NONE
-            val packetFrom = (packet.from.toLong() and 0xFFFFFFFFL).toString()
+            val packetTo = (packet.to.toLong() and 0xFFFFFFFFL).toString()
+            Log.d(TAG, "Ack from fromId: $fromId, packet originally to: $packetTo)")
             val newStatus = when {
-                isAck && fromId == packetFrom -> MessageStatus.RECEIVED
+                isAck && fromId == packetTo -> MessageStatus.RECEIVED
                 isAck -> MessageStatus.DELIVERED
                 else -> MessageStatus.FAILED
             }
