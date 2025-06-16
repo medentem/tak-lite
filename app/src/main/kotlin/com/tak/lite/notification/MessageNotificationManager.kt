@@ -41,7 +41,7 @@ class MessageNotificationManager @Inject constructor(
         }
     }
 
-    fun showMessageNotification(channelId: String, channelName: String, message: String) {
+    fun showMessageNotification(channelId: String, channelName: String, message: String, fromShortName: String) {
         Log.d("MessageNotificationManager", "Creating notification for channel: $channelName, message: $message")
         val intent = MessageActivity.createIntent(context, channelId).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -55,7 +55,7 @@ class MessageNotificationManager @Inject constructor(
         )
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setContentTitle("New message in $channelName")
+            .setContentTitle("New message from $fromShortName in $channelName")
             .setContentText(message)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setAutoCancel(true)

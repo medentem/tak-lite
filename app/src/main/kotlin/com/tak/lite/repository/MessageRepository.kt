@@ -56,17 +56,22 @@ class MessageRepository @Inject constructor(
 
                         // Show notifications for new messages
                         newMessages.forEach { message ->
-                            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-                                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
-                                Log.d(TAG, "Showing notification for new message in channel $channelId")
-                                val channelName = protocol.getChannelName(channelId) ?: channelId
-                                messageNotificationManager.showMessageNotification(
-                                    channelId = channelId,
-                                    channelName = channelName,
-                                    message = message.content
-                                )
+                            if (meshProtocolProvider.protocol.value.localNodeIdOrNickname.value == message.senderId) {
+                                Log.d(TAG, "Message sent from our node, skipping notification")
                             } else {
-                                Log.d(TAG, "No notification permission, skipping notification")
+                                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+                                    Log.d(TAG, "Showing notification for new message in channel $channelId")
+                                    val channelName = protocol.getChannelName(channelId) ?: channelId
+                                    messageNotificationManager.showMessageNotification(
+                                        channelId = channelId,
+                                        channelName = channelName,
+                                        message = message.content,
+                                        message.senderShortName
+                                    )
+                                } else {
+                                    Log.d(TAG, "No notification permission, skipping notification")
+                                }
                             }
                         }
                     }

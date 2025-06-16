@@ -1,14 +1,17 @@
 package com.tak.lite.data.model
 
 import kotlinx.serialization.Serializable
+import java.net.IDN
 
 /**
  * Represents the status of a message in the mesh network
  */
 enum class MessageStatus {
     SENDING,    // Message is being sent
+    SENT,       // Message is sent
     DELIVERED,  // Message was delivered to the mesh
     RECEIVED,   // Message was received by the intended recipient
+    FAILED,     // Message failed to be acknowledged by another node
     ERROR       // Message failed to send or was rejected
 }
 
@@ -17,10 +20,11 @@ enum class MessageStatus {
  */
 @Serializable
 data class ChannelMessage(
+    val senderId: String,
     val senderShortName: String,
     val content: String,
     val timestamp: Long = System.currentTimeMillis(),
-    val requestId: Int? = null,  // ID used to track message delivery status
+    val requestId: Int,  // ID used to track message delivery status
     var status: MessageStatus = MessageStatus.SENDING,
     val channelId: String  // Make channelId non-null
 )

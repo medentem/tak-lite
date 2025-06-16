@@ -50,8 +50,10 @@ class MessageAdapter(
             // Set message status
             messageStatus.text = when (message.status) {
                 MessageStatus.SENDING -> "Sending..."
+                MessageStatus.SENT -> "Sent"
                 MessageStatus.DELIVERED -> "Delivered"
                 MessageStatus.RECEIVED -> "Received"
+                MessageStatus.FAILED -> "Failed"
                 MessageStatus.ERROR -> "Error"
             }
             messageStatus.visibility = View.VISIBLE

@@ -113,6 +113,14 @@ class BluetoothDeviceManager(private val context: Context) {
 
     private var userInitiatedDisconnect = false
 
+    // Add method to check if current disconnect was user-initiated
+    fun isUserInitiatedDisconnect(): Boolean {
+        val wasUserInitiated = userInitiatedDisconnect
+        // Reset the flag after checking
+        userInitiatedDisconnect = false
+        return wasUserInitiated
+    }
+
     private fun enqueueBleOperation(op: BleOperation) {
         bleQueue.add(op)
         processNextBleOperation()

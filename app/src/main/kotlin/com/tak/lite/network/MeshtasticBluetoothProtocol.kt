@@ -40,6 +40,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
+import java.util.concurrent.atomic.AtomicReference
 
 class MeshtasticBluetoothProtocol @Inject constructor(
     private val deviceManager: BluetoothDeviceManager,
@@ -128,9 +129,11 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     private var selectedChannelId: String? = null
     private var selectedChannelIndex: Int = 0  // Default to primary channel (index 0)
 
-    // Add request ID counter for message tracking
-    private val pendingMessages = ConcurrentHashMap<Int, ChannelMessage>()
+    // Message tracking
     private var lastSentMessage: ChannelMessage? = null
+    private val messageTimeoutJob = AtomicReference<Job?>(null)
+    private val inFlightMessages = ConcurrentHashMap<Int, ChannelMessage>()
+    private val MESSAGE_TIMEOUT_MS = 30000L // 30 seconds timeout for messages
 
     // Add location request tracking
     private data class LocationRequest(
@@ -155,8 +158,9 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             handleIncomingPacket(data)
         }
         deviceManager.setLostConnectionCallback {
-            Log.w(TAG, "Lost connection to device. State will be cleared.")
-            cleanupState()
+            Log.w(TAG, "Lost connection to device. Will attempt to reconnect.")
+            // Cancel any pending message timeouts
+            messageTimeoutJob.get()?.cancel()
         }
         // Listen for initial drain complete to trigger handshake
         deviceManager.setInitialDrainCompleteCallback {
@@ -164,6 +168,8 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             _configDownloadStep.value = ConfigDownloadStep.SendingHandshake
             startConfigHandshake()
         }
+        // Start observing handshake completion
+        observeHandshakeCompletion()
         // Observe Bluetooth connection state
         CoroutineScope(coroutineContext).launch {
             deviceManager.connectionState.collect { state ->
@@ -183,11 +189,18 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                     is BluetoothDeviceManager.ConnectionState.Disconnected -> {
                         // Stop queue when disconnected
                         stopPacketQueue()
-                        cleanupState()
+                        // Only clear state if this was a user-initiated disconnect
+                        if (deviceManager.isUserInitiatedDisconnect()) {
+                            Log.i(TAG, "User initiated disconnect - clearing state")
+                            cleanupState()
+                        } else {
+                            Log.i(TAG, "Connection lost - preserving state for reconnection")
+                        }
                         MeshConnectionState.Disconnected
                     }
                     is BluetoothDeviceManager.ConnectionState.Failed -> {
-                        // Stop queue on failure
+                        // Connection failed after all retry attempts
+                        Log.e(TAG, "Connection failed after retry attempts: ${state.reason}")
                         stopPacketQueue()
                         cleanupState()
                         MeshConnectionState.Error(state.reason)
@@ -211,7 +224,8 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             handshakeComplete.set(false)
             _configDownloadStep.value = ConfigDownloadStep.NotStarted
             nodeInfoMap.clear()
-            pendingMessages.clear()
+            inFlightMessages.clear()
+            lastSentMessage = null
             queuedPackets.clear()
             queueResponse.clear()
             channelLastMessages.clear()
@@ -850,7 +864,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             // Check if this is a message we sent (by checking requestId)
             val requestId = decoded.requestId
             if (requestId != 0) {  // 0 means no requestId
-                val existingMessage = pendingMessages[requestId]
+                val existingMessage = inFlightMessages[requestId]
                 if (existingMessage != null) {
                     // This is a message we sent, don't add it again
                     Log.d(TAG, "Received our own message back with requestId $requestId, not adding to channel messages")
@@ -880,7 +894,9 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                 content = content,
                 timestamp = System.currentTimeMillis(),
                 channelId = channelId,
-                status = MessageStatus.RECEIVED
+                status = MessageStatus.RECEIVED,
+                requestId = requestId,
+                senderId = peerId
             )
             Log.d(TAG, "Created message object: sender=$senderShortName, content=$content, isDirect=$isDirectMessage")
 
@@ -1112,12 +1128,13 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             timestamp = System.currentTimeMillis(),
             status = MessageStatus.SENDING,
             channelId = channelId,
-            requestId = textMessagePacketId
+            requestId = textMessagePacketId,
+            senderId = connectedNodeId ?: "0"
         )
 
         // Store this message as the last sent message
         lastSentMessage = message
-        pendingMessages[textMessagePacketId] = message
+        inFlightMessages[textMessagePacketId] = message
 
         // Add to channel messages immediately
         val currentMessages = _channelMessages.value.toMutableMap()
@@ -1125,6 +1142,9 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         channelMessages.add(message)
         currentMessages[channelId] = channelMessages
         _channelMessages.value = currentMessages
+
+        // Start message timeout
+        startMessageTimeout(message)
 
         // Queue the packet
         queuePacket(packet)
@@ -1192,12 +1212,13 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             timestamp = System.currentTimeMillis(),
             status = MessageStatus.SENDING,
             channelId = DirectMessageChannel.createId(peerId),
-            requestId = textMessagePacketId
+            requestId = textMessagePacketId,
+            senderId = connectedNodeId ?: "0"
         )
 
         // Store this message as the last sent message
         lastSentMessage = message
-        pendingMessages[textMessagePacketId] = message
+        inFlightMessages[textMessagePacketId] = message
 
         // Add to channel messages immediately
         val currentMessages = _channelMessages.value.toMutableMap()
@@ -1206,6 +1227,9 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         channelMessages.add(message)
         currentMessages[channelId] = channelMessages
         _channelMessages.value = currentMessages
+
+        // Start message timeout
+        startMessageTimeout(message)
 
         // Queue the packet
         queuePacket(packet)
@@ -1298,43 +1322,21 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     }
 
     private fun handleRoutingPacket(routing: com.geeksville.mesh.MeshProtos.Routing, fromId: String, requestId: Int) {
-        val isAck = routing.errorReason == com.geeksville.mesh.MeshProtos.Routing.Error.NONE
-
-        // Convert requestId to unsigned int for comparison
-        val unsignedRequestId = requestId.toLong() and 0xFFFFFFFFL
-
-        Log.d(TAG, "Received ROUTING_APP packet - isAck: $isAck, fromId: $fromId, requestId: $requestId (unsigned: $unsignedRequestId)")
-
-        // Find the pending message using the unsigned requestId
-        val message = pendingMessages[unsignedRequestId.toInt()]
+        // Check if this is a response to one of our messages
+        val message = inFlightMessages.remove(requestId)
         if (message != null) {
+            val isAck = routing.errorReason == com.geeksville.mesh.MeshProtos.Routing.Error.NONE
             val newStatus = when {
                 isAck && fromId == message.senderShortName -> MessageStatus.RECEIVED
                 isAck -> MessageStatus.DELIVERED
-                else -> MessageStatus.ERROR
+                else -> MessageStatus.FAILED
             }
-            
-            // Create updated message with new status
-            val updatedMessage = message.copy(status = newStatus)
-            
-            // Update the message in the channel messages
-            val currentMessages = _channelMessages.value.toMutableMap()
-            val channelMessages = currentMessages[message.channelId]?.toMutableList() ?: mutableListOf()
-            val messageIndex = channelMessages.indexOfFirst { it.requestId == unsignedRequestId.toInt() }
-            if (messageIndex != -1) {
-                channelMessages[messageIndex] = updatedMessage
-                currentMessages[message.channelId] = channelMessages
-                _channelMessages.value = currentMessages
-                Log.d(TAG, "Updated message status in channelMessages for requestId $unsignedRequestId to $newStatus")
-            }
-            
-            // Remove from pending messages
-            pendingMessages.remove(unsignedRequestId.toInt())
+            updateMessageStatus(message, newStatus)
+            Log.d(TAG, "Updated message ${message.requestId} status to $newStatus (fromId: $fromId, isAck: $isAck)")
             
             // Complete the queue response if it exists
-            queueResponse.remove(unsignedRequestId.toInt())?.complete(isAck)
-            
-            Log.d(TAG, "Updated message status for requestId $unsignedRequestId to $newStatus")
+            queueResponse.remove(requestId)?.complete(isAck)
+            Log.d(TAG, "Completed queue response for requestId $requestId with success=$isAck")
         }
     }
 
@@ -1358,9 +1360,9 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             queueResponse.remove(meshPacketId)?.complete(success)
             
             // Update message status if this was a text message
-            val message = pendingMessages[meshPacketId]
+            val message = inFlightMessages[meshPacketId]
             if (message != null) {
-                val newStatus = if (success) MessageStatus.SENDING else MessageStatus.ERROR
+                val newStatus = if (success) MessageStatus.SENT else MessageStatus.ERROR
                 val updatedMessage = message.copy(status = newStatus)
                 
                 // Update the message in the channel messages
@@ -1401,6 +1403,65 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             Log.d(TAG, "Packet queue stopped successfully")
         } catch (e: Exception) {
             Log.e(TAG, "Error stopping packet queue", e)
+        }
+    }
+
+    private fun startMessageTimeout(message: ChannelMessage) {
+        val job = CoroutineScope(coroutineContext).launch {
+            try {
+                delay(MESSAGE_TIMEOUT_MS)
+                // If message is still in-flight after timeout, mark it as failed
+                inFlightMessages.remove(message.requestId)?.let { timedOutMessage ->
+                    updateMessageStatus(timedOutMessage, MessageStatus.FAILED)
+                    Log.w(TAG, "Message ${timedOutMessage.requestId} timed out")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in message timeout job: ${e.message}")
+            }
+        }
+        messageTimeoutJob.set(job)
+    }
+
+    private fun updateMessageStatus(message: ChannelMessage, newStatus: MessageStatus) {
+        val currentMessages = _channelMessages.value.toMutableMap()
+        val channelMessages = currentMessages[message.channelId]?.toMutableList() ?: mutableListOf()
+        val messageIndex = channelMessages.indexOfFirst { it.requestId == message.requestId }
+        if (messageIndex != -1) {
+            channelMessages[messageIndex] = message.copy(status = newStatus)
+            currentMessages[message.channelId] = channelMessages
+            _channelMessages.value = currentMessages
+        }
+    }
+
+    private fun recoverInFlightMessages() {
+        Log.i(TAG, "Recovering in-flight messages after reconnection")
+        inFlightMessages.values.forEach { message ->
+            // Resend the message
+            val packet = newMeshPacketTo().buildMeshPacket(
+                id = message.requestId,
+                wantAck = true,
+                channel = message.channelId.split("_").firstOrNull()?.toIntOrNull() ?: 0,
+                priority = MeshProtos.MeshPacket.Priority.RELIABLE
+            ) {
+                portnum = com.geeksville.mesh.Portnums.PortNum.TEXT_MESSAGE_APP
+                payload = ByteString.copyFromUtf8(message.content)
+                requestId = message.requestId
+            }
+            queuePacket(packet)
+            // Restart timeout
+            startMessageTimeout(message)
+        }
+    }
+
+    // Add handshake completion observer
+    private fun observeHandshakeCompletion() {
+        CoroutineScope(coroutineContext).launch {
+            _configDownloadStep.collect { step ->
+                if (step == ConfigDownloadStep.Complete) {
+                    Log.i(TAG, "Handshake complete, recovering in-flight messages")
+                    recoverInFlightMessages()
+                }
+            }
         }
     }
 } 
