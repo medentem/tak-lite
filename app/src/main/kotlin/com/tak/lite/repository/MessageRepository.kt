@@ -44,9 +44,6 @@ class MessageRepository @Inject constructor(
                 protocol.channelMessages.collect { channelMessages ->
                     // Check for new messages in each channel
                     channelMessages.forEach { (channelId, messages) ->
-                        // Skip direct message channels as they are handled separately
-                        if (channelId.startsWith("dm_")) return@forEach
-
                         val previousChannelMessages = previousMessages[channelId] ?: emptyList()
                         val newMessages = messages.filter { newMessage ->
                             !previousChannelMessages.any { it.timestamp == newMessage.timestamp &&

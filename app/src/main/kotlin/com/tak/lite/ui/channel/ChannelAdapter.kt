@@ -58,7 +58,7 @@ class ChannelAdapter(
             Log.d(TAG, "Binding channel view for: ${channel.name} (${channel.id})")
             
             // Set channel name
-            channelName.text = channel.name
+            channelName.text = channel.displayName ?: channel.name
 
             // Set channel info (role and precision)
             val infoText = buildString {

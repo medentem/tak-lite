@@ -53,7 +53,8 @@ class Layer2MeshNetworkManagerImpl @Inject constructor(
                 id = "all",
                 name = "All",
                 isDefault = true,
-                members = emptyList() // Could be filled with all peer IDs if needed
+                members = emptyList(), // Could be filled with all peer IDs if needed,
+                displayName = null
             )
         )
     )
@@ -277,7 +278,8 @@ class Layer2MeshNetworkManagerImpl @Inject constructor(
             id = newId,
             name = name,
             isDefault = false,
-            members = emptyList()
+            members = emptyList(),
+            displayName = null
         )
         _channels.value += newChannel
         Log.d(TAG, "Creating channel: $name")

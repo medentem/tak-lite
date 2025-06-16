@@ -35,6 +35,7 @@ data class ChannelMessage(
 interface IChannel {
     val id: String
     val name: String
+    val displayName: String?
     val isDefault: Boolean
     val members: List<String>
     val precision: Int?
@@ -43,6 +44,8 @@ interface IChannel {
     val isPkiEncrypted: Boolean
     val isSelectableForPrimaryTraffic: Boolean
     val allowDelete: Boolean
+    
+    fun copy(): IChannel
 }
 
 /**
@@ -52,6 +55,7 @@ interface IChannel {
 data class Layer2Channel(
     override val id: String,
     override val name: String,
+    override val displayName: String?,
     override val isDefault: Boolean = false,
     override val members: List<String> = emptyList(),
     override val precision: Int? = null,
@@ -60,7 +64,11 @@ data class Layer2Channel(
     override val isPkiEncrypted: Boolean = false,
     override val isSelectableForPrimaryTraffic: Boolean = true,
     override val allowDelete: Boolean = true
-) : IChannel
+) : IChannel {
+    override fun copy(): IChannel = Layer2Channel(
+        id, name, displayName, isDefault, members, precision, lastMessage, index, isPkiEncrypted, isSelectableForPrimaryTraffic, allowDelete
+    )
+}
 
 /**
  * Meshtastic channel implementation
@@ -69,6 +77,7 @@ data class Layer2Channel(
 data class MeshtasticChannel(
     override val id: String,
     override val name: String,
+    override val displayName: String,
     override val isDefault: Boolean = false,
     override val members: List<String> = emptyList(),
     val role: ChannelRole = ChannelRole.DISABLED,
@@ -92,45 +101,9 @@ data class MeshtasticChannel(
         SECONDARY
     }
 
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (javaClass != other?.javaClass) return false
-
-        other as MeshtasticChannel
-
-        if (id != other.id) return false
-        if (name != other.name) return false
-        if (isDefault != other.isDefault) return false
-        if (members != other.members) return false
-        if (role != other.role) return false
-        if (psk != null) {
-            if (other.psk == null) return false
-            if (!psk.contentEquals(other.psk)) return false
-        } else if (other.psk != null) return false
-        if (uplinkEnabled != other.uplinkEnabled) return false
-        if (downlinkEnabled != other.downlinkEnabled) return false
-        if (positionPrecision != other.positionPrecision) return false
-        if (isClientMuted != other.isClientMuted) return false
-        if (lastMessage != other.lastMessage) return false
-        if (index != other.index) return false
-
-        return true
-    }
-
-    override fun hashCode(): Int {
-        var result = id.hashCode()
-        result = 31 * result + name.hashCode()
-        result = 31 * result + isDefault.hashCode()
-        result = 31 * result + members.hashCode()
-        result = 31 * result + role.hashCode()
-        result = 31 * result + (psk?.contentHashCode() ?: 0)
-        result = 31 * result + uplinkEnabled.hashCode()
-        result = 31 * result + downlinkEnabled.hashCode()
-        result = 31 * result + positionPrecision
-        result = 31 * result + isClientMuted.hashCode()
-        result = 31 * result + (lastMessage?.hashCode() ?: 0)
-        return result
-    }
+    override fun copy(): IChannel = MeshtasticChannel(
+        id, name, displayName, isDefault, members, role, psk, uplinkEnabled, downlinkEnabled, positionPrecision, isClientMuted, lastMessage, index, isPkiEncrypted, isSelectableForPrimaryTraffic, allowDelete
+    )
 }
 
 /**
@@ -140,6 +113,7 @@ data class MeshtasticChannel(
 data class DirectMessageChannel(
     override val id: String,  // Format: "dm_${peerId}"
     override val name: String,  // Peer's longname
+    override val displayName: String?,
     override val isDefault: Boolean = false,
     override val members: List<String> = emptyList(),
     override val precision: Int? = null,
@@ -153,8 +127,8 @@ data class DirectMessageChannel(
     companion object {
         fun createId(peerId: String): String = "dm_$peerId"
     }
-}
 
-// For backward compatibility
-@Deprecated("Use Layer2Channel instead", ReplaceWith("Layer2Channel"))
-typealias Channel = Layer2Channel
+    override fun copy(): IChannel = DirectMessageChannel(
+        id, name, displayName, isDefault, members, precision, lastMessage, index, isPkiEncrypted, isSelectableForPrimaryTraffic, allowDelete, peerId
+    )
+}
