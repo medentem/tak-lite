@@ -38,6 +38,16 @@ class AnnotationViewModel @Inject constructor(
         }
     }
     
+    fun hasSavedAnnotations(): Boolean {
+        return annotationRepository.hasSavedAnnotations()
+    }
+
+    fun clearSavedAnnotations() {
+        viewModelScope.launch {
+            annotationRepository.clearSavedAnnotations()
+        }
+    }
+    
     fun setCurrentColor(color: AnnotationColor) {
         currentColor = color
         _uiState.value = _uiState.value.copy(selectedColor = color)

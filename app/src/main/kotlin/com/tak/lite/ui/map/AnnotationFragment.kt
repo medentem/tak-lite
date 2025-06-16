@@ -13,16 +13,20 @@ import androidx.lifecycle.lifecycleScope
 import com.geeksville.mesh.MeshProtos
 import com.tak.lite.MainActivity
 import com.tak.lite.R
+import com.tak.lite.databinding.DialogRestoreAnnotationsBinding
 import com.tak.lite.databinding.FragmentAnnotationBinding
 import com.tak.lite.model.AnnotationColor
 import com.tak.lite.model.PointShape
+import com.tak.lite.repository.AnnotationRepository
 import com.tak.lite.viewmodel.AnnotationUiState
 import com.tak.lite.viewmodel.AnnotationViewModel
 import com.tak.lite.viewmodel.MeshNetworkViewModel
 import com.tak.lite.viewmodel.MessageViewModel
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class AnnotationFragment : Fragment() {
@@ -51,6 +55,12 @@ class AnnotationFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+
+        // Check for saved annotations and show dialog if needed
+        if (viewModel.hasSavedAnnotations()) {
+            showRestoreAnnotationsDialog()
+        }
+
         annotationOverlayView = binding.root.findViewById(R.id.annotationOverlayView)
         fanMenuView = binding.root.findViewById(R.id.fanMenuView)
         val mainActivity = activity as? MainActivity
@@ -202,6 +212,28 @@ class AnnotationFragment : Fragment() {
         } else {
             annotationOverlayView.deactivateLassoMode()
         }
+    }
+
+    private fun showRestoreAnnotationsDialog() {
+        val dialogBinding = DialogRestoreAnnotationsBinding.inflate(layoutInflater)
+        
+        MaterialAlertDialogBuilder(requireContext())
+            .setView(dialogBinding.root)
+            .setCancelable(false)
+            .create()
+            .apply {
+                dialogBinding.btnClear.setOnClickListener {
+                    viewModel.clearSavedAnnotations()
+                    dismiss()
+                }
+                
+                dialogBinding.btnRestore.setOnClickListener {
+                    // Annotations are already loaded in the repository
+                    dismiss()
+                }
+                
+                show()
+            }
     }
 
     override fun onDestroyView() {
