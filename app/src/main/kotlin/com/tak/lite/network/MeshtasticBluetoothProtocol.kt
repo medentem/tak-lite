@@ -654,7 +654,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                 }
                 com.geeksville.mesh.MeshProtos.FromRadio.PayloadVariantCase.MY_INFO -> {
                     val myInfo = fromRadio.myInfo
-                    connectedNodeId = myInfo.myNodeNum.toString()
+                    connectedNodeId = (myInfo.myNodeNum.toLong() and 0xFFFFFFFFL).toString()
                     _localNodeIdOrNickname.value = connectedNodeId
                     Log.d(TAG, "Received MyNodeInfo, nodeId: $connectedNodeId")
                     _configDownloadStep.value = ConfigDownloadStep.DownloadingMyInfo
