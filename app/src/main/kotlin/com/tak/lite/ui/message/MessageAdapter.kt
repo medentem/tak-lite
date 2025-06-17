@@ -71,6 +71,7 @@ class MessageAdapter(
                 
                 constraintSet.clear(R.id.messageTime, ConstraintSet.START)
                 constraintSet.connect(R.id.messageTime, ConstraintSet.END, R.id.senderName, ConstraintSet.START)
+                constraintSet.setMargin(R.id.messageTime, ConstraintSet.END, 8)
                 
                 constraintSet.clear(R.id.messageContent, ConstraintSet.START)
                 constraintSet.connect(R.id.messageContent, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
