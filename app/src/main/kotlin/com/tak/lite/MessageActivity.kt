@@ -7,14 +7,19 @@ import android.util.Log
 import android.view.MenuItem
 import android.view.View
 import android.widget.EditText
-import android.widget.ImageButton
 import android.widget.ImageView
 import androidx.activity.viewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.chip.Chip
+import com.google.android.material.chip.ChipGroup
+import com.google.mlkit.nl.smartreply.SmartReply
+import com.google.mlkit.nl.smartreply.SmartReplySuggestion
+import com.google.mlkit.nl.smartreply.SmartReplySuggestionResult
+import com.google.mlkit.nl.smartreply.TextMessage
+import com.tak.lite.data.model.ChannelMessage
 import com.tak.lite.ui.message.MessageAdapter
 import com.tak.lite.viewmodel.MessageViewModel
 import dagger.hilt.android.AndroidEntryPoint
@@ -29,7 +34,11 @@ class MessageActivity : BaseActivity() {
     private lateinit var messageInput: EditText
     private lateinit var sendButton: MaterialButton
     private lateinit var encryptionIndicator: ImageView
+    private lateinit var smartReplyContainer: View
+    private lateinit var smartReplyChipGroup: ChipGroup
     private var channelId: String = ""
+    private val smartReply = SmartReply.getClient()
+    private val conversationHistory = mutableListOf<TextMessage>()
 
     companion object {
         private const val EXTRA_CHANNEL_ID = "channel_id"
@@ -63,6 +72,8 @@ class MessageActivity : BaseActivity() {
         messageInput = findViewById(R.id.messageInput)
         sendButton = findViewById(R.id.sendButton)
         encryptionIndicator = findViewById(R.id.encryptionIndicator)
+        smartReplyContainer = findViewById(R.id.smartReplyContainer)
+        smartReplyChipGroup = findViewById(R.id.smartReplyChipGroup)
 
         // Setup RecyclerView
         // Get current user's short name from the protocol
@@ -79,6 +90,8 @@ class MessageActivity : BaseActivity() {
             if (!message.isNullOrEmpty()) {
                 viewModel.sendMessage(channelId, message)
                 messageInput.text?.clear()
+                // Clear smart reply suggestions after sending
+                updateSmartReplySuggestions(emptyList())
             }
         }
 
@@ -88,6 +101,8 @@ class MessageActivity : BaseActivity() {
                 adapter.submitList(messages)
                 if (messages.isNotEmpty()) {
                     messageList.smoothScrollToPosition(messages.size - 1)
+                    // Update conversation history for smart reply
+                    updateConversationHistory(messages)
                 }
             }
         }
@@ -132,6 +147,62 @@ class MessageActivity : BaseActivity() {
         } else {
             window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
+    }
+
+    private fun updateConversationHistory(messages: List<ChannelMessage>) {
+        conversationHistory.clear()
+        messages.forEach { message ->
+            val isLocalUser = message.senderShortName == viewModel.getCurrentUserShortName()
+            val textMessage = if (isLocalUser) {
+                TextMessage.createForLocalUser(message.content, message.timestamp)
+            } else {
+                TextMessage.createForRemoteUser(message.content, message.timestamp, message.senderShortName)
+            }
+            conversationHistory.add(textMessage)
+        }
+        generateSmartReplySuggestions()
+    }
+
+    private fun generateSmartReplySuggestions() {
+        smartReply.suggestReplies(conversationHistory)
+            .addOnSuccessListener { result ->
+                if (result.status == SmartReplySuggestionResult.STATUS_SUCCESS) {
+                    val suggestions = result.suggestions
+                    updateSmartReplySuggestions(suggestions)
+                } else {
+                    updateSmartReplySuggestions(emptyList())
+                }
+            }
+            .addOnFailureListener {
+                Log.e("MessageActivity", "Error getting smart reply suggestions", it)
+                updateSmartReplySuggestions(emptyList())
+            }
+    }
+
+    private fun updateSmartReplySuggestions(suggestions: List<SmartReplySuggestion>) {
+        smartReplyChipGroup.removeAllViews()
+        if (suggestions.isEmpty()) {
+            smartReplyContainer.visibility = View.GONE
+            return
+        }
+
+        smartReplyContainer.visibility = View.VISIBLE
+        suggestions.forEach { suggestion ->
+            val chip = Chip(this).apply {
+                text = suggestion.text
+                isCheckable = false
+                setOnClickListener {
+                    messageInput.setText(suggestion.text)
+                    messageInput.setSelection(suggestion.text.length)
+                }
+            }
+            smartReplyChipGroup.addView(chip)
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        smartReply.close()
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {

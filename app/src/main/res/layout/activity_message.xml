@@ -45,7 +45,27 @@
             android:paddingTop="8dp"
             android:paddingBottom="8dp"
             app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toTopOf="@id/messageInputLayout" />
+            app:layout_constraintBottom_toTopOf="@id/smartReplyContainer" />
+
+        <HorizontalScrollView
+            android:id="@+id/smartReplyContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:scrollbars="none"
+            android:overScrollMode="never"
+            android:visibility="gone"
+            app:layout_constraintBottom_toTopOf="@id/messageInputLayout">
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/smartReplyChipGroup"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="4dp"
+                app:singleLine="true"
+                app:singleSelection="true" />
+
+        </HorizontalScrollView>
 
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/messageInputLayout"

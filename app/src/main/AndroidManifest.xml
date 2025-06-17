@@ -60,5 +60,13 @@
             android:name=".MessageActivity"
             android:exported="false"
             android:theme="@style/Theme.TakLite" />
+
+        <receiver
+            android:name=".notification.MessageBroadcastReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.tak.lite.ACTION_REPLY" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest> 
