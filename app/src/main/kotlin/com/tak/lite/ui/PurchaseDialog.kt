@@ -79,7 +79,7 @@ class PurchaseDialog : DialogFragment() {
         view.findViewById<TextView>(R.id.tier1Description)?.text = 
             productDetails[BillingManager.PRODUCT_ID_TIER_1]?.description ?: "Basic support tier"
         view.findViewById<TextView>(R.id.tier1Price)?.text = 
-            productDetails[BillingManager.PRODUCT_ID_TIER_1]?.getFormattedPrice() ?: "$10"
+            productDetails[BillingManager.PRODUCT_ID_TIER_1]?.getFormattedPrice() ?: "$5"
 
         // Update Tier 2
         view.findViewById<TextView>(R.id.tier2Name)?.text = 
@@ -87,7 +87,7 @@ class PurchaseDialog : DialogFragment() {
         view.findViewById<TextView>(R.id.tier2Description)?.text = 
             productDetails[BillingManager.PRODUCT_ID_TIER_2]?.description ?: "Enhanced support tier"
         view.findViewById<TextView>(R.id.tier2Price)?.text = 
-            productDetails[BillingManager.PRODUCT_ID_TIER_2]?.getFormattedPrice() ?: "$20"
+            productDetails[BillingManager.PRODUCT_ID_TIER_2]?.getFormattedPrice() ?: "$15"
 
         // Update Tier 3
         view.findViewById<TextView>(R.id.tier3Name)?.text = 

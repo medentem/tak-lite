@@ -185,11 +185,13 @@ class PeerAdapter(
                         val nodeInfo = meshNetworkViewModel.getNodeInfo(peer.id)
                         val peerLongName = nodeInfo?.user?.longName
                         val channel = messageViewModel.getOrCreateDirectMessageChannel(peer.id, peerLongName)
-                        Log.d("PeerAdapter", "Get or create direct message channel: ${channel.id} for peerId: ${peer.id}")
-                        
-                        // Launch MessageActivity with the channel ID
-                        val intent = MessageActivity.createIntent(itemView.context, channel.id)
-                        itemView.context.startActivity(intent)
+                        Log.d("PeerAdapter", "Get or create direct message channel: ${channel?.id} for peerId: ${peer.id}")
+
+                        if (channel != null) {
+                            // Launch MessageActivity with the channel ID
+                            val intent = MessageActivity.createIntent(itemView.context, channel.id)
+                            itemView.context.startActivity(intent)
+                        }
                         onChatClick(peer)
                     } catch (e: Exception) {
                         Log.e("PeerAdapter", "Error starting direct message: ${e.message}", e)

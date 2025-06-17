@@ -8,12 +8,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import com.tak.lite.di.MeshProtocol
+import com.tak.lite.util.BillingManager
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class MeshProtocolProvider @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val billingManager: BillingManager
 ) {
     private val TAG = "MeshProtocolProvider"
     private val prefs: SharedPreferences = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
@@ -34,6 +36,15 @@ class MeshProtocolProvider @Inject constructor(
     }
 
     private fun createProtocol(type: String?): MeshProtocol {
+        // Check if user is premium or in trial period
+        val isPremium = billingManager.isPremium()
+        val inTrial = billingManager.isInTrialPeriod()
+        
+        if (!isPremium && !inTrial) {
+            Log.d(TAG, "User is not premium and trial period has ended, returning disabled protocol")
+            return DisabledMeshProtocol(context)
+        }
+
         return if (type == "Meshtastic") {
             Log.d(TAG, "Creating MeshtasticBluetoothProtocol")
             MeshtasticBluetoothProtocol(bluetoothDeviceManager, context)

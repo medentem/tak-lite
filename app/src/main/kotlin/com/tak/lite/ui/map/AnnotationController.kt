@@ -474,9 +474,11 @@ class AnnotationController(
                 
                 // Create or get the direct message channel
                 val channel = messageViewModel.getOrCreateDirectMessageChannel(peerId, peerLongName)
-                
-                // Launch the MessageActivity using the companion object method
-                fragment.requireContext().startActivity(MessageActivity.createIntent(fragment.requireContext(), channel.id))
+
+                if (channel != null) {
+                    // Launch the MessageActivity using the companion object method
+                    fragment.requireContext().startActivity(MessageActivity.createIntent(fragment.requireContext(), channel.id))
+                }
             } catch (e: Exception) {
                 Log.e("AnnotationController", "Error handling direct message: ${e.message}", e)
                 Toast.makeText(fragment.requireContext(), "Failed to start direct message", Toast.LENGTH_SHORT).show()

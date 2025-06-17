@@ -43,6 +43,7 @@ import kotlinx.coroutines.delay
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.absoluteValue
 import kotlin.random.Random
+import java.util.concurrent.atomic.AtomicLong
 
 class MeshtasticBluetoothProtocol @Inject constructor(
     private val deviceManager: BluetoothDeviceManager,
@@ -89,6 +90,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     private val handshakeComplete = AtomicBoolean(false)
     private val configNonce = AtomicInteger((System.currentTimeMillis() % Int.MAX_VALUE).toInt())
     private val nodeInfoMap = ConcurrentHashMap<String, com.geeksville.mesh.MeshProtos.NodeInfo>()
+    private var lastDataTime = AtomicLong(System.currentTimeMillis())
 
     // Add config download progress reporting
     sealed class ConfigDownloadStep {
@@ -105,6 +107,11 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     }
     private val _configDownloadStep = MutableStateFlow<ConfigDownloadStep>(ConfigDownloadStep.NotStarted)
     override val configDownloadStep: StateFlow<ConfigDownloadStep> = _configDownloadStep.asStateFlow()
+
+    // Add counters for each config step
+    private val _configStepCounters = MutableStateFlow<Map<ConfigDownloadStep, Int>>(emptyMap())
+    override val configStepCounters: StateFlow<Map<ConfigDownloadStep, Int>> = _configStepCounters.asStateFlow()
+
     override val requiresAppLocationSend: Boolean = false
     override val allowsChannelManagement: Boolean = false
     private val _localNodeIdOrNickname = MutableStateFlow<String?>(null)
@@ -137,6 +144,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     private val inFlightMessages = ConcurrentHashMap<Int, MeshProtos.MeshPacket>()
     private val MESSAGE_TIMEOUT_MS = 30000L // 30 seconds timeout for messages
     private val PACKET_TIMEOUT_MS = 10000L // 10 seconds timeout for packet queue
+    private val HANDSHAKE_TIMEOUT_MS = 45000L // 45 seconds total timeout for handshake
     private val MAX_RETRY_COUNT = 1 // Maximum number of retries for failed messages
 
     // Add location request tracking
@@ -255,6 +263,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             connectedNodeId = null
             handshakeComplete.set(false)
             _configDownloadStep.value = ConfigDownloadStep.NotStarted
+            _configStepCounters.value = emptyMap()  // Reset counters
             nodeInfoMap.clear()
             inFlightMessages.clear()
             messageRetryCount.clear()
@@ -540,6 +549,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         val nonce = configNonce.incrementAndGet()
         Log.i(TAG, "Starting Meshtastic config handshake with nonce=$nonce")
         _configDownloadStep.value = ConfigDownloadStep.SendingHandshake
+        _configStepCounters.value = emptyMap()  // Reset counters before starting handshake
         val toRadio = com.geeksville.mesh.MeshProtos.ToRadio.newBuilder()
             .setWantConfigId(nonce)
             .build()
@@ -573,14 +583,38 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             val gatt = deviceManager.connectedGatt
             val service = gatt?.getService(MESHTASTIC_SERVICE_UUID)
             val fromRadioChar = service?.getCharacteristic(FROMRADIO_CHARACTERISTIC_UUID)
+            
             if (gatt != null && fromRadioChar != null) {
-                while (!handshakeComplete.get()) {
-                    deviceManager.aggressiveDrainFromRadio(gatt, fromRadioChar)
-                    // Wait a short time before next drain attempt to avoid tight loop
-                    kotlinx.coroutines.delay(100)
+                try {
+                    withTimeout(HANDSHAKE_TIMEOUT_MS) {
+                        // Reset last data time when starting handshake
+                        lastDataTime.set(System.currentTimeMillis())
+                        
+                        while (!handshakeComplete.get()) {
+                            deviceManager.aggressiveDrainFromRadio(gatt, fromRadioChar)
+                            
+                            // Check if we've received any data recently
+                            if (System.currentTimeMillis() - lastDataTime.get() > 8000) { // 8 seconds without data
+                                Log.w(TAG, "No data received for 5 seconds during handshake")
+                                _configDownloadStep.value = ConfigDownloadStep.Error("No response from radio")
+                                cleanupState()
+                                break
+                            }
+                            
+                            // Wait a short time before next drain attempt to avoid tight loop
+                            delay(100)
+                        }
+                        
+                        if (handshakeComplete.get()) {
+                            Log.i(TAG, "Handshake complete.")
+                            _configDownloadStep.value = ConfigDownloadStep.Complete
+                        }
+                    }
+                } catch (e: TimeoutCancellationException) {
+                    Log.e(TAG, "Handshake timed out after ${HANDSHAKE_TIMEOUT_MS/1000}s")
+                    _configDownloadStep.value = ConfigDownloadStep.Error("Handshake timed out after ${HANDSHAKE_TIMEOUT_MS/1000}s")
+                    cleanupState()
                 }
-                Log.i(TAG, "Handshake complete.")
-                _configDownloadStep.value = ConfigDownloadStep.Complete
             } else {
                 Log.e(TAG, "GATT/service/FROMRADIO characteristic missing, cannot drain during handshake.")
                 _configDownloadStep.value = ConfigDownloadStep.Error("GATT/service/FROMRADIO characteristic missing")
@@ -590,6 +624,9 @@ class MeshtasticBluetoothProtocol @Inject constructor(
 
     // Call this when you receive a packet from the device
     private fun handleIncomingPacket(data: ByteArray) {
+        // Update last data time for handshake timeout
+        lastDataTime.set(System.currentTimeMillis())
+        
         Log.d(TAG, "handleIncomingPacket called with data: "+
             "${data.size} bytes: ${data.joinToString(", ", limit = 16)}")
         if (data.size > 252) {
@@ -602,15 +639,18 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                 com.geeksville.mesh.MeshProtos.FromRadio.PayloadVariantCase.CONFIG -> {
                     Log.i(TAG, "Received CONFIG during handshake.")
                     _configDownloadStep.value = ConfigDownloadStep.DownloadingConfig
+                    updateConfigStepCounter(ConfigDownloadStep.DownloadingConfig)
                 }
                 com.geeksville.mesh.MeshProtos.FromRadio.PayloadVariantCase.MODULECONFIG -> {
                     Log.i(TAG, "Received MODULECONFIG during handshake.")
                     _configDownloadStep.value = ConfigDownloadStep.DownloadingModuleConfig
+                    updateConfigStepCounter(ConfigDownloadStep.DownloadingModuleConfig)
                 }
                 com.geeksville.mesh.MeshProtos.FromRadio.PayloadVariantCase.CHANNEL -> {
                     Log.i(TAG, "Received CHANNEL update.")
                     if (!handshakeComplete.get()) {
                         _configDownloadStep.value = ConfigDownloadStep.DownloadingChannel
+                        updateConfigStepCounter(ConfigDownloadStep.DownloadingChannel)
                     }
                     // Handle the channel update regardless of handshake state
                     handleChannelUpdate(fromRadio.channel)
@@ -618,6 +658,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                 com.geeksville.mesh.MeshProtos.FromRadio.PayloadVariantCase.NODE_INFO -> {
                     Log.i(TAG, "Received NODE_INFO during handshake.")
                     _configDownloadStep.value = ConfigDownloadStep.DownloadingNodeInfo
+                    updateConfigStepCounter(ConfigDownloadStep.DownloadingNodeInfo)
                     val nodeInfo = fromRadio.nodeInfo
                     val nodeNum = (nodeInfo.num.toLong() and 0xFFFFFFFFL).toString()
                     
@@ -923,7 +964,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             val channelId = if (isDirectMessage) {
                 // For direct messages, get or create a direct message channel
                 val directChannel = getOrCreateDirectMessageChannel(peerId)
-                directChannel.id
+                directChannel?.id
             } else {
                 // For broadcast messages, use the channel from the packet
                 val channelIndex = packet.channel
@@ -939,7 +980,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                 senderShortName = senderShortName,
                 content = content,
                 timestamp = System.currentTimeMillis(),
-                channelId = channelId,
+                channelId = channelId ?: "",
                 status = MessageStatus.RECEIVED,
                 requestId = unsignedRequestId,
                 senderId = peerId
@@ -950,12 +991,12 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             val currentMessages = _channelMessages.value.toMutableMap()
             val channelMessages = currentMessages[channelId]?.toMutableList() ?: mutableListOf()
             channelMessages.add(message)
-            currentMessages[channelId] = channelMessages
+            currentMessages[channelId ?: ""] = channelMessages
             _channelMessages.value = currentMessages
             Log.d(TAG, "Updated channel messages, new count: ${channelMessages.size}")
             
             // Update the channel's last message
-            channelLastMessages[channelId] = message
+            channelLastMessages[channelId ?: ""] = message
 
             // Update the channel in the list with the new message
             val currentChannels = _channels.value.toMutableList()
@@ -1288,7 +1329,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         TODO("Not yet implemented")
     }
 
-    override fun getOrCreateDirectMessageChannel(peerId: String): DirectMessageChannel {
+    override fun getOrCreateDirectMessageChannel(peerId: String): DirectMessageChannel? {
         val channelId = DirectMessageChannel.createId(peerId)
         val nodeInfo = nodeInfoMap[peerId]
         val latestName = nodeInfo?.user?.longName?.takeIf { it.isNotBlank() }
@@ -1543,5 +1584,11 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                 }
             }
         }
+    }
+
+    private fun updateConfigStepCounter(step: ConfigDownloadStep) {
+        val currentCounters = _configStepCounters.value.toMutableMap()
+        currentCounters[step] = (currentCounters[step] ?: 0) + 1
+        _configStepCounters.value = currentCounters
     }
 } 

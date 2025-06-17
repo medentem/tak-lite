@@ -19,6 +19,7 @@ import com.tak.lite.model.PacketSummary
 import com.tak.lite.model.PacketType
 import com.tak.lite.model.StateSyncMessage
 import com.tak.lite.model.StateVersion
+import com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -120,7 +121,10 @@ class Layer2MeshNetworkProtocol @Inject constructor(
     
     private val _packetSummaries = MutableStateFlow<List<PacketSummary>>(emptyList())
     override val packetSummaries: StateFlow<List<PacketSummary>> = _packetSummaries.asStateFlow()
-    
+
+    private val _configStepCounters = MutableStateFlow<Map<ConfigDownloadStep, Int>>(emptyMap())
+    override val configStepCounters: StateFlow<Map<ConfigDownloadStep, Int>> = _configStepCounters.asStateFlow()
+
     private val _connectionState = MutableStateFlow<MeshConnectionState>(MeshConnectionState.Disconnected)
     override val connectionState: StateFlow<MeshConnectionState> = _connectionState.asStateFlow()
 
@@ -998,8 +1002,8 @@ class Layer2MeshNetworkProtocol @Inject constructor(
         TODO("Not yet implemented")
     }
 
-    override fun getOrCreateDirectMessageChannel(peerId: String): DirectMessageChannel {
-        TODO("Not yet implemented")
+    override fun getOrCreateDirectMessageChannel(peerId: String): DirectMessageChannel? {
+        return null
     }
 
     override val requiresAppLocationSend: Boolean = true

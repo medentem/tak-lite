@@ -48,6 +48,7 @@
                         android:paddingBottom="8dp" />
 
                     <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/meshNetworkTypeLayout"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:hint="Select mesh network adapter"
@@ -74,6 +75,16 @@
                         android:text="Connect to Meshtastic via Bluetooth"
                         android:layout_marginTop="8dp"
                         android:layout_marginBottom="4dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/unlockAppButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Unlock App Features"
+                        android:layout_marginTop="8dp"
+                        android:layout_marginBottom="4dp"
+                        android:visibility="gone"
+                        style="@style/Widget.MaterialComponents.Button" />
 
                     <TextView
                         android:id="@+id/bluetoothStatusText"

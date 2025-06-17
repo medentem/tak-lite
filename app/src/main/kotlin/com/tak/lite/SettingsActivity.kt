@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.Button
@@ -24,7 +25,9 @@ import com.google.android.material.switchmaterial.SwitchMaterial
 import com.tak.lite.network.BluetoothDeviceManager
 import com.tak.lite.service.MeshForegroundService
 import com.tak.lite.ui.map.MapController
+import com.tak.lite.util.BillingManager
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
@@ -32,6 +35,7 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class SettingsActivity : BaseActivity() {
     @Inject lateinit var meshProtocolProvider: com.tak.lite.network.MeshProtocolProvider
+    @Inject lateinit var billingManager: com.tak.lite.util.BillingManager
     private lateinit var mapModeSpinner: AutoCompleteTextView
     private lateinit var endBeepSwitch: SwitchMaterial
     private lateinit var minLineSegmentDistEditText: com.google.android.material.textfield.TextInputEditText
@@ -42,6 +46,8 @@ class SettingsActivity : BaseActivity() {
     private lateinit var simulatePeersSwitch: com.google.android.material.switchmaterial.SwitchMaterial
     private lateinit var simulatedPeersCountEditText: com.google.android.material.textfield.TextInputEditText
     private lateinit var simulatedPeersCountLayout: com.google.android.material.textfield.TextInputLayout
+    private lateinit var meshNetworkTypeLayout: com.google.android.material.textfield.TextInputLayout
+    private lateinit var unlockAppButton: com.google.android.material.button.MaterialButton
     private var connectedDevice: BluetoothDevice? = null
     private val mapModeOptions = listOf("Last Used", "Street", "Satellite", "Hybrid")
     private val mapModeEnumValues = listOf(
@@ -92,9 +98,26 @@ class SettingsActivity : BaseActivity() {
         simulatePeersSwitch = findViewById(R.id.simulatePeersSwitch)
         simulatedPeersCountEditText = findViewById(R.id.simulatedPeersCountEditText)
         simulatedPeersCountLayout = findViewById(R.id.simulatedPeersCountLayout)
+        meshNetworkTypeLayout = findViewById(R.id.meshNetworkTypeLayout)
+        unlockAppButton = findViewById(R.id.unlockAppButton)
         configProgressBar = findViewById(R.id.configProgressBar)
         configProgressText = findViewById(R.id.configProgressText)
         backgroundProcessingSwitch = findViewById(R.id.backgroundProcessingSwitch)
+
+        // Check premium status and update UI accordingly
+        lifecycleScope.launch {
+            repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                billingManager.isPremium.collectLatest { isPremium ->
+                    val inTrial = billingManager.isInTrialPeriod()
+                    updateMeshSettingsVisibility(isPremium || inTrial)
+                }
+            }
+        }
+
+        // Setup unlock button
+        unlockAppButton.setOnClickListener {
+            showPurchaseDialog()
+        }
 
         // Setup map mode spinner
         val adapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, mapModeOptions)
@@ -274,17 +297,27 @@ class SettingsActivity : BaseActivity() {
                             else -> {
                                 configProgressBar.visibility = android.view.View.VISIBLE
                                 configProgressText.visibility = android.view.View.VISIBLE
-                                configProgressText.text = when (step) {
-                                    is com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep.SendingHandshake -> "Sending handshake..."
-                                    is com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep.WaitingForConfig -> "Waiting for config..."
-                                    is com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep.DownloadingConfig -> "Downloading: Device Config..."
-                                    is com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep.DownloadingModuleConfig -> "Downloading: Module Config..."
-                                    is com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep.DownloadingChannel -> "Downloading: Channel Info..."
-                                    is com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep.DownloadingNodeInfo -> "Downloading: Node Info..."
-                                    is com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep.DownloadingMyInfo -> "Downloading: My Info..."
-                                    else -> "Downloading config..."
-                                }
+                                updateConfigProgressText(step)
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Observe counter updates separately
+        protocol.configStepCounters?.let { countersFlow ->
+            lifecycleScope.launch {
+                repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                    countersFlow.collect { counters ->
+                        // Only update if we're in a downloading state
+                        val currentStep = protocol.configDownloadStep?.value
+                        if (currentStep is com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep.DownloadingConfig ||
+                            currentStep is com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep.DownloadingModuleConfig ||
+                            currentStep is com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep.DownloadingChannel ||
+                            currentStep is com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep.DownloadingNodeInfo ||
+                            currentStep is com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep.DownloadingMyInfo) {
+                            updateConfigProgressText(currentStep)
                         }
                     }
                 }
@@ -513,5 +546,51 @@ class SettingsActivity : BaseActivity() {
                 startActivity(intent)
             }
         }
+    }
+
+    private fun updateConfigProgressText(step: com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep) {
+        val counters = meshProtocolProvider.protocol.value.configStepCounters.value
+        configProgressText.text = when (step) {
+            is com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep.SendingHandshake -> "Sending handshake..."
+            is com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep.WaitingForConfig -> "Waiting for config..."
+            is com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep.DownloadingConfig -> {
+                val count = counters[step] ?: 0
+                "Downloading: Device Config... (${count})"
+            }
+            is com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep.DownloadingModuleConfig -> {
+                val count = counters[step] ?: 0
+                "Downloading: Module Config... (${count})"
+            }
+            is com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep.DownloadingChannel -> {
+                val count = counters[step] ?: 0
+                "Downloading: Channel Info... (${count})"
+            }
+            is com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep.DownloadingNodeInfo -> {
+                val count = counters[step] ?: 0
+                "Downloading: Node Info... (${count})"
+            }
+            is com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep.DownloadingMyInfo -> {
+                val count = counters[step] ?: 0
+                "Downloading: My Info... (${count})"
+            }
+            else -> "Downloading config..."
+        }
+    }
+
+    private fun updateMeshSettingsVisibility(isEnabled: Boolean) {
+        if (isEnabled) {
+            meshNetworkTypeLayout.visibility = View.VISIBLE
+            bluetoothConnectButton.visibility = View.VISIBLE
+            unlockAppButton.visibility = View.GONE
+        } else {
+            meshNetworkTypeLayout.visibility = View.GONE
+            bluetoothConnectButton.visibility = View.GONE
+            unlockAppButton.visibility = View.VISIBLE
+        }
+    }
+
+    private fun showPurchaseDialog() {
+        val dialog = com.tak.lite.ui.PurchaseDialog()
+        dialog.show(supportFragmentManager, "purchase_dialog")
     }
 } 
