@@ -20,14 +20,14 @@ class MeshProtocolProvider @Inject constructor(
     private val TAG = "MeshProtocolProvider"
     private val prefs: SharedPreferences = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
     private val bluetoothDeviceManager = BluetoothDeviceManager(context)
-    private val _protocol = MutableStateFlow(createProtocol(prefs.getString("mesh_network_type", "Layer 2")))
+    private val _protocol = MutableStateFlow(createProtocol(prefs.getString("mesh_network_type", "Meshtastic")))
     val protocol: StateFlow<MeshProtocol> = _protocol.asStateFlow()
 
     init {
         Log.d(TAG, "Initializing MeshProtocolProvider with initial protocol: ${_protocol.value.javaClass.simpleName}")
         prefs.registerOnSharedPreferenceChangeListener { _, key ->
             if (key == "mesh_network_type") {
-                val newType = prefs.getString("mesh_network_type", "Layer 2")
+                val newType = prefs.getString("mesh_network_type", "Meshtastic")
                 Log.d(TAG, "Mesh network type changed to: $newType")
                 _protocol.value = createProtocol(newType)
                 Log.d(TAG, "Created new protocol: ${_protocol.value.javaClass.simpleName}")

@@ -6,6 +6,7 @@ import android.util.Log
 import com.tak.lite.data.model.ChannelMessage
 import com.tak.lite.data.model.DirectMessageChannel
 import com.tak.lite.data.model.IChannel
+import com.tak.lite.di.ConfigDownloadStep
 import com.tak.lite.di.MeshConnectionState
 import com.tak.lite.di.MeshProtocol
 import com.tak.lite.model.ConnectionMetrics
@@ -19,7 +20,6 @@ import com.tak.lite.model.PacketSummary
 import com.tak.lite.model.PacketType
 import com.tak.lite.model.StateSyncMessage
 import com.tak.lite.model.StateVersion
-import com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,9 +49,9 @@ class Layer2MeshNetworkProtocol @Inject constructor(
     private val TAG = "MeshNetworkProtocol"
     private val DISCOVERY_PORT = 5000
     private val ANNOTATION_PORT = 5001
-    private val DISCOVERY_INTERVAL_MS = 5000L
+    private val DISCOVERY_INTERVAL_MS = 5000L // 5s
     private val MIN_DISCOVERY_INTERVAL_MS = 1000L
-    private val MAX_DISCOVERY_INTERVAL_MS = 30000L
+    private val MAX_DISCOVERY_INTERVAL_MS = 60000L
     private var PEER_TIMEOUT_MS = 15000L
     private val STATE_SYNC_PORT = DISCOVERY_PORT + 10
     private val STATE_REBROADCAST_INTERVAL_MS = 10000L // 10 seconds
@@ -717,11 +717,6 @@ class Layer2MeshNetworkProtocol @Inject constructor(
         } catch (e: Exception) {
             Log.e(TAG, "Error rebroadcasting state: ", e)
         }
-    }
-
-    // Allow external code to provide the current list of annotations
-    fun setAnnotationProvider(provider: () -> List<MapAnnotation>) {
-        annotationProvider = provider
     }
 
     fun setNetwork(network: Network?) {

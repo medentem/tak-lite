@@ -4,11 +4,11 @@ import android.content.Context
 import com.tak.lite.data.model.ChannelMessage
 import com.tak.lite.data.model.DirectMessageChannel
 import com.tak.lite.data.model.IChannel
+import com.tak.lite.di.ConfigDownloadStep
 import com.tak.lite.di.MeshConnectionState
 import com.tak.lite.di.MeshProtocol
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PacketSummary
-import com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

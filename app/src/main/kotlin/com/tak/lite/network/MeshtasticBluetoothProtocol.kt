@@ -11,6 +11,7 @@ import com.tak.lite.data.model.DirectMessageChannel
 import com.tak.lite.data.model.IChannel
 import com.tak.lite.data.model.MeshtasticChannel
 import com.tak.lite.data.model.MessageStatus
+import com.tak.lite.di.ConfigDownloadStep
 import com.tak.lite.di.MeshConnectionState
 import com.tak.lite.di.MeshProtocol
 import com.tak.lite.model.MapAnnotation
@@ -92,19 +93,6 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     private val nodeInfoMap = ConcurrentHashMap<String, com.geeksville.mesh.MeshProtos.NodeInfo>()
     private var lastDataTime = AtomicLong(System.currentTimeMillis())
 
-    // Add config download progress reporting
-    sealed class ConfigDownloadStep {
-        object NotStarted : ConfigDownloadStep()
-        object SendingHandshake : ConfigDownloadStep()
-        object WaitingForConfig : ConfigDownloadStep()
-        object DownloadingConfig : ConfigDownloadStep()
-        object DownloadingModuleConfig : ConfigDownloadStep()
-        object DownloadingChannel : ConfigDownloadStep()
-        object DownloadingNodeInfo : ConfigDownloadStep()
-        object DownloadingMyInfo : ConfigDownloadStep()
-        object Complete : ConfigDownloadStep()
-        data class Error(val message: String) : ConfigDownloadStep()
-    }
     private val _configDownloadStep = MutableStateFlow<ConfigDownloadStep>(ConfigDownloadStep.NotStarted)
     override val configDownloadStep: StateFlow<ConfigDownloadStep> = _configDownloadStep.asStateFlow()
 
@@ -143,8 +131,8 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     private val messageTimeoutJob = AtomicReference<Job?>(null)
     private val inFlightMessages = ConcurrentHashMap<Int, MeshProtos.MeshPacket>()
     private val MESSAGE_TIMEOUT_MS = 30000L // 30 seconds timeout for messages
-    private val PACKET_TIMEOUT_MS = 10000L // 10 seconds timeout for packet queue
-    private val HANDSHAKE_TIMEOUT_MS = 45000L // 45 seconds total timeout for handshake
+    private val PACKET_TIMEOUT_MS = 15000L // 15 seconds timeout for packet queue
+    private val HANDSHAKE_TIMEOUT_MS = 60000L // 60 seconds total timeout for handshake
     private val MAX_RETRY_COUNT = 1 // Maximum number of retries for failed messages
 
     // Add location request tracking

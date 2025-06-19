@@ -7,7 +7,6 @@ import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PacketSummary
 import com.tak.lite.network.MeshPeer
 import com.tak.lite.network.MeshtasticBluetoothProtocol
-import com.tak.lite.network.MeshtasticBluetoothProtocol.ConfigDownloadStep
 import kotlinx.coroutines.flow.StateFlow
 import org.maplibre.android.geometry.LatLng
 
@@ -18,6 +17,20 @@ sealed class MeshConnectionState {
     data class Error(val message: String) : MeshConnectionState()
 }
 
+// Add config download progress reporting
+sealed class ConfigDownloadStep {
+    object NotStarted : ConfigDownloadStep()
+    object SendingHandshake : ConfigDownloadStep()
+    object WaitingForConfig : ConfigDownloadStep()
+    object DownloadingConfig : ConfigDownloadStep()
+    object DownloadingModuleConfig : ConfigDownloadStep()
+    object DownloadingChannel : ConfigDownloadStep()
+    object DownloadingNodeInfo : ConfigDownloadStep()
+    object DownloadingMyInfo : ConfigDownloadStep()
+    object Complete : ConfigDownloadStep()
+    data class Error(val message: String) : ConfigDownloadStep()
+}
+
 interface MeshProtocol {
     val channelMessages: StateFlow<Map<String, List<ChannelMessage>>>
     val peers: StateFlow<List<MeshPeer>>
@@ -25,7 +38,7 @@ interface MeshProtocol {
     val connectionState: StateFlow<MeshConnectionState>
     val localNodeIdOrNickname: StateFlow<String?>
     val packetSummaries: StateFlow<List<PacketSummary>>
-    val configDownloadStep: StateFlow<MeshtasticBluetoothProtocol.ConfigDownloadStep>? get() = null
+    val configDownloadStep: StateFlow<ConfigDownloadStep>? get() = null
     val configStepCounters: StateFlow<Map<ConfigDownloadStep, Int>>
 
     val requiresAppLocationSend: Boolean
