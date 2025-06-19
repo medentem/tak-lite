@@ -14,7 +14,7 @@ A situational awareness Android application designed for use with mesh network d
   - Optionally expire annotations and POIs
   - View elevation chart for lines
 - Text messaging
-- Push-to-Talk (PTT) real-time VOIP audio communication (WebRTC-based)
+- Push-to-Talk (PTT) real-time VOIP audio communication (Layer 2 only, WebRTC-based)
 - Mesh network integration (meshtastic or doodle labs)
 - Offline map tile support
 - Dark mode support
@@ -141,13 +141,6 @@ This project is currently in active development. Core features are being impleme
 - Proper error handling and state management
 - Accessibility (a11y) and dark mode support
 
-## Testing
-
-- Unit tests for business logic (ViewModels, repositories, etc.)
-- UI tests for critical user flows
-- Uses mock objects and dependency injection for testability
-- Test coverage is maintained for core features
-
 ## Security
 
 - Over-the-air encryption is provided by the mesh device - Doodle Labs mesh network at Layer 2 or Meshtastic's channel and PKI encryption - ensuring that all data transmitted between devices is encrypted at the network level.
@@ -158,6 +151,5 @@ This project is currently in active development. Core features are being impleme
 
 ## Documentation
 
-- Public APIs and architecture decisions are documented in-code and in this README
 - Contributions should follow the established code style and architecture
 - Please open issues or pull requests for suggestions or improvements
