@@ -22,6 +22,8 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.tak.lite.di.ConfigDownloadStep
+import com.tak.lite.di.MeshConnectionState
+import com.tak.lite.di.MeshProtocol
 import com.tak.lite.network.BluetoothDeviceManager
 import com.tak.lite.service.MeshForegroundService
 import com.tak.lite.ui.map.MapController
@@ -159,11 +161,12 @@ class SettingsActivity : BaseActivity() {
 
         updateBluetoothButtonState()
 
-        val bluetoothDeviceManager = meshProtocolProvider.getBluetoothDeviceManager()
+        val currentProtocol = meshProtocolProvider.protocol.value
 
         bluetoothConnectButton.setOnClickListener {
-            if (isBluetoothConnected) {
-                bluetoothDeviceManager.disconnect()
+            val protocol = meshProtocolProvider.protocol.value
+            if (protocol.connectionState.value is MeshConnectionState.Connected) {
+                protocol.disconnectFromDevice()
             } else {
                 when {
                     !isBluetoothEnabled() -> {
@@ -176,7 +179,7 @@ class SettingsActivity : BaseActivity() {
                         requestBluetoothPermissions()
                     }
                     else -> {
-                        showBluetoothScanDialog(bluetoothDeviceManager)
+                        showDeviceScanDialog(protocol)
                     }
                 }
             }
@@ -207,35 +210,35 @@ class SettingsActivity : BaseActivity() {
             // Show/hide the connect button based on selection
             bluetoothConnectButton.visibility = if (selectedType == "Meshtastic") View.VISIBLE else View.GONE
             if (selectedType != "Meshtastic" && isBluetoothConnected) {
-                bluetoothDeviceManager.disconnect()
+                currentProtocol.disconnectFromDevice()
             }
         }
 
         // Listen for connection state changes
-        bluetoothDeviceManager.connectionState.let { stateFlow ->
+        currentProtocol.connectionState.let { stateFlow ->
             lifecycleScope.launch {
                 repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
                     stateFlow.collect { state ->
                         when (state) {
-                            is BluetoothDeviceManager.ConnectionState.Connected -> {
+                            is MeshConnectionState.Connected -> {
                                 isBluetoothConnected = true
-                                connectedDevice = state.device
-                                bluetoothStatusText.text = "Connected: ${state.device.name ?: "Unknown"} (${state.device.address})"
+                                val deviceName = state.deviceInfo?.name ?: "device"
+                                bluetoothStatusText.text = "Connected: $deviceName"
                                 updateBluetoothButtonState()
                             }
-                            is BluetoothDeviceManager.ConnectionState.Disconnected -> {
+                            is MeshConnectionState.Disconnected -> {
                                 isBluetoothConnected = false
                                 connectedDevice = null
                                 bluetoothStatusText.text = "Not connected"
                                 updateBluetoothButtonState()
                             }
-                            is BluetoothDeviceManager.ConnectionState.Failed -> {
+                            is MeshConnectionState.Error -> {
                                 isBluetoothConnected = false
                                 connectedDevice = null
-                                bluetoothStatusText.text = "Connection failed: ${state.reason}"
+                                bluetoothStatusText.text = "Connection failed: ${state.message}"
                                 updateBluetoothButtonState()
                             }
-                            BluetoothDeviceManager.ConnectionState.Connecting -> {
+                            MeshConnectionState.Connecting -> {
                                 bluetoothStatusText.text = "Connecting..."
                             }
                         }
@@ -399,38 +402,35 @@ class SettingsActivity : BaseActivity() {
         bluetoothConnectButton.text = if (isBluetoothConnected) "Disconnect" else "Connect to Meshtastic via Bluetooth"
     }
 
-    private fun showBluetoothScanDialog(bluetoothDeviceManager: BluetoothDeviceManager?) {
-        if (bluetoothDeviceManager == null) return
-        val discoveredDevices = mutableListOf<BluetoothDevice>()
+    private fun showDeviceScanDialog(protocol: MeshProtocol) {
+        val discoveredDevices = mutableListOf<com.tak.lite.di.DeviceInfo>()
         val deviceNames = mutableListOf<String>()
-        val serviceUuid = UUID.fromString("6ba1b218-15a8-461f-9fa8-5dcae273eafd")
 
         val progressDialog = android.app.AlertDialog.Builder(this)
-            .setTitle("Scanning for Meshtastic devices...")
+            .setTitle("Scanning for devices...")
             .setView(android.widget.ProgressBar(this))
             .setCancelable(true)
             .create()
         progressDialog.show()
 
-        bluetoothDeviceManager.scanForDevices(serviceUuid, onResult = { device ->
-            discoveredDevices.add(device)
-            val name = device.name ?: "Unknown Meshtastic Device"
-            deviceNames.add("$name (${device.address})")
+        protocol.scanForDevices(onResult = { deviceInfo ->
+            discoveredDevices.add(deviceInfo)
+            deviceNames.add("${deviceInfo.name} (${deviceInfo.address})")
         }, onScanFinished = {
             progressDialog.dismiss()
             if (deviceNames.isEmpty()) {
                 android.app.AlertDialog.Builder(this)
                     .setTitle("No devices found")
-                    .setMessage("No Meshtastic devices were found. Make sure your device is powered on and try again.")
+                    .setMessage("No compatible devices were found. Make sure your device is powered on and try again.")
                     .setPositiveButton("OK", null)
                     .show()
             } else {
                 android.app.AlertDialog.Builder(this)
-                    .setTitle("Select Meshtastic Device")
+                    .setTitle("Select Device")
                     .setItems(deviceNames.toTypedArray()) { _, which ->
-                        val device = discoveredDevices[which]
-                        bluetoothStatusText.text = "Connecting to: ${device.name ?: "Unknown"} (${device.address})..."
-                        bluetoothDeviceManager.connect(device) { _ ->
+                        val deviceInfo = discoveredDevices[which]
+                        bluetoothStatusText.text = "Connecting to: ${deviceInfo.name} (${deviceInfo.address})..."
+                        protocol.connectToDevice(deviceInfo) { success ->
                             // UI will update via state observer
                         }
                     }
@@ -448,7 +448,7 @@ class SettingsActivity : BaseActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQUEST_CODE_BLUETOOTH_PERMISSIONS) {
             if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
-                showBluetoothScanDialog(null)
+                showDeviceScanDialog(meshProtocolProvider.protocol.value)
             } else {
                 bluetoothStatusText.text = "Bluetooth permissions are required to connect."
             }

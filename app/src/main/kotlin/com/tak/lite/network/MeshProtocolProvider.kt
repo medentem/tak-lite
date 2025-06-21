@@ -53,6 +53,4 @@ class MeshProtocolProvider @Inject constructor(
             Layer2MeshNetworkProtocol(context)
         }
     }
-
-    fun getBluetoothDeviceManager(): BluetoothDeviceManager = bluetoothDeviceManager
 } 

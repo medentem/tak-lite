@@ -203,21 +203,16 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             deviceManager.connectionState.collect { state ->
                 _connectionState.value = when (state) {
                     is BluetoothDeviceManager.ConnectionState.Connected -> {
-                        // Reset handshake state on new connection
                         handshakeComplete.set(false)
                         _configDownloadStep.value = ConfigDownloadStep.NotStarted
-                        // Don't start queue here - wait for handshake completion
-                        MeshConnectionState.Connected
+                        MeshConnectionState.Connected(com.tak.lite.di.DeviceInfo.BluetoothDevice(state.device))
                     }
                     is BluetoothDeviceManager.ConnectionState.Connecting -> {
-                        // Stop queue while connecting
                         stopPacketQueue()
                         MeshConnectionState.Connecting
                     }
                     is BluetoothDeviceManager.ConnectionState.Disconnected -> {
-                        // Stop queue when disconnected
                         stopPacketQueue()
-                        // Only clear state if this was a user-initiated disconnect
                         if (deviceManager.isUserInitiatedDisconnect()) {
                             Log.i(TAG, "User initiated disconnect - clearing state")
                             cleanupState()
@@ -227,7 +222,6 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                         MeshConnectionState.Disconnected
                     }
                     is BluetoothDeviceManager.ConnectionState.Failed -> {
-                        // Connection failed after all retry attempts
                         Log.e(TAG, "Connection failed after retry attempts: ${state.reason}")
                         stopPacketQueue()
                         cleanupState()
@@ -1578,5 +1572,31 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         val currentCounters = _configStepCounters.value.toMutableMap()
         currentCounters[step] = (currentCounters[step] ?: 0) + 1
         _configStepCounters.value = currentCounters
+    }
+
+    // Device management implementation
+    override fun scanForDevices(onResult: (com.tak.lite.di.DeviceInfo) -> Unit, onScanFinished: () -> Unit) {
+        deviceManager.scanForDevices(MESHTASTIC_SERVICE_UUID, 
+            onResult = { bluetoothDevice ->
+                onResult(com.tak.lite.di.DeviceInfo.BluetoothDevice(bluetoothDevice))
+            },
+            onScanFinished = onScanFinished
+        )
+    }
+
+    override fun connectToDevice(deviceInfo: com.tak.lite.di.DeviceInfo, onConnected: (Boolean) -> Unit) {
+        when (deviceInfo) {
+            is com.tak.lite.di.DeviceInfo.BluetoothDevice -> {
+                deviceManager.connect(deviceInfo.device, onConnected)
+            }
+            is com.tak.lite.di.DeviceInfo.NetworkDevice -> {
+                // Network devices are not supported by Meshtastic protocol
+                onConnected(false)
+            }
+        }
+    }
+
+    override fun disconnectFromDevice() {
+        deviceManager.disconnect()
     }
 } 

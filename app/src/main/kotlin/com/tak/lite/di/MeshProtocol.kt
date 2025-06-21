@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 import org.maplibre.android.geometry.LatLng
 
 sealed class MeshConnectionState {
-    object Connected : MeshConnectionState()
+    data class Connected(val deviceInfo: DeviceInfo?) : MeshConnectionState()
     object Disconnected : MeshConnectionState()
     object Connecting : MeshConnectionState()
     data class Error(val message: String) : MeshConnectionState()
@@ -44,6 +44,11 @@ interface MeshProtocol {
     val requiresAppLocationSend: Boolean
     val allowsChannelManagement: Boolean
     
+    // Device connection management
+    fun scanForDevices(onResult: (DeviceInfo) -> Unit, onScanFinished: () -> Unit)
+    fun connectToDevice(deviceInfo: DeviceInfo, onConnected: (Boolean) -> Unit)
+    fun disconnectFromDevice()
+    
     // Channel operations
     suspend fun createChannel(name: String)
     fun deleteChannel(channelId: String)
@@ -73,4 +78,20 @@ interface MeshProtocol {
     fun sendDirectMessage(peerId: String, content: String)
     fun getPeerPublicKey(peerId: String): ByteArray?
     fun getOrCreateDirectMessageChannel(peerId: String): DirectMessageChannel?
+}
+
+// Device information abstraction
+sealed class DeviceInfo {
+    abstract val name: String
+    abstract val address: String
+    
+    data class BluetoothDevice(val device: android.bluetooth.BluetoothDevice) : DeviceInfo() {
+        override val name: String get() = device.name ?: "Unknown Device"
+        override val address: String get() = device.address
+    }
+    
+    data class NetworkDevice(val ipAddress: String, val port: Int) : DeviceInfo() {
+        override val name: String get() = "Network Device ($ipAddress:$port)"
+        override val address: String get() = "$ipAddress:$port"
+    }
 }

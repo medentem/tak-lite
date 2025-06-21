@@ -45,7 +45,6 @@ class MeshNetworkService @Inject constructor(
         method.invoke(null) as? Context
     } catch (e: Exception) { null }
 
-    private val bluetoothDeviceManager = meshProtocolProvider.getBluetoothDeviceManager()
     private val _isDeviceLocationStale = MutableStateFlow(false)
     val isDeviceLocationStale: StateFlow<Boolean> = _isDeviceLocationStale
 
@@ -245,7 +244,7 @@ class MeshNetworkService @Inject constructor(
     }
 
     fun cleanup() {
-        bluetoothDeviceManager?.disconnect()
+        meshProtocol.disconnectFromDevice()
         _networkState.value = MeshNetworkState.Disconnected
     }
 

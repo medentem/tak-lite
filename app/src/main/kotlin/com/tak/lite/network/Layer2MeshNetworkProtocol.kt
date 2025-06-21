@@ -212,7 +212,7 @@ class Layer2MeshNetworkProtocol @Inject constructor(
         peerUpdateCallback = callback
         loadPeerCache()
         
-        _connectionState.value = MeshConnectionState.Connected
+        _connectionState.value = MeshConnectionState.Connected(null)
         
         discoveryJob = CoroutineScope(coroutineContext).launch {
             while (isActive) {
@@ -1015,5 +1015,48 @@ class Layer2MeshNetworkProtocol @Inject constructor(
 
     override suspend fun selectChannel(channelId: String) {
         // No-op for Layer 2
+    }
+
+    // Device management implementation for Layer 2
+    override fun scanForDevices(onResult: (com.tak.lite.di.DeviceInfo) -> Unit, onScanFinished: () -> Unit) {
+        // Layer 2 doesn't scan for devices in the same way as Bluetooth
+        // Instead, it discovers peers through network discovery
+        // For now, we'll simulate device discovery by looking for active peers
+        CoroutineScope(coroutineContext).launch {
+            // Simulate network device discovery
+            val discoveredPeers = peersMap.values.filter { 
+                it.lastSeen > System.currentTimeMillis() - PEER_TIMEOUT_MS 
+            }
+            
+            discoveredPeers.forEach { peer ->
+                val ipAddress = peer.ipAddress.split(":")[0]
+                val port = peer.ipAddress.split(":").getOrNull(1)?.toIntOrNull() ?: DISCOVERY_PORT
+                onResult(com.tak.lite.di.DeviceInfo.NetworkDevice(ipAddress, port))
+            }
+            
+            onScanFinished()
+        }
+    }
+
+    override fun connectToDevice(deviceInfo: com.tak.lite.di.DeviceInfo, onConnected: (Boolean) -> Unit) {
+        when (deviceInfo) {
+            is com.tak.lite.di.DeviceInfo.BluetoothDevice -> {
+                onConnected(false)
+            }
+            is com.tak.lite.di.DeviceInfo.NetworkDevice -> {
+                startDiscovery { peers ->
+                    // Update peers list when discovery finds new peers
+                    _peers.value = peers
+                }
+                _connectionState.value = MeshConnectionState.Connected(deviceInfo)
+                onConnected(true)
+            }
+        }
+    }
+
+    override fun disconnectFromDevice() {
+        // For Layer 2, "disconnecting" means stopping network discovery
+        stopDiscovery()
+        _connectionState.value = MeshConnectionState.Disconnected
     }
 } 

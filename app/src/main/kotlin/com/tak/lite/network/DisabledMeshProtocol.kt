@@ -123,4 +123,19 @@ class DisabledMeshProtocol(private val context: Context) : MeshProtocol {
         // No-op
         return null
     }
+
+    // Device management implementation for disabled protocol
+    override fun scanForDevices(onResult: (com.tak.lite.di.DeviceInfo) -> Unit, onScanFinished: () -> Unit) {
+        // No devices available in disabled mode
+        onScanFinished()
+    }
+
+    override fun connectToDevice(deviceInfo: com.tak.lite.di.DeviceInfo, onConnected: (Boolean) -> Unit) {
+        // Cannot connect in disabled mode
+        onConnected(false)
+    }
+
+    override fun disconnectFromDevice() {
+        // No-op
+    }
 } 
