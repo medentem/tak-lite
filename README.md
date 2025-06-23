@@ -105,12 +105,14 @@ The application communicates over a local mesh network using Doodle Labs devices
 
 TAK Lite is designed to operate in environments with limited or no internet connectivity by leveraging a mesh networking approach:
 
-- **Doodle Labs Mesh Devices**: The app connects to a Doodle Labs mesh radio, which provides a local, self-healing, peer-to-peer network for all connected devices.
-- **Peer Discovery**: Devices on the mesh automatically discover each other using local network broadcast and/or service discovery protocols.
+
+- **Meshtastic Devices**: The app connects to a Meshtastic device, which provides the network layer for peer discovery, sending annotations and telemetry.
 - **Data Synchronization**: Location, POI, and annotation data are shared directly between peers over the mesh, ensuring real-time situational awareness without a central server.
-- **VOIP over Mesh**: Push-to-talk audio (WebRTC) is transmitted directly between devices using the mesh network, minimizing latency and supporting robust communication even in disconnected or degraded environments.
-- **Gateway Support**: If a mesh node has internet access, it can act as a gateway, allowing the mesh to bridge to external networks as needed.
 - **Resilience**: The mesh network is resilient to node failures and adapts dynamically as devices join or leave the network.
+- **IN PROGRESS - Doodle Labs Mesh Devices**: The app connects to a Doodle Labs mesh radio, which provides a local, self-healing, peer-to-peer network for all connected devices.
+  - **Peer Discovery**: Devices on the mesh automatically discover each other using local network broadcast and/or service discovery protocols.
+  - **VOIP over Mesh**: Push-to-talk audio (WebRTC) is transmitted directly between devices using the mesh network, minimizing latency and supporting robust communication even in disconnected or degraded environments.
+  - **Gateway Support**: If a mesh node has internet access, it can act as a gateway, allowing the mesh to bridge to external networks as needed.
 
 **Further Reading:**
 - [Doodle Labs Mesh Networking Overview](https://doodlelabs.com)
