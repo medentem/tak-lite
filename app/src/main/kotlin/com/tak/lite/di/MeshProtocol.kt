@@ -78,6 +78,11 @@ interface MeshProtocol {
     fun sendDirectMessage(peerId: String, content: String)
     fun getPeerPublicKey(peerId: String): ByteArray?
     fun getOrCreateDirectMessageChannel(peerId: String): DirectMessageChannel?
+
+    // Diagnostic and reset operations
+    fun forceReset()
+    fun isReadyForNewConnection(): Boolean
+    fun getDiagnosticInfo(): String
 }
 
 // Device information abstraction

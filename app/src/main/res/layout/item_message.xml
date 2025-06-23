@@ -39,15 +39,38 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toBottomOf="@id/senderName" />
 
-    <TextView
-        android:id="@+id/messageStatus"
+    <LinearLayout
+        android:id="@+id/messageStatusLayout"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:orientation="horizontal"
         android:layout_marginTop="4dp"
-        android:textSize="12sp"
-        android:textColor="?android:attr/textColorSecondary"
-        android:visibility="gone"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/messageContent" />
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/messageContent">
+
+        <ImageView
+            android:id="@+id/statusCheck1"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:src="@drawable/ic_check_circle_outline"
+            android:contentDescription="@string/status_sent" />
+
+        <ImageView
+            android:id="@+id/statusCheck2"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:src="@drawable/ic_check_circle_outline"
+            android:layout_marginStart="-1dp"
+            android:contentDescription="@string/status_delivered" />
+
+        <ImageView
+            android:id="@+id/statusCheck3"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:src="@drawable/ic_check_circle_outline"
+            android:layout_marginStart="-1dp"
+            android:visibility="gone"
+            android:contentDescription="@string/status_received" />
+    </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout> 

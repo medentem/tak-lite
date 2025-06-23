@@ -131,8 +131,8 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     private val messageTimeoutJob = AtomicReference<Job?>(null)
     private val inFlightMessages = ConcurrentHashMap<Int, MeshProtos.MeshPacket>()
     private val MESSAGE_TIMEOUT_MS = 30000L // 30 seconds timeout for messages
-    private val PACKET_TIMEOUT_MS = 15000L // 15 seconds timeout for packet queue
-    private val HANDSHAKE_TIMEOUT_MS = 60000L // 60 seconds total timeout for handshake
+    private val PACKET_TIMEOUT_MS = 8000L // 8 seconds timeout for packet queue (closer to BLE timeout)
+    private val HANDSHAKE_PACKET_TIMEOUT_MS = 8000L // 8 seconds timeout per packet during handshake
     private val MAX_RETRY_COUNT = 1 // Maximum number of retries for failed messages
 
     // Add location request tracking
@@ -150,6 +150,9 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     private var queueJob: Job? = null
     private val queueScope = CoroutineScope(coroutineContext + SupervisorJob())
 
+    // Add callback for BLE operation failures
+    private var onBleOperationFailed: ((Exception) -> Unit)? = null
+
     // Add timeout job management
     private class TimeoutJobManager {
         private val timeoutJobs = ConcurrentHashMap<Int, Job>()
@@ -159,6 +162,9 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                 try {
                     delay(timeoutMs)
                     onTimeout(packet)
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    // This is expected when timeout is cancelled (e.g., packet was acknowledged)
+                    Log.d("TimeoutJobManager", "Timeout job cancelled for packet ${packet.id} (expected)")
                 } catch (e: Exception) {
                     Log.e("TimeoutJobManager", "Error in timeout job for packet ${packet.id}", e)
                 }
@@ -181,6 +187,9 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     // Add message retry tracking
     private val messageRetryCount = ConcurrentHashMap<Int, Int>()
 
+    // Add handshake timeout management
+    private var handshakeTimeoutJob: Job? = null
+
     init {
         deviceManager.setPacketListener { data ->
             handleIncomingPacket(data)
@@ -196,6 +205,21 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             _configDownloadStep.value = ConfigDownloadStep.SendingHandshake
             startConfigHandshake()
         }
+        // Set up BLE operation failure callback
+        onBleOperationFailed = { exception ->
+            Log.w(TAG, "BLE operation failed, notifying packet queue: ${exception.message}")
+            // Complete any pending packet responses with failure
+            queueResponse.forEach { (packetId, deferred) ->
+                if (!deferred.isCompleted) {
+                    deferred.complete(false)
+                }
+            }
+        }
+        
+        // Connect the BLE operation failure callback
+        deviceManager.setBleOperationFailedCallback { exception ->
+            onBleOperationFailed?.invoke(exception)
+        }
         // Start observing handshake completion
         observeHandshakeCompletion()
         // Observe Bluetooth connection state
@@ -205,7 +229,8 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                     is BluetoothDeviceManager.ConnectionState.Connected -> {
                         handshakeComplete.set(false)
                         _configDownloadStep.value = ConfigDownloadStep.NotStarted
-                        MeshConnectionState.Connected(com.tak.lite.di.DeviceInfo.BluetoothDevice(state.device))
+                        // Keep connection state as Connecting until handshake completes
+                        MeshConnectionState.Connecting
                     }
                     is BluetoothDeviceManager.ConnectionState.Connecting -> {
                         stopPacketQueue()
@@ -238,6 +263,10 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             // Stop any ongoing operations first
             stopPacketQueue()
             
+            // Cancel handshake timeout job
+            handshakeTimeoutJob?.cancel()
+            handshakeTimeoutJob = null
+            
             // Clear all state
             peerLocations.clear()
             _annotations.value = emptyList()
@@ -257,7 +286,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             _channels.value = emptyList()
             _channelMessages.value = emptyMap()
             
-            // Cleanup device manager last
+            // Cleanup device manager last to ensure BLE queue is cleared
             deviceManager.cleanup()
             
             Log.d(TAG, "State cleanup completed successfully")
@@ -286,6 +315,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         }
         queueJob = queueScope.launch {
             Log.d(TAG, "Packet queue job started")
+            var processedCount = 0
             while (true) {
                 try {
                     // Take the first packet from the queue
@@ -308,6 +338,12 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                                     updateMessageStatusForPacket(packet, MessageStatus.FAILED)
                                 }
                             }
+                        }
+                        
+                        // Periodic health check every 10 packets
+                        processedCount++
+                        if (processedCount % 10 == 0) {
+                            checkQueueHealth()
                         }
                     } catch (e: TimeoutCancellationException) {
                         Log.w(TAG, "Packet id=${packet.id} timed out in queue")
@@ -551,11 +587,15 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                     }.onFailure { error ->
                         Log.e(TAG, "Failed to send want_config_id: ${error.message}")
                         _configDownloadStep.value = ConfigDownloadStep.Error("Failed to send handshake: ${error.message}")
+                        // Set connection state to error since handshake failed
+                        _connectionState.value = MeshConnectionState.Error("Failed to send handshake: ${error.message}")
                     }
                 }
             } else {
                 Log.e(TAG, "GATT/service/ToRadio characteristic missing, cannot send handshake. GATT: ${gatt != null}, Service: ${service != null}, ToRadioChar: ${toRadioChar != null}")
                 _configDownloadStep.value = ConfigDownloadStep.Error("GATT/service/ToRadio characteristic missing")
+                // Set connection state to error since handshake failed
+                _connectionState.value = MeshConnectionState.Error("GATT/service/ToRadio characteristic missing")
             }
         }
     }
@@ -568,38 +608,69 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             
             if (gatt != null && fromRadioChar != null) {
                 try {
-                    withTimeout(HANDSHAKE_TIMEOUT_MS) {
-                        // Reset last data time when starting handshake
-                        lastDataTime.set(System.currentTimeMillis())
+                    // Reset last data time when starting handshake
+                    lastDataTime.set(System.currentTimeMillis())
+                    
+                    // Start the initial handshake timeout
+                    startHandshakeTimeout()
+                    
+                    while (!handshakeComplete.get()) {
+                        deviceManager.aggressiveDrainFromRadio(gatt, fromRadioChar)
                         
-                        while (!handshakeComplete.get()) {
-                            deviceManager.aggressiveDrainFromRadio(gatt, fromRadioChar)
-                            
-                            // Check if we've received any data recently
-                            if (System.currentTimeMillis() - lastDataTime.get() > 8000) { // 8 seconds without data
-                                Log.w(TAG, "No data received for 5 seconds during handshake")
-                                _configDownloadStep.value = ConfigDownloadStep.Error("No response from radio")
-                                cleanupState()
-                                break
-                            }
-                            
-                            // Wait a short time before next drain attempt to avoid tight loop
-                            delay(100)
-                        }
-                        
-                        if (handshakeComplete.get()) {
-                            Log.i(TAG, "Handshake complete.")
-                            _configDownloadStep.value = ConfigDownloadStep.Complete
-                        }
+                        // Wait a short time before next drain attempt to avoid tight loop
+                        delay(100)
                     }
-                } catch (e: TimeoutCancellationException) {
-                    Log.e(TAG, "Handshake timed out after ${HANDSHAKE_TIMEOUT_MS/1000}s")
-                    _configDownloadStep.value = ConfigDownloadStep.Error("Handshake timed out after ${HANDSHAKE_TIMEOUT_MS/1000}s")
+                    
+                    if (handshakeComplete.get()) {
+                        Log.i(TAG, "Handshake complete.")
+                        _configDownloadStep.value = ConfigDownloadStep.Complete
+                        // Cancel the timeout job since handshake is complete
+                        handshakeTimeoutJob?.cancel()
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error during handshake drain: ${e.message}", e)
+                    _configDownloadStep.value = ConfigDownloadStep.Error("Handshake drain error: ${e.message}")
                     cleanupState()
                 }
             } else {
                 Log.e(TAG, "GATT/service/FROMRADIO characteristic missing, cannot drain during handshake.")
                 _configDownloadStep.value = ConfigDownloadStep.Error("GATT/service/FROMRADIO characteristic missing")
+                // Set connection state to error since handshake failed
+                _connectionState.value = MeshConnectionState.Error("GATT/service/FROMRADIO characteristic missing")
+                cleanupState()
+            }
+        }
+    }
+
+    /**
+     * Start or restart the handshake timeout job
+     * This timeout gets reset every time a packet is received during the handshake process,
+     * ensuring that the handshake doesn't timeout as long as the device is actively sending data.
+     */
+    private fun startHandshakeTimeout() {
+        // Cancel any existing timeout job
+        handshakeTimeoutJob?.cancel()
+        
+        handshakeTimeoutJob = CoroutineScope(coroutineContext).launch {
+            try {
+                delay(HANDSHAKE_PACKET_TIMEOUT_MS)
+                // Check if we've received any data recently
+                if (System.currentTimeMillis() - lastDataTime.get() > HANDSHAKE_PACKET_TIMEOUT_MS) {
+                    Log.w(TAG, "No data received for ${HANDSHAKE_PACKET_TIMEOUT_MS/1000}s during handshake")
+                    _configDownloadStep.value = ConfigDownloadStep.Error("No response from radio")
+                    // Set connection state to error since handshake failed
+                    _connectionState.value = MeshConnectionState.Error("No response from radio")
+                    cleanupState()
+                } else {
+                    // If we received data recently, restart the timeout
+                    Log.d(TAG, "Restarting handshake timeout after receiving data")
+                    startHandshakeTimeout()
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // This is expected when handshake completes successfully and timeout is cancelled
+                Log.d(TAG, "Handshake timeout job cancelled (expected when handshake completes)")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in handshake timeout job", e)
             }
         }
     }
@@ -608,6 +679,12 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     private fun handleIncomingPacket(data: ByteArray) {
         // Update last data time for handshake timeout
         lastDataTime.set(System.currentTimeMillis())
+        
+        // Reset handshake timeout if we're still in handshake process
+        // This ensures the handshake doesn't timeout as long as we're receiving packets
+        if (!handshakeComplete.get()) {
+            startHandshakeTimeout()
+        }
         
         Log.d(TAG, "handleIncomingPacket called with data: "+
             "${data.size} bytes: ${data.joinToString(", ", limit = 16)}")
@@ -729,27 +806,40 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                     val completeId = fromRadio.configCompleteId
                     Log.i(TAG, "Received CONFIG_COMPLETE_ID: $completeId (expecting ${configNonce.get()})")
                     if (completeId == configNonce.get()) {
-                        handshakeComplete.set(true)
-                        Log.i(TAG, "Meshtastic config handshake complete!")
-                        _configDownloadStep.value = ConfigDownloadStep.Complete
-                        // Subscribe to FROMNUM notifications only after handshake is complete
-                        deviceManager.subscribeToFromNumNotifications()
-                        
-                        // Restore selected channel from preferences after handshake is complete
-                        val prefs = context.getSharedPreferences("channel_prefs", Context.MODE_PRIVATE)
-                        val savedChannelId = prefs.getString("selected_channel_id", null)
-                        if (savedChannelId != null) {
-                            Log.d(TAG, "Restoring saved channel selection: $savedChannelId")
-                            CoroutineScope(coroutineContext).launch {
-                                selectChannel(savedChannelId)
-                            }
-                        }
-
-                        // Start the packet queue now that handshake is complete
-                        startPacketQueue()
+                        Log.i(TAG, "Config complete ID matches, proceeding with handshake completion")
                     } else {
-                        Log.w(TAG, "Received stale config_complete_id: $completeId")
+                        Log.w(TAG, "Received stale config_complete_id: $completeId, but proceeding anyway")
                     }
+                    
+                    // Complete the handshake regardless of ID match (device might send stale ID first)
+                    handshakeComplete.set(true)
+                    Log.i(TAG, "Meshtastic config handshake complete!")
+                    _configDownloadStep.value = ConfigDownloadStep.Complete
+                    
+                    // Set connection state to Connected now that handshake is complete
+                    val currentDevice = deviceManager.connectedGatt?.device
+                    if (currentDevice != null) {
+                        _connectionState.value = MeshConnectionState.Connected(com.tak.lite.di.DeviceInfo.BluetoothDevice(currentDevice))
+                        Log.i(TAG, "Connection state set to Connected for device: ${currentDevice.name}")
+                    } else {
+                        Log.w(TAG, "No connected device found when setting connection state to Connected")
+                    }
+                    
+                    // Subscribe to FROMNUM notifications only after handshake is complete
+                    deviceManager.subscribeToFromNumNotifications()
+                    
+                    // Restore selected channel from preferences after handshake is complete
+                    val prefs = context.getSharedPreferences("channel_prefs", Context.MODE_PRIVATE)
+                    val savedChannelId = prefs.getString("selected_channel_id", null)
+                    if (savedChannelId != null) {
+                        Log.d(TAG, "Restoring saved channel selection: $savedChannelId")
+                        CoroutineScope(coroutineContext).launch {
+                            selectChannel(savedChannelId)
+                        }
+                    }
+
+                    // Start the packet queue now that handshake is complete
+                    startPacketQueue()
                 }
                 com.geeksville.mesh.MeshProtos.FromRadio.PayloadVariantCase.PACKET -> {
                     if (!handshakeComplete.get()) {
@@ -1453,7 +1543,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     private fun stopPacketQueue() {
         Log.d(TAG, "Stopping packet queue")
         try {
-            // Cancel the queue job
+            // Cancel the queue job first
             queueJob?.cancel()
             queueJob = null
             
@@ -1467,6 +1557,9 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             
             // Clear the queue
             queuedPackets.clear()
+            
+            // Cancel all timeout jobs
+            timeoutJobManager.cancelAll()
             
             Log.d(TAG, "Packet queue stopped successfully")
         } catch (e: Exception) {
@@ -1486,8 +1579,11 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             
             // Check if packet is still in flight (hasn't been acknowledged)
             if (inFlightMessages.containsKey(unsignedPacketId)) {
-                if (retryCount < MAX_RETRY_COUNT) {
-                    // Increment retry count and resend
+                // Check if the packet is still in the queue (BLE level retry)
+                val isInQueue = queueResponse.containsKey(unsignedPacketId)
+                
+                if (retryCount < MAX_RETRY_COUNT && !isInQueue) {
+                    // Only retry if not already being retried at BLE level
                     retryCount += 1
 
                     Log.w(TAG, "Packet $unsignedPacketId timed out, retry $retryCount of $MAX_RETRY_COUNT")
@@ -1499,12 +1595,14 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                     
                     // Queue the retry packet
                     queuePacket(timedOutPacket)
-                } else {
+                } else if (retryCount >= MAX_RETRY_COUNT) {
                     // Max retries reached, mark as failed
                     inFlightMessages.remove(unsignedPacketId)
                     messageRetryCount.remove(unsignedPacketId)
                     updateMessageStatusForPacket(timedOutPacket, MessageStatus.FAILED)
                     Log.w(TAG, "Packet $unsignedPacketId failed after $MAX_RETRY_COUNT retries")
+                } else {
+                    Log.d(TAG, "Packet $unsignedPacketId is being retried at BLE level, skipping packet-level retry")
                 }
             } else {
                 // Packet was already handled by queue or routing response
@@ -1574,6 +1672,24 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         _configStepCounters.value = currentCounters
     }
 
+    /**
+     * Check the health of both queues and log diagnostic information
+     */
+    private fun checkQueueHealth() {
+        val packetQueueSize = queuedPackets.size
+        val pendingResponses = queueResponse.size
+        val inFlightCount = inFlightMessages.size
+        val (bleQueueSize, bleInProgress, bleCurrentOp) = deviceManager.getQueueStatus()
+        
+        Log.d(TAG, "Queue Health Check - Packet Queue: $packetQueueSize, " +
+              "Pending Responses: $pendingResponses, In Flight: $inFlightCount, " +
+              "BLE Queue: $bleQueueSize, BLE In Progress: $bleInProgress, BLE Current Op: $bleCurrentOp")
+        
+        if (packetQueueSize > 10 || pendingResponses > 10 || bleQueueSize > 5) {
+            Log.w(TAG, "Queue sizes are getting large - consider investigating")
+        }
+    }
+
     // Device management implementation
     override fun scanForDevices(onResult: (com.tak.lite.di.DeviceInfo) -> Unit, onScanFinished: () -> Unit) {
         deviceManager.scanForDevices(MESHTASTIC_SERVICE_UUID, 
@@ -1598,5 +1714,77 @@ class MeshtasticBluetoothProtocol @Inject constructor(
 
     override fun disconnectFromDevice() {
         deviceManager.disconnect()
+    }
+
+    /**
+     * Force a complete reset of the Bluetooth state
+     * This should be called when the user wants to start completely fresh after connection issues
+     */
+    override fun forceReset() {
+        Log.i(TAG, "Force reset requested from protocol layer")
+        deviceManager.forceReset()
+        
+        // Also cleanup protocol state
+        cleanupState()
+    }
+
+    /**
+     * Check if the system is ready for new connections
+     * @return true if ready for new connections, false otherwise
+     */
+    override fun isReadyForNewConnection(): Boolean {
+        return deviceManager.isReadyForNewConnection()
+    }
+
+    /**
+     * Get diagnostic information about the current connection state
+     * @return String with diagnostic information
+     */
+    override fun getDiagnosticInfo(): String {
+        val deviceStatus = deviceManager.getConnectionStateSummary()
+        val reconnectionStatus = deviceManager.getReconnectionStatus()
+        val queueStatus = deviceManager.getQueueStatus()
+        
+        return "Device Status: $deviceStatus\n" +
+               "Reconnection Status: $reconnectionStatus\n" +
+               "Queue Status: ${queueStatus.first}, In Progress: ${queueStatus.second}, Current Op: ${queueStatus.third}\n" +
+               "Protocol State: ${_connectionState.value}, Handshake: ${_configDownloadStep.value}"
+    }
+
+    /**
+     * Nuclear option: Force a complete Bluetooth adapter reset
+     * This should only be used when the OS Bluetooth stack is completely stuck
+     * WARNING: This will disconnect ALL Bluetooth devices and restart the Bluetooth stack
+     */
+    fun forceBluetoothAdapterReset() {
+        Log.w(TAG, "NUCLEAR OPTION: Force Bluetooth adapter reset requested")
+        deviceManager.forceBluetoothAdapterReset()
+        
+        // Also cleanup protocol state
+        cleanupState()
+    }
+
+    /**
+     * Get detailed OS-level Bluetooth connection information for debugging
+     * @return String with detailed OS connection information
+     */
+    fun getOsConnectionInfo(): String {
+        return deviceManager.getOsConnectionInfo()
+    }
+
+    /**
+     * Manually force the release of a device connection without removing the bond
+     * @param deviceInfo The device to force connection release for
+     */
+    fun forceDeviceConnectionRelease(deviceInfo: com.tak.lite.di.DeviceInfo) {
+        when (deviceInfo) {
+            is com.tak.lite.di.DeviceInfo.BluetoothDevice -> {
+                Log.i(TAG, "Force device connection release requested for: ${deviceInfo.device.address}")
+                deviceManager.forceDeviceConnectionRelease(deviceInfo.device)
+            }
+            is com.tak.lite.di.DeviceInfo.NetworkDevice -> {
+                Log.w(TAG, "Force device connection release not applicable for network devices")
+            }
+        }
     }
 } 

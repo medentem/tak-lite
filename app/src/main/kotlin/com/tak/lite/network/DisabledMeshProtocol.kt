@@ -1,6 +1,7 @@
 package com.tak.lite.network
 
 import android.content.Context
+import android.util.Log
 import com.tak.lite.data.model.ChannelMessage
 import com.tak.lite.data.model.DirectMessageChannel
 import com.tak.lite.data.model.IChannel
@@ -137,5 +138,17 @@ class DisabledMeshProtocol(private val context: Context) : MeshProtocol {
 
     override fun disconnectFromDevice() {
         // No-op
+    }
+
+    override fun forceReset() {
+        // No-op for disabled protocol
+    }
+
+    override fun isReadyForNewConnection(): Boolean {
+        return false // Always false for disabled protocol
+    }
+
+    override fun getDiagnosticInfo(): String {
+        return "Disabled Protocol - No connections possible"
     }
 } 

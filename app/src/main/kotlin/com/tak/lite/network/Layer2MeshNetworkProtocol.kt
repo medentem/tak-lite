@@ -1059,4 +1059,24 @@ class Layer2MeshNetworkProtocol @Inject constructor(
         stopDiscovery()
         _connectionState.value = MeshConnectionState.Disconnected
     }
+
+    override fun forceReset() {
+        Log.i(TAG, "Force reset requested for Layer 2 protocol")
+        stopDiscovery()
+        _connectionState.value = MeshConnectionState.Disconnected
+        _peers.value = emptyList()
+        _annotations.value = emptyList()
+        peerLocations.clear()
+    }
+
+    override fun isReadyForNewConnection(): Boolean {
+        return _connectionState.value is MeshConnectionState.Disconnected
+    }
+
+    override fun getDiagnosticInfo(): String {
+        return "Layer 2 Protocol State: ${_connectionState.value}, " +
+               "Peers: ${_peers.value.size}, " +
+               "Annotations: ${_annotations.value.size}, " +
+               "Discovery Active: ${discoveryJob?.isActive ?: false}"
+    }
 } 

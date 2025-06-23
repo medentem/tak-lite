@@ -67,6 +67,7 @@ class BluetoothDeviceManager(private val context: Context) {
     private var mtuRetry = false
     private var skipRefresh: Boolean = false
     private var initialDrainDone = false
+    private var isReconnectionAttempt: Boolean = false // Track if this is a reconnection attempt
 
     // BLE Work Queue
     private sealed class BleOperation {
@@ -92,6 +93,12 @@ class BluetoothDeviceManager(private val context: Context) {
     private var lostConnectionCallback: (() -> Unit)? = null
     fun setLostConnectionCallback(callback: () -> Unit) {
         lostConnectionCallback = callback
+    }
+
+    // Add BLE operation failure callback
+    private var bleOperationFailedCallback: ((Exception) -> Unit)? = null
+    fun setBleOperationFailedCallback(callback: (Exception) -> Unit) {
+        bleOperationFailedCallback = callback
     }
 
     // Notification handler map
@@ -278,14 +285,20 @@ class BluetoothDeviceManager(private val context: Context) {
     private fun onOperationTimeout() {
         val op = currentOperation
         Log.e("BluetoothDeviceManager", "BLE operation timed out: $op")
+        
+        val timeoutException = Exception("Operation timed out")
+        
+        // Notify the callback about the timeout
+        bleOperationFailedCallback?.invoke(timeoutException)
+        
         when (op) {
-            is BleOperation.Write -> op.onResult(Result.failure<Boolean>(Exception("Operation timed out")))
-            is BleOperation.Read -> op.onResult(Result.failure<ByteArray?>(Exception("Operation timed out")))
-            is BleOperation.SetNotify -> op.onResult(Result.failure<Boolean>(Exception("Operation timed out")))
-            is BleOperation.ReliableWrite -> op.onResult(Result.failure<Boolean>(Exception("Operation timed out")))
+            is BleOperation.Write -> op.onResult(Result.failure<Boolean>(timeoutException))
+            is BleOperation.Read -> op.onResult(Result.failure<ByteArray?>(timeoutException))
+            is BleOperation.SetNotify -> op.onResult(Result.failure<Boolean>(timeoutException))
+            is BleOperation.ReliableWrite -> op.onResult(Result.failure<Boolean>(timeoutException))
             null -> {}
         }
-        completeCurrentOperation(Result.failure<Any?>(Exception("Operation timed out")))
+        completeCurrentOperation(Result.failure<Any?>(timeoutException))
         bleOperationInProgress = false
         processNextBleOperation()
     }
@@ -299,6 +312,11 @@ class BluetoothDeviceManager(private val context: Context) {
     }
 
     private fun failAllPendingOperations(error: Exception) {
+        Log.w("BluetoothDeviceManager", "Failing all pending BLE operations: ${error.message}")
+        
+        // Notify the callback about the failure
+        bleOperationFailedCallback?.invoke(error)
+        
         while (true) {
             val op = bleQueue.poll() ?: break
             when (op) {
@@ -312,33 +330,51 @@ class BluetoothDeviceManager(private val context: Context) {
     }
 
     fun scanForDevices(serviceUuid: UUID, onResult: (BluetoothDevice) -> Unit, onScanFinished: () -> Unit) {
+        Log.d("BluetoothDeviceManager", "Starting device scan")
+        
         // Clean up any existing state before starting a new scan
         resetReconnectState()
         
-        val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-        val adapter = bluetoothManager.adapter ?: return
-        val bleScanner = adapter.bluetoothLeScanner
-        val scanFilter = ScanFilter.Builder().setServiceUuid(ParcelUuid(serviceUuid)).build()
-        val scanSettings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
-        val discovered = mutableSetOf<String>()
+        // Add a delay to ensure the Bluetooth stack has time to reset
+        CoroutineScope(Dispatchers.Main).launch {
+            delay(2000) // 2 second delay to ensure cleanup is complete
+            
+            // Check if there are any lingering OS-level connections that might interfere
+            val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+            val connectedDevices = bluetoothManager.getConnectedDevices(BluetoothProfile.GATT)
+            if (connectedDevices.isNotEmpty()) {
+                Log.w("BluetoothDeviceManager", "Found ${connectedDevices.size} lingering OS-level connections: ${connectedDevices.map { "${it.name} (${it.address})" }}")
+                // Don't force reset here, but log the issue for debugging
+            }
+            
+            val adapter = bluetoothManager.adapter ?: return@launch
+            val bleScanner = adapter.bluetoothLeScanner
+            val scanFilter = ScanFilter.Builder().setServiceUuid(ParcelUuid(serviceUuid)).build()
+            val scanSettings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
+            val discovered = mutableSetOf<String>()
 
-        val scanCallback = object : ScanCallback() {
-            override fun onScanResult(callbackType: Int, result: ScanResult) {
-                val device = result.device
-                if (device.address !in discovered) {
-                    discovered.add(device.address)
-                    onResult(device)
+            val scanCallback = object : ScanCallback() {
+                override fun onScanResult(callbackType: Int, result: ScanResult) {
+                    val device = result.device
+                    if (device.address !in discovered) {
+                        discovered.add(device.address)
+                        Log.d("BluetoothDeviceManager", "Found device: ${device.name ?: "Unknown"} (${device.address})")
+                        onResult(device)
+                    }
+                }
+                override fun onScanFailed(errorCode: Int) {
+                    Log.e("BluetoothDeviceManager", "BLE scan failed: $errorCode")
+                    onScanFinished()
                 }
             }
-            override fun onScanFailed(errorCode: Int) {
-                Log.e("BluetoothDeviceManager", "BLE scan failed: $errorCode")
-                onScanFinished()
-            }
-        }
-        bleScanner.startScan(listOf(scanFilter), scanSettings, scanCallback)
-        CoroutineScope(Dispatchers.Main).launch {
-            kotlinx.coroutines.delay(4000)
+            
+            Log.d("BluetoothDeviceManager", "Starting BLE scan...")
+            bleScanner.startScan(listOf(scanFilter), scanSettings, scanCallback)
+            
+            // Scan for 4 seconds
+            delay(4000)
             bleScanner.stopScan(scanCallback)
+            Log.d("BluetoothDeviceManager", "BLE scan completed, found ${discovered.size} devices")
             onScanFinished()
         }
     }
@@ -347,6 +383,7 @@ class BluetoothDeviceManager(private val context: Context) {
         lastDevice = device
         lastOnConnected = onConnected
         reconnectAttempts = 0
+        isReconnectionAttempt = false // Reset for fresh connections
         mtuRetry = false
         skipRefresh = shouldSkipRefresh(device)
         connectInternal(device, onConnected)
@@ -440,12 +477,50 @@ class BluetoothDeviceManager(private val context: Context) {
 
             override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
                 CoroutineScope(Dispatchers.Main).launch {
-                    delay(1000) // Wait 1s after service discovery
+                    Log.d("BluetoothDeviceManager", "Service discovery completed with status: $status")
+                    
+                    // Use longer initial delay for reconnection attempts (device may have been powered off)
+                    val initialDelay = if (isReconnectionAttempt) 2000L else 1000L
+                    Log.d("BluetoothDeviceManager", "Waiting ${initialDelay}ms after service discovery (reconnection: $isReconnectionAttempt)")
+                    delay(initialDelay)
+                    
                     if (status == BluetoothGatt.GATT_SUCCESS) {
-                        val service = gatt.getService(MESHTASTIC_SERVICE_UUID)
-                        val fromNumChar = service?.getCharacteristic(FROMNUM_CHARACTERISTIC_UUID)
-                        val fromRadioChar = service?.getCharacteristic(FROMRADIO_CHARACTERISTIC_UUID)
+                        // Try to find characteristics with retry logic
+                        var fromNumChar: BluetoothGattCharacteristic? = null
+                        var fromRadioChar: BluetoothGattCharacteristic? = null
+                        var retryCount = 0
+                        val maxRetries = if (isReconnectionAttempt) 5 else 3 // More retries for reconnection
+                        
+                        while (retryCount < maxRetries && (fromNumChar == null || fromRadioChar == null)) {
+                            val service = gatt.getService(MESHTASTIC_SERVICE_UUID)
+                            if (service == null) {
+                                Log.w("BluetoothDeviceManager", "Meshtastic service not found on attempt ${retryCount + 1}")
+                            } else {
+                                Log.d("BluetoothDeviceManager", "Found Meshtastic service, looking for characteristics...")
+                                fromNumChar = service.getCharacteristic(FROMNUM_CHARACTERISTIC_UUID)
+                                fromRadioChar = service.getCharacteristic(FROMRADIO_CHARACTERISTIC_UUID)
+                                
+                                if (fromNumChar != null) {
+                                    Log.d("BluetoothDeviceManager", "Found FROMNUM characteristic")
+                                }
+                                if (fromRadioChar != null) {
+                                    Log.d("BluetoothDeviceManager", "Found FROMRADIO characteristic")
+                                }
+                            }
+                            
+                            if (fromNumChar == null || fromRadioChar == null) {
+                                retryCount++
+                                if (retryCount < maxRetries) {
+                                    val retryDelay = if (isReconnectionAttempt) retryCount * 1500L else retryCount * 1000L
+                                    Log.w("BluetoothDeviceManager", "Characteristics not found on attempt $retryCount, retrying in ${retryDelay}ms...")
+                                    delay(retryDelay) // Progressive delay: longer for reconnection attempts
+                                }
+                            }
+                        }
+                        
                         if (fromNumChar != null && fromRadioChar != null) {
+                            Log.i("BluetoothDeviceManager", "All characteristics found successfully after ${retryCount + 1} attempts")
+                            isReconnectionAttempt = false // Reset the flag on successful connection
                             // Do NOT subscribe to FROMNUM notifications here anymore
                             _connectionState.value = ConnectionState.Connected(device)
                             onConnected(true)
@@ -459,8 +534,8 @@ class BluetoothDeviceManager(private val context: Context) {
                                 initialDrainCompleteCallback?.invoke()
                             }
                         } else {
-                            if (fromNumChar == null) Log.e("BluetoothDeviceManager", "FROMNUM characteristic not found!")
-                            if (fromRadioChar == null) Log.e("BluetoothDeviceManager", "FROMRADIO characteristic not found!")
+                            if (fromNumChar == null) Log.e("BluetoothDeviceManager", "FROMNUM characteristic not found after $maxRetries attempts!")
+                            if (fromRadioChar == null) Log.e("BluetoothDeviceManager", "FROMRADIO characteristic not found after $maxRetries attempts!")
                             _connectionState.value = ConnectionState.Failed("Missing characteristic after service discovery")
                             onConnected(false)
                             scheduleReconnect("Missing characteristic after service discovery")
@@ -625,20 +700,65 @@ class BluetoothDeviceManager(private val context: Context) {
     }
 
     fun disconnect() {
+        Log.i("BluetoothDeviceManager", "User-initiated disconnect")
         userInitiatedDisconnect = true
-        resetReconnectState()
-        // Explicitly close the GATT connection
-        bluetoothGatt?.let { gatt ->
-            try {
-                gatt.disconnect()
-                gatt.close()
-            } catch (e: Exception) {
-                Log.e("BluetoothDeviceManager", "Error during disconnect: ${e.message}")
-            }
-        }
-        bluetoothGatt = null
-        gattCallback = null
+        forceCleanup() // Use force cleanup for user-initiated disconnects
         _connectionState.value = ConnectionState.Disconnected
+    }
+
+    /**
+     * Force a complete reset of the Bluetooth state
+     * This should be called when the user wants to start completely fresh
+     */
+    fun forceReset() {
+        Log.i("BluetoothDeviceManager", "Force reset requested")
+        userInitiatedDisconnect = true
+        forceCleanup()
+        
+        // Additional reset: clear all state and wait for Bluetooth stack to settle
+        CoroutineScope(Dispatchers.Main).launch {
+            delay(3000) // Wait 3 seconds for complete reset
+            Log.d("BluetoothDeviceManager", "Force reset completed")
+        }
+    }
+
+    /**
+     * Nuclear option: Force a complete Bluetooth adapter reset
+     * This should only be used when the OS Bluetooth stack is completely stuck
+     * WARNING: This will disconnect ALL Bluetooth devices and restart the Bluetooth stack
+     */
+    fun forceBluetoothAdapterReset() {
+        Log.w("BluetoothDeviceManager", "NUCLEAR OPTION: Force Bluetooth adapter reset")
+        
+        try {
+            val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+            val adapter = bluetoothManager.adapter
+            
+            if (adapter != null && adapter.isEnabled) {
+                Log.i("BluetoothDeviceManager", "Disabling Bluetooth adapter...")
+                
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    adapter.disable()
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        Log.i("BluetoothDeviceManager", "Re-enabling Bluetooth adapter...")
+                        adapter.enable()
+                    }, 3000) // Wait 3 seconds before re-enabling
+                } else {
+                    @Suppress("DEPRECATION")
+                    adapter.disable()
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        Log.i("BluetoothDeviceManager", "Re-enabling Bluetooth adapter...")
+                        @Suppress("DEPRECATION")
+                        adapter.enable()
+                    }, 3000) // Wait 3 seconds before re-enabling
+                }
+                
+                // Reset our state
+                resetReconnectState()
+            }
+        } catch (e: Exception) {
+            Log.e("BluetoothDeviceManager", "Error during Bluetooth adapter reset: ${e.message}")
+        }
     }
 
     // Robust reconnect logic
@@ -657,7 +777,7 @@ class BluetoothDeviceManager(private val context: Context) {
             Log.e("BluetoothDeviceManager", "Reconnect timeout exceeded after ${currentTime - reconnectStartTime}ms")
             _connectionState.value = ConnectionState.Failed("Connection timeout - device may be unavailable")
             lastOnConnected?.invoke(false)
-            resetReconnectState()
+            forceCleanup() // Force cleanup when timeout is exceeded
             return
         }
 
@@ -666,13 +786,42 @@ class BluetoothDeviceManager(private val context: Context) {
             Log.e("BluetoothDeviceManager", "Maximum reconnect attempts reached")
             _connectionState.value = ConnectionState.Failed("Maximum reconnection attempts reached")
             lastOnConnected?.invoke(false)
-            resetReconnectState()
+            forceCleanup() // Force cleanup when max attempts are reached
             return
+        }
+
+        // Check if the OS is stuck in a connected state (this often happens after device power cycles)
+        lastDevice?.let { device ->
+            if (isDeviceConnectedAtOsLevel(device) && reconnectAttempts >= 2) {
+                Log.w("BluetoothDeviceManager", "OS appears stuck in connected state, forcing connection release")
+                forceConnectionRelease(device)
+                // Wait longer before next attempt after connection release
+                CoroutineScope(Dispatchers.Main).launch {
+                    delay(5000) // Wait 5 seconds after connection release
+                    pendingReconnect = false
+                    lastDevice?.let { device ->
+                        lastOnConnected?.let { onConnected ->
+                            Log.i("BluetoothDeviceManager", "Attempting reconnect after connection release to ${device.address}")
+                            connectInternal(device, onConnected)
+                        }
+                    }
+                }
+                return
+            }
         }
 
         pendingReconnect = true
         reconnectAttempts++
-        val delayMs = (1000L * reconnectAttempts).coerceAtMost(10000L)
+        isReconnectionAttempt = true // Mark this as a reconnection attempt
+        
+        // Progressive delay strategy: longer delays for early attempts, then exponential backoff
+        val delayMs = when (reconnectAttempts) {
+            1 -> 2000L  // 2 seconds for first attempt
+            2 -> 4000L  // 4 seconds for second attempt  
+            3 -> 6000L  // 6 seconds for third attempt
+            else -> (1000L * reconnectAttempts).coerceAtMost(10000L) // Exponential backoff with max 10s
+        }
+        
         Log.w("BluetoothDeviceManager", "[Reconnect] Scheduling reconnect in ${delayMs}ms because: $reason (attempt $reconnectAttempts)")
         CoroutineScope(Dispatchers.Main).launch {
             delay(delayMs)
@@ -687,22 +836,17 @@ class BluetoothDeviceManager(private val context: Context) {
     }
 
     private fun resetReconnectState() {
+        Log.d("BluetoothDeviceManager", "Resetting reconnection state")
         reconnectAttempts = 0
         reconnectStartTime = 0
         pendingReconnect = false
+        isReconnectionAttempt = false // Reset reconnection flag
         lastDevice = null
         lastOnConnected = null
-        // Clean up GATT resources
-        bluetoothGatt?.let { gatt ->
-            try {
-                gatt.disconnect()
-                gatt.close()
-            } catch (e: Exception) {
-                Log.e("BluetoothDeviceManager", "Error cleaning up GATT: ${e.message}")
-            }
-        }
-        bluetoothGatt = null
-        gattCallback = null
+        
+        // Force cleanup GATT resources with retry
+        forceCleanupGatt()
+        
         // Clear any pending operations
         failAllPendingOperations(Exception("Connection reset"))
         bleQueue.clear()
@@ -710,6 +854,7 @@ class BluetoothDeviceManager(private val context: Context) {
         currentOperation = null
         currentOperationTimeoutJob?.cancel()
         currentOperationTimeoutJob = null
+        
         // Reset other state
         mtuRetry = false
         skipRefresh = false
@@ -720,6 +865,178 @@ class BluetoothDeviceManager(private val context: Context) {
         pendingReliableWriteCallback = null
         currentReliableWriteValue = null
         notificationHandlers.clear()
+        
+        // Reset connection state
+        _connectionState.value = ConnectionState.Disconnected
+        
+        Log.d("BluetoothDeviceManager", "Reconnection state reset completed")
+    }
+
+    /**
+     * Force cleanup of GATT connection with retry logic
+     */
+    private fun forceCleanupGatt() {
+        val gatt = bluetoothGatt
+        if (gatt != null) {
+            Log.d("BluetoothDeviceManager", "Force cleaning up GATT connection")
+            try {
+                // First try to disconnect
+                gatt.disconnect()
+                Log.d("BluetoothDeviceManager", "GATT disconnect called")
+            } catch (e: Exception) {
+                Log.w("BluetoothDeviceManager", "Error during GATT disconnect: ${e.message}")
+            }
+            
+            try {
+                // Then close the connection
+                gatt.close()
+                Log.d("BluetoothDeviceManager", "GATT close called")
+            } catch (e: Exception) {
+                Log.w("BluetoothDeviceManager", "Error during GATT close: ${e.message}")
+            }
+            
+            // Clear the reference
+            bluetoothGatt = null
+            gattCallback = null
+        }
+    }
+
+    /**
+     * Force the OS Bluetooth stack to release the connection without removing the bond
+     * This is necessary when the OS gets stuck in a connected state
+     */
+    private fun forceOsBluetoothReset(device: BluetoothDevice) {
+        Log.i("BluetoothDeviceManager", "Force OS Bluetooth reset for device: ${device.address}")
+        
+        try {
+            // Instead of removing the bond, try to force the OS to release the connection
+            // by creating a new GATT connection with autoConnect=false
+            Log.d("BluetoothDeviceManager", "Attempting to force OS connection release without unbonding")
+            
+            // First, ensure our current GATT is properly closed
+            forceCleanupGatt()
+            
+            // Wait a bit for the OS to process the cleanup
+            CoroutineScope(Dispatchers.Main).launch {
+                delay(2000) // Wait 2 seconds for OS cleanup
+                Log.d("BluetoothDeviceManager", "OS cleanup delay completed")
+            }
+            
+        } catch (e: Exception) {
+            Log.w("BluetoothDeviceManager", "Error during force OS reset: ${e.message}")
+        }
+    }
+
+    /**
+     * Alternative approach: Force connection release by connecting with autoConnect=false
+     * This can help when the OS is stuck in a connected state
+     */
+    private fun forceConnectionRelease(device: BluetoothDevice) {
+        Log.i("BluetoothDeviceManager", "Force connection release for device: ${device.address}")
+        
+        try {
+            // Method 1: Try to force a fresh connection with autoConnect=false
+            val tempCallback = object : BluetoothGattCallback() {
+                override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+                    Log.d("BluetoothDeviceManager", "Temp connection state change: status=$status, newState=$newState")
+                    if (newState == BluetoothProfile.STATE_CONNECTED) {
+                        // Immediately disconnect to release the connection
+                        Log.d("BluetoothDeviceManager", "Temp connection established, immediately disconnecting")
+                        gatt.disconnect()
+                    } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                        // Close the temporary connection
+                        gatt.close()
+                        Log.d("BluetoothDeviceManager", "Temp connection cleanup completed")
+                    }
+                }
+            }
+            
+            // Connect with autoConnect=false to force a fresh connection
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                device.connectGatt(context, false, tempCallback, BluetoothDevice.TRANSPORT_LE)
+            } else {
+                device.connectGatt(context, false, tempCallback)
+            }
+            
+            // Method 2: Also try to refresh the GATT connection if available
+            CoroutineScope(Dispatchers.Main).launch {
+                delay(1000) // Wait a bit for the temp connection to establish
+                try {
+                    val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+                    val connectedDevices = bluetoothManager.getConnectedDevices(BluetoothProfile.GATT)
+                    val connectedDevice = connectedDevices.find { it.address == device.address }
+                    
+                    if (connectedDevice != null) {
+                        Log.d("BluetoothDeviceManager", "Attempting to refresh GATT connection")
+                        // Try to get the GATT server and refresh it
+                        val gattServer = bluetoothManager.openGattServer(context, null)
+                        if (gattServer != null) {
+                            try {
+                                val refreshMethod = gattServer.javaClass.getMethod("refresh")
+                                val result = refreshMethod.invoke(gattServer) as Boolean
+                                Log.d("BluetoothDeviceManager", "GATT server refresh result: $result")
+                            } catch (e: Exception) {
+                                Log.w("BluetoothDeviceManager", "GATT server refresh not available: ${e.message}")
+                            } finally {
+                                gattServer.close()
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w("BluetoothDeviceManager", "Error during GATT refresh attempt: ${e.message}")
+                }
+            }
+            
+        } catch (e: Exception) {
+            Log.w("BluetoothDeviceManager", "Error during force connection release: ${e.message}")
+        }
+    }
+
+    /**
+     * Check if the device is still connected at the OS level
+     */
+    private fun isDeviceConnectedAtOsLevel(device: BluetoothDevice): Boolean {
+        return try {
+            val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+            val connectedDevices = bluetoothManager.getConnectedDevices(BluetoothProfile.GATT)
+            connectedDevices.any { it.address == device.address }
+        } catch (e: Exception) {
+            Log.w("BluetoothDeviceManager", "Error checking OS connection status: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * Force cleanup when reconnection fails completely
+     * This should be called when the user wants to start fresh
+     */
+    fun forceCleanup() {
+        Log.i("BluetoothDeviceManager", "Force cleanup requested")
+        resetReconnectState()
+        
+        // Check if we need to force OS-level cleanup
+        lastDevice?.let { device ->
+            if (isDeviceConnectedAtOsLevel(device)) {
+                Log.w("BluetoothDeviceManager", "Device still connected at OS level, forcing connection release")
+                forceConnectionRelease(device)
+            }
+        }
+        
+        // Additional cleanup: cancel any pending operations and clear state
+        CoroutineScope(Dispatchers.Main).launch {
+            delay(1000) // Give some time for cleanup to complete
+            Log.d("BluetoothDeviceManager", "Force cleanup completed")
+        }
+    }
+
+    /**
+     * Manually force the release of a device connection without removing the bond
+     * This can be called when the OS appears stuck in a connected state
+     * @param device The device to force connection release for
+     */
+    fun forceDeviceConnectionRelease(device: BluetoothDevice) {
+        Log.i("BluetoothDeviceManager", "Manual force connection release requested for: ${device.address}")
+        forceConnectionRelease(device)
     }
 
     // Device-specific refresh logic
@@ -875,5 +1192,90 @@ class BluetoothDeviceManager(private val context: Context) {
     // Add a method to force cleanup
     fun cleanup() {
         resetReconnectState()
+    }
+
+    /**
+     * Get the current status of the BLE operation queue
+     * @return Triple containing (queue size, operation in progress, current operation type)
+     */
+    fun getQueueStatus(): Triple<Int, Boolean, String?> {
+        val queueSize = bleQueue.size
+        val inProgress = bleOperationInProgress
+        val currentOpType = when (currentOperation) {
+            is BleOperation.Write -> "Write"
+            is BleOperation.Read -> "Read"
+            is BleOperation.SetNotify -> "SetNotify"
+            is BleOperation.ReliableWrite -> "ReliableWrite"
+            null -> null
+        }
+        return Triple(queueSize, inProgress, currentOpType)
+    }
+
+    /**
+     * Get the current reconnection status for debugging
+     * @return Map containing reconnection state information
+     */
+    fun getReconnectionStatus(): Map<String, Any> {
+        return mapOf(
+            "reconnectAttempts" to reconnectAttempts,
+            "pendingReconnect" to pendingReconnect,
+            "isReconnectionAttempt" to isReconnectionAttempt,
+            "reconnectStartTime" to reconnectStartTime,
+            "maxReconnectTimeMs" to MAX_RECONNECT_TIME_MS,
+            "maxReconnectAttempts" to MAX_RECONNECT_ATTEMPTS
+        )
+    }
+
+    /**
+     * Check if the system is in a clean state and ready for new connections
+     * @return true if ready for new connections, false otherwise
+     */
+    fun isReadyForNewConnection(): Boolean {
+        return bluetoothGatt == null && 
+               !pendingReconnect && 
+               reconnectAttempts == 0 && 
+               bleQueue.isEmpty() && 
+               !bleOperationInProgress &&
+               _connectionState.value is ConnectionState.Disconnected
+    }
+
+    /**
+     * Get a summary of the current connection state for debugging
+     * @return String describing the current state
+     */
+    fun getConnectionStateSummary(): String {
+        return "Connection State: ${_connectionState.value}, " +
+               "GATT: ${if (bluetoothGatt != null) "Active" else "None"}, " +
+               "Pending Reconnect: $pendingReconnect, " +
+               "Reconnect Attempts: $reconnectAttempts, " +
+               "Queue Size: ${bleQueue.size}, " +
+               "Operation In Progress: $bleOperationInProgress"
+    }
+
+    /**
+     * Get detailed OS-level Bluetooth connection information for debugging
+     * @return String with detailed OS connection information
+     */
+    fun getOsConnectionInfo(): String {
+        return try {
+            val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+            val connectedDevices = bluetoothManager.getConnectedDevices(BluetoothProfile.GATT)
+            val bondedDevices = bluetoothManager.adapter?.bondedDevices ?: emptySet()
+            
+            val osConnections = connectedDevices.map { device ->
+                "Connected: ${device.name ?: "Unknown"} (${device.address}) - Bond State: ${device.bondState}"
+            }
+            
+            val bondedDevicesInfo = bondedDevices.map { device ->
+                "Bonded: ${device.name ?: "Unknown"} (${device.address}) - Bond State: ${device.bondState}"
+            }
+            
+            "OS-Level Connections (${connectedDevices.size}):\n" +
+            osConnections.joinToString("\n") + "\n\n" +
+            "Bonded Devices (${bondedDevices.size}):\n" +
+            bondedDevicesInfo.joinToString("\n")
+        } catch (e: Exception) {
+            "Error getting OS connection info: ${e.message}"
+        }
     }
 } 

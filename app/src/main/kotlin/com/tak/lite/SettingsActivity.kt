@@ -24,14 +24,12 @@ import com.google.android.material.switchmaterial.SwitchMaterial
 import com.tak.lite.di.ConfigDownloadStep
 import com.tak.lite.di.MeshConnectionState
 import com.tak.lite.di.MeshProtocol
-import com.tak.lite.network.BluetoothDeviceManager
 import com.tak.lite.service.MeshForegroundService
 import com.tak.lite.ui.map.MapController
 import com.tak.lite.util.BillingManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import java.util.UUID
 import javax.inject.Inject
 
 @AndroidEntryPoint
