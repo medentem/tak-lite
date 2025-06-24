@@ -1238,7 +1238,7 @@ class BluetoothDeviceManager(private val context: Context) {
     // Aggressive drain logic and isDrainingFromRadio flag
     @Volatile private var isDrainingFromRadio = false
     @Volatile private var isStackSettling = false
-    public fun aggressiveDrainFromRadio(gatt: BluetoothGatt, fromRadioChar: BluetoothGattCharacteristic) {
+    fun aggressiveDrainFromRadio(gatt: BluetoothGatt, fromRadioChar: BluetoothGattCharacteristic) {
         if (isDrainingFromRadio) return
         isDrainingFromRadio = true
 

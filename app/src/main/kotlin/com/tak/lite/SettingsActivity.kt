@@ -432,7 +432,6 @@ class SettingsActivity : BaseActivity() {
     private fun showDeviceScanDialog(protocol: MeshProtocol) {
         val discoveredDevices = mutableListOf<com.tak.lite.di.DeviceInfo>()
         val deviceNames = mutableListOf<String>()
-        val deviceConnectionStatus = mutableListOf<Boolean>()
 
         val progressDialog = android.app.AlertDialog.Builder(this)
             .setTitle("Scanning for devices...")
@@ -443,22 +442,7 @@ class SettingsActivity : BaseActivity() {
 
         protocol.scanForDevices(onResult = { deviceInfo ->
             discoveredDevices.add(deviceInfo)
-            
-            // Check if this device is connected at OS level
-            val isConnected = when (deviceInfo) {
-                is com.tak.lite.di.DeviceInfo.BluetoothDevice -> {
-                    val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager
-                    val connectedDevices = bluetoothManager.getConnectedDevices(android.bluetooth.BluetoothProfile.GATT)
-                    connectedDevices.any { it.address == deviceInfo.device.address }
-                }
-                is com.tak.lite.di.DeviceInfo.NetworkDevice -> false
-            }
-            
-            deviceConnectionStatus.add(isConnected)
-            
-            // Add connection status indicator to device name
-            val statusIndicator = if (isConnected) " (Connected)" else ""
-            deviceNames.add("${deviceInfo.name} (${deviceInfo.address})$statusIndicator")
+            deviceNames.add("${deviceInfo.name} (${deviceInfo.address})")
         }, onScanFinished = {
             progressDialog.dismiss()
             if (deviceNames.isEmpty()) {
@@ -472,26 +456,9 @@ class SettingsActivity : BaseActivity() {
                     .setTitle("Select Device")
                     .setItems(deviceNames.toTypedArray()) { _, which ->
                         val deviceInfo = discoveredDevices[which]
-                        val isConnected = deviceConnectionStatus[which]
-                        
-                        if (isConnected) {
-                            // Show a dialog explaining that the device is already connected
-                            android.app.AlertDialog.Builder(this)
-                                .setTitle("Device Already Connected")
-                                .setMessage("This device is already connected at the system level. Connecting to it may help resolve connection issues.")
-                                .setPositiveButton("Connect Anyway") { _, _ ->
-                                    bluetoothStatusText.text = "Connecting to: ${deviceInfo.name} (${deviceInfo.address})..."
-                                    protocol.connectToDevice(deviceInfo) { success ->
-                                        // UI will update via state observer
-                                    }
-                                }
-                                .setNegativeButton("Cancel", null)
-                                .show()
-                        } else {
-                            bluetoothStatusText.text = "Connecting to: ${deviceInfo.name} (${deviceInfo.address})..."
-                            protocol.connectToDevice(deviceInfo) { success ->
-                                // UI will update via state observer
-                            }
+                        bluetoothStatusText.text = "Connecting to: ${deviceInfo.name} (${deviceInfo.address})..."
+                        protocol.connectToDevice(deviceInfo) { success ->
+                            // UI will update via state observer
                         }
                     }
                     .setCancelable(true)
