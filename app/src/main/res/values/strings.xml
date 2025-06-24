@@ -5,4 +5,22 @@
     <string name="status_sent">Sent</string>
     <string name="status_delivered">Delivered</string>
     <string name="status_received">Received</string>
+    
+    <!-- Compass Calibration -->
+    <string name="compass_calibration_needed">Your compass needs calibration for accurate readings. Please follow the instructions below.</string>
+    <string name="compass_calibration_optional">Your compass quality could be improved. Would you like to calibrate it?</string>
+    <string name="compass_calibration_instructions">Hold your phone level and move it in a figure-8 pattern as shown. Keep it away from metal objects and move slowly and smoothly.</string>
+    <string name="compass_calibration_complete">Calibration complete! Your compass should now be more accurate.</string>
+    <string name="compass_quality_excellent">Excellent</string>
+    <string name="compass_quality_good">Good</string>
+    <string name="compass_quality_fair">Fair</string>
+    <string name="compass_quality_poor">Poor</string>
+    <string name="compass_quality_unreliable">Unreliable</string>
+    
+    <!-- Periodic Calibration Status -->
+    <string name="calibration_status_unknown">UNCALIBRATED</string>
+    <string name="calibration_status_poor">POOR CAL</string>
+    <string name="calibration_status_good">GOOD CAL</string>
+    <string name="calibration_status_excellent">EXCELLENT CAL</string>
+    <string name="calibration_confidence_format">%1$s (%2$d%%)</string>
 </resources> 

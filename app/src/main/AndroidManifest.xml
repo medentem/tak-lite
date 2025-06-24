@@ -60,6 +60,11 @@
             android:name=".MessageActivity"
             android:exported="false"
             android:theme="@style/Theme.TakLite" />
+        <activity
+            android:name=".ui.location.CompassCalibrationActivity"
+            android:exported="false"
+            android:theme="@style/Theme.TakLite"
+            android:screenOrientation="portrait" />
 
         <receiver
             android:name=".notification.MessageBroadcastReceiver"

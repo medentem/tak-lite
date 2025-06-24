@@ -79,66 +79,122 @@
         android:textColor="#F0F0F0"
         android:gravity="center" />
 
+    <!-- Magnetic Declination Indicator -->
+    <TextView
+        android:id="@+id/declinationText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:textSize="12sp"
+        android:textColor="#B0B0B0"
+        android:gravity="center"
+        android:layout_marginTop="4dp"
+        android:visibility="gone" />
+
     <LinearLayout
         android:id="@+id/detailsContainer"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
+        android:orientation="vertical"
         android:gravity="center"
         android:layout_marginTop="0dp">
+        
+        <!-- Compass Quality Indicator - only shown when expanded -->
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:gravity="center">
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:layout_marginBottom="12dp">
+            
+            <ImageView
+                android:id="@+id/compassQualityIndicator"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:src="@drawable/ic_check_circle_filled"
+                android:layout_marginEnd="4dp" />
+                
             <TextView
-                android:id="@+id/speedText"
+                android:id="@+id/compassQualityText"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="1.2"
-                android:textSize="20sp"
-                android:textColor="#F0F0F0"
-                android:textStyle="bold" />
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="mph"
+                android:text="EXCELLENT"
                 android:textSize="12sp"
-                android:textColor="#B0B0B0" />
+                android:textColor="#4CAF50"
+                android:textStyle="bold" />
+                
+            <ImageView
+                android:id="@+id/calibrationIndicator"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:src="@drawable/ic_calibration_needed"
+                android:layout_marginStart="8dp"
+                android:visibility="gone"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true" />
         </LinearLayout>
-        <View
-            android:layout_width="32dp"
-            android:layout_height="0dp" />
+        
+        <!-- Speed and Altitude -->
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
+            android:orientation="horizontal"
             android:gravity="center">
-            <TextView
-                android:id="@+id/altitudeText"
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="958"
-                android:textSize="20sp"
-                android:textColor="#F0F0F0"
-                android:textStyle="bold" />
-            <TextView
+                android:orientation="vertical"
+                android:gravity="center">
+                <TextView
+                    android:id="@+id/speedText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="1.2"
+                    android:textSize="20sp"
+                    android:textColor="#F0F0F0"
+                    android:textStyle="bold" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="mph"
+                    android:textSize="12sp"
+                    android:textColor="#B0B0B0" />
+            </LinearLayout>
+            <View
+                android:layout_width="32dp"
+                android:layout_height="0dp" />
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="ft"
-                android:textSize="12sp"
-                android:textColor="#B0B0B0" />
+                android:orientation="vertical"
+                android:gravity="center">
+                <TextView
+                    android:id="@+id/altitudeText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="958"
+                    android:textSize="20sp"
+                    android:textColor="#F0F0F0"
+                    android:textStyle="bold" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="ft"
+                    android:textSize="12sp"
+                    android:textColor="#B0B0B0" />
+            </LinearLayout>
         </LinearLayout>
-    </LinearLayout>
 
-    <TextView
-        android:id="@+id/latLngText"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="43.0938374, -88.0917566"
-        android:textSize="16sp"
-        android:textColor="#B0B0B0"
-        android:gravity="center"
-        android:layout_marginTop="8dp" />
+        <TextView
+            android:id="@+id/latLngText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="43.0938374, -88.0917566"
+            android:textSize="16sp"
+            android:textColor="#B0B0B0"
+            android:gravity="center"
+            android:layout_marginTop="8dp" />
+    </LinearLayout>
 
 </LinearLayout> 

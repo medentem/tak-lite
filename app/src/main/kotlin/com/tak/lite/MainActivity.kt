@@ -48,6 +48,7 @@ import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import javax.inject.Inject
+import kotlin.math.abs
 
 val DEFAULT_US_CENTER = LatLng(39.8283, -98.5795)
 const val DEFAULT_US_ZOOM = 4.0
@@ -79,7 +80,6 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
 
     // Add properties for FAB menu views
     private lateinit var fabMenuContainer: LinearLayout
-    private lateinit var nicknameButton: View
     private lateinit var mapTypeToggleButton: View
     private lateinit var downloadSectorButton: View
     private lateinit var settingsButton: View
@@ -92,6 +92,10 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
     private lateinit var latLngText: TextView
     private lateinit var compassBand: LinearLayout
     private lateinit var compassLetters: List<TextView>
+    private lateinit var compassQualityIndicator: ImageView
+    private lateinit var compassQualityText: TextView
+    private lateinit var calibrationIndicator: ImageView
+    private lateinit var declinationText: TextView
 
     // For compass tape smoothing and animation
     private var smoothedHeading: Float? = null
@@ -110,6 +114,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
     private var isDeviceLocationStale: Boolean = true
 
     private val REQUEST_CODE_ALL_PERMISSIONS = 4001
+    private val REQUEST_CODE_COMPASS_CALIBRATION = 4002
 
     @Inject lateinit var meshProtocolProvider: com.tak.lite.network.MeshProtocolProvider
     @Inject lateinit var billingManager: com.tak.lite.util.BillingManager
@@ -143,7 +148,6 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
 
         // Initialize FAB menu views
         fabMenuContainer = findViewById(R.id.fabMenuContainer)
-        nicknameButton = findViewById(R.id.nicknameButton)
         mapTypeToggleButton = findViewById(R.id.mapTypeToggleButton)
         downloadSectorButton = findViewById(R.id.downloadSectorButton)
         settingsButton = findViewById(R.id.settingsButton)
@@ -162,6 +166,10 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
             directionOverlay.findViewById(R.id.compassLetter3),
             directionOverlay.findViewById(R.id.compassLetter4)
         )
+        compassQualityIndicator = directionOverlay.findViewById(R.id.compassQualityIndicator)
+        compassQualityText = directionOverlay.findViewById(R.id.compassQualityText)
+        calibrationIndicator = directionOverlay.findViewById(R.id.calibrationIndicator)
+        declinationText = directionOverlay.findViewById(R.id.declinationText)
 
         updateDirectionOverlayPosition(resources.configuration.orientation)
 
@@ -331,6 +339,11 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
                         }
                     }
                 }
+            },
+            onCalibrationNeeded = {
+                runOnUiThread {
+                    showCalibrationDialog()
+                }
             }
         )
         // FIX: Start location updates if permissions are already granted
@@ -358,10 +371,6 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
         channelController.setupChannelButton(peerIdToNickname)
 
         observeMeshNetworkState()
-
-        nicknameButton.setOnClickListener {
-            showNicknameDialog()
-        }
 
         mapTypeToggleButton.setOnClickListener {
             onMapModeToggled()
@@ -447,6 +456,18 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
                     speedText.text = String.format("%d", data.speedMph.toInt())
                     altitudeText.text = String.format("%.0f", data.altitudeFt)
                     latLngText.text = String.format("%.7f, %.7f", data.latitude, data.longitude)
+                    
+                    // Update compass quality indicators
+                    updateCompassQualityIndicator(data.compassQuality)
+                    
+                    // Update calibration indicator
+                    updateCalibrationIndicator(data.needsCalibration)
+                    
+                    // Update magnetic declination
+                    updateMagneticDeclination(data.magneticDeclination)
+                    
+                    // Update calibration status
+                    updateCalibrationStatus(data.calibrationStatus, data.calibrationConfidence)
                 }
             }
         }
@@ -672,40 +693,6 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
                 }
             }
         }
-    }
-
-    private fun showNicknameDialog() {
-        val editText = android.widget.EditText(this)
-        editText.hint = "Enter your nickname"
-        // Add left padding to the EditText
-        val paddingDp = 16 // 16dp is a common value for input padding
-        val scale = resources.displayMetrics.density
-        val paddingPx = (paddingDp * scale + 0.5f).toInt()
-        editText.setPadding(paddingPx, editText.paddingTop, editText.paddingRight, editText.paddingBottom)
-        val savedNickname = loadNickname()
-        if (!savedNickname.isNullOrEmpty()) {
-            editText.setText(savedNickname)
-            editText.setSelection(savedNickname.length)
-        }
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Set Nickname")
-            .setView(editText)
-            .setPositiveButton("OK") { _, _ ->
-                val nickname = editText.text.toString().trim()
-                if (nickname.isNotEmpty()) {
-                    viewModel.setLocalNickname(nickname)
-                    saveNickname(nickname)
-                }
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    private fun saveNickname(nickname: String) {
-        getSharedPreferences("user_prefs", MODE_PRIVATE)
-            .edit()
-            .putString("nickname", nickname)
-            .apply()
     }
 
     private fun loadNickname(): String? {
@@ -1048,5 +1035,124 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
     private fun showPurchaseDialog() {
         val dialog = com.tak.lite.ui.PurchaseDialog()
         dialog.show(supportFragmentManager, "purchase_dialog")
+    }
+
+    private fun updateCompassQualityIndicator(quality: com.tak.lite.ui.location.CompassQuality) {
+        // Since the compass quality indicator is now inside the details container,
+        // it will only be visible when the overlay is expanded
+        // Always show the compass quality when expanded, regardless of quality
+        val (iconRes, color, text) = when (quality) {
+            com.tak.lite.ui.location.CompassQuality.EXCELLENT -> {
+                Triple(R.drawable.ic_check_circle_filled, "#4CAF50", "EXCELLENT")
+            }
+            com.tak.lite.ui.location.CompassQuality.GOOD -> {
+                Triple(R.drawable.ic_check_circle_filled, "#4CAF50", "GOOD")
+            }
+            com.tak.lite.ui.location.CompassQuality.FAIR -> {
+                Triple(R.drawable.ic_check_circle_outline, "#FF9800", "FAIR")
+            }
+            com.tak.lite.ui.location.CompassQuality.POOR -> {
+                Triple(R.drawable.ic_check_circle_outline, "#F44336", "POOR")
+            }
+            com.tak.lite.ui.location.CompassQuality.UNRELIABLE -> {
+                Triple(R.drawable.ic_cancel, "#F44336", "UNRELIABLE")
+            }
+        }
+        
+        compassQualityIndicator.setImageResource(iconRes)
+        compassQualityIndicator.setColorFilter(android.graphics.Color.parseColor(color))
+        compassQualityText.text = text
+        compassQualityText.setTextColor(android.graphics.Color.parseColor(color))
+    }
+    
+    private fun updateCalibrationIndicator(needsCalibration: Boolean) {
+        if (needsCalibration) {
+            calibrationIndicator.visibility = View.VISIBLE
+            calibrationIndicator.setColorFilter(android.graphics.Color.parseColor("#FF9800"))
+            calibrationIndicator.setOnClickListener {
+                showCalibrationDialog()
+            }
+        } else {
+            // Hide the indicator when calibration is not needed
+            // The updateCalibrationStatus function will show it if there's calibration status to display
+            calibrationIndicator.visibility = View.GONE
+        }
+    }
+    
+    private fun updateMagneticDeclination(declination: Float) {
+        if (abs(declination) > 0.5f) {
+            declinationText.visibility = View.VISIBLE
+            val sign = if (declination > 0) "+" else ""
+            
+            // Get accuracy estimate for current location
+            val currentData = locationController.directionOverlayData.value
+            val accuracy = com.tak.lite.ui.location.MagneticDeclinationCalculator.getAccuracyEstimate(
+                currentData.latitude, currentData.longitude
+            )
+            
+            declinationText.text = "Magnetic declination: ${sign}${String.format("%.1f°", declination)} (±${String.format("%.1f°", accuracy)})"
+        } else {
+            declinationText.visibility = View.GONE
+        }
+    }
+    
+    private fun updateCalibrationStatus(status: com.tak.lite.ui.location.CalibrationStatus, confidence: Float) {
+        val statusColor = when (status) {
+            com.tak.lite.ui.location.CalibrationStatus.UNKNOWN -> android.graphics.Color.GRAY
+            com.tak.lite.ui.location.CalibrationStatus.POOR -> android.graphics.Color.RED
+            com.tak.lite.ui.location.CalibrationStatus.GOOD -> android.graphics.Color.parseColor("#FF9800")
+            com.tak.lite.ui.location.CalibrationStatus.EXCELLENT -> android.graphics.Color.parseColor("#4CAF50")
+        }
+        
+        // Update calibration indicator
+        calibrationIndicator.visibility = View.VISIBLE
+        calibrationIndicator.setColorFilter(statusColor)
+        
+        // Always set the click listener when the indicator is visible
+        calibrationIndicator.setOnClickListener {
+            showCalibrationDialog()
+        }
+        
+        // Only update compass quality text to show calibration status if calibration is good or excellent
+        if (status == com.tak.lite.ui.location.CalibrationStatus.GOOD || 
+            status == com.tak.lite.ui.location.CalibrationStatus.EXCELLENT) {
+            
+            val statusText = when (status) {
+                com.tak.lite.ui.location.CalibrationStatus.GOOD -> getString(R.string.calibration_status_good)
+                com.tak.lite.ui.location.CalibrationStatus.EXCELLENT -> getString(R.string.calibration_status_excellent)
+                else -> return // This shouldn't happen due to the if condition above
+            }
+            
+            compassQualityText.text = statusText
+            compassQualityText.setTextColor(statusColor)
+            
+            // Add confidence percentage for good/excellent calibrations
+            val confidencePercent = (confidence * 100).toInt()
+            compassQualityText.text = getString(R.string.calibration_confidence_format, statusText, confidencePercent)
+        }
+        // For UNKNOWN and POOR calibration status, the compass quality text will show the actual compass quality
+        // as set by updateCompassQualityIndicator
+    }
+    
+    private fun showCalibrationDialog() {
+        val currentData = locationController.directionOverlayData.value
+        val intent = com.tak.lite.ui.location.CompassCalibrationActivity.createIntent(
+            this,
+            currentData.compassQuality,
+            currentData.needsCalibration
+        )
+        startActivityForResult(intent, REQUEST_CODE_COMPASS_CALIBRATION)
+    }
+    
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        
+        if (requestCode == REQUEST_CODE_COMPASS_CALIBRATION) {
+            if (resultCode == RESULT_OK) {
+                // User completed calibration - reset both manual and periodic calibration
+                locationController.resetCalibration()
+                android.widget.Toast.makeText(this, "Compass calibration completed", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 }
