@@ -339,26 +339,78 @@ class BluetoothDeviceManager(private val context: Context) {
         CoroutineScope(Dispatchers.Main).launch {
             delay(2000) // 2 second delay to ensure cleanup is complete
             
-            // Check if there are any lingering OS-level connections that might interfere
             val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+            val discovered = mutableSetOf<String>()
+            
+            // First, check for already-connected devices that support the Meshtastic service
             val connectedDevices = bluetoothManager.getConnectedDevices(BluetoothProfile.GATT)
             if (connectedDevices.isNotEmpty()) {
-                Log.w("BluetoothDeviceManager", "Found ${connectedDevices.size} lingering OS-level connections: ${connectedDevices.map { "${it.name} (${it.address})" }}")
-                // Don't force reset here, but log the issue for debugging
+                Log.i("BluetoothDeviceManager", "Found ${connectedDevices.size} OS-level connections, checking for Meshtastic service support")
+                
+                for (device in connectedDevices) {
+                    if (device.address !in discovered) {
+                        Log.d("BluetoothDeviceManager", "Checking connected device: ${device.name ?: "Unknown"} (${device.address})")
+                        
+                        // Try to connect to the device temporarily to check if it supports the Meshtastic service
+                        val tempCallback = object : BluetoothGattCallback() {
+                            override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+                                if (newState == BluetoothProfile.STATE_CONNECTED) {
+                                    Log.d("BluetoothDeviceManager", "Connected to ${device.address} for service check")
+                                    gatt.discoverServices()
+                                } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                                    Log.d("BluetoothDeviceManager", "Disconnected from ${device.address} after service check")
+                                    gatt.close()
+                                }
+                            }
+                            
+                            override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+                                if (status == BluetoothGatt.GATT_SUCCESS) {
+                                    val service = gatt.getService(serviceUuid)
+                                    if (service != null) {
+                                        Log.i("BluetoothDeviceManager", "Found Meshtastic service on connected device: ${device.name ?: "Unknown"} (${device.address})")
+                                        discovered.add(device.address)
+                                        onResult(device)
+                                    } else {
+                                        Log.d("BluetoothDeviceManager", "Connected device ${device.address} does not support Meshtastic service")
+                                    }
+                                } else {
+                                    Log.w("BluetoothDeviceManager", "Service discovery failed for connected device ${device.address}: $status")
+                                }
+                                // Always disconnect after service check
+                                gatt.disconnect()
+                            }
+                        }
+                        
+                        try {
+                            // Connect with autoConnect=false to avoid interfering with existing connection
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                                device.connectGatt(context, false, tempCallback, BluetoothDevice.TRANSPORT_LE)
+                            } else {
+                                device.connectGatt(context, false, tempCallback)
+                            }
+                            
+                            // Wait a bit for the service check to complete
+                            delay(1000)
+                        } catch (e: Exception) {
+                            Log.w("BluetoothDeviceManager", "Error checking connected device ${device.address}: ${e.message}")
+                        }
+                    }
+                }
+            } else {
+                Log.d("BluetoothDeviceManager", "No OS-level connections found")
             }
             
             val adapter = bluetoothManager.adapter ?: return@launch
             val bleScanner = adapter.bluetoothLeScanner
             val scanFilter = ScanFilter.Builder().setServiceUuid(ParcelUuid(serviceUuid)).build()
             val scanSettings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
-            val discovered = mutableSetOf<String>()
 
             val scanCallback = object : ScanCallback() {
                 override fun onScanResult(callbackType: Int, result: ScanResult) {
                     val device = result.device
                     if (device.address !in discovered) {
                         discovered.add(device.address)
-                        Log.d("BluetoothDeviceManager", "Found device: ${device.name ?: "Unknown"} (${device.address})")
+                        Log.d("BluetoothDeviceManager", "Found device via scan: ${device.name ?: "Unknown"} (${device.address})")
                         onResult(device)
                     }
                 }
@@ -368,13 +420,13 @@ class BluetoothDeviceManager(private val context: Context) {
                 }
             }
             
-            Log.d("BluetoothDeviceManager", "Starting BLE scan...")
+            Log.d("BluetoothDeviceManager", "Starting BLE scan for additional devices...")
             bleScanner.startScan(listOf(scanFilter), scanSettings, scanCallback)
             
             // Scan for 4 seconds
             delay(4000)
             bleScanner.stopScan(scanCallback)
-            Log.d("BluetoothDeviceManager", "BLE scan completed, found ${discovered.size} devices")
+            Log.d("BluetoothDeviceManager", "BLE scan completed, found ${discovered.size} total devices")
             onScanFinished()
         }
     }
@@ -436,12 +488,19 @@ class BluetoothDeviceManager(private val context: Context) {
                     }
                     when (status) {
                         133 -> {
-                            Log.e("BluetoothDeviceManager", "GATT_ERROR (133) encountered. Closing GATT and retrying with autoConnect=true.")
+                            // Immediate connection failed, switch to background connection
+                            Log.w("BluetoothDeviceManager", "Immediate connection failed (status 133), switching to background connection")
                             gatt.close()
-                            // Retry with autoConnect=true
+                            // Retry with autoConnect=true for background connection
                             CoroutineScope(Dispatchers.Main).launch {
-                                delay(1000)
-                                connectInternal(device, onConnected)
+                                delay(1000) // Brief delay before background connection attempt
+                                try {
+                                    device.connectGattBackground(context, gattCallback!!)
+                                } catch (e: Exception) {
+                                    Log.e("BluetoothDeviceManager", "Background connection failed: ${e.message}")
+                                    _connectionState.value = ConnectionState.Failed("Background connection failed")
+                                    onConnected(false)
+                                }
                             }
                         }
                         147 -> {
@@ -453,7 +512,9 @@ class BluetoothDeviceManager(private val context: Context) {
                             restartBleStack()
                         }
                         else -> {
-                            scheduleReconnect("Disconnected")
+                            Log.w("BluetoothDeviceManager", "Disconnected with status $status. Letting client handle reconnection.")
+                            // Let the client handle reconnection instead of automatic scheduling
+                            lostConnectionCallback?.invoke()
                         }
                     }
                 }
@@ -668,8 +729,16 @@ class BluetoothDeviceManager(private val context: Context) {
                 bleOperationInProgress = false
             }
         }
+        
+        // Start the connection with immediate strategy (autoConnect=false)
         if (device.bondState == BluetoothDevice.BOND_BONDED) {
-            device.connectGatt(context, gattCallback!!)
+            try {
+                device.connectGattImmediate(context, gattCallback!!)
+            } catch (e: Exception) {
+                Log.e("BluetoothDeviceManager", "Failed to start connection: ${e.message}")
+                _connectionState.value = ConnectionState.Failed("Failed to start connection")
+                onConnected(false)
+            }
         } else {
             val bondReceiver = object : BroadcastReceiver() {
                 override fun onReceive(context: Context, intent: Intent) {
@@ -684,7 +753,13 @@ class BluetoothDeviceManager(private val context: Context) {
                         val bondState = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.ERROR)
                         if (bondState == BluetoothDevice.BOND_BONDED) {
                             context.unregisterReceiver(this)
-                            device.connectGatt(context, gattCallback!!)
+                            try {
+                                device.connectGattImmediate(context, gattCallback!!)
+                            } catch (e: Exception) {
+                                Log.e("BluetoothDeviceManager", "Failed to start connection after bonding: ${e.message}")
+                                _connectionState.value = ConnectionState.Failed("Failed to start connection after bonding")
+                                onConnected(false)
+                            }
                         } else if (bondState == BluetoothDevice.BOND_NONE) {
                             context.unregisterReceiver(this)
                             _connectionState.value = ConnectionState.Failed("Bonding failed")
@@ -995,7 +1070,7 @@ class BluetoothDeviceManager(private val context: Context) {
     /**
      * Check if the device is still connected at the OS level
      */
-    private fun isDeviceConnectedAtOsLevel(device: BluetoothDevice): Boolean {
+    fun isDeviceConnectedAtOsLevel(device: BluetoothDevice): Boolean {
         return try {
             val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
             val connectedDevices = bluetoothManager.getConnectedDevices(BluetoothProfile.GATT)
@@ -1003,6 +1078,60 @@ class BluetoothDeviceManager(private val context: Context) {
         } catch (e: Exception) {
             Log.w("BluetoothDeviceManager", "Error checking OS connection status: ${e.message}")
             false
+        }
+    }
+
+    /**
+     * Get a list of all connected devices that support the Meshtastic service
+     * @param serviceUuid The service UUID to check for
+     * @return List of connected devices that support the service
+     */
+    fun getConnectedMeshtasticDevices(serviceUuid: UUID): List<BluetoothDevice> {
+        return try {
+            val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+            val connectedDevices = bluetoothManager.getConnectedDevices(BluetoothProfile.GATT)
+            val meshtasticDevices = mutableListOf<BluetoothDevice>()
+            
+            for (device in connectedDevices) {
+                // Check if this device supports the Meshtastic service
+                val tempCallback = object : BluetoothGattCallback() {
+                    var hasService = false
+                    
+                    override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+                        if (newState == BluetoothProfile.STATE_CONNECTED) {
+                            gatt.discoverServices()
+                        } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                            gatt.close()
+                        }
+                    }
+                    
+                    override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+                        if (status == BluetoothGatt.GATT_SUCCESS) {
+                            val service = gatt.getService(serviceUuid)
+                            hasService = service != null
+                            if (hasService) {
+                                meshtasticDevices.add(device)
+                            }
+                        }
+                        gatt.disconnect()
+                    }
+                }
+                
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        device.connectGatt(context, false, tempCallback, BluetoothDevice.TRANSPORT_LE)
+                    } else {
+                        device.connectGatt(context, false, tempCallback)
+                    }
+                } catch (e: Exception) {
+                    Log.w("BluetoothDeviceManager", "Error checking device ${device.address}: ${e.message}")
+                }
+            }
+            
+            meshtasticDevices
+        } catch (e: Exception) {
+            Log.w("BluetoothDeviceManager", "Error getting connected Meshtastic devices: ${e.message}")
+            emptyList()
         }
     }
 
@@ -1086,6 +1215,23 @@ class BluetoothDeviceManager(private val context: Context) {
             this.connectGatt(context, true, gattCallback, BluetoothDevice.TRANSPORT_LE)
         } else {
             this.connectGatt(context, true, gattCallback)
+        }
+    }
+
+    // Updated connection strategy: start with autoConnect=false, fallback to autoConnect=true
+    private fun BluetoothDevice.connectGattImmediate(context: Context, gattCallback: BluetoothGattCallback): BluetoothGatt {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            this.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE) // autoConnect=false for immediate feedback
+        } else {
+            this.connectGatt(context, false, gattCallback) // autoConnect=false for immediate feedback
+        }
+    }
+
+    private fun BluetoothDevice.connectGattBackground(context: Context, gattCallback: BluetoothGattCallback): BluetoothGatt {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            this.connectGatt(context, true, gattCallback, BluetoothDevice.TRANSPORT_LE) // autoConnect=true for background connection
+        } else {
+            this.connectGatt(context, true, gattCallback) // autoConnect=true for background connection
         }
     }
 
@@ -1278,4 +1424,7 @@ class BluetoothDeviceManager(private val context: Context) {
             "Error getting OS connection info: ${e.message}"
         }
     }
+
+    // Add public getter for reconnection attempt status
+    fun isReconnectionAttempt(): Boolean = isReconnectionAttempt
 } 

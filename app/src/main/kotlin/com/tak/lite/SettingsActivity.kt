@@ -292,21 +292,49 @@ class SettingsActivity : BaseActivity() {
             lifecycleScope.launch {
                 repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
                     stepFlow.collect { step ->
-                        when (step) {
-                            is ConfigDownloadStep.NotStarted,
-                            is ConfigDownloadStep.Complete -> {
+                        // Check if we're disconnected - if so, hide handshake progress regardless of step
+                        val isDisconnected = protocol.connectionState.value is MeshConnectionState.Disconnected
+                        if (isDisconnected) {
+                            configProgressBar.visibility = View.GONE
+                            configProgressText.visibility = View.GONE
+                        } else {
+                            when (step) {
+                                is ConfigDownloadStep.NotStarted,
+                                is ConfigDownloadStep.Complete -> {
+                                    configProgressBar.visibility = View.GONE
+                                    configProgressText.visibility = View.GONE
+                                }
+                                is ConfigDownloadStep.Error -> {
+                                    configProgressBar.visibility = View.GONE
+                                    configProgressText.visibility = View.VISIBLE
+                                    configProgressText.text = "Error: ${step.message}"
+                                }
+                                else -> {
+                                    configProgressBar.visibility = View.VISIBLE
+                                    configProgressText.visibility = View.VISIBLE
+                                    updateConfigProgressText(step)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Also observe connection state changes to hide handshake progress when disconnected
+        protocol.connectionState.let { connectionFlow ->
+            lifecycleScope.launch {
+                repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                    connectionFlow.collect { state ->
+                        when (state) {
+                            is MeshConnectionState.Disconnected -> {
+                                // Hide handshake progress when disconnected
                                 configProgressBar.visibility = View.GONE
                                 configProgressText.visibility = View.GONE
                             }
-                            is ConfigDownloadStep.Error -> {
-                                configProgressBar.visibility = View.GONE
-                                configProgressText.visibility = View.VISIBLE
-                                configProgressText.text = "Error: ${step.message}"
-                            }
                             else -> {
-                                configProgressBar.visibility = View.VISIBLE
-                                configProgressText.visibility = View.VISIBLE
-                                updateConfigProgressText(step)
+                                // For other states, let the handshake step observer handle visibility
+                                // This will be handled by the stepFlow observer above
                             }
                         }
                     }
@@ -319,13 +347,14 @@ class SettingsActivity : BaseActivity() {
             lifecycleScope.launch {
                 repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
                     countersFlow.collect { counters ->
-                        // Only update if we're in a downloading state
+                        // Only update if we're in a downloading state and connected
                         val currentStep = protocol.configDownloadStep?.value
-                        if (currentStep is ConfigDownloadStep.DownloadingConfig ||
+                        val isConnected = protocol.connectionState.value !is MeshConnectionState.Disconnected
+                        if (isConnected && (currentStep is ConfigDownloadStep.DownloadingConfig ||
                             currentStep is ConfigDownloadStep.DownloadingModuleConfig ||
                             currentStep is ConfigDownloadStep.DownloadingChannel ||
                             currentStep is ConfigDownloadStep.DownloadingNodeInfo ||
-                            currentStep is ConfigDownloadStep.DownloadingMyInfo) {
+                            currentStep is ConfigDownloadStep.DownloadingMyInfo)) {
                             updateConfigProgressText(currentStep)
                         }
                     }
@@ -403,6 +432,7 @@ class SettingsActivity : BaseActivity() {
     private fun showDeviceScanDialog(protocol: MeshProtocol) {
         val discoveredDevices = mutableListOf<com.tak.lite.di.DeviceInfo>()
         val deviceNames = mutableListOf<String>()
+        val deviceConnectionStatus = mutableListOf<Boolean>()
 
         val progressDialog = android.app.AlertDialog.Builder(this)
             .setTitle("Scanning for devices...")
@@ -413,7 +443,22 @@ class SettingsActivity : BaseActivity() {
 
         protocol.scanForDevices(onResult = { deviceInfo ->
             discoveredDevices.add(deviceInfo)
-            deviceNames.add("${deviceInfo.name} (${deviceInfo.address})")
+            
+            // Check if this device is connected at OS level
+            val isConnected = when (deviceInfo) {
+                is com.tak.lite.di.DeviceInfo.BluetoothDevice -> {
+                    val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager
+                    val connectedDevices = bluetoothManager.getConnectedDevices(android.bluetooth.BluetoothProfile.GATT)
+                    connectedDevices.any { it.address == deviceInfo.device.address }
+                }
+                is com.tak.lite.di.DeviceInfo.NetworkDevice -> false
+            }
+            
+            deviceConnectionStatus.add(isConnected)
+            
+            // Add connection status indicator to device name
+            val statusIndicator = if (isConnected) " (Connected)" else ""
+            deviceNames.add("${deviceInfo.name} (${deviceInfo.address})$statusIndicator")
         }, onScanFinished = {
             progressDialog.dismiss()
             if (deviceNames.isEmpty()) {
@@ -427,9 +472,26 @@ class SettingsActivity : BaseActivity() {
                     .setTitle("Select Device")
                     .setItems(deviceNames.toTypedArray()) { _, which ->
                         val deviceInfo = discoveredDevices[which]
-                        bluetoothStatusText.text = "Connecting to: ${deviceInfo.name} (${deviceInfo.address})..."
-                        protocol.connectToDevice(deviceInfo) { success ->
-                            // UI will update via state observer
+                        val isConnected = deviceConnectionStatus[which]
+                        
+                        if (isConnected) {
+                            // Show a dialog explaining that the device is already connected
+                            android.app.AlertDialog.Builder(this)
+                                .setTitle("Device Already Connected")
+                                .setMessage("This device is already connected at the system level. Connecting to it may help resolve connection issues.")
+                                .setPositiveButton("Connect Anyway") { _, _ ->
+                                    bluetoothStatusText.text = "Connecting to: ${deviceInfo.name} (${deviceInfo.address})..."
+                                    protocol.connectToDevice(deviceInfo) { success ->
+                                        // UI will update via state observer
+                                    }
+                                }
+                                .setNegativeButton("Cancel", null)
+                                .show()
+                        } else {
+                            bluetoothStatusText.text = "Connecting to: ${deviceInfo.name} (${deviceInfo.address})..."
+                            protocol.connectToDevice(deviceInfo) { success ->
+                                // UI will update via state observer
+                            }
                         }
                     }
                     .setCancelable(true)

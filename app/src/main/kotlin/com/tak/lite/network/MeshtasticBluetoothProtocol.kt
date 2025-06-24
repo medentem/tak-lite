@@ -77,6 +77,19 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         return ((currentPacketId % numPacketIds) + 1L).toInt()
     }
 
+    /**
+     * Generate a random nonce for handshake security
+     * Uses a combination of timestamp and random number to ensure uniqueness
+     */
+    private fun generateRandomNonce(): Int {
+        var random = Random(System.currentTimeMillis()).nextLong().absoluteValue
+        val nonceMask = ((1L shl 32) - 1) // A mask for only the valid nonce bits, either 255 or maxint
+        random = (random and 0xffffffff) // keep from exceeding 32 bits
+
+        // Use modulus and +1 to ensure we skip 0 on any values we return
+        return ((random % nonceMask) + 1L).toInt()
+    }
+
     private var annotationCallback: ((MapAnnotation) -> Unit)? = null
     private var peerLocationCallback: ((Map<String, LatLng>) -> Unit)? = null
     private var userLocationCallback: ((LatLng) -> Unit)? = null
@@ -89,7 +102,6 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     var connectedNodeId: String? = null
         private set
     private val handshakeComplete = AtomicBoolean(false)
-    private val configNonce = AtomicInteger((System.currentTimeMillis() % Int.MAX_VALUE).toInt())
     private val nodeInfoMap = ConcurrentHashMap<String, com.geeksville.mesh.MeshProtos.NodeInfo>()
     private var lastDataTime = AtomicLong(System.currentTimeMillis())
 
@@ -227,8 +239,15 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             deviceManager.connectionState.collect { state ->
                 _connectionState.value = when (state) {
                     is BluetoothDeviceManager.ConnectionState.Connected -> {
-                        handshakeComplete.set(false)
-                        _configDownloadStep.value = ConfigDownloadStep.NotStarted
+                        // Check if this is a fresh connection or reconnection
+                        val isReconnection = deviceManager.isReconnectionAttempt()
+                        if (isReconnection) {
+                            Log.i(TAG, "Reconnection established - preserving existing state")
+                            // For reconnections, don't reset handshake state - let it resume
+                        } else {
+                            Log.i(TAG, "Fresh connection established - resetting handshake state")
+                            resetHandshakeState()
+                        }
                         // Keep connection state as Connecting until handshake completes
                         MeshConnectionState.Connecting
                     }
@@ -243,6 +262,11 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                             cleanupState()
                         } else {
                             Log.i(TAG, "Connection lost - preserving state for reconnection")
+                            // Don't call cleanupState() here - preserve protocol state for reconnection
+                            // Only stop the packet queue and cancel timeouts
+                            stopPacketQueue()
+                            handshakeTimeoutJob?.cancel()
+                            handshakeTimeoutJob = null
                         }
                         MeshConnectionState.Disconnected
                     }
@@ -564,7 +588,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
 
     private fun startConfigHandshake() {
         handshakeComplete.set(false)
-        val nonce = configNonce.incrementAndGet()
+        val nonce = generateRandomNonce()
         Log.i(TAG, "Starting Meshtastic config handshake with nonce=$nonce")
         _configDownloadStep.value = ConfigDownloadStep.SendingHandshake
         _configStepCounters.value = emptyMap()  // Reset counters before starting handshake
@@ -581,9 +605,15 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                 deviceManager.reliableWrite(toRadioChar, toRadioBytes) { result ->
                     result.onSuccess { success ->
                         Log.i(TAG, "Sent want_config_id handshake packet: $success")
-                        _configDownloadStep.value = ConfigDownloadStep.WaitingForConfig
-                        // Start handshake drain loop
-                        drainFromRadioUntilHandshakeComplete()
+                        if (success) {
+                            _configDownloadStep.value = ConfigDownloadStep.WaitingForConfig
+                            // Start handshake drain loop
+                            drainFromRadioUntilHandshakeComplete()
+                        } else {
+                            Log.e(TAG, "Failed to send want_config_id handshake packet")
+                            _configDownloadStep.value = ConfigDownloadStep.Error("Failed to send handshake packet")
+                            _connectionState.value = MeshConnectionState.Error("Failed to send handshake packet")
+                        }
                     }.onFailure { error ->
                         Log.e(TAG, "Failed to send want_config_id: ${error.message}")
                         _configDownloadStep.value = ConfigDownloadStep.Error("Failed to send handshake: ${error.message}")
@@ -592,9 +622,8 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                     }
                 }
             } else {
-                Log.e(TAG, "GATT/service/ToRadio characteristic missing, cannot send handshake. GATT: ${gatt != null}, Service: ${service != null}, ToRadioChar: ${toRadioChar != null}")
+                Log.e(TAG, "GATT/service/ToRadio characteristic missing, cannot send handshake")
                 _configDownloadStep.value = ConfigDownloadStep.Error("GATT/service/ToRadio characteristic missing")
-                // Set connection state to error since handshake failed
                 _connectionState.value = MeshConnectionState.Error("GATT/service/ToRadio characteristic missing")
             }
         }
@@ -643,6 +672,19 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     }
 
     /**
+     * Reset handshake state for fresh connections
+     * This should be called when establishing a new connection after a complete disconnect
+     */
+    private fun resetHandshakeState() {
+        Log.d(TAG, "Resetting handshake state for fresh connection")
+        handshakeComplete.set(false)
+        _configDownloadStep.value = ConfigDownloadStep.NotStarted
+        _configStepCounters.value = emptyMap()
+        handshakeTimeoutJob?.cancel()
+        handshakeTimeoutJob = null
+    }
+
+    /**
      * Start or restart the handshake timeout job
      * This timeout gets reset every time a packet is received during the handshake process,
      * ensuring that the handshake doesn't timeout as long as the device is actively sending data.
@@ -655,15 +697,17 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             try {
                 delay(HANDSHAKE_PACKET_TIMEOUT_MS)
                 // Check if we've received any data recently
-                if (System.currentTimeMillis() - lastDataTime.get() > HANDSHAKE_PACKET_TIMEOUT_MS) {
-                    Log.w(TAG, "No data received for ${HANDSHAKE_PACKET_TIMEOUT_MS/1000}s during handshake")
+                val timeSinceLastData = System.currentTimeMillis() - lastDataTime.get()
+                if (timeSinceLastData > HANDSHAKE_PACKET_TIMEOUT_MS) {
+                    Log.w(TAG, "No data received for ${HANDSHAKE_PACKET_TIMEOUT_MS/1000}s during handshake (last data: ${timeSinceLastData}ms ago)")
                     _configDownloadStep.value = ConfigDownloadStep.Error("No response from radio")
                     // Set connection state to error since handshake failed
                     _connectionState.value = MeshConnectionState.Error("No response from radio")
+                    // For handshake timeout, we should do a full cleanup since the device is not responding
                     cleanupState()
                 } else {
                     // If we received data recently, restart the timeout
-                    Log.d(TAG, "Restarting handshake timeout after receiving data")
+                    Log.d(TAG, "Restarting handshake timeout after receiving data (last data: ${timeSinceLastData}ms ago)")
                     startHandshakeTimeout()
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -683,6 +727,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         // Reset handshake timeout if we're still in handshake process
         // This ensures the handshake doesn't timeout as long as we're receiving packets
         if (!handshakeComplete.get()) {
+            Log.d(TAG, "Received packet during handshake - resetting timeout")
             startHandshakeTimeout()
         }
         
@@ -804,12 +849,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                 }
                 com.geeksville.mesh.MeshProtos.FromRadio.PayloadVariantCase.CONFIG_COMPLETE_ID -> {
                     val completeId = fromRadio.configCompleteId
-                    Log.i(TAG, "Received CONFIG_COMPLETE_ID: $completeId (expecting ${configNonce.get()})")
-                    if (completeId == configNonce.get()) {
-                        Log.i(TAG, "Config complete ID matches, proceeding with handshake completion")
-                    } else {
-                        Log.w(TAG, "Received stale config_complete_id: $completeId, but proceeding anyway")
-                    }
+                    Log.i(TAG, "Received CONFIG_COMPLETE_ID: $completeId")
                     
                     // Complete the handshake regardless of ID match (device might send stale ID first)
                     handshakeComplete.set(true)
@@ -1694,6 +1734,9 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     override fun scanForDevices(onResult: (com.tak.lite.di.DeviceInfo) -> Unit, onScanFinished: () -> Unit) {
         deviceManager.scanForDevices(MESHTASTIC_SERVICE_UUID, 
             onResult = { bluetoothDevice ->
+                // Check if this device is already connected at OS level
+                val isConnected = deviceManager.isDeviceConnectedAtOsLevel(bluetoothDevice)
+                Log.i(TAG, "Found device: ${bluetoothDevice.name ?: "Unknown"} (${bluetoothDevice.address}) - Connected at OS level: $isConnected")
                 onResult(com.tak.lite.di.DeviceInfo.BluetoothDevice(bluetoothDevice))
             },
             onScanFinished = onScanFinished
@@ -1729,6 +1772,30 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     }
 
     /**
+     * Force a complete reset when handshake issues occur
+     * This should be called when the device doesn't respond to handshake after reconnection
+     */
+    fun forceResetAfterHandshakeFailure() {
+        Log.w(TAG, "Force reset after handshake failure - clearing all state")
+        // Cancel any ongoing handshake
+        handshakeTimeoutJob?.cancel()
+        handshakeTimeoutJob = null
+        
+        // Reset handshake state
+        handshakeComplete.set(false)
+        _configDownloadStep.value = ConfigDownloadStep.NotStarted
+        _configStepCounters.value = emptyMap()
+        
+        // Force cleanup of device manager
+        deviceManager.forceCleanup()
+        
+        // Clear protocol state
+        cleanupState()
+        
+        Log.i(TAG, "Force reset after handshake failure completed")
+    }
+
+    /**
      * Check if the system is ready for new connections
      * @return true if ready for new connections, false otherwise
      */
@@ -1744,11 +1811,13 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         val deviceStatus = deviceManager.getConnectionStateSummary()
         val reconnectionStatus = deviceManager.getReconnectionStatus()
         val queueStatus = deviceManager.getQueueStatus()
+        val handshakeFailed = isHandshakeFailed()
         
         return "Device Status: $deviceStatus\n" +
                "Reconnection Status: $reconnectionStatus\n" +
                "Queue Status: ${queueStatus.first}, In Progress: ${queueStatus.second}, Current Op: ${queueStatus.third}\n" +
-               "Protocol State: ${_connectionState.value}, Handshake: ${_configDownloadStep.value}"
+               "Protocol State: ${_connectionState.value}, Handshake: ${_configDownloadStep.value}\n" +
+               "Handshake Failed: $handshakeFailed"
     }
 
     /**
@@ -1785,6 +1854,41 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             is com.tak.lite.di.DeviceInfo.NetworkDevice -> {
                 Log.w(TAG, "Force device connection release not applicable for network devices")
             }
+        }
+    }
+
+    /**
+     * Check if the system is in a handshake failure state
+     * @return true if handshake has failed and system needs reset, false otherwise
+     */
+    fun isHandshakeFailed(): Boolean {
+        return _configDownloadStep.value is ConfigDownloadStep.Error && 
+               _connectionState.value is MeshConnectionState.Error
+    }
+
+    /**
+     * Get a list of all connected devices that support the Meshtastic service
+     * This can be useful for debugging and manual connection scenarios
+     * @return List of connected devices that support the Meshtastic service
+     */
+    fun getConnectedMeshtasticDevices(): List<com.tak.lite.di.DeviceInfo> {
+        val connectedDevices = deviceManager.getConnectedMeshtasticDevices(MESHTASTIC_SERVICE_UUID)
+        return connectedDevices.map { device ->
+            com.tak.lite.di.DeviceInfo.BluetoothDevice(device)
+        }
+    }
+
+    /**
+     * Check if a specific device is connected at the OS level
+     * @param deviceInfo The device to check
+     * @return true if the device is connected at OS level, false otherwise
+     */
+    fun isDeviceConnectedAtOsLevel(deviceInfo: com.tak.lite.di.DeviceInfo): Boolean {
+        return when (deviceInfo) {
+            is com.tak.lite.di.DeviceInfo.BluetoothDevice -> {
+                deviceManager.isDeviceConnectedAtOsLevel(deviceInfo.device)
+            }
+            is com.tak.lite.di.DeviceInfo.NetworkDevice -> false
         }
     }
 } 
