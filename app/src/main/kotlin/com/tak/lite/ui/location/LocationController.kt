@@ -35,6 +35,7 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
+import kotlin.math.atan2
 
 // Enhanced data class for overlay with compass quality
 data class DirectionOverlayData(
@@ -46,9 +47,8 @@ data class DirectionOverlayData(
     val longitude: Double = 0.0,
     val compassQuality: CompassQuality = CompassQuality.UNRELIABLE,
     val needsCalibration: Boolean = false,
-    val magneticDeclination: Float = 0f,
-    val calibrationConfidence: Float = 0f,
-    val calibrationStatus: CalibrationStatus = CalibrationStatus.UNKNOWN
+    val calibrationStatus: CalibrationStatus = CalibrationStatus.UNKNOWN,
+    val headingSource: HeadingSource = HeadingSource.COMPASS
 )
 
 enum class CompassQuality {
@@ -60,6 +60,11 @@ enum class CalibrationStatus {
     POOR,           // Low confidence calibration
     GOOD,           // Good confidence calibration
     EXCELLENT       // High confidence calibration
+}
+
+// Add enum for heading source
+enum class HeadingSource {
+    COMPASS, GPS
 }
 
 class LocationController(
@@ -87,14 +92,11 @@ class LocationController(
     private var currentAccuracy = SensorManager.SENSOR_STATUS_UNRELIABLE
     private var needsCalibration = false
     
-    // Advanced filtering
-    private val headingReadings = mutableListOf<Float>()
-    private val maxReadings = 10
-    private val lowPassAlpha = 0.15f
-    private val calibrationThreshold = 5f // degrees of variation to trigger calibration check
+    // Rate limiting for UI updates
+    private var lastUiUpdateTime = 0L
+    private val minUpdateInterval = 100L // Increased to 100ms for more stability (10fps max)
     
-    // Magnetic declination
-    private var magneticDeclination = 0f
+    // Location tracking for calibration
     private var lastLatitude = 0.0
     private var lastLongitude = 0.0
     
@@ -103,70 +105,82 @@ class LocationController(
     private val maxErraticReadings = 5
     private var lastReadings = mutableListOf<Float>()
     private val maxLastReadings = 20
-    
-    // Periodic calibration
-    private val calibrationManager = PeriodicCalibrationManager()
-    private val movementBuffer = mutableListOf<Location>()
+    private val calibrationThreshold = 8f
+
     private val compassBuffer = mutableListOf<Float>()
-    private var lastCalibrationAttempt = 0L
+    private val movementBuffer = mutableListOf<Location>()
+    
+    // Filtering state - track raw readings for filtering
+    private var lastRawHeading: Float = 0f
     
     private val sensorListener = object : SensorEventListener {
-        override fun onSensorChanged(event: SensorEvent) {
+        override fun onSensorChanged(event: SensorEvent?) {
+            if (event == null) return
+            
             val rawHeading = when (event.sensor.type) {
                 Sensor.TYPE_ROTATION_VECTOR -> {
                     val rotationMatrix = FloatArray(9)
                     SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
-                    val orientation = FloatArray(3)
-                    SensorManager.getOrientation(rotationMatrix, orientation)
-                    Math.toDegrees(orientation[0].toDouble()).toFloat()
+                    val orientationAngles = FloatArray(3)
+                    SensorManager.getOrientation(rotationMatrix, orientationAngles)
+                    Math.toDegrees(orientationAngles[0].toDouble()).toFloat()
                 }
-                Sensor.TYPE_ORIENTATION -> {
-                    event.values[0]
-                }
+                Sensor.TYPE_ORIENTATION -> event.values[0]
                 else -> return
             }
             
+            // Normalize to 0-360
             val normalized = (rawHeading + 360) % 360
             
-            // Apply advanced filtering first (on raw magnetic heading)
-            val filteredHeading = applyAdvancedFiltering(normalized)
+            // Apply simple filtering to reduce jitter (on raw readings)
+            val filteredRawHeading = applySimpleFilter(normalized)
             
-            // Apply magnetic declination correction (magnetic to true north)
-            val declinationCorrected = applyMagneticDeclination(filteredHeading, magneticDeclination)
-            
-            // Track compass readings for calibration (true north heading)
-            compassBuffer.add(declinationCorrected)
+            // Track RAW compass readings for calibration (not filtered)
+            compassBuffer.add(normalized)
             if (compassBuffer.size > 20) {
                 compassBuffer.removeAt(0)
             }
+            Log.d("CompassDebug", "Compass buffer size: ${compassBuffer.size}, latest raw: ${normalized}°, filtered raw: ${filteredRawHeading}°")
             
-            // Apply periodic calibration offset (learns device-specific errors only)
-            val finalHeading = calibrationManager.getCalibratedHeading(declinationCorrected)
-            
-            // Check for calibration needs (using final heading for variance calculation)
-            checkCalibrationNeeds(finalHeading)
-            
-            lastHeading = finalHeading
-            val cardinal = getCardinalDirection(finalHeading)
+            // Update tracking variables
+            lastRawHeading = filteredRawHeading
+            lastHeading = filteredRawHeading
+            val cardinal = getCardinalDirection(filteredRawHeading)
             
             // Get calibration status
-            val calibrationState = calibrationManager.getCalibrationState()
-            val calibrationStatus = getCalibrationStatus(calibrationState.confidence)
+            val calibrationStatus = getCalibrationStatus(currentAccuracy)
+            Log.d("CompassDebug", "Final result - Heading: ${filteredRawHeading}°, Cardinal: ${cardinal}, Status: ${calibrationStatus}")
             
-            _directionOverlayData.value = _directionOverlayData.value.copy(
-                headingDegrees = finalHeading,
-                cardinal = cardinal,
-                compassQuality = getCompassQuality(),
-                needsCalibration = needsCalibration,
-                magneticDeclination = magneticDeclination,
-                calibrationConfidence = calibrationState.confidence,
-                calibrationStatus = calibrationStatus
-            )
+            // Rate limit UI updates to prevent jerkiness
+            val currentTime = System.currentTimeMillis()
+            if (currentTime - lastUiUpdateTime >= minUpdateInterval) {
+                // Log comprehensive summary of the complete data flow
+                Log.d("CompassDebug", "=== COMPASS DATA FLOW SUMMARY ===")
+                Log.d("CompassDebug", "Raw sensor: ${rawHeading}°")
+                Log.d("CompassDebug", "Normalized: ${normalized}°")
+                Log.d("CompassDebug", "Filtered raw: ${filteredRawHeading}°")
+                Log.d("CompassDebug", "Calibration status: ${calibrationStatus}")
+                Log.d("CompassDebug", "Needs calibration: ${needsCalibration}")
+                Log.d("CompassDebug", "Sensor accuracy: ${getAccuracyString(currentAccuracy)}")
+                Log.d("CompassDebug", "Location: (${_directionOverlayData.value.latitude}, ${_directionOverlayData.value.longitude})")
+                Log.d("CompassDebug", "=====================================")
+                
+                _directionOverlayData.value = _directionOverlayData.value.copy(
+                    headingDegrees = filteredRawHeading,
+                    cardinal = cardinal,
+                    compassQuality = getCompassQuality(),
+                    needsCalibration = needsCalibration,
+                    calibrationStatus = calibrationStatus
+                )
+                lastUiUpdateTime = currentTime
+            }
         }
         
         override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
             currentAccuracy = accuracy
             needsCalibration = checkCalibrationNeeded()
+            
+            Log.d("CompassDebug", "Sensor accuracy changed: ${accuracy} (${getAccuracyString(accuracy)}), needsCalibration: ${needsCalibration}")
             
             // Notify if calibration is needed
             if (needsCalibration && onCalibrationNeeded != null) {
@@ -184,19 +198,19 @@ class LocationController(
         // Register for rotation vector sensor, fallback to orientation
         val rotationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
         if (rotationSensor != null) {
-            sensorManager.registerListener(sensorListener, rotationSensor, SensorManager.SENSOR_DELAY_UI)
+            sensorManager.registerListener(sensorListener, rotationSensor, SensorManager.SENSOR_DELAY_NORMAL)
         } else {
             val orientationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ORIENTATION)
             if (orientationSensor != null) {
-                sensorManager.registerListener(sensorListener, orientationSensor, SensorManager.SENSOR_DELAY_UI)
+                sensorManager.registerListener(sensorListener, orientationSensor, SensorManager.SENSOR_DELAY_NORMAL)
             }
         }
     }
     
     private fun getCardinalDirection(degrees: Float): String {
         val dirs = listOf("N", "NE", "E", "SE", "S", "SW", "W", "NW", "N")
-        val ix = ((degrees + 22.5f) / 45f).roundToInt()
-        return dirs.getOrElse(ix) { "N" }
+        val ix = ((degrees + 22.5f) / 45f).roundToInt().coerceIn(0, dirs.size - 1)
+        return dirs[ix]
     }
     
     private fun getCompassQuality(): CompassQuality {
@@ -209,49 +223,17 @@ class LocationController(
         }
     }
     
-    private fun applyMagneticDeclination(heading: Float, declination: Float): Float {
-        return (heading + declination + 360) % 360
+    private fun applySimpleFilter(newValue: Float): Float {
+        return lastRawHeading * 0.8f + newValue * 0.2f
     }
     
-    private fun getMagneticDeclination(latitude: Double, longitude: Double): Float {
-        // Use the improved offline magnetic declination calculator
-        return MagneticDeclinationCalculator.calculateDeclination(latitude, longitude).toFloat()
-    }
-    
-    private fun applyAdvancedFiltering(newValue: Float): Float {
-        // Add to readings list
-        headingReadings.add(newValue)
-        if (headingReadings.size > maxReadings) {
-            headingReadings.removeAt(0)
-        }
-        
-        // Apply median filter if we have enough readings
-        val medianFiltered = if (headingReadings.size >= 3) {
-            applyMedianFilter(headingReadings)
-        } else {
-            newValue
-        }
-        
-        // Apply low-pass filter
-        return applyLowPassFilter(medianFiltered, lowPassAlpha)
-    }
-    
-    private fun applyMedianFilter(readings: List<Float>): Float {
-        val sorted = readings.sorted()
-        return if (sorted.size % 2 == 0) {
-            (sorted[sorted.size / 2 - 1] + sorted[sorted.size / 2]) / 2f
-        } else {
-            sorted[sorted.size / 2]
-        }
-    }
-    
-    private fun applyLowPassFilter(newValue: Float, alpha: Float): Float {
-        return lastHeading * (1 - alpha) + newValue * alpha
-    }
-    
-    private fun checkCalibrationNeeds(currentHeading: Float) {
-        // Add to last readings
-        lastReadings.add(currentHeading)
+    /**
+     * Check for calibration needs using raw compass readings for variance calculation
+     * @param normalized The normalized raw compass reading (0-360°)
+     */
+    private fun checkCalibrationNeeds(normalized: Float) {
+        // Add to last readings (using raw readings for variance calculation)
+        lastReadings.add(normalized)
         if (lastReadings.size > maxLastReadings) {
             lastReadings.removeAt(0)
         }
@@ -261,13 +243,22 @@ class LocationController(
             val variance = calculateVariance(lastReadings)
             if (variance > calibrationThreshold) {
                 erraticReadings++
+                Log.d("CompassDebug", "Erratic reading detected - Variance: ${variance}° (threshold: ${calibrationThreshold}°), erratic count: ${erraticReadings}")
             } else {
                 erraticReadings = max(0, erraticReadings - 1)
+                Log.d("CompassDebug", "Stable reading - Variance: ${variance}°, erratic count: ${erraticReadings}")
             }
             
+            val wasNeedingCalibration = needsCalibration
             needsCalibration = erraticReadings >= maxErraticReadings || 
                               currentAccuracy == SensorManager.SENSOR_STATUS_UNRELIABLE ||
                               currentAccuracy == SensorManager.SENSOR_STATUS_ACCURACY_LOW
+            
+            if (needsCalibration != wasNeedingCalibration) {
+                Log.d("CompassDebug", "Calibration need changed: ${wasNeedingCalibration} -> ${needsCalibration}")
+                Log.d("CompassDebug", "  Erratic readings: ${erraticReadings}/${maxErraticReadings}")
+                Log.d("CompassDebug", "  Sensor accuracy: ${getAccuracyString(currentAccuracy)}")
+            }
         }
     }
     
@@ -285,35 +276,44 @@ class LocationController(
                erraticReadings >= maxErraticReadings
     }
     
-    fun getCalibrationInstructions(): String {
-        return "To calibrate your compass:\n\n" +
-               "1. Hold your phone level\n" +
-               "2. Move it in a figure-8 pattern\n" +
-               "3. Rotate it slowly in all directions\n" +
-               "4. Keep away from metal objects\n" +
-               "5. Repeat until the compass stabilizes"
-    }
-    
-    private fun getCalibrationStatus(confidence: Float): CalibrationStatus {
-        return when {
-            confidence < 0.3f -> CalibrationStatus.UNKNOWN
-            confidence < 0.6f -> CalibrationStatus.POOR
-            confidence < 0.8f -> CalibrationStatus.GOOD
-            else -> CalibrationStatus.EXCELLENT
+    private fun getCalibrationStatus(accuracy: Int): CalibrationStatus {
+        return when (accuracy) {
+            SensorManager.SENSOR_STATUS_ACCURACY_HIGH -> CalibrationStatus.EXCELLENT
+            SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM -> CalibrationStatus.GOOD
+            SensorManager.SENSOR_STATUS_ACCURACY_LOW -> CalibrationStatus.POOR
+            SensorManager.SENSOR_STATUS_UNRELIABLE -> CalibrationStatus.UNKNOWN
+            else -> CalibrationStatus.UNKNOWN
         }
     }
     
-    fun resetCalibration() {
-        erraticReadings = 0
-        lastReadings.clear()
-        headingReadings.clear()
-        needsCalibration = false
-        calibrationManager.resetCalibration()
-        movementBuffer.clear()
-        compassBuffer.clear()
-        _directionOverlayData.value = _directionOverlayData.value.copy(
-            needsCalibration = false
-        )
+    private fun getAccuracyString(accuracy: Int): String {
+        return when (accuracy) {
+            SensorManager.SENSOR_STATUS_ACCURACY_HIGH -> "HIGH"
+            SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM -> "MEDIUM"
+            SensorManager.SENSOR_STATUS_ACCURACY_LOW -> "LOW"
+            SensorManager.SENSOR_STATUS_UNRELIABLE -> "UNRELIABLE"
+            else -> "UNKNOWN"
+        }
+    }
+    
+    // Calculate GPS heading from movement
+    private fun calculateGPSHeading(locations: List<Location>): Float {
+        if (locations.size < 2) return 0f
+
+        val startLocation = locations.first()
+        val endLocation = locations.last()
+
+        val lat1 = Math.toRadians(startLocation.latitude)
+        val lon1 = Math.toRadians(startLocation.longitude)
+        val lat2 = Math.toRadians(endLocation.latitude)
+        val lon2 = Math.toRadians(endLocation.longitude)
+
+        val dLon = lon2 - lon1
+        val y = sin(dLon) * cos(lat2)
+        val x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon)
+
+        val bearing = Math.toDegrees(atan2(y, x))
+        return ((bearing + 360) % 360).toFloat()
     }
 
     // Add a flag or callback to indicate if device location is active
@@ -397,67 +397,36 @@ class LocationController(
             onLocationUpdate(location)
         }
         
-        // Update magnetic declination if location changed significantly
-        if (abs(location.latitude - lastLatitude) > 0.1 || abs(location.longitude - lastLongitude) > 0.1) {
-            lastLatitude = location.latitude
-            lastLongitude = location.longitude
-            magneticDeclination = getMagneticDeclination(location.latitude, location.longitude)
-        }
-        
-        // Add to movement buffer for calibration
+        // Update location tracking for heading
+        lastLatitude = location.latitude
+        lastLongitude = location.longitude
+        Log.d("CompassDebug", "Location update - Lat: ${location.latitude}, Lon: ${location.longitude}")
+
+        // Add to movement buffer for heading
         movementBuffer.add(location)
         if (movementBuffer.size > 10) {
             movementBuffer.removeAt(0)
         }
-        
-        // Attempt periodic calibration
-        attemptPeriodicCalibration()
-        
+        Log.d("CompassDebug", "Movement buffer size: ${movementBuffer.size}")
+
         // Update overlay data (heading will be updated by sensor logic later)
+        val useGpsHeading = location.speed > 3.0f && movementBuffer.size >= 2
+        val gpsHeading = if (useGpsHeading) calculateGPSHeading(movementBuffer) else 0f
+        val headingSource = if (useGpsHeading) HeadingSource.GPS else HeadingSource.COMPASS
+        val headingDegrees = if (useGpsHeading) gpsHeading else lastHeading
+        val cardinal = getCardinalDirection(headingDegrees)
+
+        Log.d("HeadingSourceDebug", "Speed: ${location.speed} m/s (${location.speed * 2.23694f} mph), Movement buffer: ${movementBuffer.size}, Use GPS: $useGpsHeading, Heading source: $headingSource")
+
         _directionOverlayData.value = _directionOverlayData.value.copy(
-            speedMph = (location.speed * 2.23694f), // m/s to mph
-            altitudeFt = (location.altitude * 3.28084f).toFloat(), // meters to feet
+            headingDegrees = headingDegrees,
+            cardinal = cardinal,
+            speedMph = (location.speed * 2.23694f),
+            altitudeFt = (location.altitude * 3.28084f).toFloat(),
             latitude = location.latitude,
             longitude = location.longitude,
-            magneticDeclination = magneticDeclination
+            headingSource = headingSource
         )
-    }
-
-    private fun attemptPeriodicCalibration() {
-        // Check if we should attempt calibration
-        if (!calibrationManager.shouldAttemptCalibration() || 
-            movementBuffer.size < 5 || 
-            compassBuffer.size < 5) {
-            return
-        }
-        
-        // Assess movement quality
-        val movementQuality = calibrationManager.assessMovementQuality(movementBuffer, compassBuffer)
-        
-        // Only calibrate if movement quality is good enough
-        if (movementQuality > 0.6f) {
-            val gpsHeading = calibrationManager.calculateGPSHeading(movementBuffer)
-            val avgCompassReading = compassBuffer.average().toFloat()
-            
-            calibrationManager.updateCalibration(
-                gpsHeading,
-                avgCompassReading,
-                movementQuality
-            )
-            
-            // Clear buffers after successful calibration
-            movementBuffer.clear()
-            compassBuffer.clear()
-            
-            // Update calibration status in overlay data
-            val calibrationState = calibrationManager.getCalibrationState()
-            val calibrationStatus = getCalibrationStatus(calibrationState.confidence)
-            
-            _directionOverlayData.value = _directionOverlayData.value.copy(
-                calibrationConfidence = calibrationState.confidence,
-                calibrationStatus = calibrationStatus
-            )
-        }
     }
 
     private fun startFallbackLocationManager() {
@@ -511,6 +480,176 @@ class LocationController(
             } else {
                 callback(null)
             }
+        }
+    }
+
+    /**
+     * Update manual calibration results and trigger OS-level sensor calibration
+     * @param calibrationQuality Quality score from manual calibration (0.0-1.0)
+     */
+    fun updateManualCalibration(calibrationQuality: Float) {
+        Log.d("LocationController", "Updating manual calibration with quality: $calibrationQuality")
+        
+        // Reset erratic readings counter since user performed calibration
+        erraticReadings = 0
+        lastReadings.clear()
+        
+        // Update calibration status based on quality
+        val newCalibrationStatus = when {
+            calibrationQuality >= 0.8f -> CalibrationStatus.EXCELLENT
+            calibrationQuality >= 0.6f -> CalibrationStatus.GOOD
+            calibrationQuality >= 0.4f -> CalibrationStatus.POOR
+            else -> CalibrationStatus.UNKNOWN
+        }
+        
+        // Trigger OS-level sensor calibration if quality is good
+        if (calibrationQuality >= 0.6f) {
+            triggerOSLevelCalibration()
+        }
+        
+        // Update the UI state
+        _directionOverlayData.value = _directionOverlayData.value.copy(
+            needsCalibration = false,
+            calibrationStatus = newCalibrationStatus
+        )
+        
+        Log.d("LocationController", "Manual calibration updated - Status: $newCalibrationStatus, Needs calibration: false")
+    }
+
+    /**
+     * Trigger OS-level sensor calibration using Android's built-in calibration features
+     */
+    private fun triggerOSLevelCalibration() {
+        try {
+            // Get the rotation vector sensor for calibration
+            val rotationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
+            if (rotationSensor != null) {
+                // Trigger sensor calibration by temporarily unregistering and re-registering the sensor
+                // This often triggers the sensor's internal calibration routine
+                sensorManager.unregisterListener(sensorListener)
+                
+                // Re-register with calibration request
+                val success = sensorManager.registerListener(
+                    sensorListener,
+                    rotationSensor,
+                    SensorManager.SENSOR_DELAY_NORMAL,
+                    SensorManager.SENSOR_DELAY_NORMAL
+                )
+                
+                Log.d("LocationController", "OS-level calibration triggered: $success")
+            }
+        } catch (e: Exception) {
+            Log.e("LocationController", "Failed to trigger OS-level calibration: ${e.message}")
+        }
+    }
+
+    /**
+     * Check if OS-level calibration is available and supported
+     */
+    fun isOSLevelCalibrationSupported(): Boolean {
+        val rotationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
+        val magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
+        val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        
+        return rotationSensor != null && magnetometer != null && accelerometer != null
+    }
+
+    /**
+     * Get the current calibration status from OS sensors
+     */
+    fun getOSCalibrationStatus(): CalibrationStatus {
+        return when (currentAccuracy) {
+            SensorManager.SENSOR_STATUS_ACCURACY_HIGH -> CalibrationStatus.EXCELLENT
+            SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM -> CalibrationStatus.GOOD
+            SensorManager.SENSOR_STATUS_ACCURACY_LOW -> CalibrationStatus.POOR
+            SensorManager.SENSOR_STATUS_UNRELIABLE -> CalibrationStatus.UNKNOWN
+            else -> CalibrationStatus.UNKNOWN
+        }
+    }
+
+    /**
+     * Force a sensor accuracy check and update calibration status
+     */
+    fun forceCalibrationCheck() {
+        // Clear current readings to force fresh assessment
+        lastReadings.clear()
+        erraticReadings = 0
+        
+        // Re-evaluate calibration needs
+        needsCalibration = checkCalibrationNeeded()
+        
+        // Update UI state
+        _directionOverlayData.value = _directionOverlayData.value.copy(
+            needsCalibration = needsCalibration,
+            calibrationStatus = getCalibrationStatus(currentAccuracy)
+        )
+        
+        Log.d("LocationController", "Forced calibration check - Needs calibration: $needsCalibration, Status: ${getCalibrationStatus(currentAccuracy)}")
+    }
+
+    /**
+     * Check if stored calibration has expired (24 hours)
+     */
+    fun isCalibrationExpired(): Boolean {
+        val prefs = activity.getSharedPreferences("compass_calibration", Context.MODE_PRIVATE)
+        val calibrationTimestamp = prefs.getLong("calibration_timestamp", 0L)
+        val currentTime = System.currentTimeMillis()
+        val calibrationAge = currentTime - calibrationTimestamp
+        val maxAge = 24 * 60 * 60 * 1000L // 24 hours in milliseconds
+        
+        return calibrationTimestamp == 0L || calibrationAge > maxAge
+    }
+
+    /**
+     * Get the last calibration quality from stored preferences
+     */
+    fun getLastCalibrationQuality(): Float {
+        val prefs = activity.getSharedPreferences("compass_calibration", Context.MODE_PRIVATE)
+        return prefs.getFloat("calibration_quality", 0f)
+    }
+
+    /**
+     * Get comprehensive calibration status including expiry and quality
+     */
+    fun getComprehensiveCalibrationStatus(): CalibrationStatus {
+        // Check if calibration has expired
+        if (isCalibrationExpired()) {
+            Log.d("LocationController", "Calibration has expired")
+            return CalibrationStatus.UNKNOWN
+        }
+        
+        // Get stored calibration quality
+        val storedQuality = getLastCalibrationQuality()
+        
+        // Combine stored quality with current sensor accuracy
+        val currentAccuracy = getCalibrationStatus(this.currentAccuracy)
+        
+        return when {
+            storedQuality >= 0.8f && currentAccuracy == CalibrationStatus.EXCELLENT -> CalibrationStatus.EXCELLENT
+            storedQuality >= 0.6f && currentAccuracy in listOf(CalibrationStatus.GOOD, CalibrationStatus.EXCELLENT) -> CalibrationStatus.GOOD
+            storedQuality >= 0.4f -> CalibrationStatus.POOR
+            else -> CalibrationStatus.UNKNOWN
+        }
+    }
+
+    /**
+     * Initialize calibration status on app startup
+     */
+    fun initializeCalibrationStatus() {
+        // Check if we have stored calibration data
+        if (!isCalibrationExpired()) {
+            val storedQuality = getLastCalibrationQuality()
+            val comprehensiveStatus = getComprehensiveCalibrationStatus()
+            
+            Log.d("LocationController", "Initializing calibration status - Stored quality: $storedQuality, Status: $comprehensiveStatus")
+            
+            // Update UI with stored calibration status
+            _directionOverlayData.value = _directionOverlayData.value.copy(
+                calibrationStatus = comprehensiveStatus,
+                needsCalibration = comprehensiveStatus == CalibrationStatus.UNKNOWN
+            )
+        } else {
+            Log.d("LocationController", "No valid calibration data found, starting fresh")
         }
     }
 } 

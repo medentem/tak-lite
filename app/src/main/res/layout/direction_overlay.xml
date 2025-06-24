@@ -13,61 +13,12 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center">
-        <LinearLayout
-            android:id="@+id/compassBand"
+        <!-- Only the custom compass cardinal view remains -->
+        <com.tak.lite.ui.location.CompassCardinalView
+            android:id="@+id/compassCardinalView"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center"
-            android:layout_marginTop="-2dp"
-            android:layout_marginBottom="4dp">
-            <TextView
-                android:id="@+id/compassLetter0"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="W"
-                android:textSize="18sp"
-                android:textColor="#B0B0B0"
-                android:layout_marginEnd="8dp"/>
-            <TextView
-                android:id="@+id/compassLetter1"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="NW"
-                android:textSize="18sp"
-                android:textColor="#B0B0B0"
-                android:layout_marginEnd="8dp"/>
-            <TextView
-                android:id="@+id/compassLetter2"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="N"
-                android:textSize="18sp"
-                android:textColor="#F0F0F0"
-                android:textStyle="bold"
-                android:layout_marginEnd="8dp"/>
-            <TextView
-                android:id="@+id/compassLetter3"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="NE"
-                android:textSize="18sp"
-                android:textColor="#B0B0B0"
-                android:layout_marginEnd="8dp"/>
-            <TextView
-                android:id="@+id/compassLetter4"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="E"
-                android:textSize="18sp"
-                android:textColor="#B0B0B0"/>
-        </LinearLayout>
-        <View
-            android:id="@+id/compassCenterLine"
-            android:layout_width="2dp"
-            android:layout_height="32dp"
-            android:layout_gravity="center"
-            android:background="#F0F0F0" />
+            android:layout_gravity="center" />
     </FrameLayout>
 
     <TextView
@@ -79,110 +30,85 @@
         android:textColor="#F0F0F0"
         android:gravity="center" />
 
-    <!-- Magnetic Declination Indicator -->
     <TextView
-        android:id="@+id/declinationText"
+        android:id="@+id/headingSourceText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text=""
-        android:textSize="12sp"
+        android:text="COMPASS"
+        android:textSize="10sp"
         android:textColor="#B0B0B0"
         android:gravity="center"
-        android:layout_marginTop="4dp"
-        android:visibility="gone" />
+        android:textAllCaps="true"
+        android:layout_marginTop="2dp" />
 
+    <!-- Details container for expanded view -->
     <LinearLayout
         android:id="@+id/detailsContainer"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:gravity="center"
-        android:layout_marginTop="0dp">
-        
-        <!-- Compass Quality Indicator - only shown when expanded -->
+        android:visibility="gone">
+
         <LinearLayout
+            android:id="@+id/speedAltitudeContainer"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center"
-            android:layout_marginBottom="12dp">
-            
-            <ImageView
-                android:id="@+id/compassQualityIndicator"
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:src="@drawable/ic_check_circle_filled"
-                android:layout_marginEnd="4dp" />
-                
-            <TextView
-                android:id="@+id/compassQualityText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="EXCELLENT"
-                android:textSize="12sp"
-                android:textColor="#4CAF50"
-                android:textStyle="bold" />
-                
-            <ImageView
-                android:id="@+id/calibrationIndicator"
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:src="@drawable/ic_calibration_needed"
-                android:layout_marginStart="8dp"
-                android:visibility="gone"
-                android:background="?android:attr/selectableItemBackgroundBorderless"
-                android:clickable="true"
-                android:focusable="true" />
-        </LinearLayout>
-        
-        <!-- Speed and Altitude -->
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center">
+            android:layout_marginBottom="4dp">
+
             <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:gravity="center">
+                android:gravity="center"
+                android:layout_marginEnd="16dp">
+
                 <TextView
                     android:id="@+id/speedText"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="1.2"
-                    android:textSize="20sp"
+                    android:text="0"
+                    android:textSize="24sp"
                     android:textColor="#F0F0F0"
-                    android:textStyle="bold" />
+                    android:gravity="center" />
+
                 <TextView
+                    android:id="@+id/speedUnitsText"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="mph"
-                    android:textSize="12sp"
-                    android:textColor="#B0B0B0" />
+                    android:text="MPH"
+                    android:textSize="10sp"
+                    android:textColor="#B0B0B0"
+                    android:gravity="center"
+                    android:textAllCaps="true" />
             </LinearLayout>
-            <View
-                android:layout_width="32dp"
-                android:layout_height="0dp" />
+
             <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:gravity="center">
+
                 <TextView
                     android:id="@+id/altitudeText"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="958"
-                    android:textSize="20sp"
+                    android:text="0"
+                    android:textSize="24sp"
                     android:textColor="#F0F0F0"
-                    android:textStyle="bold" />
+                    android:gravity="center" />
+
                 <TextView
+                    android:id="@+id/altitudeUnitsText"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="ft"
-                    android:textSize="12sp"
-                    android:textColor="#B0B0B0" />
+                    android:text="FT"
+                    android:textSize="10sp"
+                    android:textColor="#B0B0B0"
+                    android:gravity="center"
+                    android:textAllCaps="true" />
             </LinearLayout>
         </LinearLayout>
 
@@ -190,11 +116,42 @@
             android:id="@+id/latLngText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="43.0938374, -88.0917566"
-            android:textSize="16sp"
+            android:text="0.0000000, 0.0000000"
+            android:textSize="12sp"
             android:textColor="#B0B0B0"
+            android:gravity="center" />
+
+        <!-- Compass quality indicators -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
             android:gravity="center"
-            android:layout_marginTop="8dp" />
+            android:layout_marginTop="8dp">
+
+            <ImageView
+                android:id="@+id/compassQualityIndicator"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_marginEnd="4dp" />
+
+            <TextView
+                android:id="@+id/compassQualityText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Unknown"
+                android:textSize="12sp"
+                android:textColor="#B0B0B0" />
+
+            <ImageView
+                android:id="@+id/calibrationIndicator"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_marginStart="8dp"
+                android:visibility="gone" />
+
+        </LinearLayout>
+
     </LinearLayout>
 
 </LinearLayout> 
