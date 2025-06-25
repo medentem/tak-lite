@@ -36,6 +36,7 @@ class MessageActivity : BaseActivity() {
     private lateinit var encryptionIndicator: ImageView
     private lateinit var smartReplyContainer: View
     private lateinit var smartReplyChipGroup: ChipGroup
+    private lateinit var disabledOverlay: View
     private var channelId: String = ""
     private val smartReply = SmartReply.getClient()
     private val conversationHistory = mutableListOf<TextMessage>()
@@ -74,6 +75,7 @@ class MessageActivity : BaseActivity() {
         encryptionIndicator = findViewById(R.id.encryptionIndicator)
         smartReplyContainer = findViewById(R.id.smartReplyContainer)
         smartReplyChipGroup = findViewById(R.id.smartReplyChipGroup)
+        disabledOverlay = findViewById(R.id.disabledOverlay)
 
         // Setup RecyclerView
         // Get current user's short name from the protocol
@@ -111,7 +113,7 @@ class MessageActivity : BaseActivity() {
         lifecycleScope.launch {
             Log.d("MessageActivity", "Starting to observe channel info for channelId: $channelId")
             viewModel.getChannelInfo(channelId).collectLatest { channelInfo ->
-                Log.d("MessageActivity", "Received channel info update - name: ${channelInfo.name}, isPkiEncrypted: ${channelInfo.isPkiEncrypted}")
+                Log.d("MessageActivity", "Received channel info update - name: ${channelInfo.name}, isPkiEncrypted: ${channelInfo.isPkiEncrypted}, readyToSend: ${channelInfo.readyToSend}")
                 supportActionBar?.title = channelInfo.name
                 
                 // Show/hide encryption indicator based on whether this is a direct message
@@ -123,6 +125,20 @@ class MessageActivity : BaseActivity() {
                     )
                 } else {
                     encryptionIndicator.visibility = View.GONE
+                }
+                
+                // Handle readyToSend status
+                if (!channelInfo.readyToSend) {
+                    // Show disabled overlay and disable input
+                    disabledOverlay.visibility = View.VISIBLE
+                    messageInput.isEnabled = false
+                    sendButton.isEnabled = false
+                    smartReplyContainer.visibility = View.GONE
+                } else {
+                    // Hide disabled overlay and enable input
+                    disabledOverlay.visibility = View.GONE
+                    messageInput.isEnabled = true
+                    sendButton.isEnabled = true
                 }
             }
         }

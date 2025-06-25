@@ -16,7 +16,9 @@ import javax.inject.Inject
 
 data class ChannelInfo(
     val name: String,
-    val isPkiEncrypted: Boolean = false
+    val isPkiEncrypted: Boolean = false,
+    val canSend: Boolean = true,
+    val readyToSend: Boolean = true
 )
 
 @HiltViewModel
@@ -38,7 +40,8 @@ class MessageViewModel @Inject constructor(
             Log.d(TAG, "Regular channel found: ${channel?.name ?: "null"} for channelId: $channelId")
             ChannelInfo(
                 name = channel?.name ?: channelId,
-                isPkiEncrypted = channel?.isPkiEncrypted ?: false
+                isPkiEncrypted = channel?.isPkiEncrypted ?: false,
+                readyToSend = channel?.readyToSend ?: true
             )
         }
     }

@@ -819,11 +819,19 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                             ?: updatedNodeInfo.user.shortName.takeIf { it.isNotBlank() }
                             ?: nodeNum
                         
-                        // Create updated channel with new name and PKI status
+                        // Check if user is unmessageable
+                        val isUnmessageable = if (updatedNodeInfo.user.hasIsUnmessagable()) {
+                            updatedNodeInfo.user.isUnmessagable
+                        } else {
+                            false
+                        }
+                        
+                        // Create updated channel with new name, PKI status, and readyToSend status
                         val updatedChannel = existingChannel.copy(
                             name = channelName,
                             isPkiEncrypted = updatedNodeInfo.user.publicKey.isNotEmpty() && 
-                                           updatedNodeInfo.user.publicKey != ERROR_BYTE_STRING
+                                           updatedNodeInfo.user.publicKey != ERROR_BYTE_STRING,
+                            readyToSend = !isUnmessageable
                         )
                         
                         // Update in channels collection
@@ -832,7 +840,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                         if (channelIndex != -1) {
                             currentChannels[channelIndex] = updatedChannel
                             _channels.value = currentChannels
-                            Log.d(TAG, "Updated direct message channel for node $nodeNum with new name: $channelName")
+                            Log.d(TAG, "Updated direct message channel for node $nodeNum with new name: $channelName, readyToSend: ${updatedChannel.readyToSend}")
                         }
                     }
                 }
@@ -1445,18 +1453,33 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             ?: nodeInfo?.user?.shortName?.takeIf { it.isNotBlank() }
             ?: peerId
         val latestPki = nodeInfo?.user?.publicKey?.isNotEmpty() == true && nodeInfo.user?.publicKey != ERROR_BYTE_STRING
+        
+        // Check if user is unmessageable
+        val isUnmessageable = nodeInfo?.user?.let { user ->
+            if (user.hasIsUnmessagable()) {
+                user.isUnmessagable
+            } else {
+                false
+            }
+        } ?: false
+        val latestReadyToSend = !isUnmessageable
 
         // Check if channel already exists
         val existingChannel = _channels.value.find { it.id == channelId }
         if (existingChannel != null && existingChannel is DirectMessageChannel) {
-            // If name or PKI status has changed, update the channel
-            if (existingChannel.name != latestName || existingChannel.isPkiEncrypted != latestPki) {
-                val updatedChannel = existingChannel.copy(name = latestName, isPkiEncrypted = latestPki)
+            // If name, PKI status, or readyToSend status has changed, update the channel
+            if (existingChannel.name != latestName || existingChannel.isPkiEncrypted != latestPki || existingChannel.readyToSend != latestReadyToSend) {
+                val updatedChannel = existingChannel.copy(
+                    name = latestName, 
+                    isPkiEncrypted = latestPki,
+                    readyToSend = latestReadyToSend
+                )
                 val currentChannels = _channels.value.toMutableList()
                 val idx = currentChannels.indexOfFirst { it.id == channelId }
                 if (idx != -1) {
                     currentChannels[idx] = updatedChannel
                     _channels.value = currentChannels
+                    Log.d(TAG, "Updated existing direct message channel for peer $peerId: name=$latestName, readyToSend=$latestReadyToSend")
                 }
                 return updatedChannel
             }
@@ -1469,12 +1492,14 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             peerId = peerId,
             lastMessage = null,
             isPkiEncrypted = latestPki,
+            readyToSend = latestReadyToSend,
             displayName = null
         )
         // Add to channels collection
         val currentChannels = _channels.value.toMutableList()
         currentChannels.add(newChannel)
         _channels.value = currentChannels
+        Log.d(TAG, "Created new direct message channel for peer $peerId: name=$latestName, readyToSend=$latestReadyToSend")
         return newChannel
     }
 

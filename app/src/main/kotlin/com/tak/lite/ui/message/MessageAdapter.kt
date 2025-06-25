@@ -145,6 +145,12 @@ class MessageAdapter(
                 MessageStatus.RECEIVED -> {
                     text = "Message confirmed received by the target recipient"
                 }
+                MessageStatus.ERROR -> {
+                    text = "Error communicating with mesh device"
+                }
+                MessageStatus.FAILED -> {
+                    text = "Failed to deliver message to the network"
+                }
                 else -> { /* keep all outline */ }
             }
             android.widget.Toast.makeText(view.context, text, android.widget.Toast.LENGTH_LONG).show()

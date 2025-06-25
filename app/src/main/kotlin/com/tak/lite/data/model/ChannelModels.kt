@@ -44,6 +44,7 @@ interface IChannel {
     val isPkiEncrypted: Boolean
     val isSelectableForPrimaryTraffic: Boolean
     val allowDelete: Boolean
+    val readyToSend: Boolean
     
     fun copy(): IChannel
 }
@@ -63,7 +64,8 @@ data class Layer2Channel(
     override val index: Int = 0,
     override val isPkiEncrypted: Boolean = false,
     override val isSelectableForPrimaryTraffic: Boolean = true,
-    override val allowDelete: Boolean = true
+    override val allowDelete: Boolean = true,
+    override val readyToSend: Boolean = true
 ) : IChannel {
     override fun copy(): IChannel = Layer2Channel(
         id, name, displayName, isDefault, members, precision, lastMessage, index, isPkiEncrypted, isSelectableForPrimaryTraffic, allowDelete
@@ -90,7 +92,8 @@ data class MeshtasticChannel(
     override val index: Int = 0,
     override val isPkiEncrypted: Boolean = false,
     override val isSelectableForPrimaryTraffic: Boolean = true,
-    override val allowDelete: Boolean = false
+    override val allowDelete: Boolean = false,
+    override val readyToSend: Boolean = true
 ) : IChannel {
     override val precision: Int?
         get() = positionPrecision
@@ -122,6 +125,7 @@ data class DirectMessageChannel(
     override val isPkiEncrypted: Boolean = false,
     override val isSelectableForPrimaryTraffic: Boolean = false,
     override val allowDelete: Boolean = true,
+    override val readyToSend: Boolean = true,
     val peerId: String
 ) : IChannel {
     companion object {
@@ -129,6 +133,6 @@ data class DirectMessageChannel(
     }
 
     override fun copy(): IChannel = DirectMessageChannel(
-        id, name, displayName, isDefault, members, precision, lastMessage, index, isPkiEncrypted, isSelectableForPrimaryTraffic, allowDelete, peerId
+        id, name, displayName, isDefault, members, precision, lastMessage, index, isPkiEncrypted, isSelectableForPrimaryTraffic, allowDelete, readyToSend, peerId
     )
 }
