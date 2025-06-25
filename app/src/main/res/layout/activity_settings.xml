@@ -373,6 +373,53 @@
                     </com.google.android.material.textfield.TextInputLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardElevation="2dp"
+                app:cardCornerRadius="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/compass_calibration_title"
+                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                        android:paddingBottom="8dp" />
+
+                    <TextView
+                        android:id="@+id/compassStatusText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Status: Checking..."
+                        android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+                        android:paddingTop="4dp"
+                        android:paddingBottom="8dp" />
+
+                    <TextView
+                        android:id="@+id/compassQualityText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Quality: Unknown"
+                        android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+                        android:paddingBottom="8dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/compassCalibrateButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/compass_calibration_button"
+                        android:layout_marginTop="4dp"
+                        android:layout_marginBottom="4dp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
         </LinearLayout>
     </ScrollView>
 

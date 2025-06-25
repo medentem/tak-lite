@@ -769,10 +769,6 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                     // Get existing node info if any
                     val existingNode = nodeInfoMap[nodeNum]
                     
-                    // Check if this is a new node or has unknown user
-                    val isNewNode = existingNode == null || 
-                        (existingNode.user.hwModel == com.geeksville.mesh.MeshProtos.HardwareModel.UNSET)
-                    
                     // Check for public key match
                     val keyMatch = existingNode?.user?.publicKey?.let { existingKey ->
                         !existingKey.isNotEmpty() || existingKey == nodeInfo.user.publicKey
@@ -1279,6 +1275,9 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         this.hopLimit = hopLimit
         this.priority = priority
         
+        // Always set the channel field first
+        this.channel = channel
+        
         // Set PKI encryption and public key before building if using PKC channel
         if (channel == PKC_CHANNEL_INDEX) {
             this.pkiEncrypted = true
@@ -1287,8 +1286,6 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             nodeInfoMap[targetNodeId]?.user?.publicKey?.let { publicKey ->
                 this.publicKey = publicKey
             }
-        } else {
-            this.channel = channel
         }
         
         decoded = MeshProtos.Data.newBuilder().also {
@@ -1534,7 +1531,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             
             val isAck = routing.errorReason == com.geeksville.mesh.MeshProtos.Routing.Error.NONE
             val packetTo = (packet.to.toLong() and 0xFFFFFFFFL).toString()
-            Log.d(TAG, "Ack from fromId: $fromId, packet originally to: $packetTo)")
+            Log.d(TAG, "Routing response for requestId $requestId - fromId: $fromId, packet originally to: $packetTo, errorReason: ${routing.errorReason} (code: ${routing.errorReason.number})")
             val newStatus = when {
                 isAck && fromId == packetTo -> MessageStatus.RECEIVED
                 isAck -> MessageStatus.DELIVERED

@@ -154,25 +154,31 @@ class LocationController(
             // Rate limit UI updates to prevent jerkiness
             val currentTime = System.currentTimeMillis()
             if (currentTime - lastUiUpdateTime >= minUpdateInterval) {
-                // Log comprehensive summary of the complete data flow
-                Log.d("CompassDebug", "=== COMPASS DATA FLOW SUMMARY ===")
-                Log.d("CompassDebug", "Raw sensor: ${rawHeading}°")
-                Log.d("CompassDebug", "Normalized: ${normalized}°")
-                Log.d("CompassDebug", "Filtered raw: ${filteredRawHeading}°")
-                Log.d("CompassDebug", "Calibration status: ${calibrationStatus}")
-                Log.d("CompassDebug", "Needs calibration: ${needsCalibration}")
-                Log.d("CompassDebug", "Sensor accuracy: ${getAccuracyString(currentAccuracy)}")
-                Log.d("CompassDebug", "Location: (${_directionOverlayData.value.latitude}, ${_directionOverlayData.value.longitude})")
-                Log.d("CompassDebug", "=====================================")
-                
-                _directionOverlayData.value = _directionOverlayData.value.copy(
-                    headingDegrees = filteredRawHeading,
-                    cardinal = cardinal,
-                    compassQuality = getCompassQuality(),
-                    needsCalibration = needsCalibration,
-                    calibrationStatus = calibrationStatus
-                )
-                lastUiUpdateTime = currentTime
+                // Only update heading data if we're using compass as the heading source
+                val currentHeadingSource = _directionOverlayData.value.headingSource
+                if (currentHeadingSource == HeadingSource.COMPASS) {
+                    // Log comprehensive summary of the complete data flow
+                    Log.d("CompassDebug", "=== COMPASS DATA FLOW SUMMARY ===")
+                    Log.d("CompassDebug", "Raw sensor: ${rawHeading}°")
+                    Log.d("CompassDebug", "Normalized: ${normalized}°")
+                    Log.d("CompassDebug", "Filtered raw: ${filteredRawHeading}°")
+                    Log.d("CompassDebug", "Calibration status: ${calibrationStatus}")
+                    Log.d("CompassDebug", "Needs calibration: ${needsCalibration}")
+                    Log.d("CompassDebug", "Sensor accuracy: ${getAccuracyString(currentAccuracy)}")
+                    Log.d("CompassDebug", "Location: (${_directionOverlayData.value.latitude}, ${_directionOverlayData.value.longitude})")
+                    Log.d("CompassDebug", "=====================================")
+                    
+                    _directionOverlayData.value = _directionOverlayData.value.copy(
+                        headingDegrees = filteredRawHeading,
+                        cardinal = cardinal,
+                        compassQuality = getCompassQuality(),
+                        needsCalibration = needsCalibration,
+                        calibrationStatus = calibrationStatus
+                    )
+                    lastUiUpdateTime = currentTime
+                } else {
+                    Log.d("CompassDebug", "Skipping compass update - using GPS heading (${currentHeadingSource})")
+                }
             }
         }
         
@@ -187,6 +193,7 @@ class LocationController(
                 onCalibrationNeeded.invoke()
             }
             
+            // Always update calibration status regardless of heading source
             _directionOverlayData.value = _directionOverlayData.value.copy(
                 compassQuality = getCompassQuality(),
                 needsCalibration = needsCalibration
@@ -417,6 +424,7 @@ class LocationController(
         val cardinal = getCardinalDirection(headingDegrees)
 
         Log.d("HeadingSourceDebug", "Speed: ${location.speed} m/s (${location.speed * 2.23694f} mph), Movement buffer: ${movementBuffer.size}, Use GPS: $useGpsHeading, Heading source: $headingSource")
+        Log.d("HeadingSourceDebug", "Final heading: ${headingDegrees}° (${if (useGpsHeading) "GPS" else "Compass"}), Cardinal: $cardinal")
 
         _directionOverlayData.value = _directionOverlayData.value.copy(
             headingDegrees = headingDegrees,
@@ -651,5 +659,35 @@ class LocationController(
         } else {
             Log.d("LocationController", "No valid calibration data found, starting fresh")
         }
+    }
+
+    /**
+     * Force the system to use compass heading instead of GPS heading
+     * This can be useful for testing or when users want to override automatic switching
+     */
+    fun forceCompassHeading() {
+        Log.d("LocationController", "Forcing compass heading usage")
+        
+        _directionOverlayData.value = _directionOverlayData.value.copy(
+            headingDegrees = lastHeading,
+            cardinal = getCardinalDirection(lastHeading),
+            headingSource = HeadingSource.COMPASS
+        )
+        
+        Log.d("LocationController", "Forced compass heading: ${lastHeading}°, Cardinal: ${getCardinalDirection(lastHeading)}")
+    }
+
+    /**
+     * Get the current heading source being used
+     */
+    fun getCurrentHeadingSource(): HeadingSource {
+        return _directionOverlayData.value.headingSource
+    }
+
+    /**
+     * Check if GPS heading is currently being used
+     */
+    fun isUsingGPSHeading(): Boolean {
+        return _directionOverlayData.value.headingSource == HeadingSource.GPS
     }
 } 

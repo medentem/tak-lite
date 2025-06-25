@@ -276,9 +276,12 @@ class CompassCalibrationActivity : AppCompatActivity(), SensorEventListener {
         if (osCalibrationTriggered) return
         
         try {
-            // Trigger OS-level calibration by temporarily unregistering and re-registering sensors
+            // Method 1: Trigger OS-level calibration by temporarily unregistering and re-registering sensors
             // This often triggers the sensor's internal calibration routine
             sensorManager.unregisterListener(this)
+            
+            // Small delay to allow sensor reset
+            Thread.sleep(100)
             
             // Re-register with calibration request
             rotationVector?.let { 
@@ -287,11 +290,50 @@ class CompassCalibrationActivity : AppCompatActivity(), SensorEventListener {
             magnetometer?.let { 
                 sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL)
             }
+            accelerometer?.let { 
+                sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL)
+            }
+            gyroscope?.let { 
+                sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL)
+            }
+            
+            // Method 2: Try to trigger Android's built-in sensor calibration
+            triggerAndroidSensorCalibration()
             
             osCalibrationTriggered = true
             Log.d(TAG, "OS-level calibration triggered")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to trigger OS-level calibration: ${e.message}")
+        }
+    }
+    
+    private fun triggerAndroidSensorCalibration() {
+        try {
+            // Try to access Android's sensor calibration features
+            // This is a more direct approach to trigger OS-level calibration
+            
+            // For rotation vector sensor, try to force a calibration cycle
+            rotationVector?.let { sensor ->
+                // Unregister and re-register with different delay to trigger calibration
+                sensorManager.unregisterListener(this, sensor)
+                Thread.sleep(50)
+                sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_UI)
+                Thread.sleep(50)
+                sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_NORMAL)
+            }
+            
+            // For magnetometer, try to trigger magnetic field calibration
+            magnetometer?.let { sensor ->
+                sensorManager.unregisterListener(this, sensor)
+                Thread.sleep(50)
+                sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_UI)
+                Thread.sleep(50)
+                sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_NORMAL)
+            }
+            
+            Log.d(TAG, "Android sensor calibration triggered")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to trigger Android sensor calibration: ${e.message}")
         }
     }
     

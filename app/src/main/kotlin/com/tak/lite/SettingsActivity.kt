@@ -75,9 +75,30 @@ class SettingsActivity : BaseActivity() {
     private lateinit var configProgressBar: android.widget.ProgressBar
     private lateinit var configProgressText: TextView
     private lateinit var backgroundProcessingSwitch: SwitchMaterial
+    private lateinit var compassStatusText: TextView
+    private lateinit var compassQualityText: TextView
+    private lateinit var compassCalibrateButton: com.google.android.material.button.MaterialButton
     private val REQUEST_CODE_FOREGROUND_SERVICE_CONNECTED_DEVICE = 2003
     private val REQUEST_CODE_NOTIFICATION_PERMISSION = 3001
     private val REQUEST_CODE_ALL_PERMISSIONS = 4001
+    private val REQUEST_CODE_COMPASS_CALIBRATION = 5001
+    
+    // Compass sensor monitoring
+    private lateinit var sensorManager: android.hardware.SensorManager
+    private var currentSensorAccuracy = android.hardware.SensorManager.SENSOR_STATUS_UNRELIABLE
+    private val sensorListener = object : android.hardware.SensorEventListener {
+        override fun onSensorChanged(event: android.hardware.SensorEvent?) {
+            // We only care about accuracy changes for compass status
+        }
+        
+        override fun onAccuracyChanged(sensor: android.hardware.Sensor?, accuracy: Int) {
+            if (sensor?.type == android.hardware.Sensor.TYPE_ROTATION_VECTOR || 
+                sensor?.type == android.hardware.Sensor.TYPE_MAGNETIC_FIELD) {
+                currentSensorAccuracy = accuracy
+                updateCompassStatus()
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -103,6 +124,9 @@ class SettingsActivity : BaseActivity() {
         configProgressBar = findViewById(R.id.configProgressBar)
         configProgressText = findViewById(R.id.configProgressText)
         backgroundProcessingSwitch = findViewById(R.id.backgroundProcessingSwitch)
+        compassStatusText = findViewById(R.id.compassStatusText)
+        compassQualityText = findViewById(R.id.compassQualityText)
+        compassCalibrateButton = findViewById(R.id.compassCalibrateButton)
 
         // Check premium status and update UI accordingly
         lifecycleScope.launch {
@@ -404,6 +428,129 @@ class SettingsActivity : BaseActivity() {
         showPacketSummarySwitch.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean("show_packet_summary", isChecked).apply()
         }
+
+        // Setup compass calibration
+        setupCompassCalibration()
+    }
+
+    private fun setupCompassCalibration() {
+        // Initialize sensor manager
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as android.hardware.SensorManager
+        
+        // Register sensor listener for accuracy monitoring
+        val rotationSensor = sensorManager.getDefaultSensor(android.hardware.Sensor.TYPE_ROTATION_VECTOR)
+        val magnetometer = sensorManager.getDefaultSensor(android.hardware.Sensor.TYPE_MAGNETIC_FIELD)
+        
+        rotationSensor?.let { 
+            sensorManager.registerListener(sensorListener, it, android.hardware.SensorManager.SENSOR_DELAY_NORMAL)
+        }
+        magnetometer?.let { 
+            sensorManager.registerListener(sensorListener, it, android.hardware.SensorManager.SENSOR_DELAY_NORMAL)
+        }
+        
+        // Initialize compass status
+        updateCompassStatus()
+        
+        // Setup calibration button
+        compassCalibrateButton.setOnClickListener {
+            startCompassCalibration()
+        }
+        
+        // Monitor compass status changes
+        lifecycleScope.launch {
+            repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                // Update status every 5 seconds while activity is active
+                while (true) {
+                    updateCompassStatus()
+                    kotlinx.coroutines.delay(5000)
+                }
+            }
+        }
+    }
+
+    private fun updateCompassStatus() {
+        val sensorManager = getSystemService(Context.SENSOR_SERVICE) as android.hardware.SensorManager
+        val rotationSensor = sensorManager.getDefaultSensor(android.hardware.Sensor.TYPE_ROTATION_VECTOR)
+        val magnetometer = sensorManager.getDefaultSensor(android.hardware.Sensor.TYPE_MAGNETIC_FIELD)
+        
+        if (rotationSensor == null && magnetometer == null) {
+            compassStatusText.text = getString(R.string.compass_calibration_status, getString(R.string.compass_calibration_no_sensors))
+            compassQualityText.text = getString(R.string.compass_calibration_quality, getString(R.string.compass_calibration_not_supported))
+            compassCalibrateButton.isEnabled = false
+            return
+        }
+        
+        // Get current sensor accuracy from the sensor listener
+        val currentAccuracy = getCurrentSensorAccuracy()
+        val calibrationStatus = getCalibrationStatus(currentAccuracy)
+        val compassQuality = getCompassQuality(currentAccuracy)
+        
+        // Get stored calibration data
+        val prefs = getSharedPreferences("compass_calibration", MODE_PRIVATE)
+        val lastCalibrationTime = prefs.getLong("calibration_timestamp", 0L)
+        val lastCalibrationQuality = prefs.getFloat("calibration_quality", 0f)
+        val osCalibrationTriggered = prefs.getBoolean("os_calibration_triggered", false)
+        
+        // Update status text
+        val statusText = when (calibrationStatus) {
+            com.tak.lite.ui.location.CalibrationStatus.EXCELLENT -> getString(R.string.compass_calibration_excellent)
+            com.tak.lite.ui.location.CalibrationStatus.GOOD -> getString(R.string.compass_calibration_good)
+            com.tak.lite.ui.location.CalibrationStatus.POOR -> getString(R.string.compass_calibration_poor)
+            com.tak.lite.ui.location.CalibrationStatus.UNKNOWN -> getString(R.string.compass_calibration_needs_calibration)
+        }
+        compassStatusText.text = getString(R.string.compass_calibration_status, statusText)
+        
+        // Update quality text with additional info
+        val qualityText = buildString {
+            append(getString(R.string.compass_calibration_quality, compassQuality.name))
+            if (lastCalibrationTime > 0) {
+                val age = System.currentTimeMillis() - lastCalibrationTime
+                val hours = age / (1000 * 60 * 60)
+                if (hours < 1) append(" (calibrated <1h ago)")
+                else if (hours == 1L) append(" (calibrated 1h ago)")
+                else append(" (calibrated ${hours}h ago)")
+            }
+        }
+        compassQualityText.text = qualityText
+        
+        // Enable/disable calibration button based on status
+        compassCalibrateButton.isEnabled = true
+    }
+
+    private fun getCurrentSensorAccuracy(): Int {
+        return currentSensorAccuracy
+    }
+
+    private fun getCalibrationStatus(accuracy: Int): com.tak.lite.ui.location.CalibrationStatus {
+        return when (accuracy) {
+            android.hardware.SensorManager.SENSOR_STATUS_ACCURACY_HIGH -> com.tak.lite.ui.location.CalibrationStatus.EXCELLENT
+            android.hardware.SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM -> com.tak.lite.ui.location.CalibrationStatus.GOOD
+            android.hardware.SensorManager.SENSOR_STATUS_ACCURACY_LOW -> com.tak.lite.ui.location.CalibrationStatus.POOR
+            android.hardware.SensorManager.SENSOR_STATUS_UNRELIABLE -> com.tak.lite.ui.location.CalibrationStatus.UNKNOWN
+            else -> com.tak.lite.ui.location.CalibrationStatus.UNKNOWN
+        }
+    }
+
+    private fun getCompassQuality(accuracy: Int): com.tak.lite.ui.location.CompassQuality {
+        return when (accuracy) {
+            android.hardware.SensorManager.SENSOR_STATUS_ACCURACY_HIGH -> com.tak.lite.ui.location.CompassQuality.EXCELLENT
+            android.hardware.SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM -> com.tak.lite.ui.location.CompassQuality.GOOD
+            android.hardware.SensorManager.SENSOR_STATUS_ACCURACY_LOW -> com.tak.lite.ui.location.CompassQuality.FAIR
+            android.hardware.SensorManager.SENSOR_STATUS_UNRELIABLE -> com.tak.lite.ui.location.CompassQuality.UNRELIABLE
+            else -> com.tak.lite.ui.location.CompassQuality.POOR
+        }
+    }
+
+    private fun startCompassCalibration() {
+        val currentQuality = getCompassQuality(getCurrentSensorAccuracy())
+        val needsCalibration = getCalibrationStatus(getCurrentSensorAccuracy()) == com.tak.lite.ui.location.CalibrationStatus.UNKNOWN
+        
+        val intent = com.tak.lite.ui.location.CompassCalibrationActivity.createIntent(
+            this,
+            currentQuality,
+            needsCalibration
+        )
+        startActivityForResult(intent, REQUEST_CODE_COMPASS_CALIBRATION)
     }
 
     override fun onPause() {
@@ -504,6 +651,48 @@ class SettingsActivity : BaseActivity() {
         }
     }
 
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        
+        when (requestCode) {
+            REQUEST_CODE_COMPASS_CALIBRATION -> {
+                if (resultCode == RESULT_OK) {
+                    // User completed calibration - update the status immediately
+                    updateCompassStatus()
+                    
+                    // Show success message
+                    val prefs = getSharedPreferences("compass_calibration", MODE_PRIVATE)
+                    val calibrationQuality = prefs.getFloat("calibration_quality", 0f)
+                    val osCalibrationTriggered = prefs.getBoolean("os_calibration_triggered", false)
+                    
+                    val qualityText = when {
+                        calibrationQuality >= 0.8f -> "excellent"
+                        calibrationQuality >= 0.6f -> "good"
+                        calibrationQuality >= 0.4f -> "fair"
+                        else -> "poor"
+                    }
+                    
+                    val message = getString(R.string.compass_calibration_completed, qualityText)
+                    if (osCalibrationTriggered) {
+                        android.widget.Toast.makeText(this, "$message ${getString(R.string.compass_calibration_os_applied)}", android.widget.Toast.LENGTH_LONG).show()
+                    } else {
+                        android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
+                    }
+                } else if (resultCode == RESULT_CANCELED) {
+                    android.widget.Toast.makeText(this, getString(R.string.compass_calibration_cancelled), android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+            2001 -> { // Bluetooth enable request
+                if (isBluetoothEnabled()) {
+                    // Optionally, retry connection or inform user
+                    bluetoothStatusText.text = "Bluetooth enabled. You can now connect."
+                } else {
+                    bluetoothStatusText.text = "Bluetooth must be enabled to connect."
+                }
+            }
+        }
+    }
+
     private fun applyDarkMode(mode: String) {
         val nightMode = when (mode) {
             "dark" -> AppCompatDelegate.MODE_NIGHT_YES
@@ -557,18 +746,6 @@ class SettingsActivity : BaseActivity() {
             }
             .setNegativeButton("Cancel", null)
             .show()
-    }
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == 2001) {
-            if (isBluetoothEnabled()) {
-                // Optionally, retry connection or inform user
-                bluetoothStatusText.text = "Bluetooth enabled. You can now connect."
-            } else {
-                bluetoothStatusText.text = "Bluetooth must be enabled to connect."
-            }
-        }
     }
 
     private fun promptDisableBatteryOptimizationsIfNeeded() {
@@ -627,5 +804,11 @@ class SettingsActivity : BaseActivity() {
     private fun showPurchaseDialog() {
         val dialog = com.tak.lite.ui.PurchaseDialog()
         dialog.show(supportFragmentManager, "purchase_dialog")
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // Unregister sensor listener to prevent memory leaks
+        sensorManager.unregisterListener(sensorListener)
     }
 } 
