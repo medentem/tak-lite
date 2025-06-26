@@ -46,7 +46,7 @@ class PeerLocationHistoryRepository @Inject constructor(
     val predictionConfig: StateFlow<PredictionConfig> = _predictionConfig.asStateFlow()
     
     // Prediction model selection
-    private val _selectedModel = MutableStateFlow(PredictionModel.KALMAN_FILTER)
+    private val _selectedModel = MutableStateFlow(PredictionModel.LINEAR)
     val selectedModel: StateFlow<PredictionModel> = _selectedModel.asStateFlow()
     
     private val prefs: SharedPreferences by lazy { context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE) }
@@ -58,7 +58,7 @@ class PeerLocationHistoryRepository @Inject constructor(
     /**
      * Add a new location entry for a peer
      */
-    fun addLocationEntry(peerId: String, latLng: LatLng, accuracy: Float? = null, speed: Float? = null, heading: Float? = null) {
+    fun addLocationEntry(peerId: String, latLng: LatLng) {
         val entry = PeerLocationEntry(
             timestamp = System.currentTimeMillis(),
             latitude = latLng.latitude,
@@ -116,38 +116,64 @@ class PeerLocationHistoryRepository @Inject constructor(
         
         Log.d(TAG, "Updating prediction for peer $peerId with model $currentModel (history entries: ${history.entries.size})")
         
-        val prediction = when (currentModel) {
-            PredictionModel.LINEAR -> predictionEngine.predictLinear(history, currentConfig)
-            PredictionModel.KALMAN_FILTER -> predictionEngine.predictKalmanFilter(history, currentConfig)
-            PredictionModel.PARTICLE_FILTER -> predictionEngine.predictParticleFilter(history, currentConfig)
-            PredictionModel.MACHINE_LEARNING -> predictionEngine.predictMachineLearning(history, currentConfig)
-        }
-        
-        if (prediction != null) {
-            val currentPredictions = _predictions.value.toMutableMap()
-            currentPredictions[peerId] = prediction
-            _predictions.value = currentPredictions
-            
-            // Generate confidence cone
-            val confidenceCone = predictionEngine.generateConfidenceCone(prediction, history, currentConfig)
-            if (confidenceCone != null) {
-                val currentCones = _confidenceCones.value.toMutableMap()
-                currentCones[peerId] = confidenceCone
-                _confidenceCones.value = currentCones
+        // For Particle Filter, get both prediction and predictedParticles
+        if (currentModel == PredictionModel.PARTICLE_FILTER) {
+            val result = predictionEngine.predictParticleFilter(history, currentConfig)
+            val prediction = result?.first
+            val predictedParticles = result?.second
+            if (prediction != null && predictedParticles != null) {
+                val currentPredictions = _predictions.value.toMutableMap()
+                currentPredictions[peerId] = prediction
+                _predictions.value = currentPredictions
+                // Use particle-based cone
+                val latest = history.getLatestEntry()
+                if (latest != null) {
+                    val cone = predictionEngine.generateParticleConfidenceCone(
+                        predictedParticles,
+                        latest,
+                        currentConfig.predictionHorizonMinutes * 60.0
+                    )
+                    val currentCones = _confidenceCones.value.toMutableMap()
+                    currentCones[peerId] = cone
+                    _confidenceCones.value = currentCones
+                }
+                Log.d(TAG, "Updated prediction for peer $peerId: confidence=${prediction.confidence}, model=$currentModel (particle cone)")
+                return
             }
-            
-            Log.d(TAG, "Updated prediction for peer $peerId: confidence=${prediction.confidence}, model=$currentModel")
         } else {
-            // Remove prediction if no longer valid
-            val currentPredictions = _predictions.value.toMutableMap()
-            currentPredictions.remove(peerId)
-            _predictions.value = currentPredictions
-            
-            val currentCones = _confidenceCones.value.toMutableMap()
-            currentCones.remove(peerId)
-            _confidenceCones.value = currentCones
-            
-            Log.w(TAG, "Failed to generate prediction for peer $peerId with model $currentModel")
+            val prediction = when (currentModel) {
+                PredictionModel.LINEAR -> predictionEngine.predictLinear(history, currentConfig)
+                PredictionModel.KALMAN_FILTER -> predictionEngine.predictKalmanFilter(history, currentConfig)
+                else -> null
+            }
+            if (prediction != null) {
+                val currentPredictions = _predictions.value.toMutableMap()
+                currentPredictions[peerId] = prediction
+                _predictions.value = currentPredictions
+                
+                // Generate confidence cone based on prediction model
+                val confidenceCone = when (currentModel) {
+                    PredictionModel.LINEAR -> predictionEngine.generateLinearConfidenceCone(prediction, history, currentConfig)
+                    PredictionModel.KALMAN_FILTER -> predictionEngine.generateKalmanConfidenceCone(prediction, history, currentConfig)
+                    else -> predictionEngine.generateConfidenceCone(prediction, history, currentConfig)
+                }
+                
+                if (confidenceCone != null) {
+                    val currentCones = _confidenceCones.value.toMutableMap()
+                    currentCones[peerId] = confidenceCone
+                    _confidenceCones.value = currentCones
+                }
+                Log.d(TAG, "Updated prediction for peer $peerId: confidence=${prediction.confidence}, model=$currentModel")
+            } else {
+                // Remove prediction if no longer valid
+                val currentPredictions = _predictions.value.toMutableMap()
+                currentPredictions.remove(peerId)
+                _predictions.value = currentPredictions
+                val currentCones = _confidenceCones.value.toMutableMap()
+                currentCones.remove(peerId)
+                _confidenceCones.value = currentCones
+                Log.w(TAG, "Failed to generate prediction for peer $peerId with model $currentModel")
+            }
         }
     }
     

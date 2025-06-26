@@ -43,7 +43,8 @@ data class LocationPrediction(
     val targetTimestamp: Long, // The time we're predicting for (5 min from last update)
     val confidence: Double, // 0.0 to 1.0
     val velocity: VelocityVector? = null,
-    val predictionModel: PredictionModel = PredictionModel.LINEAR
+    val predictionModel: PredictionModel = PredictionModel.LINEAR,
+    val kalmanState: KalmanState? = null // Kalman filter state for covariance-based confidence cones
 )
 
 @Serializable
@@ -51,6 +52,14 @@ data class VelocityVector(
     val speed: Double, // m/s
     val heading: Double, // degrees
     val headingUncertainty: Double // uncertainty in heading direction (degrees)
+)
+
+@Serializable
+data class KalmanState(
+    val lat: Double, val lon: Double,
+    val vLat: Double, val vLon: Double,
+    val pLat: Double, val pLon: Double,
+    val pVLat: Double, val pVLon: Double
 )
 
 @Serializable
@@ -67,7 +76,6 @@ enum class PredictionModel {
     LINEAR, // Simple linear extrapolation
     KALMAN_FILTER, // Kalman filter for noisy data
     PARTICLE_FILTER, // Particle filter for complex motion
-    MACHINE_LEARNING // ML-based prediction
 }
 
 @Serializable

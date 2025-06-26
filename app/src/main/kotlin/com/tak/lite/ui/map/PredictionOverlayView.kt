@@ -36,12 +36,12 @@ class PredictionOverlayView @JvmOverloads constructor(
     }
     
     private val confidenceConePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.argb(100, 255, 255, 0) // More opaque yellow
+        color = Color.argb(30, 255, 255, 0) // More opaque yellow
         style = Paint.Style.FILL
     }
     
     private val confidenceConeBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.argb(200, 255, 255, 0) // More opaque border
+        color = Color.argb(80, 255, 255, 0) // More opaque border
         style = Paint.Style.STROKE
         strokeWidth = 3f // Thicker border
     }

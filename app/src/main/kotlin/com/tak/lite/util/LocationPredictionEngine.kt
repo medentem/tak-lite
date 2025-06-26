@@ -87,21 +87,48 @@ class LocationPredictionEngine {
         if (entries.size < 2) return Pair(0.0, 0.0)
         val speeds = mutableListOf<Double>()
         val headings = mutableListOf<Double>()
+        
+        Log.d(TAG, "LINEAR: Processing ${entries.size} entries for velocity calculation")
+        
         for (i in 1 until entries.size) {
             val distance = calculateDistance(
                 entries[i-1].latitude, entries[i-1].longitude,
                 entries[i].latitude, entries[i].longitude
             )
             val timeDiff = (entries[i].timestamp - entries[i-1].timestamp) / 1000.0
-            if (timeDiff > 0) {
-                speeds.add(distance / timeDiff)
-                val heading = calculateBearing(
-                    entries[i-1].latitude, entries[i-1].longitude,
-                    entries[i].latitude, entries[i].longitude
-                )
-                headings.add(heading)
+            
+            // Skip entries with zero or negative time difference
+            if (timeDiff <= 0) {
+                Log.w(TAG, "LINEAR: Skipping entry $i - invalid time difference: ${timeDiff}s")
+                continue
             }
+            
+            val speed = distance / timeDiff
+            
+            // Filter out impossible speeds (e.g., > 100 m/s or ~224 mph)
+            val maxReasonableSpeed = 100.0 // 100 m/s = ~224 mph
+            if (speed > maxReasonableSpeed) {
+                Log.w(TAG, "LINEAR: Skipping entry $i - impossible speed: ${speed.toInt()}m/s (${(speed * 2.23694).toInt()}mph)")
+                continue
+            }
+            
+            // Filter out impossible distances (e.g., > 10 km in 3 seconds)
+            val maxReasonableDistance = 10000.0 // 10 km
+            if (distance > maxReasonableDistance) {
+                Log.w(TAG, "LINEAR: Skipping entry $i - impossible distance: ${distance.toInt()}m in ${timeDiff.toInt()}s")
+                continue
+            }
+            
+            speeds.add(speed)
+            val heading = calculateBearing(
+                entries[i-1].latitude, entries[i-1].longitude,
+                entries[i].latitude, entries[i].longitude
+            )
+            headings.add(heading)
+            
+            Log.d(TAG, "LINEAR: Entry $i: distance=${distance.toInt()}m, timeDiff=${timeDiff.toInt()}s, speed=${speed.toInt()}m/s, heading=${heading.toInt()}°")
         }
+        
         val avgSpeed = if (speeds.isNotEmpty()) speeds.average() else 0.0
         // Average heading using circular mean
         val avgHeading = if (headings.isNotEmpty()) {
@@ -109,6 +136,9 @@ class LocationPredictionEngine {
             val cosSum = headings.sumOf { cos(it * DEG_TO_RAD) }
             atan2(sinSum, cosSum) * RAD_TO_DEG
         } else 0.0
+        
+        Log.d(TAG, "LINEAR: Final average speed=${avgSpeed.toInt()}m/s (${(avgSpeed * 2.23694).toInt()}mph), average heading=${avgHeading.toInt()}° (from ${speeds.size} valid entries)")
+        
         return Pair(avgSpeed, (avgHeading + 360) % 360)
     }
     
@@ -119,22 +149,35 @@ class LocationPredictionEngine {
         val recentEntries = history.getRecentEntries(config.maxHistoryAgeMinutes)
         if (recentEntries.size < config.minHistoryEntries) return null
         val latest = history.getLatestEntry() ?: return null
+        
+        Log.d(TAG, "LINEAR: Starting prediction for peer ${history.peerId}")
+        Log.d(TAG, "LINEAR: Config - maxHistoryAge=${config.maxHistoryAgeMinutes}min, minEntries=${config.minHistoryEntries}, horizon=${config.predictionHorizonMinutes}min")
+        Log.d(TAG, "LINEAR: Recent entries: ${recentEntries.size} entries over ${config.maxHistoryAgeMinutes} minutes")
+        
         // Use moving average of velocity and heading
         val (avgSpeed, avgHeading) = calculateAverageVelocityAndHeading(recentEntries)
+        
         // Predict future position
         val predictionTimeSeconds = config.predictionHorizonMinutes * 60.0
         val predictedDistance = avgSpeed * predictionTimeSeconds
         val (predLat, predLon) = calculateDestination(
             latest.latitude, latest.longitude, predictedDistance, avgHeading
         )
+        
+        Log.d(TAG, "LINEAR: Prediction - distance=${predictedDistance.toInt()}m, target=(${predLat}, ${predLon})")
+        
         // Check if prediction resulted in invalid coordinates
         if (predLat.isNaN() || predLon.isNaN()) {
+            Log.w(TAG, "LINEAR: Invalid prediction coordinates")
             return null
         }
         // Calculate uncertainties from actual data
         val (headingUncertainty, speedUncertainty) = calculateUncertainties(recentEntries)
         // Calculate confidence based on speed consistency and data quality
         val confidence = calculateLinearConfidence(recentEntries, avgSpeed, config)
+        
+        Log.d(TAG, "LINEAR: Final prediction - confidence=$confidence, uncertainty=(${headingUncertainty}°, ${speedUncertainty * 100}%)")
+        
         return LocationPrediction(
             peerId = history.peerId,
             predictedLocation = LatLngSerializable(predLat, predLon),
@@ -148,48 +191,232 @@ class LocationPredictionEngine {
     
     /**
      * Kalman Filter prediction model
-     * Uses all recent entries (filtered by maxHistoryAgeMinutes) for uncertainty and velocity estimation
+     * Properly implements Kalman filter with state tracking and covariance propagation
      */
     fun predictKalmanFilter(history: PeerLocationHistory, config: PredictionConfig): LocationPrediction? {
         val recentEntries = history.getRecentEntries(config.maxHistoryAgeMinutes)
         if (recentEntries.size < config.minHistoryEntries) return null
-        // Calculate uncertainties from actual data
-        val (headingUncertainty, speedUncertainty) = calculateUncertainties(recentEntries)
-        // For Kalman filter, we'll use a simpler approach that estimates velocity from recent movement
+        
         val latest = history.getLatestEntry() ?: return null
-        val secondLatest = history.getSecondLatestEntry() ?: return null
-        // Calculate current velocity from last two points (could be improved to use average as above)
-        val distance = calculateDistance(
-            secondLatest.latitude, secondLatest.longitude,
-            latest.latitude, latest.longitude
-        )
-        val timeDiff = (latest.timestamp - secondLatest.timestamp) / 1000.0
-        val speed = if (timeDiff > 0) distance / timeDiff else 0.0
-        val heading = calculateBearing(
-            secondLatest.latitude, secondLatest.longitude,
-            latest.latitude, latest.longitude
-        )
-        // Predict future position using current velocity
-        val predictionTimeSeconds = config.predictionHorizonMinutes * 60.0
-        val predictedDistance = speed * predictionTimeSeconds
-        val (predLat, predLon) = calculateDestination(
-            latest.latitude, latest.longitude, predictedDistance, heading
-        )
-        // Check if prediction resulted in invalid coordinates
-        if (predLat.isNaN() || predLon.isNaN()) {
+        
+        Log.d(TAG, "KALMAN: Starting prediction for peer ${history.peerId}")
+        Log.d(TAG, "KALMAN: Processing ${recentEntries.size} entries")
+        
+        try {
+            // Initialize Kalman state from recent entries
+            val initialState = initializeKalmanState(recentEntries)
+            if (initialState == null) {
+                Log.w(TAG, "KALMAN: Failed to initialize Kalman state")
+                return null
+            }
+            
+            Log.d(TAG, "KALMAN: Initial state - pos=(${initialState.lat}, ${initialState.lon}), vel=(${initialState.vLat}, ${initialState.vLon})")
+            Log.d(TAG, "KALMAN: Initial covariance - pos=(${initialState.pLat}, ${initialState.pLon}), vel=(${initialState.pVLat}, ${initialState.pVLon})")
+            
+            // Process all historical measurements to update the filter
+            var currentState: KalmanState = initialState
+            for (i in 1 until recentEntries.size) {
+                val dt = (recentEntries[i].timestamp - recentEntries[i-1].timestamp) / 1000.0
+                if (dt > 0) {
+                    // Predict step
+                    currentState = kalmanPredict(currentState, dt)
+                    // Update step with new measurement
+                    currentState = kalmanUpdate(currentState, recentEntries[i].latitude, recentEntries[i].longitude)
+                }
+            }
+            
+            Log.d(TAG, "KALMAN: Final state after processing history - pos=(${currentState.lat}, ${currentState.lon}), vel=(${currentState.vLat}, ${currentState.vLon})")
+            Log.d(TAG, "KALMAN: Final covariance - pos=(${currentState.pLat}, ${currentState.pLon}), vel=(${currentState.pVLat}, ${currentState.pVLon})")
+            
+            // Predict future position using Kalman predict equations
+            val predictionTimeSeconds = config.predictionHorizonMinutes * 60.0
+            val predictedState = kalmanPredict(currentState, predictionTimeSeconds)
+            
+            // Convert velocity from degrees/second to m/s and heading
+            val speedLat = predictedState.vLat * EARTH_RADIUS_METERS * DEG_TO_RAD
+            val speedLon = predictedState.vLon * EARTH_RADIUS_METERS * cos(predictedState.lat * DEG_TO_RAD) * DEG_TO_RAD
+            val speed = sqrt(speedLat * speedLat + speedLon * speedLon)
+            val heading = atan2(speedLon, speedLat) * RAD_TO_DEG
+            
+            // Validate predictions
+            if (predictedState.lat.isNaN() || predictedState.lon.isNaN() || 
+                speed.isNaN() || heading.isNaN() || speed.isInfinite() || heading.isInfinite()) {
+                Log.w(TAG, "KALMAN: Invalid prediction results")
+                return null
+            }
+            
+            // Calculate confidence based on Kalman covariance
+            val confidence = calculateKalmanConfidence(predictedState, config)
+            
+            // Calculate heading uncertainty from velocity covariance
+            val headingUncertainty = calculateHeadingUncertaintyFromCovariance(predictedState)
+            
+            Log.d(TAG, "KALMAN: Final prediction - pos=(${predictedState.lat}, ${predictedState.lon}), speed=${speed.toInt()}m/s, heading=${heading.toInt()}°, confidence=$confidence")
+            
+            return LocationPrediction(
+                peerId = history.peerId,
+                predictedLocation = LatLngSerializable(predictedState.lat, predictedState.lon),
+                predictedTimestamp = System.currentTimeMillis(),
+                targetTimestamp = latest.timestamp + (config.predictionHorizonMinutes * 60 * 1000L),
+                confidence = confidence,
+                velocity = VelocityVector(speed, heading, headingUncertainty),
+                predictionModel = PredictionModel.KALMAN_FILTER,
+                kalmanState = predictedState // Store the Kalman state for confidence cone generation
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "KALMAN: Prediction failed: ${e.message}", e)
             return null
         }
-        // Calculate confidence based on data consistency
-        val confidence = calculateLinearConfidence(recentEntries, speed, config)
-        Log.d(TAG, "Kalman filter prediction: speed=$speed m/s, heading=${heading}°, confidence=$confidence")
-        return LocationPrediction(
-            peerId = history.peerId,
-            predictedLocation = LatLngSerializable(predLat, predLon),
-            predictedTimestamp = System.currentTimeMillis(),
-            targetTimestamp = latest.timestamp + (config.predictionHorizonMinutes * 60 * 1000L),
-            confidence = confidence,
-            velocity = VelocityVector(speed, heading, headingUncertainty),
-            predictionModel = PredictionModel.KALMAN_FILTER
+    }
+    
+    /**
+     * Initialize Kalman state from recent location entries
+     */
+    private fun initializeKalmanState(entries: List<PeerLocationEntry>): KalmanState? {
+        if (entries.size < 2) return null
+        
+        val latest = entries.last()
+        val previous = entries[entries.size - 2]
+        
+        val dt = (latest.timestamp - previous.timestamp) / 1000.0
+        if (dt <= 0) return null
+        
+        // Calculate initial velocity
+        val distance = calculateDistance(
+            previous.latitude, previous.longitude,
+            latest.latitude, latest.longitude
+        )
+        val speed = distance / dt
+        
+        // Convert to lat/lon velocity components
+        val heading = calculateBearing(
+            previous.latitude, previous.longitude,
+            latest.latitude, latest.longitude
+        )
+        
+        val vLat = speed * cos(heading * DEG_TO_RAD) / (EARTH_RADIUS_METERS * DEG_TO_RAD)
+        val vLon = speed * sin(heading * DEG_TO_RAD) / (EARTH_RADIUS_METERS * cos(latest.latitude * DEG_TO_RAD) * DEG_TO_RAD)
+        
+        // Initialize covariance matrices
+        // Position uncertainty: 50m standard deviation
+        val pLat = 50.0 * 50.0 / (EARTH_RADIUS_METERS * EARTH_RADIUS_METERS * DEG_TO_RAD * DEG_TO_RAD)
+        val pLon = 50.0 * 50.0 / (EARTH_RADIUS_METERS * EARTH_RADIUS_METERS * cos(latest.latitude * DEG_TO_RAD) * cos(latest.latitude * DEG_TO_RAD) * DEG_TO_RAD * DEG_TO_RAD)
+        
+        // Velocity uncertainty: 5 m/s standard deviation
+        val pVLat = 5.0 * 5.0 / (EARTH_RADIUS_METERS * EARTH_RADIUS_METERS * DEG_TO_RAD * DEG_TO_RAD)
+        val pVLon = 5.0 * 5.0 / (EARTH_RADIUS_METERS * EARTH_RADIUS_METERS * cos(latest.latitude * DEG_TO_RAD) * cos(latest.latitude * DEG_TO_RAD) * DEG_TO_RAD * DEG_TO_RAD)
+        
+        return KalmanState(
+            lat = latest.latitude,
+            lon = latest.longitude,
+            vLat = vLat,
+            vLon = vLon,
+            pLat = pLat,
+            pLon = pLon,
+            pVLat = pVLat,
+            pVLon = pVLon
+        )
+    }
+    
+    /**
+     * Calculate heading uncertainty from Kalman velocity covariance
+     */
+    private fun calculateHeadingUncertaintyFromCovariance(state: KalmanState): Double {
+        val speedLat = state.vLat * EARTH_RADIUS_METERS * DEG_TO_RAD
+        val speedLon = state.vLon * EARTH_RADIUS_METERS * cos(state.lat * DEG_TO_RAD) * DEG_TO_RAD
+        val speed = sqrt(speedLat * speedLat + speedLon * speedLon)
+        
+        if (speed < 0.1) return 45.0 // High uncertainty for very slow movement
+        
+        // Convert velocity covariance to heading uncertainty
+        val pVLatMps = state.pVLat * EARTH_RADIUS_METERS * EARTH_RADIUS_METERS * DEG_TO_RAD * DEG_TO_RAD
+        val pVLonMps = state.pVLon * EARTH_RADIUS_METERS * EARTH_RADIUS_METERS * cos(state.lat * DEG_TO_RAD) * cos(state.lat * DEG_TO_RAD) * DEG_TO_RAD * DEG_TO_RAD
+        
+        // Approximate heading uncertainty from velocity uncertainty
+        val headingUncertainty = atan2(sqrt(pVLonMps), speed) * RAD_TO_DEG
+        
+        return headingUncertainty.coerceIn(1.0, 45.0)
+    }
+    
+    /**
+     * Generate Kalman filter-specific confidence cone using covariance ellipsoids
+     */
+    fun generateKalmanConfidenceCone(
+        prediction: LocationPrediction,
+        history: PeerLocationHistory,
+        config: PredictionConfig
+    ): ConfidenceCone? {
+        val kalmanState = prediction.kalmanState ?: return null
+        val latest = history.getLatestEntry() ?: return null
+        
+        Log.d(TAG, "KALMAN_CONE: Generating confidence cone using Kalman covariance")
+        
+        val centerLine = mutableListOf<LatLngSerializable>()
+        val leftBoundary = mutableListOf<LatLngSerializable>()
+        val rightBoundary = mutableListOf<LatLngSerializable>()
+        
+        // Generate points along the cone
+        val steps = 10
+        for (i in 0..steps) {
+            val progress = i.toDouble() / steps
+            val predictionTime = progress * config.predictionHorizonMinutes * 60.0
+            
+            // Predict state at this time using Kalman equations
+            val predictedState = kalmanPredict(kalmanState, predictionTime)
+            
+            // Center line
+            centerLine.add(LatLngSerializable(predictedState.lat, predictedState.lon))
+            
+            // Calculate uncertainty ellipse at this point
+            val (leftPoint, rightPoint) = calculateUncertaintyEllipse(
+                predictedState.lat, predictedState.lon,
+                predictedState.pLat, predictedState.pLon,
+                predictedState.vLat, predictedState.vLon
+            )
+            
+            leftBoundary.add(leftPoint)
+            rightBoundary.add(rightPoint)
+        }
+        
+        Log.d(TAG, "KALMAN_CONE: Generated cone with ${leftBoundary.size} boundary points")
+        
+        return ConfidenceCone(
+            centerLine = centerLine,
+            leftBoundary = leftBoundary,
+            rightBoundary = rightBoundary,
+            confidenceLevel = prediction.confidence,
+            maxDistance = sqrt(kalmanState.vLat * kalmanState.vLat + kalmanState.vLon * kalmanState.vLon) * config.predictionHorizonMinutes * 60.0 * EARTH_RADIUS_METERS * DEG_TO_RAD
+        )
+    }
+    
+    /**
+     * Calculate uncertainty ellipse points based on Kalman covariance
+     */
+    private fun calculateUncertaintyEllipse(
+        lat: Double, lon: Double,
+        pLat: Double, pLon: Double,
+        vLat: Double, vLon: Double
+    ): Pair<LatLngSerializable, LatLngSerializable> {
+        // Calculate the major axis of the uncertainty ellipse
+        val positionUncertainty = sqrt(pLat + pLon) * EARTH_RADIUS_METERS * DEG_TO_RAD
+        
+        // Calculate the direction of movement for ellipse orientation
+        val movementHeading = atan2(vLon, vLat) * RAD_TO_DEG
+        
+        // Calculate perpendicular direction for ellipse width
+        val perpHeading = (movementHeading + 90.0) % 360.0
+        
+        // Use 2-sigma confidence interval (95% confidence)
+        val confidenceFactor = 2.0
+        val ellipseWidth = positionUncertainty * confidenceFactor
+        
+        // Calculate left and right boundary points
+        val (leftLat, leftLon) = calculateDestination(lat, lon, ellipseWidth, perpHeading)
+        val (rightLat, rightLon) = calculateDestination(lat, lon, ellipseWidth, (perpHeading + 180.0) % 360.0)
+        
+        return Pair(
+            LatLngSerializable(leftLat, leftLon),
+            LatLngSerializable(rightLat, rightLon)
         )
     }
     
@@ -197,7 +424,7 @@ class LocationPredictionEngine {
      * Particle Filter prediction model
      * Uses all recent entries (filtered by maxHistoryAgeMinutes) for velocity estimation and particle updates
      */
-    fun predictParticleFilter(history: PeerLocationHistory, config: PredictionConfig): LocationPrediction? {
+    fun predictParticleFilter(history: PeerLocationHistory, config: PredictionConfig): Pair<LocationPrediction, List<Particle>>? {
         val recentEntries = history.getRecentEntries(config.maxHistoryAgeMinutes)
         if (recentEntries.size < config.minHistoryEntries) {
             Log.d(TAG, "Particle filter: insufficient history entries (${recentEntries.size} < ${config.minHistoryEntries})")
@@ -222,7 +449,7 @@ class LocationPredictionEngine {
                 
                 // Initialize velocity based on estimated velocity with reasonable noise
                 val speedNoise = Random.nextDouble(-0.5, 0.5) // ±0.5 m/s noise
-                val headingNoise = Random.nextDouble(-5.0, 5.0) // ±5 degrees noise
+                val headingNoise = Random.nextDouble(-10.0, 10.0) // ±5 degrees noise
                 
                 val initialSpeed = sqrt(initialVelocity.first * initialVelocity.first + initialVelocity.second * initialVelocity.second)
                 val initialHeading = atan2(initialVelocity.second, initialVelocity.first) * RAD_TO_DEG
@@ -260,7 +487,7 @@ class LocationPredictionEngine {
                     
                     // Calculate weight based on how close the particle is to the actual measurement
                     val distance = calculateDistance(particle.lat, particle.lon, current.latitude, current.longitude)
-                    particle.weight *= exp(-distance * distance / (2 * 25 * 25)) // Tighter Gaussian likelihood (25m std dev)
+                    particle.weight *= exp(-distance * distance / (2 * 40 * 40)) // Tighter Gaussian likelihood (25m std dev)
                 }
                 
                 // Normalize weights with safety check
@@ -328,7 +555,7 @@ class LocationPredictionEngine {
             
             Log.d(TAG, "Particle filter prediction successful: confidence=$confidence, speed=$speed, heading=$heading")
             
-            return LocationPrediction(
+            val prediction = LocationPrediction(
                 peerId = history.peerId,
                 predictedLocation = LatLngSerializable(avgLat, avgLon),
                 predictedTimestamp = System.currentTimeMillis(),
@@ -337,51 +564,10 @@ class LocationPredictionEngine {
                 velocity = VelocityVector(speed, heading, headingUncertainty),
                 predictionModel = PredictionModel.PARTICLE_FILTER
             )
+            
+            return Pair(prediction, predictedParticles)
         } catch (e: Exception) {
             Log.e(TAG, "Particle filter prediction failed: ${e.message}", e)
-            return null
-        }
-    }
-    
-    /**
-     * Basic Machine Learning prediction model using simple pattern recognition
-     * Uses all recent entries (filtered by maxHistoryAgeMinutes) for feature extraction
-     */
-    fun predictMachineLearning(history: PeerLocationHistory, config: PredictionConfig): LocationPrediction? {
-        val recentEntries = history.getRecentEntries(config.maxHistoryAgeMinutes)
-        if (recentEntries.size < config.minHistoryEntries) {
-            Log.d(TAG, "ML prediction: insufficient history entries (${recentEntries.size} < ${config.minHistoryEntries})")
-            return null
-        }
-        
-        val latest = history.getLatestEntry() ?: return null
-        
-        Log.d(TAG, "ML prediction: processing ${recentEntries.size} entries for peer ${history.peerId}")
-        
-        // Calculate uncertainties from actual data
-        val (headingUncertainty, speedUncertainty) = calculateUncertainties(recentEntries)
-        
-        try {
-            // Extract features from recent movement patterns
-            val features = extractMovementFeatures(recentEntries)
-            
-            Log.d(TAG, "ML prediction: extracted features - avgSpeed=${features.avgSpeed}, avgHeading=${features.avgHeading}, consistency=${features.movementConsistency}")
-            
-            // Simple pattern-based prediction
-            val prediction = predictFromPatterns(features, latest, config, headingUncertainty)
-            
-            if (prediction != null) {
-                Log.d(TAG, "ML prediction successful: confidence=${prediction.confidence}, speed=${prediction.velocity?.speed}, heading=${prediction.velocity?.heading}")
-            } else {
-                Log.w(TAG, "ML prediction failed: pattern prediction returned null")
-            }
-            
-            return prediction?.copy(
-                peerId = history.peerId,
-                velocity = prediction.velocity?.copy(headingUncertainty = headingUncertainty)
-            )
-        } catch (e: Exception) {
-            Log.e(TAG, "ML prediction failed: ${e.message}", e)
             return null
         }
     }
@@ -445,14 +631,26 @@ class LocationPredictionEngine {
             )
             val timeDiff = (entries[i].timestamp - entries[i-1].timestamp) / 1000.0
             if (timeDiff > 0) {
-                speeds.add(distance / timeDiff)
+                val speed = distance / timeDiff
                 
-                val heading = calculateBearing(
-                    entries[i-1].latitude, entries[i-1].longitude,
-                    entries[i].latitude, entries[i].longitude
-                )
-                headings.add(heading)
+                // Filter out impossible speeds (e.g., > 50 m/s or ~112 mph)
+                val maxReasonableSpeed = 50.0 // 50 m/s = ~112 mph
+                if (speed <= maxReasonableSpeed) {
+                    speeds.add(speed)
+                    
+                    val heading = calculateBearing(
+                        entries[i-1].latitude, entries[i-1].longitude,
+                        entries[i].latitude, entries[i].longitude
+                    )
+                    headings.add(heading)
+                }
             }
+        }
+        
+        // Handle case where no valid speeds were found
+        if (speeds.isEmpty()) {
+            Log.w(TAG, "ML prediction: no valid speeds found in movement data")
+            return MovementFeatures(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
         }
         
         val avgSpeed = speeds.average()
@@ -466,15 +664,25 @@ class LocationPredictionEngine {
         
         val headingVariance = calculateHeadingVariance(headings)
         
-        // Calculate acceleration (change in speed over time)
+        // Calculate acceleration (change in speed over time) - use last two speeds
         val acceleration = if (speeds.size >= 2) {
-            val speedChange = speeds.last() - speeds.first()
-            val totalTime = (entries.last().timestamp - entries.first().timestamp) / 1000.0
-            if (totalTime > 0) speedChange / totalTime else 0.0
+            val lastSpeed = speeds.last()
+            val secondLastSpeed = speeds[speeds.size - 2]
+            val speedChange = lastSpeed - secondLastSpeed
+            
+            // Use the time between the last two entries for acceleration calculation
+            val lastTimeDiff = (entries.last().timestamp - entries[entries.size - 2].timestamp) / 1000.0
+            if (lastTimeDiff > 0) {
+                speedChange / lastTimeDiff // m/s²
+            } else {
+                0.0
+            }
         } else 0.0
         
         // Calculate movement consistency (how straight the path is)
         val movementConsistency = calculateMovementConsistency(entries)
+        
+        Log.d(TAG, "ML prediction: extracted features - speeds=${speeds.size}, avgSpeed=${avgSpeed.toInt()}m/s, avgHeading=${avgHeading.toInt()}°, acceleration=${acceleration.toInt()}m/s², consistency=${(movementConsistency * 100).toInt()}%")
         
         return MovementFeatures(
             avgSpeed = avgSpeed,
@@ -490,7 +698,7 @@ class LocationPredictionEngine {
      * Calculate movement consistency (how straight the path is)
      */
     private fun calculateMovementConsistency(entries: List<PeerLocationEntry>): Double {
-        if (entries.size < 3) return 0.0
+        if (entries.size < 3) return 0.5 // Default moderate consistency for insufficient data
         
         val totalDistance = calculateDistance(
             entries.first().latitude, entries.first().longitude,
@@ -505,124 +713,29 @@ class LocationPredictionEngine {
             )
         }
         
-        return if (pathDistance > 0) totalDistance / pathDistance else 0.0
-    }
-    
-    /**
-     * Predict location based on movement patterns
-     */
-    private fun predictFromPatterns(
-        features: MovementFeatures,
-        latest: PeerLocationEntry,
-        config: PredictionConfig,
-        headingUncertainty: Double
-    ): LocationPrediction? {
-        // Adjust prediction based on movement patterns
-        val adjustedSpeed = features.avgSpeed * (1.0 + features.acceleration * 60.0) // Adjust for acceleration
-        val adjustedHeading = features.avgHeading
-        
-        // Apply consistency factor
-        val consistencyFactor = features.movementConsistency.coerceIn(0.1, 1.0)
-        val predictionDistance = adjustedSpeed * config.predictionHorizonMinutes * 60.0 * consistencyFactor
-        
-        val (predLat, predLon) = calculateDestination(
-            latest.latitude, latest.longitude, predictionDistance, adjustedHeading
-        )
-        
-        if (predLat.isNaN() || predLon.isNaN()) return null
-        
-        // Calculate confidence based on pattern consistency with safety checks
-        val speedConfidence = if (features.avgSpeed > 0.1) { // Avoid division by very small numbers
-            1.0 / (1.0 + features.speedVariance / (features.avgSpeed * features.avgSpeed))
-        } else 0.3 // Low confidence for very slow or stationary movement
-        
-        val headingConfidence = 1.0 / (1.0 + features.headingVariance / 360.0)
-        val consistencyConfidence = features.movementConsistency
-        
-        val confidence = (speedConfidence + headingConfidence + consistencyConfidence) / 3.0
-        
-        return LocationPrediction(
-            peerId = "", // Will be set by caller
-            predictedLocation = LatLngSerializable(predLat, predLon),
-            predictedTimestamp = System.currentTimeMillis(),
-            targetTimestamp = latest.timestamp + (config.predictionHorizonMinutes * 60 * 1000L),
-            confidence = confidence.coerceIn(0.0, 1.0),
-            velocity = VelocityVector(adjustedSpeed, adjustedHeading, headingUncertainty),
-            predictionModel = PredictionModel.MACHINE_LEARNING
-        )
-    }
-    
-    /**
-     * Generate confidence cone for a prediction
-     */
-    fun generateConfidenceCone(
-        prediction: LocationPrediction,
-        history: PeerLocationHistory,
-        config: PredictionConfig
-    ): ConfidenceCone? {
-        val latest = history.getLatestEntry() ?: return null
-        val velocity = prediction.velocity ?: return null
-        
-        Log.d(TAG, "Generating confidence cone for peer ${prediction.peerId}: speed=${velocity.speed}, heading=${velocity.heading}, confidence=${prediction.confidence}")
-        
-        val centerLine = mutableListOf<LatLngSerializable>()
-        val leftBoundary = mutableListOf<LatLngSerializable>()
-        val rightBoundary = mutableListOf<LatLngSerializable>()
-        
-        // Generate points along the cone
-        val steps = 10
-        for (i in 0..steps) {
-            val progress = i.toDouble() / steps
-            val distance = velocity.speed * progress * config.predictionHorizonMinutes * 60.0
-            
-            // Center line
-            val (centerLat, centerLon) = calculateDestination(
-                latest.latitude, latest.longitude, distance, velocity.heading
-            )
-            if (!centerLat.isNaN() && !centerLon.isNaN()) {
-                centerLine.add(LatLngSerializable(centerLat, centerLon))
-            }
-            
-            // Calculate cone angle based on confidence level and uncertainty
-            val coneAngle = calculateConeAngle(prediction.confidence, velocity.headingUncertainty, progress)
-            
-            // Left boundary
-            val (leftLat, leftLon) = calculateDestination(
-                latest.latitude, latest.longitude, distance, velocity.heading - coneAngle
-            )
-            if (!leftLat.isNaN() && !leftLon.isNaN()) {
-                leftBoundary.add(LatLngSerializable(leftLat, leftLon))
-            }
-            
-            // Right boundary
-            val (rightLat, rightLon) = calculateDestination(
-                latest.latitude, latest.longitude, distance, velocity.heading + coneAngle
-            )
-            if (!rightLat.isNaN() && !rightLon.isNaN()) {
-                rightBoundary.add(LatLngSerializable(rightLat, rightLon))
-            }
+        // Consistency is the ratio of straight-line distance to actual path distance
+        // Higher ratio = more consistent/straight movement
+        val consistency = if (pathDistance > 0) {
+            (totalDistance / pathDistance).coerceIn(0.0, 1.0)
+        } else {
+            0.5 // Default for no movement
         }
         
-        Log.d(TAG, "Generated cone with ${leftBoundary.size} left boundary points, ${rightBoundary.size} right boundary points")
+        // Boost consistency for very short paths (likely more predictable)
+        val boostedConsistency = if (totalDistance < 10.0) {
+            // For very short paths, assume higher consistency
+            consistency.coerceIn(0.6, 1.0)
+        } else {
+            consistency
+        }
         
-        return ConfidenceCone(
-            centerLine = centerLine,
-            leftBoundary = leftBoundary,
-            rightBoundary = rightBoundary,
-            confidenceLevel = prediction.confidence,
-            maxDistance = velocity.speed * config.predictionHorizonMinutes * 60.0
-        )
+        Log.d(TAG, "ML prediction: movement consistency - totalDistance=${totalDistance.toInt()}m, pathDistance=${pathDistance.toInt()}m, consistency=${(boostedConsistency * 100).toInt()}%")
+        
+        return boostedConsistency
     }
     
     // Helper classes and methods
-    private data class KalmanState(
-        val lat: Double, val lon: Double,
-        val vLat: Double, val vLon: Double,
-        val pLat: Double, val pLon: Double,
-        val pVLat: Double, val pVLon: Double
-    )
-    
-    private data class Particle(
+    data class Particle(
         var lat: Double, var lon: Double,
         var vLat: Double, var vLon: Double,
         var weight: Double
@@ -807,15 +920,27 @@ class LocationPredictionEngine {
                 entries[i].latitude, entries[i].longitude
             )
             val timeDiff = (entries[i].timestamp - entries[i-1].timestamp) / 1000.0
-            if (timeDiff > 0) {
-                speeds.add(distance / timeDiff)
-                
-                val heading = calculateBearing(
-                    entries[i-1].latitude, entries[i-1].longitude,
-                    entries[i].latitude, entries[i].longitude
-                )
-                headings.add(heading)
-            }
+            
+            // Skip entries with invalid time difference
+            if (timeDiff <= 0) continue
+            
+            val speed = distance / timeDiff
+            
+            // Filter out impossible speeds (e.g., > 100 m/s or ~224 mph)
+            val maxReasonableSpeed = 100.0 // 100 m/s = ~224 mph
+            if (speed > maxReasonableSpeed) continue
+            
+            // Filter out impossible distances (e.g., > 10 km in 3 seconds)
+            val maxReasonableDistance = 10000.0 // 10 km
+            if (distance > maxReasonableDistance) continue
+            
+            speeds.add(speed)
+            
+            val heading = calculateBearing(
+                entries[i-1].latitude, entries[i-1].longitude,
+                entries[i].latitude, entries[i].longitude
+            )
+            headings.add(heading)
         }
         
         // Calculate heading uncertainty from variance
@@ -831,8 +956,296 @@ class LocationPredictionEngine {
             0.2 // Default if no movement
         }
         
-        Log.d(TAG, "Calculated uncertainties: heading=${headingUncertainty}°, speed=${speedUncertainty * 100}%")
+        Log.d(TAG, "Calculated uncertainties: heading=${headingUncertainty}°, speed=${speedUncertainty * 100}% (from ${speeds.size} valid entries)")
         
         return Pair(headingUncertainty, speedUncertainty)
+    }
+    
+    /**
+     * Generate a particle-based confidence cone for the Particle Filter model
+     */
+    fun generateParticleConfidenceCone(
+        predictedParticles: List<Particle>,
+        latest: PeerLocationEntry,
+        predictionHorizonSeconds: Double,
+        steps: Int = 10
+    ): ConfidenceCone {
+        val centerLine = mutableListOf<LatLngSerializable>()
+        val leftBoundary = mutableListOf<LatLngSerializable>()
+        val rightBoundary = mutableListOf<LatLngSerializable>()
+
+        for (i in 0..steps) {
+            val t = i * predictionHorizonSeconds / steps
+            val positions = predictedParticles.map { particle ->
+                val lat = particle.lat + particle.vLat * t
+                val lon = particle.lon + particle.vLon * t
+                LatLngSerializable(lat, lon)
+            }
+            // Compute mean position
+            val avgLat = positions.map { it.lt }.average()
+            val avgLon = positions.map { it.lng }.average()
+            centerLine.add(LatLngSerializable(avgLat, avgLon))
+
+            // Compute heading from latest to mean
+            val meanHeading = calculateBearing(latest.latitude, latest.longitude, avgLat, avgLon)
+            // Project all positions onto axis perpendicular to mean heading
+            val perpAngle = (meanHeading + 90.0) % 360.0
+            val projections = positions.map {
+                val d = calculateDistance(avgLat, avgLon, it.lt, it.lng)
+                val bearing = calculateBearing(avgLat, avgLon, it.lt, it.lng)
+                val angleDiff = ((bearing - perpAngle + 540) % 360) - 180 // [-180,180]
+                d * cos(angleDiff * DEG_TO_RAD)
+            }
+            // Find 10th and 90th percentiles
+            val sorted = projections.sorted()
+            val leftIdx = (0.1 * sorted.size).toInt().coerceIn(0, sorted.size - 1)
+            val rightIdx = (0.9 * sorted.size).toInt().coerceIn(0, sorted.size - 1)
+            val leftOffset = sorted[leftIdx]
+            val rightOffset = sorted[rightIdx]
+            // Compute left/right boundary points
+            val (leftLat, leftLon) = calculateDestination(avgLat, avgLon, abs(leftOffset), perpAngle + if (leftOffset < 0) 180.0 else 0.0)
+            val (rightLat, rightLon) = calculateDestination(avgLat, avgLon, abs(rightOffset), perpAngle + if (rightOffset < 0) 180.0 else 0.0)
+            leftBoundary.add(LatLngSerializable(leftLat, leftLon))
+            rightBoundary.add(LatLngSerializable(rightLat, rightLon))
+        }
+        
+        // Calculate confidence based on particle spread at the prediction horizon
+        val finalPositions = predictedParticles.map { particle ->
+            LatLngSerializable(particle.lat, particle.lon)
+        }
+        val avgLat = finalPositions.map { it.lt }.average()
+        val avgLon = finalPositions.map { it.lng }.average()
+        
+        val spread = predictedParticles.sumOf { particle ->
+            val distance = calculateDistance(particle.lat, particle.lon, avgLat, avgLon)
+            particle.weight * distance * distance
+        }
+        
+        val maxSpread = 10000.0 // meters squared
+        val confidence = 1.0 - (spread / maxSpread).coerceAtMost(1.0)
+        
+        return ConfidenceCone(
+            centerLine = centerLine,
+            leftBoundary = leftBoundary,
+            rightBoundary = rightBoundary,
+            confidenceLevel = confidence,
+            maxDistance = predictionHorizonSeconds * predictedParticles.map { sqrt(it.vLat * it.vLat + it.vLon * it.vLon) }.average()
+        )
+    }
+    
+    /**
+     * Generate confidence cone for a prediction (generic fallback method)
+     * 
+     * Note: For LINEAR prediction models, use generateLinearConfidenceCone() instead.
+     * For KALMAN_FILTER models, use generateKalmanConfidenceCone() instead.
+     * For MACHINE_LEARNING models, use generateMachineLearningConfidenceCone() instead.
+     * 
+     * This generic method uses a simplified approach that may not fully capture
+     * the uncertainty characteristics of specific prediction models.
+     */
+    fun generateConfidenceCone(
+        prediction: LocationPrediction,
+        history: PeerLocationHistory,
+        config: PredictionConfig
+    ): ConfidenceCone? {
+        val latest = history.getLatestEntry() ?: return null
+        val velocity = prediction.velocity ?: return null
+        
+        Log.d(TAG, "Generating confidence cone for peer ${prediction.peerId}: speed=${velocity.speed}, heading=${velocity.heading}, confidence=${prediction.confidence}")
+        
+        val centerLine = mutableListOf<LatLngSerializable>()
+        val leftBoundary = mutableListOf<LatLngSerializable>()
+        val rightBoundary = mutableListOf<LatLngSerializable>()
+        
+        // Generate points along the cone
+        val steps = 10
+        for (i in 0..steps) {
+            val progress = i.toDouble() / steps
+            val distance = velocity.speed * progress * config.predictionHorizonMinutes * 60.0
+            
+            // Center line
+            val (centerLat, centerLon) = calculateDestination(
+                latest.latitude, latest.longitude, distance, velocity.heading
+            )
+            if (!centerLat.isNaN() && !centerLon.isNaN()) {
+                centerLine.add(LatLngSerializable(centerLat, centerLon))
+            }
+            
+            // Calculate cone angle based on confidence level and uncertainty
+            val coneAngle = calculateConeAngle(prediction.confidence, velocity.headingUncertainty, progress)
+            
+            // Left boundary
+            val (leftLat, leftLon) = calculateDestination(
+                latest.latitude, latest.longitude, distance, velocity.heading - coneAngle
+            )
+            if (!leftLat.isNaN() && !leftLon.isNaN()) {
+                leftBoundary.add(LatLngSerializable(leftLat, leftLon))
+            }
+            
+            // Right boundary
+            val (rightLat, rightLon) = calculateDestination(
+                latest.latitude, latest.longitude, distance, velocity.heading + coneAngle
+            )
+            if (!rightLat.isNaN() && !rightLon.isNaN()) {
+                rightBoundary.add(LatLngSerializable(rightLat, rightLon))
+            }
+        }
+        
+        Log.d(TAG, "Generated cone with ${leftBoundary.size} left boundary points, ${rightBoundary.size} right boundary points")
+        
+        return ConfidenceCone(
+            centerLine = centerLine,
+            leftBoundary = leftBoundary,
+            rightBoundary = rightBoundary,
+            confidenceLevel = prediction.confidence,
+            maxDistance = velocity.speed * config.predictionHorizonMinutes * 60.0
+        )
+    }
+    
+    /**
+     * Generate confidence cone specifically for LINEAR prediction model
+     * This method properly incorporates both heading and speed uncertainties
+     * from the linear model's velocity analysis
+     */
+    fun generateLinearConfidenceCone(
+        prediction: LocationPrediction,
+        history: PeerLocationHistory,
+        config: PredictionConfig
+    ): ConfidenceCone? {
+        val latest = history.getLatestEntry() ?: return null
+        val velocity = prediction.velocity ?: return null
+        
+        Log.d(TAG, "LINEAR_CONE: Generating confidence cone for peer ${prediction.peerId}")
+        Log.d(TAG, "LINEAR_CONE: Speed=${velocity.speed}m/s, heading=${velocity.heading}°, headingUncertainty=${velocity.headingUncertainty}°")
+        
+        // Get the same recent entries used in the linear prediction
+        val recentEntries = history.getRecentEntries(config.maxHistoryAgeMinutes)
+        if (recentEntries.size < config.minHistoryEntries) {
+            Log.w(TAG, "LINEAR_CONE: Insufficient history entries")
+            return null
+        }
+        
+        // Calculate uncertainties using the same method as the linear prediction
+        val (headingUncertainty, speedUncertainty) = calculateUncertainties(recentEntries)
+        
+        Log.d(TAG, "LINEAR_CONE: Calculated uncertainties - heading=${headingUncertainty}°, speed=${speedUncertainty * 100}%")
+        
+        val centerLine = mutableListOf<LatLngSerializable>()
+        val leftBoundary = mutableListOf<LatLngSerializable>()
+        val rightBoundary = mutableListOf<LatLngSerializable>()
+        
+        // Prediction horizon in seconds
+        val predictionHorizonSeconds = config.predictionHorizonMinutes * 60.0
+        // Predicted distance at mean speed
+        val predictedDistance = velocity.speed * predictionHorizonSeconds
+        // Use 2-sigma (95%) confidence interval for speed uncertainty
+        val sigma = 2.0
+        val maxDistance = (velocity.speed + sigma * velocity.speed * speedUncertainty) * predictionHorizonSeconds
+        val minDistance = (velocity.speed - sigma * velocity.speed * speedUncertainty).coerceAtLeast(0.0) * predictionHorizonSeconds
+        
+        // The cone should extend from minDistance to maxDistance
+        val steps = 10
+        for (i in 0..steps) {
+            val progress = i.toDouble() / steps
+            // Interpolate distance from min to max
+            val distance = minDistance + (maxDistance - minDistance) * progress
+            // Center line: always at predicted heading
+            if (progress <= 1.0) {
+                val centerDist = minDistance + (predictedDistance - minDistance) * progress
+                val (centerLat, centerLon) = calculateDestination(
+                    latest.latitude, latest.longitude, centerDist, velocity.heading
+                )
+                if (!centerLat.isNaN() && !centerLon.isNaN()) {
+                    centerLine.add(LatLngSerializable(centerLat, centerLon))
+                }
+            }
+            // Calculate cone angle at this distance (uncertainty grows with distance)
+            val coneAngle = calculateLinearConeAngle(
+                headingUncertainty = headingUncertainty,
+                speedUncertainty = speedUncertainty,
+                currentSpeed = velocity.speed,
+                timeProgress = distance / maxDistance, // progress along the cone
+                predictionHorizonMinutes = config.predictionHorizonMinutes
+            )
+            // Left boundary: max plausible distance at (heading - coneAngle)
+            val (leftLat, leftLon) = calculateDestination(
+                latest.latitude, latest.longitude, distance, velocity.heading - coneAngle
+            )
+            if (!leftLat.isNaN() && !leftLon.isNaN()) {
+                leftBoundary.add(LatLngSerializable(leftLat, leftLon))
+            }
+            // Right boundary: max plausible distance at (heading + coneAngle)
+            val (rightLat, rightLon) = calculateDestination(
+                latest.latitude, latest.longitude, distance, velocity.heading + coneAngle
+            )
+            if (!rightLat.isNaN() && !rightLon.isNaN()) {
+                rightBoundary.add(LatLngSerializable(rightLat, rightLon))
+            }
+        }
+        
+        Log.d(TAG, "LINEAR_CONE: Generated cone with ${leftBoundary.size} boundary points (maxDistance=$maxDistance, minDistance=$minDistance, predictedDistance=$predictedDistance)")
+        
+        return ConfidenceCone(
+            centerLine = centerLine,
+            leftBoundary = leftBoundary,
+            rightBoundary = rightBoundary,
+            confidenceLevel = prediction.confidence,
+            maxDistance = maxDistance
+        )
+    }
+    
+    /**
+     * Calculate cone angle specifically for linear prediction model
+     * Incorporates both heading uncertainty and speed uncertainty over time
+     */
+    private fun calculateLinearConeAngle(
+        headingUncertainty: Double,
+        speedUncertainty: Double,
+        currentSpeed: Double,
+        timeProgress: Double,
+        predictionHorizonMinutes: Int
+    ): Double {
+        // Base heading uncertainty (in radians)
+        val baseHeadingUncertainty = headingUncertainty * DEG_TO_RAD
+        
+        // Speed uncertainty contribution to position uncertainty over time
+        // Speed uncertainty affects how far the target could be along the predicted path
+        val timeSeconds = timeProgress * predictionHorizonMinutes * 60.0
+        val speedUncertaintyDistance = currentSpeed * speedUncertainty * timeSeconds
+        
+        // Convert speed uncertainty distance to angular uncertainty
+        // This represents how much the target could deviate from the predicted path
+        val speedUncertaintyAngle = if (currentSpeed > 0.1) {
+            // Convert distance uncertainty to angular uncertainty
+            // The angle is approximately distance / (speed * time) for small angles
+            atan2(speedUncertaintyDistance, currentSpeed * timeSeconds) * RAD_TO_DEG
+        } else {
+            0.0
+        }
+        
+        // Combine heading and speed uncertainties
+        // Heading uncertainty affects cross-track error (perpendicular to path)
+        // Speed uncertainty affects along-track error (parallel to path)
+        // For a cone, we're primarily concerned with cross-track error
+        val totalUncertainty = sqrt(
+            baseHeadingUncertainty * baseHeadingUncertainty + 
+            (speedUncertaintyAngle * DEG_TO_RAD) * (speedUncertaintyAngle * DEG_TO_RAD)
+        )
+        
+        // Cone widens with distance due to uncertainty propagation
+        val distanceFactor = 1.0 + timeProgress * 0.3 // Moderate widening with distance
+        
+        // Calculate final angle in degrees
+        val calculatedAngle = totalUncertainty * distanceFactor * RAD_TO_DEG
+        
+        // Ensure reasonable bounds
+        val minAngle = 2.0 // Minimum visible angle
+        val maxAngle = 60.0 // Maximum reasonable angle
+        
+        val finalAngle = calculatedAngle.coerceIn(minAngle, maxAngle)
+        
+        Log.d(TAG, "LINEAR_CONE: timeProgress=$timeProgress, headingUncertainty=${headingUncertainty}°, speedUncertainty=${speedUncertainty * 100}%, finalAngle=${finalAngle}°")
+        
+        return finalAngle
     }
 } 

@@ -64,7 +64,7 @@ class PredictionSettingsFragment : Fragment() {
         modelSpinner.adapter = adapter
         
         // Set default explanation
-        modelExplanationText.text = getModelExplanation(PredictionModel.KALMAN_FILTER)
+        modelExplanationText.text = getModelExplanation(PredictionModel.LINEAR)
     }
     
     private fun setupObservers() {
@@ -232,10 +232,9 @@ class PredictionSettingsFragment : Fragment() {
     
     private fun getModelExplanation(model: PredictionModel): String {
         return when (model) {
-            PredictionModel.KALMAN_FILTER -> "Recommended. Smooths out noise and missing data. Good for most movement."
-            PredictionModel.LINEAR -> "Simple and fast. Best for straight, constant movement."
+            PredictionModel.KALMAN_FILTER -> "Smooths out noise and missing data. Good for most movement and honest about it's uncertainty."
+            PredictionModel.LINEAR -> "Simple and fast. Best for straight, constant movement. Not very accurate."
             PredictionModel.PARTICLE_FILTER -> "Advanced. Handles erratic or unpredictable movement, but uses more battery."
-            PredictionModel.MACHINE_LEARNING -> "Adapts to movement patterns, but requires frequent location updates to be effective."
         }
     }
 } 

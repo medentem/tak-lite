@@ -60,12 +60,10 @@ class MeshNetworkService @Inject constructor(
 
     // Add directional bias tracking for simulated peers
     // Each simulated peer has:
-    // - preferredDirection: The main direction they prefer to move (0-360 degrees)
-    // - variability: How much they can deviate from their preferred direction (degrees)
-    // - biasStrength: How strongly they follow their preferred direction (0.0-1.0)
-    private val simulatedPeerDirections = mutableMapOf<String, Double>() // peerId -> preferred heading in degrees
-    private val simulatedPeerDirectionVariability = mutableMapOf<String, Double>() // peerId -> variability in degrees
-    private val simulatedPeerBiasStrength = mutableMapOf<String, Double>() // peerId -> bias strength (0.0-1.0)
+    // - currentDirection: The current direction they are moving (0-360 degrees)
+    // - straightBias: How strongly they prefer to continue straight (0.0-1.0)
+    private val simulatedPeerCurrentDirections = mutableMapOf<String, Double>() // peerId -> current heading in degrees
+    private val simulatedPeerStraightBias = mutableMapOf<String, Double>() // peerId -> straight bias strength (0.0-1.0)
 
     private val _packetSummaries = MutableStateFlow<List<PacketSummary>>(emptyList())
     val packetSummaries: StateFlow<List<PacketSummary>> = _packetSummaries.asStateFlow()
@@ -207,22 +205,18 @@ class MeshNetworkService @Inject constructor(
                         Log.d("MeshNetworkService", "Resetting simulated peers: count=$count, centerLocation=$centerLocation, locationChanged=$locationChanged")
                         // Only clear simulatedPeers and related maps, but do NOT clear peer histories here
                         simulatedPeers.clear()
-                        simulatedPeerDirections.clear()
-                        simulatedPeerDirectionVariability.clear()
-                        simulatedPeerBiasStrength.clear()
+                        simulatedPeerCurrentDirections.clear()
+                        simulatedPeerStraightBias.clear()
                         repeat(count) { i ->
                             val id = "$simulatedPeerPrefix$i"
                             val location = randomNearbyLocation(centerLocation, 3.0)
                             simulatedPeers[id] = location
-                            // Assign random preferred direction (0-360 degrees)
-                            val preferredDirection = kotlin.random.Random.nextDouble() * 360.0
-                            simulatedPeerDirections[id] = preferredDirection
-                            // Assign low variability (2-8 degrees) for straight-line movement
-                            val variability = 2.0 + kotlin.random.Random.nextDouble() * 6.0
-                            simulatedPeerDirectionVariability[id] = variability
-                            // Assign high bias strength (0.8-0.95) for consistent direction following
-                            val biasStrength = 0.8 + kotlin.random.Random.nextDouble() * 0.15
-                            simulatedPeerBiasStrength[id] = biasStrength
+                            // Assign random current direction (0-360 degrees)
+                            val currentDirection = kotlin.random.Random.nextDouble() * 360.0
+                            simulatedPeerCurrentDirections[id] = currentDirection
+                            // Assign high straight bias (0.7-0.95) for strong straight-line movement
+                            val straightBias = 0.7 + kotlin.random.Random.nextDouble() * 0.25
+                            simulatedPeerStraightBias[id] = straightBias
                             // Add initial location to history repository (do NOT clear history)
                             peerLocationHistoryRepository.addLocationEntry(id, location)
                         }
@@ -262,9 +256,8 @@ class MeshNetworkService @Inject constructor(
                             peerLocationHistoryRepository.removePeerHistory(peerId)
                         }
                         simulatedPeers.clear()
-                        simulatedPeerDirections.clear()
-                        simulatedPeerDirectionVariability.clear()
-                        simulatedPeerBiasStrength.clear()
+                        simulatedPeerCurrentDirections.clear()
+                        simulatedPeerStraightBias.clear()
                     }
                     lastSimSettings = Pair(enabled, count)
                 }
@@ -309,32 +302,32 @@ class MeshNetworkService @Inject constructor(
 
     private fun movePeer(peerId: String, current: LatLng, center: LatLng, radiusMiles: Double): LatLng {
         // Random walk, but keep within radius
-        val stepMeters = 20 + kotlin.random.Random.nextDouble() * 30 // 20-50 meters per update
+        val stepMeters = 2 + kotlin.random.Random.nextDouble() * 15 // 2-17 meters per update
         
-        // Get the peer's preferred direction and variability
-        val preferredDirection = simulatedPeerDirections[peerId] ?: 0.0
-        val variability = simulatedPeerDirectionVariability[peerId] ?: 30.0
-        val biasStrength = simulatedPeerBiasStrength[peerId] ?: 0.5
+        // Get the peer's current direction and settings
+        val currentDirection = simulatedPeerCurrentDirections[peerId] ?: 0.0
+        val maxDirectionChange = 30.0 // Fixed maximum of 30 degrees
+        val straightBias = simulatedPeerStraightBias[peerId] ?: 0.8 // High bias to stay straight
         
-        // Calculate biased angle with variability
-        val baseAngleRad = Math.toRadians(preferredDirection)
-        val variabilityRad = Math.toRadians(variability)
-        
-        // Generate a random angle within the variability range around the preferred direction
-        val randomOffset = (kotlin.random.Random.nextDouble() - 0.5) * 2 * variabilityRad
-        val angle = baseAngleRad + randomOffset
-        
-        // Apply bias strength: higher bias strength means more likely to follow preferred direction
-        val finalAngle = if (kotlin.random.Random.nextDouble() < biasStrength) {
-            // Strong bias: use the calculated biased angle
-            angle
+        // Determine new direction with strong bias to continue straight
+        val newDirection = if (kotlin.random.Random.nextDouble() < straightBias) {
+            // Strong bias: continue in current direction with small random variation
+            val smallVariation = (kotlin.random.Random.nextDouble() - 0.5) * 10.0 // ±5 degrees
+            currentDirection + smallVariation
         } else {
-            // Weak bias: add more randomness
-            kotlin.random.Random.nextDouble() * 2 * Math.PI
+            // Weak bias: allow larger direction change but still limited to maxDirectionChange
+            val directionChange = (kotlin.random.Random.nextDouble() - 0.5) * 2 * maxDirectionChange
+            currentDirection + directionChange
         }
         
-        // Convert to 0-2π range
-        val normalizedAngle = ((finalAngle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)
+        // Normalize direction to 0-360 degrees
+        val normalizedDirection = ((newDirection % 360.0) + 360.0) % 360.0
+        
+        // Update the peer's current direction
+        simulatedPeerCurrentDirections[peerId] = normalizedDirection
+        
+        // Convert to radians for calculations
+        val angleRad = Math.toRadians(normalizedDirection)
         
         val earthRadius = 6378137.0 // meters
         
@@ -346,10 +339,10 @@ class MeshNetworkService @Inject constructor(
         val angularDistance = stepMeters / earthRadius
         val newLatRad = asin(
             sin(currentLatRad) * cos(angularDistance) + 
-            cos(currentLatRad) * sin(angularDistance) * cos(normalizedAngle)
+            cos(currentLatRad) * sin(angularDistance) * cos(angleRad)
         )
         val newLonRad = currentLonRad + atan2(
-            sin(normalizedAngle) * sin(angularDistance) * cos(currentLatRad),
+            sin(angleRad) * sin(angularDistance) * cos(currentLatRad),
             cos(angularDistance) - sin(currentLatRad) * sin(newLatRad)
         )
         
@@ -384,7 +377,7 @@ class MeshNetworkService @Inject constructor(
             ))
         }
         
-        Log.d("MeshNetworkService", "SimPeer $peerId: preferred=${preferredDirection.toInt()}°, variability=${variability.toInt()}°, bias=${(biasStrength * 100).toInt()}%, actual=${Math.toDegrees(normalizedAngle).toInt()}°")
+        Log.d("MeshNetworkService", "SimPeer $peerId: current=${currentDirection.toInt()}°, new=${normalizedDirection.toInt()}°, bias=${(straightBias * 100).toInt()}%")
         
         return LatLng(newLat, newLon)
     }
@@ -439,12 +432,11 @@ class MeshNetworkService @Inject constructor(
      * Get current directional bias settings for simulated peers
      * Useful for debugging and monitoring peer movement patterns
      */
-    fun getSimulatedPeerBiasSettings(): Map<String, Triple<Double, Double, Double>> {
+    fun getSimulatedPeerBiasSettings(): Map<String, Pair<Double, Double>> {
         return simulatedPeers.keys.associate { peerId ->
-            peerId to Triple(
-                simulatedPeerDirections[peerId] ?: 0.0,
-                simulatedPeerDirectionVariability[peerId] ?: 30.0,
-                simulatedPeerBiasStrength[peerId] ?: 0.5
+            peerId to Pair(
+                simulatedPeerCurrentDirections[peerId] ?: 0.0,
+                simulatedPeerStraightBias[peerId] ?: 0.8
             )
         }
     }
