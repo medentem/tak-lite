@@ -974,8 +974,8 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                                 peerLocations[peerId] = org.maplibre.android.geometry.LatLng(lat, lng)
                                 // Update last seen for node info
                                 nodeInfoMap[peerId]?.let { info ->
-                                    val updated = info.toBuilder().setLastHeard((System.currentTimeMillis() / 1000).toInt()).build()
-                                    nodeInfoMap[peerId] = updated
+                                    val updatedNodeInfo = info.toBuilder().setLastHeard((System.currentTimeMillis() / 1000).toInt()).build()
+                                    nodeInfoMap[peerId] = updatedNodeInfo
                                 }
                                 peerLocationCallback?.invoke(peerLocations.toMap())
                                 if (isOwnNode(peerId)) {

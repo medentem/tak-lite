@@ -37,6 +37,12 @@ class MeshNetworkRepository @Inject constructor(
     val userLocation: Flow<LatLng?>
         get() = meshNetworkService.userLocation
     
+    val phoneLocation: Flow<LatLng?>
+        get() = meshNetworkService.phoneLocation
+    
+    val bestLocation: Flow<LatLng?>
+        get() = meshNetworkService.bestLocation
+    
     val isDeviceLocationStale: Flow<Boolean>
         get() = meshNetworkService.isDeviceLocationStale
     
@@ -64,6 +70,10 @@ class MeshNetworkRepository @Inject constructor(
     
     fun setLocalNickname(nickname: String) {
         meshNetworkService.setLocalNickname(nickname)
+    }
+    
+    fun setPhoneLocation(latLng: LatLng) {
+        meshNetworkService.setPhoneLocation(latLng)
     }
     
     suspend fun getNodeInfo(peerId: String): com.geeksville.mesh.MeshProtos.NodeInfo? {

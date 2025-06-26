@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Prediction Settings"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="16dp"
+            android:textColor="?android:textColorPrimary" />
+
+        <!-- Prediction Model Selection -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Prediction Model"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginTop="16dp"
+            android:textColor="?android:textColorPrimary" />
+
+        <Spinner
+            android:id="@+id/modelSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp" />
+
+        <TextView
+            android:id="@+id/modelExplanationText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textColor="?android:textColorSecondary" />
+
+        <!-- Prediction Horizon -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Prediction Horizon"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginTop="16dp"
+            android:textColor="?android:textColorPrimary" />
+
+        <SeekBar
+            android:id="@+id/predictionHorizonSlider"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="29"
+            android:progress="4"
+            android:layout_marginTop="8dp" />
+
+        <TextView
+            android:id="@+id/predictionHorizonText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="5 minutes"
+            android:textAlignment="center"
+            android:layout_marginTop="4dp"
+            android:textColor="?android:textColorPrimary" />
+
+        <!-- Minimum History Entries -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Minimum History Entries"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginTop="16dp"
+            android:textColor="?android:textColorPrimary" />
+
+        <SeekBar
+            android:id="@+id/minHistoryEntriesSlider"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="18"
+            android:progress="1"
+            android:layout_marginTop="8dp" />
+
+        <TextView
+            android:id="@+id/minHistoryEntriesText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="3 entries"
+            android:textAlignment="center"
+            android:layout_marginTop="4dp"
+            android:textColor="?android:textColorPrimary" />
+
+        <!-- Maximum History Age -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Maximum History Age"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginTop="16dp"
+            android:textColor="?android:textColorPrimary" />
+
+        <SeekBar
+            android:id="@+id/maxHistoryAgeSlider"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="29"
+            android:progress="5"
+            android:layout_marginTop="8dp" />
+
+        <TextView
+            android:id="@+id/maxHistoryAgeText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="30 minutes"
+            android:textAlignment="center"
+            android:layout_marginTop="4dp"
+            android:textColor="?android:textColorPrimary" />
+
+        <!-- Note about automatic uncertainty calculation -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Note: Confidence levels, heading, and speed uncertainties are automatically calculated from each peer's movement patterns for more accurate predictions."
+            android:textSize="14sp"
+            android:textStyle="italic"
+            android:layout_marginTop="16dp"
+            android:padding="8dp"
+            android:background="#1A4CAF50"
+            android:textColor="?android:textColorPrimary" />
+
+        <!-- Statistics -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Prediction Statistics"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginTop="24dp"
+            android:textColor="?android:textColorPrimary" />
+
+        <TextView
+            android:id="@+id/statsText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:padding="16dp"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:lineSpacingExtra="2dp"
+            android:background="@drawable/overlay_bg"
+            android:textColor="?android:textColorPrimary" />
+
+    </LinearLayout>
+</ScrollView> 

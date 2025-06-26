@@ -10,6 +10,12 @@
         android:layout_height="match_parent"
         android:visibility="visible" />
 
+    <com.tak.lite.ui.map.PredictionOverlayView
+        android:id="@+id/predictionOverlayView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@android:color/transparent" />
+
     <com.tak.lite.ui.map.FanMenuView
         android:id="@+id/fanMenuView"
         android:layout_width="match_parent"

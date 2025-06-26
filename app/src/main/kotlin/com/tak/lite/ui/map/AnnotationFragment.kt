@@ -43,6 +43,7 @@ class AnnotationFragment : Fragment() {
     private var currentColor: AnnotationColor = AnnotationColor.GREEN
     private var currentShape: PointShape = PointShape.CIRCLE
     private var isDrawing = false
+    private lateinit var predictionOverlayView: PredictionOverlayView
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -65,6 +66,14 @@ class AnnotationFragment : Fragment() {
         fanMenuView = binding.root.findViewById(R.id.fanMenuView)
         val mainActivity = activity as? MainActivity
         val mapController = mainActivity?.getMapController()
+
+        // Initialize prediction overlay
+        predictionOverlayView = view.findViewById(R.id.predictionOverlayView)
+        
+        // Set initial prediction overlay visibility based on user preference
+        val prefs = requireContext().getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
+        val showPredictionOverlay = prefs.getBoolean("show_prediction_overlay", true)
+        predictionOverlayView.setShowPredictionOverlay(showPredictionOverlay)
 
         // Observe mapReadyLiveData from MainActivity
         mainActivity?.mapReadyLiveData?.observe(viewLifecycleOwner) { mapLibreMap ->
@@ -113,8 +122,10 @@ class AnnotationFragment : Fragment() {
             mapLibreMap.addOnCameraMoveListener {
                 annotationController.syncAnnotationOverlayView(mapLibreMap)
                 annotationOverlayView.setZoom(mapLibreMap.cameraPosition.zoom.toFloat())
+                predictionOverlayView.setProjection(mapLibreMap.projection)
             }
             annotationController.setupAnnotationOverlay(mapLibreMap)
+            predictionOverlayView.setProjection(mapLibreMap.projection)
             annotationController.setupPoiLongPressListener()
             annotationController.setupMapLongPress(mapLibreMap)
 
@@ -123,6 +134,7 @@ class AnnotationFragment : Fragment() {
                 meshNetworkViewModel.peerLocations.collectLatest { locations ->
                     Log.d("AnnotationFragment", "Updating peer locations in overlay: ${locations.size} peers, simulated=${locations.keys.count { it.startsWith("sim_peer_") }}")
                     annotationOverlayView.updatePeerLocations(locations)
+                    predictionOverlayView.updatePeerLocations(locations)
                 }
             }
             viewLifecycleOwner.lifecycleScope.launch {
@@ -145,6 +157,22 @@ class AnnotationFragment : Fragment() {
             viewLifecycleOwner.lifecycleScope.launch {
                 meshNetworkViewModel.isDeviceLocationStale.collectLatest { isStale ->
                     annotationOverlayView.setDeviceLocationStaleness(isStale)
+                }
+            }
+
+            // Observe predictions
+            viewLifecycleOwner.lifecycleScope.launch {
+                meshNetworkViewModel.predictions.collectLatest { predictions ->
+                    Log.d("AnnotationFragment", "Updating predictions: ${predictions.size} predictions")
+                    predictionOverlayView.updatePredictions(predictions)
+                }
+            }
+
+            // Observe confidence cones
+            viewLifecycleOwner.lifecycleScope.launch {
+                meshNetworkViewModel.confidenceCones.collectLatest { cones ->
+                    Log.d("AnnotationFragment", "Updating confidence cones: ${cones.size} cones")
+                    predictionOverlayView.updateConfidenceCones(cones)
                 }
             }
 
@@ -239,5 +267,13 @@ class AnnotationFragment : Fragment() {
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Update prediction overlay visibility in case user changed the setting
+        val prefs = requireContext().getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
+        val showPredictionOverlay = prefs.getBoolean("show_prediction_overlay", true)
+        predictionOverlayView.setShowPredictionOverlay(showPredictionOverlay)
     }
 } 

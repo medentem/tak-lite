@@ -92,6 +92,21 @@ data class LatLngSerializable(
         return org.maplibre.android.geometry.LatLng(lt, lng)
     }
     
+    /**
+     * Safe conversion that returns null if coordinates are invalid (NaN or infinite)
+     */
+    fun toMapLibreLatLngSafe(): org.maplibre.android.geometry.LatLng? {
+        return if (lt.isNaN() || lng.isNaN() || lt.isInfinite() || lng.isInfinite()) {
+            null
+        } else {
+            try {
+                org.maplibre.android.geometry.LatLng(lt, lng)
+            } catch (e: IllegalArgumentException) {
+                null
+            }
+        }
+    }
+    
     companion object {
         fun fromMapLibreLatLng(latLng: org.maplibre.android.geometry.LatLng): LatLngSerializable {
             return LatLngSerializable(latLng.latitude, latLng.longitude)

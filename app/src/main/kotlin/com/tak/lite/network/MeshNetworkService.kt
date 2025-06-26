@@ -6,6 +6,7 @@ import com.tak.lite.data.model.IChannel
 import com.tak.lite.di.MeshConnectionState
 import com.tak.lite.di.MeshProtocol
 import com.tak.lite.model.PacketSummary
+import com.tak.lite.repository.PeerLocationHistoryRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -13,10 +14,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import org.maplibre.android.geometry.LatLng
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.asin
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -24,7 +27,9 @@ import kotlin.math.sqrt
 
 @Singleton
 class MeshNetworkService @Inject constructor(
-    private val meshProtocolProvider: MeshProtocolProvider
+    private val meshProtocolProvider: MeshProtocolProvider,
+    private val peerLocationHistoryRepository: PeerLocationHistoryRepository,
+    private val context: Context
 ) {
     private val scope = CoroutineScope(Dispatchers.Main)
     private var protocolJob: Job? = null
@@ -36,14 +41,14 @@ class MeshNetworkService @Inject constructor(
     val peers: StateFlow<List<MeshPeer>> get() = meshProtocol.peers
     private val _userLocation = MutableStateFlow<LatLng?>(null)
     val userLocation: StateFlow<LatLng?> = _userLocation
+    private val _phoneLocation = MutableStateFlow<LatLng?>(null)
+    val phoneLocation: StateFlow<LatLng?> = _phoneLocation
+    // Computed property that prefers phone location over user location (protocol location)
+    private val _bestLocation = MutableStateFlow<LatLng?>(null)
+    val bestLocation: StateFlow<LatLng?> = _bestLocation.asStateFlow()
     private var lastDeviceLocationTimestamp: Long = 0L
     private val STALE_THRESHOLD_MS = 5 * 60 * 1000L // 2 minutes
     private var stalenessJob: Job? = null
-    private val appContext: Context? = try { // Only if available
-        val clazz = Class.forName("android.app.AppGlobals")
-        val method = clazz.getMethod("getInitialApplication")
-        method.invoke(null) as? Context
-    } catch (e: Exception) { null }
 
     private val _isDeviceLocationStale = MutableStateFlow(false)
     val isDeviceLocationStale: StateFlow<Boolean> = _isDeviceLocationStale
@@ -52,6 +57,15 @@ class MeshNetworkService @Inject constructor(
     private val simulatedPeerPrefix = "sim_peer_"
     private val simulatedPeers = mutableMapOf<String, LatLng>()
     private var lastSimSettings: Pair<Boolean, Int>? = null
+
+    // Add directional bias tracking for simulated peers
+    // Each simulated peer has:
+    // - preferredDirection: The main direction they prefer to move (0-360 degrees)
+    // - variability: How much they can deviate from their preferred direction (degrees)
+    // - biasStrength: How strongly they follow their preferred direction (0.0-1.0)
+    private val simulatedPeerDirections = mutableMapOf<String, Double>() // peerId -> preferred heading in degrees
+    private val simulatedPeerDirectionVariability = mutableMapOf<String, Double>() // peerId -> variability in degrees
+    private val simulatedPeerBiasStrength = mutableMapOf<String, Double>() // peerId -> bias strength (0.0-1.0)
 
     private val _packetSummaries = MutableStateFlow<List<PacketSummary>>(emptyList())
     val packetSummaries: StateFlow<List<PacketSummary>> = _packetSummaries.asStateFlow()
@@ -81,9 +95,7 @@ class MeshNetworkService @Inject constructor(
             meshProtocolProvider.protocol.collect { newProtocol: MeshProtocol ->
                 if (meshProtocol !== newProtocol) {
                     meshProtocol = newProtocol
-                    meshProtocol.setPeerLocationCallback { locations: Map<String, LatLng> ->
-                        _peerLocations.value = locations
-                    }
+                    setupPeerLocationCallback(meshProtocol)
                     // Set user location callback for new protocol
                     setUserLocationCallbackForProtocol(meshProtocol)
                 }
@@ -113,11 +125,41 @@ class MeshNetworkService @Inject constructor(
                 }
             }
         }
-        meshProtocol.setPeerLocationCallback { locations: Map<String, LatLng> ->
-            _peerLocations.value = locations
-        }
+        
+        // Set up callback for initial protocol
+        setupPeerLocationCallback(meshProtocol)
         setUserLocationCallbackForProtocol(meshProtocol)
+        
+        // Start observing best location changes
+        scope.launch {
+            combine(_phoneLocation, _userLocation) { phone, user ->
+                phone ?: user
+            }.collect { best ->
+                _bestLocation.value = best
+            }
+        }
+        
         startSimulatedPeersMonitor()
+        
+        // Start periodic cleanup of old location entries
+        startLocationHistoryCleanup()
+    }
+
+    private fun setupPeerLocationCallback(protocol: MeshProtocol) {
+        protocol.setPeerLocationCallback { locations: Map<String, LatLng> ->
+            // Merge with existing simulated peers instead of overwriting
+            val merged = _peerLocations.value.toMutableMap()
+            // Remove old real peers (but keep simulated ones)
+            merged.keys.removeAll { !it.startsWith(simulatedPeerPrefix) }
+            // Add new real peer locations
+            merged.putAll(locations)
+            _peerLocations.value = merged
+
+            // Add location entries to history repository
+            locations.forEach { (peerId, latLng) ->
+                peerLocationHistoryRepository.addLocationEntry(peerId, latLng)
+            }
+        }
     }
 
     private fun setUserLocationCallbackForProtocol(protocol: MeshProtocol) {
@@ -144,33 +186,69 @@ class MeshNetworkService @Inject constructor(
     private fun startSimulatedPeersMonitor() {
         simulatedPeersJob?.cancel()
         simulatedPeersJob = scope.launch {
+            var lastBestLoc: LatLng? = null
             while (true) {
-                val prefs = appContext?.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-                val enabled = prefs?.getBoolean("simulate_peers_enabled", false) ?: false
-                val count = prefs?.getInt("simulated_peers_count", 3)?.coerceIn(1, 10) ?: 3
-                val userLoc = _userLocation.value
-                Log.d("MeshNetworkService", "Simulated peers monitor: enabled=$enabled, count=$count, userLoc=$userLoc")
-                if (enabled && userLoc != null) {
-                    // If settings changed, reset peers
-                    if (lastSimSettings != Pair(enabled, count) || simulatedPeers.size != count) {
-                        Log.d("MeshNetworkService", "Resetting simulated peers: count=$count")
+                val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+                val enabled = prefs.getBoolean("simulate_peers_enabled", false)
+                val count = prefs.getInt("simulated_peers_count", 3).coerceIn(1, 10)
+                val bestLoc = bestLocation.value
+                
+                Log.d("MeshNetworkService", "Simulated peers monitor: enabled=$enabled, count=$count, bestLoc=$bestLoc")
+                
+                if (enabled) {
+                    // Use best location if available, otherwise use a fallback location
+                    val centerLocation = bestLoc ?: LatLng(37.7749, -122.4194) // San Francisco as fallback
+                    
+                    // If settings changed or location changed significantly, reset peers
+                    val locationChanged = lastBestLoc == null || 
+                        (bestLoc != null && haversine(lastBestLoc!!.latitude, lastBestLoc!!.longitude, bestLoc.latitude, bestLoc.longitude) > 5000) // 5000m threshold
+                    
+                    if (lastSimSettings != Pair(enabled, count) || simulatedPeers.size != count || locationChanged) {
+                        Log.d("MeshNetworkService", "Resetting simulated peers: count=$count, centerLocation=$centerLocation, locationChanged=$locationChanged")
+                        // Only clear simulatedPeers and related maps, but do NOT clear peer histories here
                         simulatedPeers.clear()
+                        simulatedPeerDirections.clear()
+                        simulatedPeerDirectionVariability.clear()
+                        simulatedPeerBiasStrength.clear()
                         repeat(count) { i ->
                             val id = "$simulatedPeerPrefix$i"
-                            simulatedPeers[id] = randomNearbyLocation(userLoc, 5.0)
+                            val location = randomNearbyLocation(centerLocation, 3.0)
+                            simulatedPeers[id] = location
+                            // Assign random preferred direction (0-360 degrees)
+                            val preferredDirection = kotlin.random.Random.nextDouble() * 360.0
+                            simulatedPeerDirections[id] = preferredDirection
+                            // Assign low variability (2-8 degrees) for straight-line movement
+                            val variability = 2.0 + kotlin.random.Random.nextDouble() * 6.0
+                            simulatedPeerDirectionVariability[id] = variability
+                            // Assign high bias strength (0.8-0.95) for consistent direction following
+                            val biasStrength = 0.8 + kotlin.random.Random.nextDouble() * 0.15
+                            simulatedPeerBiasStrength[id] = biasStrength
+                            // Add initial location to history repository (do NOT clear history)
+                            peerLocationHistoryRepository.addLocationEntry(id, location)
                         }
                         lastSimSettings = Pair(enabled, count)
+                        lastBestLoc = bestLoc
                     }
+                    
                     // Move each peer a small random step
                     simulatedPeers.forEach { (id, loc) ->
-                        simulatedPeers[id] = movePeer(loc, userLoc, 5.0)
+                        simulatedPeers[id] = movePeer(id, loc, centerLocation, 5.0)
                     }
-                    // Merge with real peers
+                    
+                    // Merge with existing peer locations (preserving real peers)
                     val merged = _peerLocations.value.toMutableMap()
                     // Remove old sim peers
                     merged.keys.removeAll { it.startsWith(simulatedPeerPrefix) }
+                    // Add updated simulated peers
                     merged.putAll(simulatedPeers)
+                    
+                    // Add simulated peer locations to history repository for predictions
+                    simulatedPeers.forEach { (peerId, latLng) ->
+                        peerLocationHistoryRepository.addLocationEntry(peerId, latLng)
+                    }
+                    
                     Log.d("MeshNetworkService", "Updating peer locations with simulated peers: ${simulatedPeers.size} simulated, ${merged.size} total")
+                    Log.d("MeshNetworkService", "Simulated peer positions: ${simulatedPeers.map { (id, loc) -> "$id=(${loc.latitude}, ${loc.longitude})" }}")
                     _peerLocations.value = merged
                 } else {
                     // Remove simulated peers if disabled
@@ -179,7 +257,14 @@ class MeshNetworkService @Inject constructor(
                         val merged = _peerLocations.value.toMutableMap()
                         merged.keys.removeAll { it.startsWith(simulatedPeerPrefix) }
                         _peerLocations.value = merged
+                        // Remove simulated peers from history repository
+                        simulatedPeers.keys.forEach { peerId ->
+                            peerLocationHistoryRepository.removePeerHistory(peerId)
+                        }
                         simulatedPeers.clear()
+                        simulatedPeerDirections.clear()
+                        simulatedPeerDirectionVariability.clear()
+                        simulatedPeerBiasStrength.clear()
                     }
                     lastSimSettings = Pair(enabled, count)
                 }
@@ -190,33 +275,117 @@ class MeshNetworkService @Inject constructor(
 
     private fun randomNearbyLocation(center: LatLng, radiusMiles: Double): LatLng {
         val radiusMeters = radiusMiles * 1609.34
-        val angle = Math.random() * 2 * Math.PI
-        val distance = Math.random() * radiusMeters
-        val dx = distance * cos(angle)
-        val dy = distance * sin(angle)
-        val earthRadius = 6378137.0
-        val newLat = center.latitude + (dy / earthRadius) * (180 / Math.PI)
-        val newLon = center.longitude + (dx / (earthRadius * cos(Math.PI * center.latitude / 180))) * (180 / Math.PI)
+        
+        // Use square root of random to get uniform distribution over area
+        val rawRandom = kotlin.random.Random.nextDouble()
+        val distance = sqrt(rawRandom) * radiusMeters
+        val angle = kotlin.random.Random.nextDouble() * 2 * Math.PI
+        
+        val earthRadius = 6378137.0 // meters
+        
+        // Convert to radians for calculations
+        val centerLatRad = Math.toRadians(center.latitude)
+        val centerLonRad = Math.toRadians(center.longitude)
+        
+        // Calculate new position using great circle formula
+        val angularDistance = distance / earthRadius
+        val newLatRad = asin(
+            sin(centerLatRad) * cos(angularDistance) + 
+            cos(centerLatRad) * sin(angularDistance) * cos(angle)
+        )
+        val newLonRad = centerLonRad + atan2(
+            sin(angle) * sin(angularDistance) * cos(centerLatRad),
+            cos(angularDistance) - sin(centerLatRad) * sin(newLatRad)
+        )
+        
+        // Convert back to degrees
+        val newLat = Math.toDegrees(newLatRad)
+        val newLon = Math.toDegrees(newLonRad)
+        
+        Log.d("MeshNetworkService", "SimPeer: center=(${center.latitude}, ${center.longitude}), radiusMiles=$radiusMiles, rawRandom=$rawRandom, distance=$distance, angle=$angle, new=($newLat, $newLon)")
+        
         return LatLng(newLat, newLon)
     }
 
-    private fun movePeer(current: LatLng, center: LatLng, radiusMiles: Double): LatLng {
+    private fun movePeer(peerId: String, current: LatLng, center: LatLng, radiusMiles: Double): LatLng {
         // Random walk, but keep within radius
-        val stepMeters = 20 + Math.random() * 30 // 20-50 meters per update
-        val angle = Math.random() * 2 * Math.PI
-        val dx = stepMeters * cos(angle)
-        val dy = stepMeters * sin(angle)
-        val earthRadius = 6378137.0
-        var newLat = current.latitude + (dy / earthRadius) * (180 / Math.PI)
-        var newLon = current.longitude + (dx / (earthRadius * cos(Math.PI * current.latitude / 180))) * (180 / Math.PI)
-        // Clamp to radius
+        val stepMeters = 20 + kotlin.random.Random.nextDouble() * 30 // 20-50 meters per update
+        
+        // Get the peer's preferred direction and variability
+        val preferredDirection = simulatedPeerDirections[peerId] ?: 0.0
+        val variability = simulatedPeerDirectionVariability[peerId] ?: 30.0
+        val biasStrength = simulatedPeerBiasStrength[peerId] ?: 0.5
+        
+        // Calculate biased angle with variability
+        val baseAngleRad = Math.toRadians(preferredDirection)
+        val variabilityRad = Math.toRadians(variability)
+        
+        // Generate a random angle within the variability range around the preferred direction
+        val randomOffset = (kotlin.random.Random.nextDouble() - 0.5) * 2 * variabilityRad
+        val angle = baseAngleRad + randomOffset
+        
+        // Apply bias strength: higher bias strength means more likely to follow preferred direction
+        val finalAngle = if (kotlin.random.Random.nextDouble() < biasStrength) {
+            // Strong bias: use the calculated biased angle
+            angle
+        } else {
+            // Weak bias: add more randomness
+            kotlin.random.Random.nextDouble() * 2 * Math.PI
+        }
+        
+        // Convert to 0-2π range
+        val normalizedAngle = ((finalAngle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)
+        
+        val earthRadius = 6378137.0 // meters
+        
+        // Convert to radians for calculations
+        val currentLatRad = Math.toRadians(current.latitude)
+        val currentLonRad = Math.toRadians(current.longitude)
+        
+        // Calculate new position using great circle formula
+        val angularDistance = stepMeters / earthRadius
+        val newLatRad = asin(
+            sin(currentLatRad) * cos(angularDistance) + 
+            cos(currentLatRad) * sin(angularDistance) * cos(normalizedAngle)
+        )
+        val newLonRad = currentLonRad + atan2(
+            sin(normalizedAngle) * sin(angularDistance) * cos(currentLatRad),
+            cos(angularDistance) - sin(currentLatRad) * sin(newLatRad)
+        )
+        
+        // Convert back to degrees
+        var newLat = Math.toDegrees(newLatRad)
+        var newLon = Math.toDegrees(newLonRad)
+        
+        // Clamp to radius using haversine distance
         val dist = haversine(center.latitude, center.longitude, newLat, newLon)
         if (dist > radiusMiles * 1609.34) {
-            // Snap back to edge
-            val bearing = atan2(newLon - center.longitude, newLat - center.latitude)
-            newLat = center.latitude + (radiusMiles * 1609.34 / earthRadius) * (180 / Math.PI) * cos(bearing)
-            newLon = center.longitude + (radiusMiles * 1609.34 / (earthRadius * cos(Math.PI * center.latitude / 180))) * (180 / Math.PI) * sin(bearing)
+            // Snap back to edge - use great circle formula to find point on edge
+            val maxDistance = radiusMiles * 1609.34
+            val angularDistance = maxDistance / earthRadius
+            
+            val centerLatRad = Math.toRadians(center.latitude)
+            val centerLonRad = Math.toRadians(center.longitude)
+            
+            // Calculate bearing from center to new point
+            val bearing = atan2(
+                sin(newLonRad - centerLonRad) * cos(Math.toRadians(newLat)),
+                cos(centerLatRad) * sin(Math.toRadians(newLat)) - sin(centerLatRad) * cos(Math.toRadians(newLat)) * cos(newLonRad - centerLonRad)
+            )
+            
+            // Calculate point on edge at this bearing
+            newLat = Math.toDegrees(asin(
+                sin(centerLatRad) * cos(angularDistance) + 
+                cos(centerLatRad) * sin(angularDistance) * cos(bearing)
+            ))
+            newLon = Math.toDegrees(centerLonRad + atan2(
+                sin(bearing) * sin(angularDistance) * cos(centerLatRad),
+                cos(angularDistance) - sin(centerLatRad) * sin(Math.toRadians(newLat))
+            ))
         }
+        
+        Log.d("MeshNetworkService", "SimPeer $peerId: preferred=${preferredDirection.toInt()}°, variability=${variability.toInt()}°, bias=${(biasStrength * 100).toInt()}%, actual=${Math.toDegrees(normalizedAngle).toInt()}°")
+        
         return LatLng(newLat, newLon)
     }
 
@@ -250,6 +419,34 @@ class MeshNetworkService @Inject constructor(
 
     fun setLocalNickname(nickname: String) {
         meshProtocol.setLocalNickname(nickname)
+    }
+
+    fun setPhoneLocation(latLng: LatLng) {
+        Log.d("MeshNetworkService", "Setting phone location: $latLng")
+        _phoneLocation.value = latLng
+    }
+
+    private fun startLocationHistoryCleanup() {
+        scope.launch {
+            while (true) {
+                delay(5 * 60 * 1000L) // Every 5 minutes
+                peerLocationHistoryRepository.cleanupOldEntries(60) // Keep last hour
+            }
+        }
+    }
+
+    /**
+     * Get current directional bias settings for simulated peers
+     * Useful for debugging and monitoring peer movement patterns
+     */
+    fun getSimulatedPeerBiasSettings(): Map<String, Triple<Double, Double, Double>> {
+        return simulatedPeers.keys.associate { peerId ->
+            peerId to Triple(
+                simulatedPeerDirections[peerId] ?: 0.0,
+                simulatedPeerDirectionVariability[peerId] ?: 30.0,
+                simulatedPeerBiasStrength[peerId] ?: 0.5
+            )
+        }
     }
 }
 

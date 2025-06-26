@@ -4,10 +4,15 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.geeksville.mesh.MeshProtos
+import com.tak.lite.model.ConfidenceCone
+import com.tak.lite.model.LocationPrediction
 import com.tak.lite.model.PacketSummary
+import com.tak.lite.model.PredictionConfig
+import com.tak.lite.model.PredictionModel
 import com.tak.lite.network.MeshNetworkState
 import com.tak.lite.network.MeshPeer
 import com.tak.lite.repository.MeshNetworkRepository
+import com.tak.lite.repository.PeerLocationHistoryRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,7 +24,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class MeshNetworkViewModel @Inject constructor(
-    private val meshNetworkRepository: MeshNetworkRepository
+    private val meshNetworkRepository: MeshNetworkRepository,
+    private val peerLocationHistoryRepository: PeerLocationHistoryRepository
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow<MeshNetworkUiState>(MeshNetworkUiState.Initial)
@@ -29,16 +35,22 @@ class MeshNetworkViewModel @Inject constructor(
     val peerLocations: StateFlow<Map<String, LatLng>> = _peerLocations.asStateFlow()
     
     val userLocation: StateFlow<org.maplibre.android.geometry.LatLng?> = meshNetworkRepository.userLocation as StateFlow<org.maplibre.android.geometry.LatLng?>
+    val phoneLocation: StateFlow<org.maplibre.android.geometry.LatLng?> = meshNetworkRepository.phoneLocation as StateFlow<org.maplibre.android.geometry.LatLng?>
+    val bestLocation: StateFlow<org.maplibre.android.geometry.LatLng?> = meshNetworkRepository.bestLocation as StateFlow<org.maplibre.android.geometry.LatLng?>
     val isDeviceLocationStale: StateFlow<Boolean> = meshNetworkRepository.isDeviceLocationStale as StateFlow<Boolean>
-    
-    private val _phoneLocation = MutableStateFlow<LatLng?>(null)
-    val phoneLocation: StateFlow<LatLng?> = _phoneLocation.asStateFlow()
     
     private val _packetSummaries = MutableStateFlow<List<PacketSummary>>(emptyList())
     val packetSummaries: StateFlow<List<PacketSummary>> = _packetSummaries.asStateFlow()
     
     private val _selfId = MutableStateFlow<String?>(null)
     val selfId: StateFlow<String?> = _selfId.asStateFlow()
+
+    // State flows for predictions and confidence cones
+    private val _predictions = MutableStateFlow<Map<String, LocationPrediction>>(emptyMap())
+    val predictions: StateFlow<Map<String, LocationPrediction>> = _predictions.asStateFlow()
+
+    private val _confidenceCones = MutableStateFlow<Map<String, ConfidenceCone>>(emptyMap())
+    val confidenceCones: StateFlow<Map<String, ConfidenceCone>> = _confidenceCones.asStateFlow()
     
     init {
         viewModelScope.launch {
@@ -77,6 +89,13 @@ class MeshNetworkViewModel @Inject constructor(
                 _selfId.value = nodeId
             }
         }
+
+        viewModelScope.launch {
+            peerLocationHistoryRepository.predictions.collect { _predictions.value = it }
+        }
+        viewModelScope.launch {
+            peerLocationHistoryRepository.confidenceCones.collect { _confidenceCones.value = it }
+        }
     }
 
     fun requestPeerLocation(peerId: String, onLocationReceived: (timeout: Boolean) -> Unit) {
@@ -94,7 +113,7 @@ class MeshNetworkViewModel @Inject constructor(
     }
     
     fun setPhoneLocation(latLng: LatLng) {
-        _phoneLocation.value = latLng
+        meshNetworkRepository.setPhoneLocation(latLng)
     }
     
     override fun onCleared() {

@@ -26,6 +26,7 @@ import com.tak.lite.di.MeshConnectionState
 import com.tak.lite.di.MeshProtocol
 import com.tak.lite.service.MeshForegroundService
 import com.tak.lite.ui.map.MapController
+import com.tak.lite.ui.settings.PredictionAdvancedSettingsDialog
 import com.tak.lite.util.BillingManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
@@ -78,6 +79,8 @@ class SettingsActivity : BaseActivity() {
     private lateinit var compassStatusText: TextView
     private lateinit var compassQualityText: TextView
     private lateinit var compassCalibrateButton: com.google.android.material.button.MaterialButton
+    private lateinit var showPredictionOverlaySwitch: SwitchMaterial
+    private lateinit var predictionAdvancedLink: TextView
     private val REQUEST_CODE_FOREGROUND_SERVICE_CONNECTED_DEVICE = 2003
     private val REQUEST_CODE_NOTIFICATION_PERMISSION = 3001
     private val REQUEST_CODE_ALL_PERMISSIONS = 4001
@@ -127,6 +130,8 @@ class SettingsActivity : BaseActivity() {
         compassStatusText = findViewById(R.id.compassStatusText)
         compassQualityText = findViewById(R.id.compassQualityText)
         compassCalibrateButton = findViewById(R.id.compassCalibrateButton)
+        showPredictionOverlaySwitch = findViewById(R.id.showPredictionOverlaySwitch)
+        predictionAdvancedLink = findViewById(R.id.predictionAdvancedLink)
 
         // Check premium status and update UI accordingly
         lifecycleScope.launch {
@@ -427,6 +432,18 @@ class SettingsActivity : BaseActivity() {
         showPacketSummarySwitch.isChecked = showPacketSummaryEnabled
         showPacketSummarySwitch.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean("show_packet_summary", isChecked).apply()
+        }
+
+        // Setup prediction overlay switch
+        val showPredictionOverlayEnabled = prefs.getBoolean("show_prediction_overlay", true)
+        showPredictionOverlaySwitch.isChecked = showPredictionOverlayEnabled
+        showPredictionOverlaySwitch.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean("show_prediction_overlay", isChecked).apply()
+        }
+        
+        // Setup prediction advanced settings link
+        predictionAdvancedLink.setOnClickListener {
+            showPredictionAdvancedSettings()
         }
 
         // Setup compass calibration
@@ -806,9 +823,14 @@ class SettingsActivity : BaseActivity() {
         dialog.show(supportFragmentManager, "purchase_dialog")
     }
 
+    private fun showPredictionAdvancedSettings() {
+        val dialog = PredictionAdvancedSettingsDialog()
+        dialog.show(supportFragmentManager, "prediction_advanced_settings")
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         // Unregister sensor listener to prevent memory leaks
         sensorManager.unregisterListener(sensorListener)
     }
-} 
+}

@@ -512,10 +512,10 @@ class AnnotationController(
     }
 
     private fun handleDrawLineToPeer(peerId: String) {
-        val userLocation = meshNetworkViewModel.phoneLocation.value ?: meshNetworkViewModel.userLocation.value
+        val userLocation = meshNetworkViewModel.bestLocation.value
         val peerLocation = meshNetworkViewModel.peerLocations.value[peerId]
         Log.d("AnnotationController", "handleDrawLineToPeer: peerId=$peerId")
-        Log.d("AnnotationController", "handleDrawLineToPeer: phoneLocation=$userLocation")
+        Log.d("AnnotationController", "handleDrawLineToPeer: bestLocation=$userLocation")
         Log.d("AnnotationController", "handleDrawLineToPeer: peerLocation=$peerLocation")
         Log.d("AnnotationController", "handleDrawLineToPeer: all peer locations=${meshNetworkViewModel.peerLocations.value}")
         
