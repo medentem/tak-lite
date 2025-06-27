@@ -585,6 +585,16 @@ class LocationPredictionEngine {
             
             Log.d(TAG, "Particle filter: initial velocity = (${initialVelocity.first}, ${initialVelocity.second}) m/s")
             
+            // FIXED: Validate initial velocity to prevent impossibly high values
+            val initialSpeed = sqrt(initialVelocity.first * initialVelocity.first + initialVelocity.second * initialVelocity.second)
+            val maxReasonableInitialSpeed = 50.0 // 50 m/s = ~112 mph for initial velocity
+            val validatedInitialSpeed = if (initialSpeed > maxReasonableInitialSpeed) {
+                Log.w(TAG, "Particle filter: Initial speed too high: ${initialSpeed.toInt()}m/s - capping at ${maxReasonableInitialSpeed.toInt()}m/s")
+                maxReasonableInitialSpeed
+            } else {
+                initialSpeed
+            }
+            
             repeat(100) { // 100 particles
                 val latOffset = Random.nextDouble(-0.0001, 0.0001) // Small initial spread
                 val lonOffset = Random.nextDouble(-0.0001, 0.0001)
@@ -593,10 +603,9 @@ class LocationPredictionEngine {
                 val speedNoise = Random.nextDouble(-0.5, 0.5) // ±0.5 m/s noise
                 val headingNoise = Random.nextDouble(-10.0, 10.0) // ±10 degrees noise
                 
-                val initialSpeed = sqrt(initialVelocity.first * initialVelocity.first + initialVelocity.second * initialVelocity.second)
                 val initialHeading = atan2(initialVelocity.second, initialVelocity.first) * RAD_TO_DEG
                 
-                val adjustedSpeed = (initialSpeed + speedNoise).coerceAtLeast(0.0)
+                val adjustedSpeed = (validatedInitialSpeed + speedNoise).coerceAtLeast(0.0)
                 val adjustedHeading = (initialHeading + headingNoise + 360.0) % 360.0
                 
                 // FIXED: Correct velocity conversion to degrees/second
@@ -613,6 +622,7 @@ class LocationPredictionEngine {
             }
             
             Log.d(TAG, "Particle filter: initialized ${particles.size} particles around (${latest.latitude}, ${latest.longitude})")
+            Log.d(TAG, "Particle filter: validated initial speed=${validatedInitialSpeed.toInt()}m/s, initial heading=${atan2(initialVelocity.second, initialVelocity.first) * RAD_TO_DEG}°")
             
             // Process historical data to update particle weights
             for (i in 1 until filteredEntries.size) {
@@ -625,6 +635,21 @@ class LocationPredictionEngine {
                 
                 // Predict particle positions
                 particles.forEach { particle ->
+                    // FIXED: Validate particle velocities before movement to prevent excessive movement
+                    val vLatMps = particle.vLat * EARTH_RADIUS_METERS * DEG_TO_RAD
+                    val vLonMps = particle.vLon * EARTH_RADIUS_METERS * cos(particle.lat * DEG_TO_RAD) * DEG_TO_RAD
+                    val particleSpeed = sqrt(vLatMps * vLatMps + vLonMps * vLonMps)
+                    
+                    // Cap particle speed to prevent excessive movement
+                    val maxParticleSpeed = 100.0 // 100 m/s = ~224 mph
+                    if (particleSpeed > maxParticleSpeed) {
+                        Log.w(TAG, "Particle filter: Particle speed too high: ${particleSpeed.toInt()}m/s - capping movement")
+                        // Scale down the velocity components proportionally
+                        val scaleFactor = maxParticleSpeed / particleSpeed
+                        particle.vLat *= scaleFactor
+                        particle.vLon *= scaleFactor
+                    }
+                    
                     particle.lat += particle.vLat * dt
                     particle.lon += particle.vLon * dt
                     
@@ -775,12 +800,52 @@ class LocationPredictionEngine {
             return null
         }
         
-        // Calculate velocity from the predicted position
-        val distance = calculateDistance(latest.latitude, latest.longitude, predLat, predLon)
-        val speed = distance / predictionTimeSeconds
-        val heading = meanHeading // Use the mean heading as the predicted heading
+        // FIXED: Calculate velocity from actual particle velocities instead of recalculating from positions
+        // Convert particle velocities from degrees/second back to m/s
+        val particleVelocities = predictedParticles.map { particle ->
+            val vLatMps = particle.vLat * EARTH_RADIUS_METERS * DEG_TO_RAD
+            val vLonMps = particle.vLon * EARTH_RADIUS_METERS * cos(particle.lat * DEG_TO_RAD) * DEG_TO_RAD
+            val speed = sqrt(vLatMps * vLatMps + vLonMps * vLonMps)
+            val heading = atan2(vLonMps, vLatMps) * RAD_TO_DEG
+            Triple(speed, heading, particle.weight)
+        }
         
-        return Quadruple(predLat, predLon, speed, heading)
+        // Calculate weighted average speed and heading
+        val totalWeight = particleVelocities.sumOf { it.third }
+        val weightedSpeed = if (totalWeight > 0) {
+            particleVelocities.sumOf { it.first * it.third } / totalWeight
+        } else {
+            0.0
+        }
+        
+        // Calculate weighted average heading using circular mean
+        val sinSum = particleVelocities.sumOf { sin(it.second * DEG_TO_RAD) * it.third }
+        val cosSum = particleVelocities.sumOf { cos(it.second * DEG_TO_RAD) * it.third }
+        val weightedHeading = if (totalWeight > 0) {
+            atan2(sinSum, cosSum) * RAD_TO_DEG
+        } else {
+            meanHeading
+        }
+        
+        // FIXED: Validate speed to prevent impossibly high values
+        val maxReasonableSpeed = 100.0 // 100 m/s = ~224 mph
+        val finalSpeed = if (weightedSpeed > maxReasonableSpeed) {
+            Log.w(TAG, "Particle filter: Weighted speed too high: ${weightedSpeed.toInt()}m/s - capping at ${maxReasonableSpeed.toInt()}m/s")
+            maxReasonableSpeed
+        } else {
+            weightedSpeed
+        }
+        
+        // Validate final calculations
+        if (finalSpeed.isNaN() || finalSpeed.isInfinite() || 
+            weightedHeading.isNaN() || weightedHeading.isInfinite()) {
+            Log.w(TAG, "Particle filter: Invalid velocity calculations - speed=$finalSpeed, heading=$weightedHeading")
+            return null
+        }
+        
+        Log.d(TAG, "Particle filter: Final velocity calculation - weightedSpeed=${weightedSpeed.toInt()}m/s, finalSpeed=${finalSpeed.toInt()}m/s, heading=${weightedHeading.toInt()}°")
+        
+        return Quadruple(predLat, predLon, finalSpeed, (weightedHeading + 360) % 360)
     }
     
     /**
