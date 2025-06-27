@@ -193,23 +193,20 @@ class MeshNetworkService @Inject constructor(
                 
                 Log.d("MeshNetworkService", "Simulated peers monitor: enabled=$enabled, count=$count, bestLoc=$bestLoc")
                 
-                if (enabled) {
-                    // Use best location if available, otherwise use a fallback location
-                    val centerLocation = bestLoc ?: LatLng(37.7749, -122.4194) // San Francisco as fallback
-                    
+                if (enabled && bestLoc != null) {
                     // If settings changed or location changed significantly, reset peers
                     val locationChanged = lastBestLoc == null || 
-                        (bestLoc != null && haversine(lastBestLoc!!.latitude, lastBestLoc!!.longitude, bestLoc.latitude, bestLoc.longitude) > 5000) // 5000m threshold
+                        (haversine(lastBestLoc.latitude, lastBestLoc.longitude, bestLoc.latitude, bestLoc.longitude) > 5000) // 5000m threshold
                     
                     if (lastSimSettings != Pair(enabled, count) || simulatedPeers.size != count || locationChanged) {
-                        Log.d("MeshNetworkService", "Resetting simulated peers: count=$count, centerLocation=$centerLocation, locationChanged=$locationChanged")
+                        Log.d("MeshNetworkService", "Resetting simulated peers: count=$count, centerLocation=$bestLoc, locationChanged=$locationChanged")
                         // Only clear simulatedPeers and related maps, but do NOT clear peer histories here
                         simulatedPeers.clear()
                         simulatedPeerCurrentDirections.clear()
                         simulatedPeerStraightBias.clear()
                         repeat(count) { i ->
                             val id = "$simulatedPeerPrefix$i"
-                            val location = randomNearbyLocation(centerLocation, 3.0)
+                            val location = randomNearbyLocation(bestLoc, 3.0)
                             simulatedPeers[id] = location
                             // Assign random current direction (0-360 degrees)
                             val currentDirection = kotlin.random.Random.nextDouble() * 360.0
@@ -226,7 +223,7 @@ class MeshNetworkService @Inject constructor(
                     
                     // Move each peer a small random step
                     simulatedPeers.forEach { (id, loc) ->
-                        simulatedPeers[id] = movePeer(id, loc, centerLocation, 5.0)
+                        simulatedPeers[id] = movePeer(id, loc, bestLoc, 5.0)
                     }
                     
                     // Merge with existing peer locations (preserving real peers)
@@ -261,7 +258,7 @@ class MeshNetworkService @Inject constructor(
                     }
                     lastSimSettings = Pair(enabled, count)
                 }
-                delay(3000)
+                delay(15000)
             }
         }
     }
@@ -302,7 +299,7 @@ class MeshNetworkService @Inject constructor(
 
     private fun movePeer(peerId: String, current: LatLng, center: LatLng, radiusMiles: Double): LatLng {
         // Random walk, but keep within radius
-        val stepMeters = 2 + kotlin.random.Random.nextDouble() * 15 // 2-17 meters per update
+        val stepMeters = 5 + kotlin.random.Random.nextDouble() * 30 // 2-17 meters per update
         
         // Get the peer's current direction and settings
         val currentDirection = simulatedPeerCurrentDirections[peerId] ?: 0.0

@@ -20,19 +20,47 @@ data class PeerLocationHistory(
     val maxEntries: Int = 100 // Keep last 100 entries
 ) {
     fun addEntry(entry: PeerLocationEntry): PeerLocationHistory {
-        val newEntries = (entries + entry).takeLast(maxEntries)
+        // Add new entry and sort by timestamp to ensure chronological order
+        val newEntries = (entries + entry)
+            .sortedBy { it.timestamp } // CRITICAL FIX: Sort by timestamp
+            .takeLast(maxEntries)
         return copy(entries = newEntries)
     }
     
     fun getRecentEntries(minutes: Int): List<PeerLocationEntry> {
         val cutoffTime = System.currentTimeMillis() - (minutes * 60 * 1000L)
-        return entries.filter { it.timestamp >= cutoffTime }
+        // Filter and ensure chronological order for prediction engine
+        return entries
+            .filter { it.timestamp >= cutoffTime }
+            .sortedBy { it.timestamp } // CRITICAL FIX: Ensure chronological order
     }
     
     fun getLatestEntry(): PeerLocationEntry? = entries.lastOrNull()
     
     fun getSecondLatestEntry(): PeerLocationEntry? = 
         if (entries.size >= 2) entries[entries.size - 2] else null
+        
+    /**
+     * Validate that entries are in chronological order
+     * This is a safety check to catch any data corruption
+     */
+    fun validateChronologicalOrder(): Boolean {
+        if (entries.size <= 1) return true
+        for (i in 1 until entries.size) {
+            if (entries[i].timestamp < entries[i-1].timestamp) {
+                return false
+            }
+        }
+        return true
+    }
+    
+    /**
+     * Get entries in guaranteed chronological order
+     * Use this when you need to be absolutely sure of the order
+     */
+    fun getChronologicalEntries(): List<PeerLocationEntry> {
+        return entries.sortedBy { it.timestamp }
+    }
 }
 
 @Serializable
@@ -59,7 +87,10 @@ data class KalmanState(
     val lat: Double, val lon: Double,
     val vLat: Double, val vLon: Double,
     val pLat: Double, val pLon: Double,
-    val pVLat: Double, val pVLon: Double
+    val pVLat: Double, val pVLon: Double,
+    val pLatVLat: Double = 0.0, // Cross-covariance between lat position and lat velocity
+    val pLonVLon: Double = 0.0, // Cross-covariance between lon position and lon velocity
+    val lastUpdateTime: Long = System.currentTimeMillis() // Track time for proper covariance propagation
 )
 
 @Serializable

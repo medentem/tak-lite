@@ -65,6 +65,13 @@ class PeerLocationHistoryRepository @Inject constructor(
             longitude = latLng.longitude
         )
         
+        // Validate entry data
+        if (entry.latitude.isNaN() || entry.longitude.isNaN() || 
+            entry.latitude.isInfinite() || entry.longitude.isInfinite()) {
+            Log.e(TAG, "Invalid location data for peer $peerId: lat=${entry.latitude}, lon=${entry.longitude}")
+            return
+        }
+        
         // Check prediction accuracy if we have a previous prediction
         val currentPrediction = _predictions.value[peerId]
         if (currentPrediction != null) {
@@ -99,6 +106,13 @@ class PeerLocationHistoryRepository @Inject constructor(
         
         val currentHistory = peerHistories[peerId] ?: PeerLocationHistory(peerId)
         val updatedHistory = currentHistory.addEntry(entry)
+        
+        // Validate the updated history has proper chronological order
+        if (!updatedHistory.validateChronologicalOrder()) {
+            Log.e(TAG, "CRITICAL: Updated history for peer $peerId is not in chronological order!")
+            // This should never happen with our fix, but log it if it does
+        }
+        
         peerHistories[peerId] = updatedHistory
         
         // Update predictions
@@ -424,7 +438,7 @@ class PeerLocationHistoryRepository @Inject constructor(
             avgSpeedMph < 5 -> "LINEAR - Low speed movement detected"
             avgSpeedMph < 20 -> "KALMAN_FILTER - Moderate speed, good for noise reduction"
             avgSpeedMph < 50 -> "PARTICLE_FILTER - High speed, complex movement patterns"
-            else -> "MACHINE_LEARNING - Very high speed, adaptive patterns needed"
+            else -> "PARTICLE_FILTER - High speed, complex movement patterns"
         }
     }
     

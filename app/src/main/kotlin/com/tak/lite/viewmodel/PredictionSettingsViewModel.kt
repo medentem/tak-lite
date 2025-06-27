@@ -71,10 +71,4 @@ class PredictionSettingsViewModel @Inject constructor(
     fun setPredictionModel(model: PredictionModel) {
         peerLocationHistoryRepository.setPredictionModel(model)
     }
-    
-    fun refreshStatistics() {
-        viewModelScope.launch {
-            _predictionStats.value = peerLocationHistoryRepository.getPredictionStats()
-        }
-    }
 } 
