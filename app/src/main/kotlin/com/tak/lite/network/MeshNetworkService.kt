@@ -146,11 +146,10 @@ class MeshNetworkService @Inject constructor(
 
     private fun setupPeerLocationCallback(protocol: MeshProtocol) {
         protocol.setPeerLocationCallback { locations: Map<String, PeerLocationEntry> ->
-            // Merge with existing simulated peers instead of overwriting
+            Log.d("MeshNetworkService", "Received peer location update: ${locations.size} peers, peer IDs: ${locations.keys}")
+            // Merge with existing peer locations instead of overwriting
             val merged = _peerLocations.value.toMutableMap()
-            // Remove old real peers (but keep simulated ones)
-            merged.keys.removeAll { !it.startsWith(simulatedPeerPrefix) }
-            // Add new real peer locations
+            // Add/update the new peer locations (don't remove existing ones)
             merged.putAll(locations)
             _peerLocations.value = merged
 

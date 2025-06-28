@@ -1007,8 +1007,11 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                                 
                                 peerLocations[peerId] = locationEntry
                                 
+                                Log.d(TAG, "Updated peer location for $peerId: ${locationEntry.latitude}, ${locationEntry.longitude}")
+                                Log.d(TAG, "Total peer locations now: ${peerLocations.size}, peer IDs: ${peerLocations.keys}")
+                                
                                 // Call enhanced callback with full location entry data
-                                peerLocationCallback?.invoke(mapOf(peerId to locationEntry))
+                                peerLocationCallback?.invoke(peerLocations.toMap())
                                 
                                 // Update last seen for node info
                                 nodeInfoMap[peerId]?.let { info ->
