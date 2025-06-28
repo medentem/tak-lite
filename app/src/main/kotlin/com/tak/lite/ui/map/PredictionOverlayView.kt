@@ -2,6 +2,8 @@ package com.tak.lite.ui.map
 
 import android.content.Context
 import android.graphics.*
+import android.os.Handler
+import android.os.Looper
 import android.util.AttributeSet
 import android.util.Log
 import android.view.View
@@ -10,6 +12,7 @@ import com.tak.lite.model.LocationPrediction
 import com.tak.lite.model.PeerLocationEntry
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Projection
+import java.util.concurrent.TimeUnit
 
 class PredictionOverlayView @JvmOverloads constructor(
     context: Context,
@@ -22,6 +25,15 @@ class PredictionOverlayView @JvmOverloads constructor(
     private var confidenceCones: Map<String, ConfidenceCone> = emptyMap()
     private var peerLocations: Map<String, PeerLocationEntry> = emptyMap()
     private var showPredictionOverlay: Boolean = true
+    
+    // Timer for updating time displays
+    private val timeUpdateHandler = Handler(Looper.getMainLooper())
+    private val timeUpdateRunnable = object : Runnable {
+        override fun run() {
+            invalidate() // Trigger redraw to update time displays
+            timeUpdateHandler.postDelayed(this, 1000) // Update every second
+        }
+    }
     
     // Paint objects for different elements
     private val predictionLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -52,6 +64,48 @@ class PredictionOverlayView @JvmOverloads constructor(
         textSize = 24f
         textAlign = Paint.Align.CENTER
         typeface = Typeface.DEFAULT_BOLD
+    }
+    
+    private val timeTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.YELLOW
+        textSize = 26f
+        textAlign = Paint.Align.CENTER
+        typeface = Typeface.DEFAULT
+    }
+    
+    init {
+        // Start the time update timer
+        timeUpdateHandler.post(timeUpdateRunnable)
+    }
+    
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        // Stop the time update timer
+        timeUpdateHandler.removeCallbacks(timeUpdateRunnable)
+    }
+    
+    /**
+     * Format time difference into human-readable string
+     */
+    private fun formatTimeDifference(targetTimestamp: Long): String {
+        val currentTime = System.currentTimeMillis()
+        val timeDiff = targetTimestamp - currentTime
+        val absTimeDiff = kotlin.math.abs(timeDiff)
+        
+        return when {
+            absTimeDiff < 60000 -> { // Less than 1 minute
+                val seconds = TimeUnit.MILLISECONDS.toSeconds(absTimeDiff)
+                if (timeDiff >= 0) "${seconds}s from now" else "${seconds}s ago"
+            }
+            absTimeDiff < 3600000 -> { // Less than 1 hour
+                val minutes = TimeUnit.MILLISECONDS.toMinutes(absTimeDiff)
+                if (timeDiff >= 0) "${minutes} min from now" else "${minutes} min ago"
+            }
+            else -> { // 1 hour or more
+                val hours = TimeUnit.MILLISECONDS.toHours(absTimeDiff)
+                if (timeDiff >= 0) "${hours}h from now" else "${hours}h ago"
+            }
+        }
     }
     
     fun setProjection(projection: Projection?) {
@@ -172,19 +226,43 @@ class PredictionOverlayView @JvmOverloads constructor(
                     12f, predictionDotPaint
                 )
                 
-                // Draw prediction info
+                // Draw prediction info (speed)
                 val velocity = prediction.velocity
                 if (velocity != null) {
                     val speedMph = (velocity.speed * 2.23694).toInt()
-                    val infoText = "$speedMph mph"
-                    val textBounds = Rect()
-                    confidenceTextPaint.getTextBounds(infoText, 0, infoText.length, textBounds)
+                    val speedText = "$speedMph mph"
+                    val speedTextBounds = Rect()
+                    confidenceTextPaint.getTextBounds(speedText, 0, speedText.length, speedTextBounds)
                     
                     canvas.drawText(
-                        infoText,
+                        speedText,
                         predictedScreenPoint.x,
                         predictedScreenPoint.y - 20f,
                         confidenceTextPaint
+                    )
+                    
+                    // Draw time information below speed
+                    val timeText = formatTimeDifference(prediction.targetTimestamp)
+                    val timeTextBounds = Rect()
+                    timeTextPaint.getTextBounds(timeText, 0, timeText.length, timeTextBounds)
+                    
+                    canvas.drawText(
+                        timeText,
+                        predictedScreenPoint.x,
+                        predictedScreenPoint.y + 32f,
+                        timeTextPaint
+                    )
+                } else {
+                    // If no velocity, just show time information
+                    val timeText = formatTimeDifference(prediction.targetTimestamp)
+                    val timeTextBounds = Rect()
+                    timeTextPaint.getTextBounds(timeText, 0, timeText.length, timeTextBounds)
+                    
+                    canvas.drawText(
+                        timeText,
+                        predictedScreenPoint.x,
+                        predictedScreenPoint.y + 32f,
+                        timeTextPaint
                     )
                 }
             }

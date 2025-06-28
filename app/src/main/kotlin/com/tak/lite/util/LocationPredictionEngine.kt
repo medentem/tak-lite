@@ -613,9 +613,9 @@ class LocationPredictionEngine {
             
             // ENHANCED: Adjust particle initialization based on velocity data quality
             val particleSpread = when (dataSource) {
-                "device_velocity" -> 0.00005 // Tighter spread for device-provided velocity
-                "position_calculated" -> 0.0001 // Moderate spread for calculated velocity
-                else -> 0.0002 // Wider spread for insufficient data
+                "device_velocity" -> 0.001 // ~111m spread for device-provided velocity (was 0.00005)
+                "position_calculated" -> 0.002 // ~222m spread for calculated velocity (was 0.0001)
+                else -> 0.005 // ~555m spread for insufficient data (was 0.0002)
             }
             
             val velocityNoise = when (dataSource) {
@@ -1623,43 +1623,46 @@ class LocationPredictionEngine {
             val sortedCrossTrack = crossTrackProjections.sorted()
             val sortedAlongTrack = alongTrackProjections.sorted()
             
-            // Use 10th and 90th percentiles for cross-track (left/right uncertainty)
-            val leftIdx = (0.1 * sortedCrossTrack.size).toInt().coerceIn(0, sortedCrossTrack.size - 1)
-            val rightIdx = (0.9 * sortedCrossTrack.size).toInt().coerceIn(0, sortedCrossTrack.size - 1)
+            // Use 5th and 95th percentiles for cross-track (left/right uncertainty) - wider cone
+            val leftIdx = (0.05 * sortedCrossTrack.size).toInt().coerceIn(0, sortedCrossTrack.size - 1)
+            val rightIdx = (0.95 * sortedCrossTrack.size).toInt().coerceIn(0, sortedCrossTrack.size - 1)
             val leftOffset = sortedCrossTrack[leftIdx]
             val rightOffset = sortedCrossTrack[rightIdx]
             
-            // Use 10th and 90th percentiles for along-track (forward/backward uncertainty)
-            val backIdx = (0.1 * sortedAlongTrack.size).toInt().coerceIn(0, sortedAlongTrack.size - 1)
-            val forwardIdx = (0.9 * sortedAlongTrack.size).toInt().coerceIn(0, sortedAlongTrack.size - 1)
+            // Use 5th and 95th percentiles for along-track (forward/backward uncertainty) - wider cone
+            val backIdx = (0.05 * sortedAlongTrack.size).toInt().coerceIn(0, sortedAlongTrack.size - 1)
+            val forwardIdx = (0.95 * sortedAlongTrack.size).toInt().coerceIn(0, sortedAlongTrack.size - 1)
             val backOffset = sortedAlongTrack[backIdx]
             val forwardOffset = sortedAlongTrack[forwardIdx]
             
-            // FIXED: Calculate boundary points correctly
-            // Left boundary: cross-track left + along-track uncertainty
+            // FIXED: Calculate boundary points correctly for proper cone shape
+            // Left boundary: cross-track left offset
             val leftCrossTrackLat = avgLat + (leftOffset / EARTH_RADIUS_METERS) * RAD_TO_DEG
             val leftCrossTrackLon = avgLon + (leftOffset / (EARTH_RADIUS_METERS * cos(avgLat * DEG_TO_RAD))) * RAD_TO_DEG
             
-            // Right boundary: cross-track right + along-track uncertainty  
+            // Right boundary: cross-track right offset  
             val rightCrossTrackLat = avgLat + (rightOffset / EARTH_RADIUS_METERS) * RAD_TO_DEG
             val rightCrossTrackLon = avgLon + (rightOffset / (EARTH_RADIUS_METERS * cos(avgLat * DEG_TO_RAD))) * RAD_TO_DEG
             
-            // Add along-track uncertainty to both boundaries
-            val (leftLat, leftLon) = calculateDestination(
-                leftCrossTrackLat, leftCrossTrackLon, 
-                abs(backOffset), meanHeading
-            )
-            val (rightLat, rightLon) = calculateDestination(
-                rightCrossTrackLat, rightCrossTrackLon,
-                abs(forwardOffset), meanHeading
-            )
+            // Use the cross-track offsets directly for left and right boundaries
+            // This creates a proper cone shape based on cross-track uncertainty
+            val leftLat = leftCrossTrackLat
+            val leftLon = leftCrossTrackLon
+            val rightLat = rightCrossTrackLat
+            val rightLon = rightCrossTrackLon
             
-            // Validate boundary points
             if (!leftLat.isNaN() && !leftLon.isNaN() && !leftLat.isInfinite() && !leftLon.isInfinite()) {
                 leftBoundary.add(LatLngSerializable(leftLat, leftLon))
             }
             if (!rightLat.isNaN() && !rightLon.isNaN() && !rightLat.isInfinite() && !rightLon.isInfinite()) {
                 rightBoundary.add(LatLngSerializable(rightLat, rightLon))
+            }
+            
+            // Log detailed information for debugging
+            if (i == 0 || i == steps / 2 || i == steps) {
+                val progress = i.toDouble() / steps
+                Log.d(TAG, "Particle cone: Step $i (${(progress * 100).toInt()}%) - crossTrack: left=${leftOffset.toInt()}m, right=${rightOffset.toInt()}m, alongTrack: back=${backOffset.toInt()}m, forward=${forwardOffset.toInt()}m")
+                Log.d(TAG, "Particle cone:   Center=(${avgLat}, ${avgLon}), Left=(${leftLat}, ${leftLon}), Right=(${rightLat}, ${rightLon})")
             }
         }
         
