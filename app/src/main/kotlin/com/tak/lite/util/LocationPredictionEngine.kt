@@ -717,9 +717,22 @@ class LocationPredictionEngine {
             
             Log.d(TAG, "Particle filter: Finished processing historical data, effective particle count: ${1.0 / particles.sumOf { it.weight * it.weight }}")
             
-            // Predict future positions for all particles
+            // FIXED: Reset particles to current position before prediction
+            // Particles have been moved through historical time, but for prediction we need them at current position
+            val currentPositionParticles = particles.map { particle ->
+                // Reset position to current location while keeping learned velocity and weight
+                Particle(
+                    lat = latest.latitude,
+                    lon = latest.longitude,
+                    vLat = particle.vLat,
+                    vLon = particle.vLon,
+                    weight = particle.weight
+                )
+            }
+            
+            // Predict future positions for all particles from current position
             val predictionTimeSeconds = config.predictionHorizonMinutes * 60.0
-            val predictedParticles = particles.map { particle ->
+            val predictedParticles = currentPositionParticles.map { particle ->
                 Particle(
                     lat = particle.lat + particle.vLat * predictionTimeSeconds,
                     lon = particle.lon + particle.vLon * predictionTimeSeconds,
@@ -729,7 +742,7 @@ class LocationPredictionEngine {
                 )
             }
             
-            Log.d(TAG, "Particle filter: predicted future positions for ${predictedParticles.size} particles")
+            Log.d(TAG, "Particle filter: predicted future positions for ${predictedParticles.size} particles from current position")
             
             // Calculate enhanced particle prediction that preserves cross-track information
             val enhancedPrediction = calculateEnhancedParticlePrediction(
@@ -859,6 +872,7 @@ class LocationPredictionEngine {
         Log.d(TAG, "  - Speed: ${finalSpeed.toInt()}m/s (${(finalSpeed * 2.23694).toInt()}mph)")
         Log.d(TAG, "  - Heading: ${weightedHeading.toInt()}°")
         Log.d(TAG, "  - Prediction time: ${predictionTimeSeconds.toInt()}s")
+        Log.d(TAG, "  - Distance ratio (actual/expected): ${if (expectedDistance > 0) distanceFromCurrent / expectedDistance else 0.0}")
         
         return Quadruple(predLat, predLon, finalSpeed, (weightedHeading + 360) % 360)
     }
