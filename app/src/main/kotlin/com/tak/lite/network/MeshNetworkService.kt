@@ -6,6 +6,7 @@ import com.tak.lite.data.model.IChannel
 import com.tak.lite.di.MeshConnectionState
 import com.tak.lite.di.MeshProtocol
 import com.tak.lite.model.PacketSummary
+import com.tak.lite.model.PeerLocationEntry
 import com.tak.lite.repository.PeerLocationHistoryRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -36,8 +37,8 @@ class MeshNetworkService @Inject constructor(
     private var meshProtocol: com.tak.lite.di.MeshProtocol = meshProtocolProvider.protocol.value
     private val _networkState = MutableStateFlow<MeshNetworkState>(MeshNetworkState.Disconnected)
     val networkState: StateFlow<MeshNetworkState> = _networkState
-    private val _peerLocations = MutableStateFlow<Map<String, LatLng>>(emptyMap())
-    val peerLocations: StateFlow<Map<String, LatLng>> = _peerLocations
+    private val _peerLocations = MutableStateFlow<Map<String, PeerLocationEntry>>(emptyMap())
+    val peerLocations: StateFlow<Map<String, PeerLocationEntry>> = _peerLocations
     val peers: StateFlow<List<MeshPeer>> get() = meshProtocol.peers
     private val _userLocation = MutableStateFlow<LatLng?>(null)
     val userLocation: StateFlow<LatLng?> = _userLocation
@@ -55,7 +56,7 @@ class MeshNetworkService @Inject constructor(
 
     private var simulatedPeersJob: Job? = null
     private val simulatedPeerPrefix = "sim_peer_"
-    private val simulatedPeers = mutableMapOf<String, LatLng>()
+    private val simulatedPeers = mutableMapOf<String, PeerLocationEntry>()
     private var lastSimSettings: Pair<Boolean, Int>? = null
 
     // Add directional bias tracking for simulated peers
@@ -144,7 +145,7 @@ class MeshNetworkService @Inject constructor(
     }
 
     private fun setupPeerLocationCallback(protocol: MeshProtocol) {
-        protocol.setPeerLocationCallback { locations: Map<String, LatLng> ->
+        protocol.setPeerLocationCallback { locations: Map<String, PeerLocationEntry> ->
             // Merge with existing simulated peers instead of overwriting
             val merged = _peerLocations.value.toMutableMap()
             // Remove old real peers (but keep simulated ones)
@@ -234,8 +235,8 @@ class MeshNetworkService @Inject constructor(
                     merged.putAll(simulatedPeers)
                     
                     // Add simulated peer locations to history repository for predictions
-                    simulatedPeers.forEach { (peerId, latLng) ->
-                        peerLocationHistoryRepository.addLocationEntry(peerId, latLng)
+                    simulatedPeers.forEach { (peerId, entry) ->
+                        peerLocationHistoryRepository.addLocationEntry(peerId, entry)
                     }
                     
                     Log.d("MeshNetworkService", "Updating peer locations with simulated peers: ${simulatedPeers.size} simulated, ${merged.size} total")
@@ -263,7 +264,7 @@ class MeshNetworkService @Inject constructor(
         }
     }
 
-    private fun randomNearbyLocation(center: LatLng, radiusMiles: Double): LatLng {
+    private fun randomNearbyLocation(center: LatLng, radiusMiles: Double): PeerLocationEntry {
         val radiusMeters = radiusMiles * 1609.34
         
         // Use square root of random to get uniform distribution over area
@@ -294,10 +295,14 @@ class MeshNetworkService @Inject constructor(
         
         Log.d("MeshNetworkService", "SimPeer: center=(${center.latitude}, ${center.longitude}), radiusMiles=$radiusMiles, rawRandom=$rawRandom, distance=$distance, angle=$angle, new=($newLat, $newLon)")
         
-        return LatLng(newLat, newLon)
+        return PeerLocationEntry(
+            timestamp = System.currentTimeMillis(),
+            latitude = newLat,
+            longitude = newLon
+        )
     }
 
-    private fun movePeer(peerId: String, current: LatLng, center: LatLng, radiusMiles: Double): LatLng {
+    private fun movePeer(peerId: String, current: PeerLocationEntry, center: LatLng, radiusMiles: Double): PeerLocationEntry {
         // Random walk, but keep within radius
         val stepMeters = 5 + kotlin.random.Random.nextDouble() * 30 // 2-17 meters per update
         
@@ -376,7 +381,11 @@ class MeshNetworkService @Inject constructor(
         
         Log.d("MeshNetworkService", "SimPeer $peerId: current=${currentDirection.toInt()}°, new=${normalizedDirection.toInt()}°, bias=${(straightBias * 100).toInt()}%")
         
-        return LatLng(newLat, newLon)
+        return PeerLocationEntry(
+            timestamp = System.currentTimeMillis(),
+            latitude = newLat,
+            longitude = newLon
+        )
     }
 
     private fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {

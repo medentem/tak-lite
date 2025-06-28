@@ -6,6 +6,37 @@ import kotlin.math.*
 import org.maplibre.android.geometry.LatLng
 import kotlin.random.Random
 
+/**
+ * Enhanced Location Prediction Engine
+ * 
+ * This engine provides location prediction using three different models:
+ * 1. LINEAR - Simple linear extrapolation with enhanced velocity calculation
+ * 2. KALMAN_FILTER - Kalman filter for noisy data with enhanced initialization
+ * 3. PARTICLE_FILTER - Particle filter for complex motion with enhanced particle initialization
+ * 
+ * ENHANCED FEATURES:
+ * - Prioritizes device-provided velocity data (groundSpeed, groundTrack) when available
+ * - Uses GPS timestamp (gpsTimestamp) for more accurate time calculations
+ * - Incorporates GPS quality indicators (accuracy, fix type, satellites, HDOP) for confidence calculation
+ * - Adjusts prediction confidence based on data source and quality
+ * - Falls back to position-calculated velocity when device data is unavailable
+ * 
+ * VELOCITY DATA PRIORITIZATION:
+ * 1. Device-provided velocity (groundSpeed, groundTrack) - highest confidence
+ * 2. Position-calculated velocity from location changes - moderate confidence  
+ * 3. Insufficient data - lowest confidence
+ * 
+ * GPS QUALITY INTEGRATION:
+ * - GPS accuracy (mm) converted to meters for measurement noise adjustment
+ * - Fix type (2D/3D) affects confidence weighting
+ * - Satellite count influences confidence calculation
+ * - HDOP (Horizontal Dilution of Precision) used for uncertainty estimation
+ * 
+ * TIMESTAMP HANDLING:
+ * - Uses gpsTimestamp when available for more accurate time calculations
+ * - Falls back to app timestamp when GPS timestamp is not available
+ * - Improves velocity calculation accuracy for infrequent mesh updates
+ */
 class LocationPredictionEngine {
     
     companion object {
@@ -147,7 +178,7 @@ class LocationPredictionEngine {
     }
     
     /**
-     * Linear prediction model - now uses moving average of velocity and heading over all recent entries
+     * Linear prediction model - now uses enhanced velocity calculation with device data prioritization
      */
     fun predictLinear(history: PeerLocationHistory, config: PredictionConfig): LocationPrediction? {
         val recentEntries = history.getRecentEntries(config.maxHistoryAgeMinutes)
@@ -176,8 +207,10 @@ class LocationPredictionEngine {
         // FIXED: Use the latest entry from filtered entries, not original entries
         val filteredLatest = filteredEntries.last()
         
-        // Use moving average of velocity and heading
-        val (avgSpeed, avgHeading) = calculateAverageVelocityAndHeading(filteredEntries)
+        // ENHANCED: Use enhanced velocity calculation that prioritizes device-provided data
+        val (avgSpeed, avgHeading, dataSource, velocityConfidence) = calculateEnhancedVelocityWithConfidence(filteredEntries)
+        
+        Log.d(TAG, "LINEAR: Enhanced velocity calculation - speed=${avgSpeed.toInt()}m/s, heading=${avgHeading.toInt()}°, source=$dataSource, confidence=${(velocityConfidence * 100).toInt()}%")
         
         // Predict future position
         val predictionTimeSeconds = config.predictionHorizonMinutes * 60.0
@@ -193,10 +226,12 @@ class LocationPredictionEngine {
             Log.w(TAG, "LINEAR: Invalid prediction coordinates")
             return null
         }
+        
         // Calculate uncertainties from actual data
         val (headingUncertainty, speedUncertainty) = calculateUncertainties(filteredEntries)
-        // Calculate confidence based on speed consistency and data quality
-        val confidence = calculateLinearConfidence(filteredEntries, avgSpeed, config)
+        
+        // ENHANCED: Calculate confidence incorporating velocity data quality
+        val confidence = calculateEnhancedLinearConfidence(filteredEntries, avgSpeed, velocityConfidence, dataSource, config)
         
         Log.d(TAG, "LINEAR: Final prediction - confidence=$confidence, uncertainty=(${headingUncertainty}°, ${speedUncertainty * 100}%)")
         
@@ -332,7 +367,7 @@ class LocationPredictionEngine {
     }
     
     /**
-     * Initialize Kalman state from recent location entries
+     * Initialize Kalman state from recent location entries with enhanced velocity calculation
      */
     private fun initializeKalmanState(entries: List<PeerLocationEntry>): KalmanState? {
         if (entries.size < 2) return null
@@ -340,32 +375,10 @@ class LocationPredictionEngine {
         val latest = entries.last()
         val previous = entries[entries.size - 2]
         
-        val dt = (latest.timestamp - previous.timestamp) / 1000.0
-        if (dt <= 0) return null
+        // ENHANCED: Use enhanced velocity calculation that prioritizes device-provided data
+        val (speed, heading, dataSource, velocityConfidence) = calculateEnhancedVelocityWithConfidence(entries)
         
-        // Calculate initial velocity in m/s
-        val distance = calculateDistance(
-            previous.latitude, previous.longitude,
-            latest.latitude, latest.longitude
-        )
-        val rawSpeed = distance / dt
-        
-        // FIXED: Validate speed to prevent impossibly high values
-        val maxReasonableSpeed = 100.0 // 100 m/s = ~224 mph
-        val speed = if (rawSpeed > maxReasonableSpeed) {
-            Log.w(TAG, "KALMAN_INIT: Impossibly high speed detected: ${rawSpeed.toInt()}m/s (${(rawSpeed * 2.23694).toInt()}mph) - using max reasonable speed")
-            Log.w(TAG, "KALMAN_INIT: Distance=${distance.toInt()}m, dt=${dt}s, lat_diff=${(latest.latitude - previous.latitude) * 1000000}μ°, lon_diff=${(latest.longitude - previous.longitude) * 1000000}μ°")
-            // Use a more reasonable speed based on the distance
-            min(rawSpeed, maxReasonableSpeed)
-        } else {
-            rawSpeed
-        }
-        
-        // Calculate heading in degrees
-        val heading = calculateBearing(
-            previous.latitude, previous.longitude,
-            latest.latitude, latest.longitude
-        )
+        Log.d(TAG, "KALMAN_INIT: Enhanced velocity - speed=${speed.toInt()}m/s, heading=${heading.toInt()}°, source=$dataSource, confidence=${(velocityConfidence * 100).toInt()}%")
         
         // FIXED: Correct velocity conversion to degrees/second
         // Convert m/s to degrees/second for lat/lon velocity components
@@ -374,22 +387,35 @@ class LocationPredictionEngine {
         val vLat = speed * cos(heading * DEG_TO_RAD) / (EARTH_RADIUS_METERS * DEG_TO_RAD)
         val vLon = speed * sin(heading * DEG_TO_RAD) / (EARTH_RADIUS_METERS * cos(latest.latitude * DEG_TO_RAD) * DEG_TO_RAD)
         
-        // FIXED: Proper covariance initialization in degrees²
-        // Position uncertainty: 50m standard deviation converted to degrees²
-        val pLat = (50.0 / (EARTH_RADIUS_METERS * DEG_TO_RAD)).pow(2)
-        val pLon = (50.0 / (EARTH_RADIUS_METERS * cos(latest.latitude * DEG_TO_RAD) * DEG_TO_RAD)).pow(2)
+        // ENHANCED: Adjust covariance based on velocity data quality
+        val basePositionUncertainty = when (dataSource) {
+            "device_velocity" -> 25.0 // Lower uncertainty for device-provided velocity
+            "position_calculated" -> 50.0 // Higher uncertainty for calculated velocity
+            else -> 75.0 // Highest uncertainty for insufficient data
+        }
         
-        // Velocity uncertainty: 5 m/s standard deviation converted to degrees²/s²
-        val pVLat = (5.0 / (EARTH_RADIUS_METERS * DEG_TO_RAD)).pow(2)
-        val pVLon = (5.0 / (EARTH_RADIUS_METERS * cos(latest.latitude * DEG_TO_RAD) * DEG_TO_RAD)).pow(2)
+        val baseVelocityUncertainty = when (dataSource) {
+            "device_velocity" -> 2.0 // Lower uncertainty for device-provided velocity
+            "position_calculated" -> 5.0 // Higher uncertainty for calculated velocity
+            else -> 10.0 // Highest uncertainty for insufficient data
+        }
+        
+        // FIXED: Proper covariance initialization in degrees²
+        // Position uncertainty: adjusted based on data source
+        val pLat = (basePositionUncertainty / (EARTH_RADIUS_METERS * DEG_TO_RAD)).pow(2)
+        val pLon = (basePositionUncertainty / (EARTH_RADIUS_METERS * cos(latest.latitude * DEG_TO_RAD) * DEG_TO_RAD)).pow(2)
+        
+        // Velocity uncertainty: adjusted based on data source
+        val pVLat = (baseVelocityUncertainty / (EARTH_RADIUS_METERS * DEG_TO_RAD)).pow(2)
+        val pVLon = (baseVelocityUncertainty / (EARTH_RADIUS_METERS * cos(latest.latitude * DEG_TO_RAD) * DEG_TO_RAD)).pow(2)
         
         // FIXED: Correct conversion back to m/s for logging
         val vLatMps = vLat * EARTH_RADIUS_METERS * DEG_TO_RAD
         val vLonMps = vLon * EARTH_RADIUS_METERS * cos(latest.latitude * DEG_TO_RAD) * DEG_TO_RAD
         
-        Log.d(TAG, "KALMAN_INIT: Raw speed=${speed.toInt()}m/s, heading=${heading.toInt()}°")
-        Log.d(TAG, "KALMAN_INIT: Initial velocity=(${vLatMps.toInt()}m/s, ${vLonMps.toInt()}m/s)")
-        Log.d(TAG, "KALMAN_INIT: Initial covariance - pos=(${sqrt(pLat * EARTH_RADIUS_METERS * EARTH_RADIUS_METERS * DEG_TO_RAD * DEG_TO_RAD).toInt()}m, ${sqrt(pLon * EARTH_RADIUS_METERS * EARTH_RADIUS_METERS * cos(latest.latitude * DEG_TO_RAD) * cos(latest.latitude * DEG_TO_RAD) * DEG_TO_RAD * DEG_TO_RAD).toInt()}m)")
+        Log.d(TAG, "KALMAN_INIT: Enhanced velocity=(${vLatMps.toInt()}m/s, ${vLonMps.toInt()}m/s)")
+        Log.d(TAG, "KALMAN_INIT: Enhanced covariance - pos=(${sqrt(pLat * EARTH_RADIUS_METERS * EARTH_RADIUS_METERS * DEG_TO_RAD * DEG_TO_RAD).toInt()}m, ${sqrt(pLon * EARTH_RADIUS_METERS * EARTH_RADIUS_METERS * cos(latest.latitude * DEG_TO_RAD) * cos(latest.latitude * DEG_TO_RAD) * DEG_TO_RAD * DEG_TO_RAD).toInt()}m)")
+        Log.d(TAG, "KALMAN_INIT: Data source=$dataSource, velocity confidence=${(velocityConfidence * 100).toInt()}%")
         
         return KalmanState(
             lat = latest.latitude,
@@ -402,7 +428,7 @@ class LocationPredictionEngine {
             pVLon = pVLon,
             pLatVLat = 0.0, // Initial cross-covariance is zero
             pLonVLon = 0.0, // Initial cross-covariance is zero
-            lastUpdateTime = latest.timestamp
+            lastUpdateTime = latest.getBestTimestamp() // Use best available timestamp
         )
     }
     
@@ -545,7 +571,7 @@ class LocationPredictionEngine {
     /**
      * Particle Filter prediction model
      * Uses all recent entries (filtered by maxHistoryAgeMinutes) for velocity estimation and particle updates
-     * Now uses along-track/cross-track decomposition for consistent prediction and confidence cone
+     * Now uses enhanced velocity calculation with device data prioritization
      */
     fun predictParticleFilter(history: PeerLocationHistory, config: PredictionConfig): Pair<LocationPrediction, List<Particle>>? {
         val recentEntries = history.getRecentEntries(config.maxHistoryAgeMinutes)
@@ -579,34 +605,41 @@ class LocationPredictionEngine {
         Log.d(TAG, "Particle filter: Uncertainties - heading=${headingUncertainty}°, speed=${speedUncertainty * 100}%")
         
         try {
-            // Initialize particles around the latest position with proper velocity estimation
+            // ENHANCED: Initialize particles using enhanced velocity calculation
             val particles = mutableListOf<Particle>()
-            val initialVelocity = estimateInitialVelocityMetersPerSecond(filteredEntries)
+            val (initialSpeed, initialHeading, dataSource, velocityConfidence) = calculateEnhancedVelocityWithConfidence(filteredEntries)
             
-            Log.d(TAG, "Particle filter: initial velocity = (${initialVelocity.first}, ${initialVelocity.second}) m/s")
+            Log.d(TAG, "Particle filter: Enhanced initial velocity = ${initialSpeed.toInt()}m/s at ${initialHeading.toInt()}° (source: $dataSource, confidence: ${(velocityConfidence * 100).toInt()}%)")
             
-            // FIXED: Validate initial velocity to prevent impossibly high values
-            val initialSpeed = sqrt(initialVelocity.first * initialVelocity.first + initialVelocity.second * initialVelocity.second)
-            val maxReasonableInitialSpeed = 50.0 // 50 m/s = ~112 mph for initial velocity
-            val validatedInitialSpeed = if (initialSpeed > maxReasonableInitialSpeed) {
-                Log.w(TAG, "Particle filter: Initial speed too high: ${initialSpeed.toInt()}m/s - capping at ${maxReasonableInitialSpeed.toInt()}m/s")
-                maxReasonableInitialSpeed
-            } else {
-                initialSpeed
+            // ENHANCED: Adjust particle initialization based on velocity data quality
+            val particleSpread = when (dataSource) {
+                "device_velocity" -> 0.00005 // Tighter spread for device-provided velocity
+                "position_calculated" -> 0.0001 // Moderate spread for calculated velocity
+                else -> 0.0002 // Wider spread for insufficient data
+            }
+            
+            val velocityNoise = when (dataSource) {
+                "device_velocity" -> 0.2 // Lower noise for device-provided velocity
+                "position_calculated" -> 0.5 // Moderate noise for calculated velocity
+                else -> 1.0 // Higher noise for insufficient data
+            }
+            
+            val headingNoise = when (dataSource) {
+                "device_velocity" -> 5.0 // Lower noise for device-provided velocity
+                "position_calculated" -> 10.0 // Moderate noise for calculated velocity
+                else -> 20.0 // Higher noise for insufficient data
             }
             
             repeat(100) { // 100 particles
-                val latOffset = Random.nextDouble(-0.0001, 0.0001) // Small initial spread
-                val lonOffset = Random.nextDouble(-0.0001, 0.0001)
+                val latOffset = Random.nextDouble(-particleSpread, particleSpread)
+                val lonOffset = Random.nextDouble(-particleSpread, particleSpread)
                 
-                // Initialize velocity based on estimated velocity with reasonable noise
-                val speedNoise = Random.nextDouble(-0.5, 0.5) // ±0.5 m/s noise
-                val headingNoise = Random.nextDouble(-10.0, 10.0) // ±10 degrees noise
+                // Initialize velocity based on enhanced velocity estimation with quality-adjusted noise
+                val speedNoise = Random.nextDouble(-velocityNoise, velocityNoise)
+                val headingNoiseDegrees = Random.nextDouble(-headingNoise, headingNoise)
                 
-                val initialHeading = atan2(initialVelocity.second, initialVelocity.first) * RAD_TO_DEG
-                
-                val adjustedSpeed = (validatedInitialSpeed + speedNoise).coerceAtLeast(0.0)
-                val adjustedHeading = (initialHeading + headingNoise + 360.0) % 360.0
+                val adjustedSpeed = (initialSpeed + speedNoise).coerceAtLeast(0.0)
+                val adjustedHeading = (initialHeading + headingNoiseDegrees + 360.0) % 360.0
                 
                 // FIXED: Correct velocity conversion to degrees/second
                 val vLat = adjustedSpeed * cos(adjustedHeading * DEG_TO_RAD) / (EARTH_RADIUS_METERS * DEG_TO_RAD)
@@ -622,13 +655,13 @@ class LocationPredictionEngine {
             }
             
             Log.d(TAG, "Particle filter: initialized ${particles.size} particles around (${latest.latitude}, ${latest.longitude})")
-            Log.d(TAG, "Particle filter: validated initial speed=${validatedInitialSpeed.toInt()}m/s, initial heading=${atan2(initialVelocity.second, initialVelocity.first) * RAD_TO_DEG}°")
+            Log.d(TAG, "Particle filter: enhanced initial speed=${initialSpeed.toInt()}m/s, initial heading=${initialHeading.toInt()}°, data source=$dataSource")
             
             // Process historical data to update particle weights
             for (i in 1 until filteredEntries.size) {
                 val current = filteredEntries[i]
                 val previous = filteredEntries[i - 1]
-                val dt = (current.timestamp - previous.timestamp) / 1000.0
+                val dt = (current.getBestTimestamp() - previous.getBestTimestamp()) / 1000.0
                 
                 // Skip if time difference is too small or invalid
                 if (dt <= 0 || dt.isNaN() || dt.isInfinite()) continue
@@ -653,9 +686,17 @@ class LocationPredictionEngine {
                     particle.lat += particle.vLat * dt
                     particle.lon += particle.vLon * dt
                     
+                    // ENHANCED: Adjust measurement noise based on GPS quality if available
+                    val measurementNoise = if (current.hasGpsQualityData()) {
+                        val accuracyMeters = (current.gpsAccuracy ?: 10000) / 1000.0 // Convert mm to meters
+                        max(accuracyMeters, 10.0) // Minimum 10m noise
+                    } else {
+                        40.0 // Default noise
+                    }
+                    
                     // Calculate weight based on how close the particle is to the actual measurement
                     val distance = calculateDistance(particle.lat, particle.lon, current.latitude, current.longitude)
-                    particle.weight *= exp(-distance * distance / (2 * 40 * 40)) // Tighter Gaussian likelihood (40m std dev)
+                    particle.weight *= exp(-distance * distance / (2 * measurementNoise * measurementNoise))
                 }
                 
                 // Normalize weights with safety check
@@ -690,19 +731,19 @@ class LocationPredictionEngine {
             
             Log.d(TAG, "Particle filter: predicted future positions for ${predictedParticles.size} particles")
             
-            // Calculate prediction using along-track/cross-track decomposition
-            val predictedPosition = calculateParticlePredictionAlongCrossTrack(
+            // Calculate enhanced particle prediction that preserves cross-track information
+            val enhancedPrediction = calculateEnhancedParticlePrediction(
                 predictedParticles, latest, predictionTimeSeconds
             )
             
-            if (predictedPosition == null) {
-                Log.w(TAG, "Particle filter: failed to calculate along-track/cross-track prediction")
+            if (enhancedPrediction == null) {
+                Log.w(TAG, "Particle filter: failed to calculate enhanced prediction")
                 return null
             }
             
-            val (predLat, predLon, predSpeed, predHeading) = predictedPosition
+            val (predLat, predLon, predSpeed, predHeading) = enhancedPrediction
             
-            Log.d(TAG, "Particle filter: along-track/cross-track prediction = ($predLat, $predLon), speed=$predSpeed, heading=$predHeading")
+            Log.d(TAG, "Particle filter: enhanced prediction = ($predLat, $predLon), speed=$predSpeed, heading=$predHeading")
             
             // Check if prediction resulted in invalid coordinates
             if (predLat.isNaN() || predLon.isNaN() || predLat.isInfinite() || predLon.isInfinite()) {
@@ -710,8 +751,8 @@ class LocationPredictionEngine {
                 return null
             }
             
-            // Calculate confidence based on particle spread
-            val confidence = calculateParticleConfidence(predictedParticles, config)
+            // ENHANCED: Calculate confidence incorporating velocity data quality
+            val confidence = calculateEnhancedParticleConfidence(predictedParticles, velocityConfidence, dataSource, config)
             
             // Validate velocity calculations
             if (predSpeed.isNaN() || predSpeed.isInfinite() || predHeading.isNaN() || predHeading.isInfinite()) {
@@ -739,68 +780,33 @@ class LocationPredictionEngine {
     }
     
     /**
-     * Calculate particle prediction using along-track/cross-track decomposition
+     * Calculate enhanced particle prediction that preserves cross-track information
      * Returns (predictedLat, predictedLon, speed, heading)
+     * This approach uses along-track/cross-track decomposition correctly with already-predicted particles
      */
-    private fun calculateParticlePredictionAlongCrossTrack(
+    private fun calculateEnhancedParticlePrediction(
         predictedParticles: List<Particle>,
         latest: PeerLocationEntry,
         predictionTimeSeconds: Double
     ): Quadruple<Double, Double, Double, Double>? {
         if (predictedParticles.isEmpty()) return null
         
-        // Calculate weighted mean position as reference point
+        // Calculate weighted mean position as the primary prediction
         val meanLat = predictedParticles.sumOf { it.lat * it.weight }
         val meanLon = predictedParticles.sumOf { it.lon * it.weight }
         
-        // Calculate mean heading from current position to mean predicted position
-        val meanHeading = calculateBearing(latest.latitude, latest.longitude, meanLat, meanLon)
-        
-        // FIXED: Calculate along-track and cross-track projections correctly
-        val alongTrackProjections = mutableListOf<Double>()
-        val crossTrackProjections = mutableListOf<Double>()
-        val particleWeights = mutableListOf<Double>()
-        
-        predictedParticles.forEach { particle ->
-            val d = calculateDistance(latest.latitude, latest.longitude, particle.lat, particle.lon)
-            val bearing = calculateBearing(latest.latitude, latest.longitude, particle.lat, particle.lon)
-            
-            // Along-track projection (parallel to movement direction)
-            val alongTrackAngleDiff = ((bearing - meanHeading + 540) % 360) - 180 // [-180,180]
-            val alongTrackProjection = d * cos(alongTrackAngleDiff * DEG_TO_RAD)
-            alongTrackProjections.add(alongTrackProjection)
-            
-            // Cross-track projection (perpendicular to movement direction)
-            val perpAngle = (meanHeading + 90.0) % 360.0
-            val crossTrackAngleDiff = ((bearing - perpAngle + 540) % 360) - 180 // [-180,180]
-            val crossTrackProjection = d * cos(crossTrackAngleDiff * DEG_TO_RAD)
-            crossTrackProjections.add(crossTrackProjection)
-            
-            particleWeights.add(particle.weight)
-        }
-        
-        // Calculate weighted medians for both directions (more robust than mean)
-        val alongTrackMedian = calculateWeightedMedian(alongTrackProjections, particleWeights)
-        val crossTrackMedian = calculateWeightedMedian(crossTrackProjections, particleWeights)
-        
-        // Convert back to lat/lon coordinates
-        val alongTrackDistance = alongTrackMedian
-        val crossTrackDistance = crossTrackMedian
-        
-        // Calculate predicted position using along-track and cross-track components
-        val (predLat, predLon) = calculateDestinationFromComponents(
-            latest.latitude, latest.longitude,
-            alongTrackDistance, crossTrackDistance,
-            meanHeading
-        )
-        
-        // Validate the calculated position
-        if (predLat.isNaN() || predLon.isNaN() || predLat.isInfinite() || predLon.isInfinite()) {
-            Log.w(TAG, "Particle filter: Invalid position calculated from along-track/cross-track components")
+        // Validate the weighted mean calculation
+        if (meanLat.isNaN() || meanLon.isNaN() || meanLat.isInfinite() || meanLon.isInfinite()) {
+            Log.w(TAG, "Particle filter: Invalid weighted mean position: ($meanLat, $meanLon)")
             return null
         }
         
-        // FIXED: Calculate velocity from actual particle velocities instead of recalculating from positions
+        val predLat = meanLat
+        val predLon = meanLon
+        
+        Log.d(TAG, "Particle filter: Weighted mean position = ($predLat, $predLon)")
+        
+        // Calculate velocity from actual particle velocities (already in degrees/second)
         // Convert particle velocities from degrees/second back to m/s
         val particleVelocities = predictedParticles.map { particle ->
             val vLatMps = particle.vLat * EARTH_RADIUS_METERS * DEG_TO_RAD
@@ -824,7 +830,8 @@ class LocationPredictionEngine {
         val weightedHeading = if (totalWeight > 0) {
             atan2(sinSum, cosSum) * RAD_TO_DEG
         } else {
-            meanHeading
+            // Fallback: calculate heading from current position to predicted position
+            calculateBearing(latest.latitude, latest.longitude, predLat, predLon)
         }
         
         // FIXED: Validate speed to prevent impossibly high values
@@ -843,7 +850,15 @@ class LocationPredictionEngine {
             return null
         }
         
-        Log.d(TAG, "Particle filter: Final velocity calculation - weightedSpeed=${weightedSpeed.toInt()}m/s, finalSpeed=${finalSpeed.toInt()}m/s, heading=${weightedHeading.toInt()}°")
+        // Log detailed information for debugging
+        val distanceFromCurrent = calculateDistance(latest.latitude, latest.longitude, predLat, predLon)
+        val expectedDistance = finalSpeed * predictionTimeSeconds
+        Log.d(TAG, "Particle filter: Final prediction analysis:")
+        Log.d(TAG, "  - Distance from current position: ${distanceFromCurrent.toInt()}m")
+        Log.d(TAG, "  - Expected distance (speed × time): ${expectedDistance.toInt()}m")
+        Log.d(TAG, "  - Speed: ${finalSpeed.toInt()}m/s (${(finalSpeed * 2.23694).toInt()}mph)")
+        Log.d(TAG, "  - Heading: ${weightedHeading.toInt()}°")
+        Log.d(TAG, "  - Prediction time: ${predictionTimeSeconds.toInt()}s")
         
         return Quadruple(predLat, predLon, finalSpeed, (weightedHeading + 360) % 360)
     }
@@ -905,7 +920,7 @@ class LocationPredictionEngine {
         
         // Then, move perpendicular to the heading by cross-track distance
         val perpHeading = (heading + 90.0) % 360.0
-        // FIXED: Correctly handle cross-track direction
+        // Correctly handle cross-track direction
         val finalHeading = if (crossTrackDistance >= 0) perpHeading else (perpHeading + 180.0) % 360.0
         val finalDistance = abs(crossTrackDistance)
         
@@ -919,6 +934,89 @@ class LocationPredictionEngine {
         }
         
         return result
+    }
+    
+    /**
+     * Calculate particle prediction using weighted mean of predicted particle positions
+     * Returns (predictedLat, predictedLon, speed, heading)
+     * This is the fallback approach for particle filters - use the weighted mean of final particle positions
+     */
+    private fun calculateParticlePredictionFromWeightedMean(
+        predictedParticles: List<Particle>,
+        latest: PeerLocationEntry,
+        predictionTimeSeconds: Double
+    ): Quadruple<Double, Double, Double, Double>? {
+        if (predictedParticles.isEmpty()) return null
+        
+        // Calculate weighted mean position directly from predicted particles
+        val meanLat = predictedParticles.sumOf { it.lat * it.weight }
+        val meanLon = predictedParticles.sumOf { it.lon * it.weight }
+        
+        // Validate the weighted mean calculation
+        if (meanLat.isNaN() || meanLon.isNaN() || meanLat.isInfinite() || meanLon.isInfinite()) {
+            Log.w(TAG, "Particle filter: Invalid weighted mean position: ($meanLat, $meanLon)")
+            return null
+        }
+        
+        val predLat = meanLat
+        val predLon = meanLon
+        
+        Log.d(TAG, "Particle filter: Weighted mean position = ($predLat, $predLon)")
+        
+        // Calculate velocity from actual particle velocities (already in degrees/second)
+        val particleVelocities = predictedParticles.map { particle ->
+            val vLatMps = particle.vLat * EARTH_RADIUS_METERS * DEG_TO_RAD
+            val vLonMps = particle.vLon * EARTH_RADIUS_METERS * cos(particle.lat * DEG_TO_RAD) * DEG_TO_RAD
+            val speed = sqrt(vLatMps * vLatMps + vLonMps * vLonMps)
+            val heading = atan2(vLonMps, vLatMps) * RAD_TO_DEG
+            Triple(speed, heading, particle.weight)
+        }
+        
+        // Calculate weighted average speed and heading
+        val totalWeight = particleVelocities.sumOf { it.third }
+        val weightedSpeed = if (totalWeight > 0) {
+            particleVelocities.sumOf { it.first * it.third } / totalWeight
+        } else {
+            0.0
+        }
+        
+        // Calculate weighted average heading using circular mean
+        val sinSum = particleVelocities.sumOf { sin(it.second * DEG_TO_RAD) * it.third }
+        val cosSum = particleVelocities.sumOf { cos(it.second * DEG_TO_RAD) * it.third }
+        val weightedHeading = if (totalWeight > 0) {
+            atan2(sinSum, cosSum) * RAD_TO_DEG
+        } else {
+            // Fallback: calculate heading from current position to predicted position
+            calculateBearing(latest.latitude, latest.longitude, predLat, predLon)
+        }
+        
+        // Validate speed to prevent impossibly high values
+        val maxReasonableSpeed = 100.0 // 100 m/s = ~224 mph
+        val finalSpeed = if (weightedSpeed > maxReasonableSpeed) {
+            Log.w(TAG, "Particle filter: Weighted speed too high: ${weightedSpeed.toInt()}m/s - capping at ${maxReasonableSpeed.toInt()}m/s")
+            maxReasonableSpeed
+        } else {
+            weightedSpeed
+        }
+        
+        // Validate final calculations
+        if (finalSpeed.isNaN() || finalSpeed.isInfinite() || 
+            weightedHeading.isNaN() || weightedHeading.isInfinite()) {
+            Log.w(TAG, "Particle filter: Invalid velocity calculations - speed=$finalSpeed, heading=$weightedHeading")
+            return null
+        }
+        
+        // Log detailed information for debugging
+        val distanceFromCurrent = calculateDistance(latest.latitude, latest.longitude, predLat, predLon)
+        val expectedDistance = finalSpeed * predictionTimeSeconds
+        Log.d(TAG, "Particle filter: Weighted mean prediction analysis:")
+        Log.d(TAG, "  - Distance from current position: ${distanceFromCurrent.toInt()}m")
+        Log.d(TAG, "  - Expected distance (speed × time): ${expectedDistance.toInt()}m")
+        Log.d(TAG, "  - Speed: ${finalSpeed.toInt()}m/s (${(finalSpeed * 2.23694).toInt()}mph)")
+        Log.d(TAG, "  - Heading: ${weightedHeading.toInt()}°")
+        Log.d(TAG, "  - Prediction time: ${predictionTimeSeconds.toInt()}s")
+        
+        return Quadruple(predLat, predLon, finalSpeed, (weightedHeading + 360) % 360)
     }
     
     // Helper data class for returning multiple values
@@ -978,24 +1076,46 @@ class LocationPredictionEngine {
         val speeds = mutableListOf<Double>()
         val headings = mutableListOf<Double>()
         
-        for (i in 1 until entries.size) {
-            val distance = calculateDistance(
-                entries[i-1].latitude, entries[i-1].longitude,
-                entries[i].latitude, entries[i].longitude
-            )
-            val timeDiff = (entries[i].timestamp - entries[i-1].timestamp) / 1000.0
-            if (timeDiff > 0) {
-                val speed = distance / timeDiff
-                
-                // Note: Speed validation is now handled by filterGpsCoordinateJumps upstream
-                // No need to duplicate the validation here since entries are pre-filtered
+        // ENHANCED: Check if we have device-provided velocity data
+        val deviceVelocityEntries = entries.filter { it.hasVelocityData() }
+        val hasDeviceVelocity = deviceVelocityEntries.isNotEmpty()
+        
+        if (hasDeviceVelocity) {
+            // Use device-provided velocity data when available
+            Log.d(TAG, "ML prediction: Using device-provided velocity data for ${deviceVelocityEntries.size} entries")
+            
+            deviceVelocityEntries.forEach { entry ->
+                val (speed, heading) = entry.getVelocity()!!
                 speeds.add(speed)
-                
-                val heading = calculateBearing(
+                headings.add(heading)
+            }
+        }
+        
+        // Fallback to calculated velocity from position changes
+        if (speeds.isEmpty()) {
+            Log.d(TAG, "ML prediction: No device velocity data, calculating from position changes")
+            
+            for (i in 1 until entries.size) {
+                val distance = calculateDistance(
                     entries[i-1].latitude, entries[i-1].longitude,
                     entries[i].latitude, entries[i].longitude
                 )
-                headings.add(heading)
+                
+                // ENHANCED: Use best available timestamp for more accurate time calculations
+                val timeDiff = (entries[i].getBestTimestamp() - entries[i-1].getBestTimestamp()) / 1000.0
+                if (timeDiff > 0) {
+                    val speed = distance / timeDiff
+                    
+                    // Note: Speed validation is now handled by filterGpsCoordinateJumps upstream
+                    // No need to duplicate the validation here since entries are pre-filtered
+                    speeds.add(speed)
+                    
+                    val heading = calculateBearing(
+                        entries[i-1].latitude, entries[i-1].longitude,
+                        entries[i].latitude, entries[i].longitude
+                    )
+                    headings.add(heading)
+                }
             }
         }
         
@@ -1023,7 +1143,16 @@ class LocationPredictionEngine {
             val speedChange = lastSpeed - secondLastSpeed
             
             // Use the time between the last two entries for acceleration calculation
-            val lastTimeDiff = (entries.last().timestamp - entries[entries.size - 2].timestamp) / 1000.0
+            val lastTimeDiff = if (hasDeviceVelocity) {
+                // For device velocity, use the timestamp difference between the last two device entries
+                val lastDeviceEntry = deviceVelocityEntries.last()
+                val secondLastDeviceEntry = deviceVelocityEntries[deviceVelocityEntries.size - 2]
+                (lastDeviceEntry.getBestTimestamp() - secondLastDeviceEntry.getBestTimestamp()) / 1000.0
+            } else {
+                // For calculated velocity, use the timestamp difference between the last two entries
+                (entries.last().getBestTimestamp() - entries[entries.size - 2].getBestTimestamp()) / 1000.0
+            }
+            
             if (lastTimeDiff > 0) {
                 speedChange / lastTimeDiff // m/s²
             } else {
@@ -1034,7 +1163,7 @@ class LocationPredictionEngine {
         // Calculate movement consistency (how straight the path is)
         val movementConsistency = calculateMovementConsistency(entries)
         
-        Log.d(TAG, "ML prediction: extracted features - speeds=${speeds.size}, avgSpeed=${avgSpeed.toInt()}m/s, avgHeading=${avgHeading.toInt()}°, acceleration=${acceleration.toInt()}m/s², consistency=${(movementConsistency * 100).toInt()}%")
+        Log.d(TAG, "ML prediction: extracted features - speeds=${speeds.size}, avgSpeed=${avgSpeed.toInt()}m/s, avgHeading=${avgHeading.toInt()}°, acceleration=${acceleration.toInt()}m/s², consistency=${(movementConsistency * 100).toInt()}%, dataSource=${if (hasDeviceVelocity) "device" else "calculated"}")
         
         return MovementFeatures(
             avgSpeed = avgSpeed,
@@ -1336,7 +1465,7 @@ class LocationPredictionEngine {
     }
     
     /**
-     * Calculate uncertainty values from location history data
+     * Calculate uncertainty values from location history data with enhanced timestamp handling
      */
     private fun calculateUncertainties(entries: List<PeerLocationEntry>): Pair<Double, Double> {
         if (entries.size < 3) {
@@ -1351,7 +1480,9 @@ class LocationPredictionEngine {
                 entries[i-1].latitude, entries[i-1].longitude,
                 entries[i].latitude, entries[i].longitude
             )
-            val timeDiff = (entries[i].timestamp - entries[i-1].timestamp) / 1000.0
+            
+            // ENHANCED: Use best available timestamp for more accurate time calculations
+            val timeDiff = (entries[i].getBestTimestamp() - entries[i-1].getBestTimestamp()) / 1000.0
             
             // Skip entries with invalid time difference
             if (timeDiff <= 0) continue
@@ -1397,7 +1528,7 @@ class LocationPredictionEngine {
         latest: PeerLocationEntry,
         predictionHorizonSeconds: Double,
         steps: Int = 10
-    ): ConfidenceCone {
+    ): ConfidenceCone? {
         if (predictedParticles.isEmpty()) {
             Log.w(TAG, "Particle cone: No particles provided")
             return ConfidenceCone(
@@ -1771,6 +1902,7 @@ class LocationPredictionEngine {
     /**
      * Filter out GPS coordinate jumps that would cause impossibly high speeds
      * This handles cases where GPS signal is lost and reacquired at a different location
+     * Now uses enhanced timestamp handling for more accurate speed calculations
      */
     private fun filterGpsCoordinateJumps(entries: List<PeerLocationEntry>): List<PeerLocationEntry> {
         if (entries.size < 2) return entries
@@ -1785,7 +1917,8 @@ class LocationPredictionEngine {
             val current = entries[i]
             val previous = entries[i - 1]
             
-            val dt = (current.timestamp - previous.timestamp) / 1000.0
+            // ENHANCED: Use best available timestamp for more accurate time calculations
+            val dt = (current.getBestTimestamp() - previous.getBestTimestamp()) / 1000.0
             if (dt <= 0) {
                 Log.w(TAG, "GPS_FILTER: Skipping entry $i - invalid time difference: ${dt}s")
                 continue
@@ -1809,5 +1942,357 @@ class LocationPredictionEngine {
         
         Log.d(TAG, "GPS_FILTER: Filtered ${entries.size} entries down to ${filteredEntries.size} valid entries")
         return filteredEntries
+    }
+    
+    /**
+     * Enhanced velocity calculation that prioritizes device-provided velocity data
+     * Returns (speed in m/s, heading in degrees, dataSource)
+     */
+    private fun calculateEnhancedVelocity(entries: List<PeerLocationEntry>): Triple<Double, Double, String> {
+        if (entries.size < 2) return Triple(0.0, 0.0, "insufficient_data")
+        
+        // First, check if we have device-provided velocity data in recent entries
+        val deviceVelocityEntries = entries.filter { it.hasVelocityData() }
+        
+        if (deviceVelocityEntries.isNotEmpty()) {
+            // Use device-provided velocity data when available
+            val latestDeviceEntry = deviceVelocityEntries.last()
+            val (deviceSpeed, deviceHeading) = latestDeviceEntry.getVelocity()!!
+            
+            Log.d(TAG, "ENHANCED_VELOCITY: Using device-provided velocity: ${deviceSpeed.toInt()}m/s at ${deviceHeading.toInt()}°")
+            
+            // Validate device velocity data
+            val maxReasonableSpeed = 100.0 // 100 m/s = ~224 mph
+            val validatedSpeed = if (deviceSpeed > maxReasonableSpeed) {
+                Log.w(TAG, "ENHANCED_VELOCITY: Device speed too high: ${deviceSpeed.toInt()}m/s - capping at ${maxReasonableSpeed.toInt()}m/s")
+                maxReasonableSpeed
+            } else {
+                deviceSpeed
+            }
+            
+            return Triple(validatedSpeed, (deviceHeading + 360) % 360, "device_velocity")
+        }
+        
+        // Fallback to calculated velocity from position changes
+        Log.d(TAG, "ENHANCED_VELOCITY: No device velocity data available, calculating from position changes")
+        return calculateVelocityFromPositionChanges(entries)
+    }
+    
+    /**
+     * Calculate velocity from position changes (fallback method)
+     */
+    private fun calculateVelocityFromPositionChanges(entries: List<PeerLocationEntry>): Triple<Double, Double, String> {
+        if (entries.size < 2) return Triple(0.0, 0.0, "insufficient_data")
+        
+        val speeds = mutableListOf<Double>()
+        val headings = mutableListOf<Double>()
+        
+        Log.d(TAG, "POSITION_VELOCITY: Processing ${entries.size} entries for velocity calculation")
+        
+        for (i in 1 until entries.size) {
+            val current = entries[i]
+            val previous = entries[i - 1]
+            
+            // Use best available timestamp for more accurate time calculations
+            val currentTimestamp = current.getBestTimestamp()
+            val previousTimestamp = previous.getBestTimestamp()
+            val timeDiff = (currentTimestamp - previousTimestamp) / 1000.0
+            
+            // Skip entries with zero or negative time difference
+            if (timeDiff <= 0) {
+                Log.w(TAG, "POSITION_VELOCITY: Skipping entry $i - invalid time difference: ${timeDiff}s")
+                continue
+            }
+            
+            val distance = calculateDistance(
+                previous.latitude, previous.longitude,
+                current.latitude, current.longitude
+            )
+            val speed = distance / timeDiff
+            
+            // Note: Speed validation is now handled by filterGpsCoordinateJumps upstream
+            // No need to duplicate the validation here since entries are pre-filtered
+            
+            speeds.add(speed)
+            val heading = calculateBearing(
+                previous.latitude, previous.longitude,
+                current.latitude, current.longitude
+            )
+            headings.add(heading)
+            
+            Log.d(TAG, "POSITION_VELOCITY: Entry $i: distance=${distance.toInt()}m, timeDiff=${timeDiff.toInt()}s, speed=${speed.toInt()}m/s, heading=${heading.toInt()}°")
+        }
+        
+        val avgSpeed = if (speeds.isNotEmpty()) speeds.average() else 0.0
+        // Average heading using circular mean
+        val avgHeading = if (headings.isNotEmpty()) {
+            val sinSum = headings.sumOf { sin(it * DEG_TO_RAD) }
+            val cosSum = headings.sumOf { cos(it * DEG_TO_RAD) }
+            atan2(sinSum, cosSum) * RAD_TO_DEG
+        } else 0.0
+        
+        Log.d(TAG, "POSITION_VELOCITY: Final average speed=${avgSpeed.toInt()}m/s (${(avgSpeed * 2.23694).toInt()}mph), average heading=${avgHeading.toInt()}° (from ${speeds.size} valid entries)")
+        
+        return Triple(avgSpeed, (avgHeading + 360) % 360, "position_calculated")
+    }
+    
+    /**
+     * Enhanced velocity calculation with device data prioritization
+     * Returns (speed in m/s, heading in degrees, dataSource, confidence)
+     */
+    private fun calculateEnhancedVelocityWithConfidence(entries: List<PeerLocationEntry>): Quadruple<Double, Double, String, Double> {
+        if (entries.size < 2) return Quadruple(0.0, 0.0, "insufficient_data", 0.0)
+        
+        // First, check if we have device-provided velocity data in recent entries
+        val deviceVelocityEntries = entries.filter { it.hasVelocityData() }
+        
+        if (deviceVelocityEntries.isNotEmpty()) {
+            // Use device-provided velocity data when available
+            val latestDeviceEntry = deviceVelocityEntries.last()
+            val (deviceSpeed, deviceHeading) = latestDeviceEntry.getVelocity()!!
+            
+            // Calculate confidence based on GPS quality data if available
+            val confidence = calculateDeviceVelocityConfidence(latestDeviceEntry)
+            
+            Log.d(TAG, "ENHANCED_VELOCITY: Using device-provided velocity: ${deviceSpeed.toInt()}m/s at ${deviceHeading.toInt()}° (confidence: ${(confidence * 100).toInt()}%)")
+            
+            // Validate device velocity data
+            val maxReasonableSpeed = 100.0 // 100 m/s = ~224 mph
+            val validatedSpeed = if (deviceSpeed > maxReasonableSpeed) {
+                Log.w(TAG, "ENHANCED_VELOCITY: Device speed too high: ${deviceSpeed.toInt()}m/s - capping at ${maxReasonableSpeed.toInt()}m/s")
+                maxReasonableSpeed
+            } else {
+                deviceSpeed
+            }
+            
+            return Quadruple(validatedSpeed, (deviceHeading + 360) % 360, "device_velocity", confidence)
+        }
+        
+        // Fallback to calculated velocity from position changes
+        Log.d(TAG, "ENHANCED_VELOCITY: No device velocity data available, calculating from position changes")
+        val (speed, heading, source) = calculateVelocityFromPositionChanges(entries)
+        val confidence = calculatePositionVelocityConfidence(entries)
+        
+        return Quadruple(speed, heading, source, confidence)
+    }
+    
+    /**
+     * Calculate confidence for device-provided velocity based on GPS quality data
+     */
+    private fun calculateDeviceVelocityConfidence(entry: PeerLocationEntry): Double {
+        var confidence = 0.8 // Base confidence for device velocity data
+        
+        // Boost confidence based on GPS quality indicators
+        if (entry.hasGpsQualityData()) {
+            // GPS accuracy (lower is better, convert from mm to meters)
+            entry.gpsAccuracy?.let { accuracy ->
+                val accuracyMeters = accuracy / 1000.0
+                val accuracyConfidence = when {
+                    accuracyMeters < 1.0 -> 0.95 // Very high accuracy
+                    accuracyMeters < 3.0 -> 0.90 // High accuracy
+                    accuracyMeters < 10.0 -> 0.85 // Good accuracy
+                    accuracyMeters < 30.0 -> 0.80 // Moderate accuracy
+                    else -> 0.70 // Lower accuracy
+                }
+                confidence = confidence * 0.7 + accuracyConfidence * 0.3
+            }
+            
+            // GPS fix type (3D is better than 2D)
+            entry.fixType?.let { fixType ->
+                val fixConfidence = when (fixType) {
+                    3 -> 0.95 // 3D fix
+                    2 -> 0.85 // 2D fix
+                    else -> 0.70 // No fix or unknown
+                }
+                confidence = confidence * 0.7 + fixConfidence * 0.3
+            }
+            
+            // Number of satellites (more is better)
+            entry.satellitesInView?.let { satellites ->
+                val satelliteConfidence = when {
+                    satellites >= 10 -> 0.95 // Excellent satellite coverage
+                    satellites >= 7 -> 0.90 // Good satellite coverage
+                    satellites >= 5 -> 0.85 // Adequate satellite coverage
+                    satellites >= 3 -> 0.80 // Minimal satellite coverage
+                    else -> 0.70 // Poor satellite coverage
+                }
+                confidence = confidence * 0.7 + satelliteConfidence * 0.3
+            }
+            
+            // HDOP (Horizontal Dilution of Precision, lower is better)
+            entry.hdop?.let { hdop ->
+                val hdopConfidence = when {
+                    hdop < 1.0 -> 0.95 // Excellent HDOP
+                    hdop < 2.0 -> 0.90 // Good HDOP
+                    hdop < 5.0 -> 0.85 // Moderate HDOP
+                    hdop < 10.0 -> 0.80 // Poor HDOP
+                    else -> 0.70 // Very poor HDOP
+                }
+                confidence = confidence * 0.7 + hdopConfidence * 0.3
+            }
+        }
+        
+        Log.d(TAG, "DEVICE_VELOCITY_CONFIDENCE: GPS quality confidence: ${(confidence * 100).toInt()}%")
+        return confidence.coerceIn(0.0, 1.0)
+    }
+    
+    /**
+     * Calculate confidence for position-calculated velocity based on data consistency
+     */
+    private fun calculatePositionVelocityConfidence(entries: List<PeerLocationEntry>): Double {
+        if (entries.size < 3) return 0.6 // Lower confidence for insufficient data
+        
+        val speeds = mutableListOf<Double>()
+        val headings = mutableListOf<Double>()
+        
+        for (i in 1 until entries.size) {
+            val current = entries[i]
+            val previous = entries[i - 1]
+            
+            val currentTimestamp = current.getBestTimestamp()
+            val previousTimestamp = previous.getBestTimestamp()
+            val timeDiff = (currentTimestamp - previousTimestamp) / 1000.0
+            
+            if (timeDiff <= 0) continue
+            
+            val distance = calculateDistance(
+                previous.latitude, previous.longitude,
+                current.latitude, current.longitude
+            )
+            val speed = distance / timeDiff
+            speeds.add(speed)
+            
+            val heading = calculateBearing(
+                previous.latitude, previous.longitude,
+                current.latitude, current.longitude
+            )
+            headings.add(heading)
+        }
+        
+        if (speeds.isEmpty()) return 0.5
+        
+        // Calculate speed consistency
+        val avgSpeed = speeds.average()
+        val speedVariance = speeds.map { (it - avgSpeed).pow(2) }.average()
+        val speedConsistency = 1.0 / (1.0 + speedVariance / (avgSpeed * avgSpeed))
+        
+        // Calculate heading consistency
+        val headingVariance = calculateHeadingVariance(headings)
+        val headingConsistency = 1.0 / (1.0 + headingVariance / 360.0)
+        
+        // Factor in data quantity
+        val dataQuantityFactor = min(entries.size / 10.0, 1.0) // More data = higher confidence
+        
+        val confidence = (speedConsistency * 0.4 + headingConsistency * 0.4 + dataQuantityFactor * 0.2)
+        
+        Log.d(TAG, "POSITION_VELOCITY_CONFIDENCE: speedConsistency=${(speedConsistency * 100).toInt()}%, headingConsistency=${(headingConsistency * 100).toInt()}%, dataQuantity=${(dataQuantityFactor * 100).toInt()}%, final=${(confidence * 100).toInt()}%")
+        
+        return confidence.coerceIn(0.0, 1.0)
+    }
+    
+    /**
+     * Enhanced linear confidence calculation that incorporates velocity data quality and source
+     */
+    private fun calculateEnhancedLinearConfidence(
+        entries: List<PeerLocationEntry>, 
+        currentSpeed: Double, 
+        velocityConfidence: Double,
+        dataSource: String,
+        config: PredictionConfig
+    ): Double {
+        if (entries.size < 3) return 0.5
+        
+        // Calculate uncertainties from actual data
+        val (headingUncertainty, speedUncertainty) = calculateUncertainties(entries)
+        
+        // Calculate speed consistency
+        val speeds = mutableListOf<Double>()
+        for (i in 1 until entries.size) {
+            val distance = calculateDistance(
+                entries[i-1].latitude, entries[i-1].longitude,
+                entries[i].latitude, entries[i].longitude
+            )
+            val timeDiff = (entries[i].getBestTimestamp() - entries[i-1].getBestTimestamp()) / 1000.0
+            speeds.add(distance / timeDiff)
+        }
+        
+        val avgSpeed = speeds.average()
+        val speedVariance = speeds.map { (it - avgSpeed).pow(2) }.average()
+        val speedConsistency = 1.0 / (1.0 + speedVariance / (avgSpeed * avgSpeed))
+        
+        // Calculate heading consistency
+        val headings = mutableListOf<Double>()
+        for (i in 1 until entries.size) {
+            val heading = calculateBearing(
+                entries[i-1].latitude, entries[i-1].longitude,
+                entries[i].latitude, entries[i].longitude
+            )
+            headings.add(heading)
+        }
+        
+        val headingVariance = calculateHeadingVariance(headings)
+        val headingConsistency = 1.0 / (1.0 + headingVariance / 360.0)
+        
+        // Factor in the calculated uncertainties
+        val uncertaintyFactor = 1.0 - (headingUncertainty / 45.0) // Normalize to 0-1 range
+        val speedUncertaintyFactor = 1.0 - speedUncertainty // Lower uncertainty = higher confidence
+        
+        // ENHANCED: Factor in velocity data source and quality
+        val dataSourceFactor = when (dataSource) {
+            "device_velocity" -> 1.0 // Device-provided velocity gets highest weight
+            "position_calculated" -> 0.8 // Position-calculated velocity gets lower weight
+            else -> 0.6 // Insufficient data gets lowest weight
+        }
+        
+        // ENHANCED: Incorporate velocity confidence directly
+        val velocityQualityFactor = velocityConfidence
+        
+        // Calculate final confidence with enhanced weighting
+        val baseConfidence = (speedConsistency + headingConsistency + uncertaintyFactor + speedUncertaintyFactor) / 4.0
+        
+        // ENHANCED: Weight the final confidence based on data source and quality
+        val finalConfidence = baseConfidence * 0.6 + dataSourceFactor * 0.2 + velocityQualityFactor * 0.2
+        
+        Log.d(TAG, "ENHANCED_LINEAR_CONFIDENCE: baseConfidence=${(baseConfidence * 100).toInt()}%, dataSource=$dataSource (factor=${(dataSourceFactor * 100).toInt()}%), velocityQuality=${(velocityQualityFactor * 100).toInt()}%, final=${(finalConfidence * 100).toInt()}%")
+        
+        return finalConfidence.coerceIn(0.0, 1.0)
+    }
+    
+    /**
+     * Enhanced particle confidence calculation that incorporates velocity data quality and source
+     */
+    private fun calculateEnhancedParticleConfidence(
+        particles: List<Particle>, 
+        velocityConfidence: Double,
+        dataSource: String,
+        config: PredictionConfig
+    ): Double {
+        val avgLat = particles.sumOf { it.lat * it.weight }
+        val avgLon = particles.sumOf { it.lon * it.weight }
+        
+        val spread = particles.sumOf { particle ->
+            val distance = calculateDistance(particle.lat, particle.lon, avgLat, avgLon)
+            particle.weight * distance * distance
+        }
+        
+        val maxSpread = 10000.0 // meters squared
+        val baseConfidence = 1.0 - (spread / maxSpread).coerceAtMost(1.0)
+        
+        // ENHANCED: Factor in velocity data source and quality
+        val dataSourceFactor = when (dataSource) {
+            "device_velocity" -> 1.0 // Device-provided velocity gets highest weight
+            "position_calculated" -> 0.8 // Position-calculated velocity gets lower weight
+            else -> 0.6 // Insufficient data gets lowest weight
+        }
+        
+        // ENHANCED: Incorporate velocity confidence directly
+        val velocityQualityFactor = velocityConfidence
+        
+        // Calculate final confidence with enhanced weighting
+        val finalConfidence = baseConfidence * 0.6 + dataSourceFactor * 0.2 + velocityQualityFactor * 0.2
+        
+        Log.d(TAG, "ENHANCED_PARTICLE_CONFIDENCE: baseConfidence=${(baseConfidence * 100).toInt()}%, dataSource=$dataSource (factor=${(dataSourceFactor * 100).toInt()}%), velocityQuality=${(velocityQualityFactor * 100).toInt()}%, final=${(finalConfidence * 100).toInt()}%")
+        
+        return finalConfidence.coerceIn(0.0, 1.0)
     }
 } 

@@ -20,6 +20,7 @@ import com.tak.lite.model.AnnotationColor
 import com.tak.lite.model.LineStyle
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PointShape
+import com.tak.lite.model.PeerLocationEntry
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.Projection
 import kotlin.math.atan2
@@ -89,9 +90,9 @@ class AnnotationOverlayView @JvmOverloads constructor(
     private var isDeviceDotCandidate: Boolean = false
 
     // --- Peer Location Dot Support ---
-    private var peerLocations: Map<String, LatLng> = emptyMap()
-    fun updatePeerLocations(locations: Map<String, LatLng>) {
-        this.peerLocations = locations
+    private var peerLocations: Map<String, PeerLocationEntry> = emptyMap()
+    fun updatePeerLocations(locations: Map<String, PeerLocationEntry>) {
+        peerLocations = locations
         invalidate()
     }
 
@@ -308,7 +309,8 @@ class AnnotationOverlayView @JvmOverloads constructor(
         }
 
         // Draw peer location dots (solid green, not user annotations)
-        peerLocations.values.forEach { latLng ->
+        peerLocations.values.forEach { entry ->
+            val latLng = LatLng(entry.latitude, entry.longitude)
             val point = projection?.toScreenLocation(latLng)
             if (point != null) {
                 val pointF = PointF(point.x, point.y)
@@ -449,7 +451,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
         // Draw peer popover if active
         peerPopoverPeerId?.let { peerId ->
             val latLng = peerLocations[peerId]
-            val pos = latLng?.let { projection?.toScreenLocation(it) }?.let { PointF(it.x, it.y) }
+            val pos = latLng?.let { projection?.toScreenLocation(it.toLatLng()) }?.let { PointF(it.x, it.y) }
             if (pos != null) {
                 drawPeerPopover(canvas, peerId, peerPopoverNodeInfo, pos)
             }
@@ -1313,8 +1315,8 @@ class AnnotationOverlayView @JvmOverloads constructor(
 
     // Helper to find a peer dot at a screen position
     private fun findPeerDotAt(x: Float, y: Float): String? {
-        for ((peerId, latLng) in peerLocations) {
-            val point = projection?.toScreenLocation(latLng) ?: continue
+        for ((peerId, entry) in peerLocations) {
+            val point = projection?.toScreenLocation(entry.toLatLng()) ?: continue
             val dx = x - point.x
             val dy = y - point.y
             if (hypot(dx.toDouble(), dy.toDouble()) < 40) {

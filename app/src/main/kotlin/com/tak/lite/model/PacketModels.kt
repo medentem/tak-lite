@@ -40,7 +40,7 @@ data class StateSyncMessage(
     val type: String = "STATE_SYNC",
     val version: StateVersion,
     val channels: List<IChannel>,
-    val peerLocations: Map<String, LatLngSerializable>,
+    val peerLocations: Map<String, PeerLocationEntry>,
     val annotations: List<MapAnnotation>,
     val partialUpdate: Boolean = false,
     val updateFields: Set<String> = emptySet()

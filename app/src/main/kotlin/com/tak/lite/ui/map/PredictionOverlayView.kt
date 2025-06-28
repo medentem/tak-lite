@@ -7,6 +7,7 @@ import android.util.Log
 import android.view.View
 import com.tak.lite.model.ConfidenceCone
 import com.tak.lite.model.LocationPrediction
+import com.tak.lite.model.PeerLocationEntry
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Projection
 
@@ -19,7 +20,7 @@ class PredictionOverlayView @JvmOverloads constructor(
     private var projection: Projection? = null
     private var predictions: Map<String, LocationPrediction> = emptyMap()
     private var confidenceCones: Map<String, ConfidenceCone> = emptyMap()
-    private var peerLocations: Map<String, org.maplibre.android.geometry.LatLng> = emptyMap()
+    private var peerLocations: Map<String, PeerLocationEntry> = emptyMap()
     private var showPredictionOverlay: Boolean = true
     
     // Paint objects for different elements
@@ -68,7 +69,7 @@ class PredictionOverlayView @JvmOverloads constructor(
         invalidate()
     }
     
-    fun updatePeerLocations(locations: Map<String, org.maplibre.android.geometry.LatLng>) {
+    fun updatePeerLocations(locations: Map<String, PeerLocationEntry>) {
         this.peerLocations = locations
         invalidate()
     }
@@ -117,7 +118,7 @@ class PredictionOverlayView @JvmOverloads constructor(
                 val conePath = Path()
                 
                 // Start at the peer location
-                val peerScreenPoint = projection?.toScreenLocation(peerLocation)
+                val peerScreenPoint = projection?.toScreenLocation(peerLocation.toLatLng())
                 if (peerScreenPoint != null) {
                     conePath.moveTo(peerScreenPoint.x, peerScreenPoint.y)
                     
@@ -154,7 +155,7 @@ class PredictionOverlayView @JvmOverloads constructor(
             val predictedLocation = prediction.predictedLocation.toMapLibreLatLngSafe() ?: return@forEach
             
             // Convert to screen coordinates
-            val peerScreenPoint = projection?.toScreenLocation(peerLocation)
+            val peerScreenPoint = projection?.toScreenLocation(peerLocation.toLatLng())
             val predictedScreenPoint = projection?.toScreenLocation(predictedLocation)
             
             if (peerScreenPoint != null && predictedScreenPoint != null) {

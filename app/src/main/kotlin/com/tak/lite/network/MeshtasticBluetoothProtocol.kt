@@ -16,6 +16,7 @@ import com.tak.lite.di.MeshConnectionState
 import com.tak.lite.di.MeshProtocol
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PacketSummary
+import com.tak.lite.model.PeerLocationEntry
 import com.tak.lite.util.DeviceController
 import com.tak.lite.util.MeshAnnotationInterop
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -91,9 +92,9 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     }
 
     private var annotationCallback: ((MapAnnotation) -> Unit)? = null
-    private var peerLocationCallback: ((Map<String, LatLng>) -> Unit)? = null
+    private var peerLocationCallback: ((Map<String, PeerLocationEntry>) -> Unit)? = null
     private var userLocationCallback: ((LatLng) -> Unit)? = null
-    private val peerLocations = ConcurrentHashMap<String, LatLng>()
+    private val peerLocations = ConcurrentHashMap<String, PeerLocationEntry>()
     private val _annotations = MutableStateFlow<List<MapAnnotation>>(emptyList())
     val annotations: StateFlow<List<MapAnnotation>> = _annotations.asStateFlow()
     private val peersMap = ConcurrentHashMap<String, MeshPeer>()
@@ -467,7 +468,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         annotationCallback = callback
     }
 
-    override fun setPeerLocationCallback(callback: (Map<String, LatLng>) -> Unit) {
+    override fun setPeerLocationCallback(callback: (Map<String, com.tak.lite.model.PeerLocationEntry>) -> Unit) {
         peerLocationCallback = callback
     }
 
@@ -489,7 +490,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     override fun sendStateSync(
         toIp: String,
         channels: List<IChannel>,
-        peerLocations: Map<String, LatLng>,
+        peerLocations: Map<String, PeerLocationEntry>,
         annotations: List<MapAnnotation>,
         partialUpdate: Boolean,
         updateFields: Set<String>
@@ -971,13 +972,50 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                                 val lat = position.latitudeI / 1e7
                                 val lng = position.longitudeI / 1e7
                                 Log.d(TAG, "Parsed position from peer $peerId: lat=$lat, lng=$lng")
-                                peerLocations[peerId] = org.maplibre.android.geometry.LatLng(lat, lng)
+                                
+                                // Create enhanced location entry with additional position data
+                                val locationEntry = com.tak.lite.model.PeerLocationEntry(
+                                    timestamp = System.currentTimeMillis(),
+                                    latitude = lat,
+                                    longitude = lng,
+                                    gpsTimestamp = position.timestamp * 1000L, // Convert seconds to milliseconds
+                                    groundSpeed = if (position.hasGroundSpeed()) position.groundSpeed.toDouble() else null,
+                                    groundTrack = if (position.hasGroundTrack()) position.groundTrack / 100.0 else null, // Convert from 1/100 degrees to degrees
+                                    altitude = if (position.hasAltitude()) position.altitude else null,
+                                    altitudeHae = if (position.hasAltitudeHae()) position.altitudeHae else null,
+                                    gpsAccuracy = position.gpsAccuracy, // Required field
+                                    fixQuality = position.fixQuality, // Required field
+                                    fixType = position.fixType, // Required field
+                                    satellitesInView = position.satsInView, // Required field
+                                    pdop = position.pdop, // Required field
+                                    hdop = position.hdop, // Required field
+                                    vdop = position.vdop, // Required field
+                                    locationSource = position.locationSource.number, // Required field
+                                    altitudeSource = position.altitudeSource.number, // Required field
+                                    sequenceNumber = position.seqNumber, // Required field
+                                    precisionBits = position.precisionBits // Required field
+                                )
+                                
+                                // Log additional position data if available
+                                if (locationEntry.hasVelocityData()) {
+                                    val (speed, track) = locationEntry.getVelocity()!!
+                                    Log.d(TAG, "Position from peer $peerId includes velocity: ${speed.toInt()} m/s at ${track.toInt()}°")
+                                }
+                                if (locationEntry.hasGpsQualityData()) {
+                                    Log.d(TAG, "Position from peer $peerId includes GPS quality: accuracy=${locationEntry.gpsAccuracy}mm, fix=${locationEntry.fixType}, sats=${locationEntry.satellitesInView}")
+                                }
+                                
+                                peerLocations[peerId] = locationEntry
+                                
+                                // Call enhanced callback with full location entry data
+                                peerLocationCallback?.invoke(mapOf(peerId to locationEntry))
+                                
                                 // Update last seen for node info
                                 nodeInfoMap[peerId]?.let { info ->
                                     val updatedNodeInfo = info.toBuilder().setLastHeard((System.currentTimeMillis() / 1000).toInt()).build()
                                     nodeInfoMap[peerId] = updatedNodeInfo
                                 }
-                                peerLocationCallback?.invoke(peerLocations.toMap())
+                                
                                 if (isOwnNode(peerId)) {
                                     userLocationCallback?.invoke(org.maplibre.android.geometry.LatLng(lat, lng))
                                 }

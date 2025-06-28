@@ -65,6 +65,13 @@ class PeerLocationHistoryRepository @Inject constructor(
             longitude = latLng.longitude
         )
         
+        addLocationEntry(peerId, entry)
+    }
+    
+    /**
+     * Add an enhanced location entry with additional position data
+     */
+    fun addLocationEntry(peerId: String, entry: PeerLocationEntry) {
         // Validate entry data
         if (entry.latitude.isNaN() || entry.longitude.isNaN() || 
             entry.latitude.isInfinite() || entry.longitude.isInfinite()) {
@@ -75,7 +82,7 @@ class PeerLocationHistoryRepository @Inject constructor(
         // Check prediction accuracy if we have a previous prediction
         val currentPrediction = _predictions.value[peerId]
         if (currentPrediction != null) {
-            val actualLocation = LatLngSerializable.fromMapLibreLatLng(latLng)
+            val actualLocation = LatLngSerializable.fromMapLibreLatLng(entry.toLatLng())
             val distance = calculateDistance(
                 currentPrediction.predictedLocation.lt, currentPrediction.predictedLocation.lng,
                 actualLocation.lt, actualLocation.lng
@@ -118,7 +125,13 @@ class PeerLocationHistoryRepository @Inject constructor(
         // Update predictions
         updatePrediction(peerId, updatedHistory)
         
-        Log.d(TAG, "Added location entry for peer $peerId: ${entry.latitude}, ${entry.longitude}")
+        // Log additional data if available
+        if (entry.hasVelocityData()) {
+            val (speed, track) = entry.getVelocity()!!
+            Log.d(TAG, "Added enhanced location entry for peer $peerId: ${entry.latitude}, ${entry.longitude} with velocity: ${speed.toInt()} m/s at ${track.toInt()}°")
+        } else {
+            Log.d(TAG, "Added location entry for peer $peerId: ${entry.latitude}, ${entry.longitude}")
+        }
     }
     
     /**
@@ -147,9 +160,11 @@ class PeerLocationHistoryRepository @Inject constructor(
                         latest,
                         currentConfig.predictionHorizonMinutes * 60.0
                     )
-                    val currentCones = _confidenceCones.value.toMutableMap()
-                    currentCones[peerId] = cone
-                    _confidenceCones.value = currentCones
+                    if (cone != null) {
+                        val currentCones = _confidenceCones.value.toMutableMap()
+                        currentCones[peerId] = cone
+                        _confidenceCones.value = currentCones
+                    }
                 }
                 Log.d(TAG, "Updated prediction for peer $peerId: confidence=${prediction.confidence}, model=$currentModel (particle cone)")
                 return

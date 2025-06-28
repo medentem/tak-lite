@@ -6,7 +6,9 @@ import androidx.lifecycle.viewModelScope
 import com.geeksville.mesh.MeshProtos
 import com.tak.lite.model.ConfidenceCone
 import com.tak.lite.model.LocationPrediction
+import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PacketSummary
+import com.tak.lite.model.PeerLocationEntry
 import com.tak.lite.model.PredictionConfig
 import com.tak.lite.model.PredictionModel
 import com.tak.lite.network.MeshNetworkState
@@ -31,13 +33,27 @@ class MeshNetworkViewModel @Inject constructor(
     private val _uiState = MutableStateFlow<MeshNetworkUiState>(MeshNetworkUiState.Initial)
     val uiState: StateFlow<MeshNetworkUiState> = _uiState.asStateFlow()
     
-    private val _peerLocations = MutableStateFlow<Map<String, LatLng>>(emptyMap())
-    val peerLocations: StateFlow<Map<String, LatLng>> = _peerLocations.asStateFlow()
+    // Private MutableStateFlow properties for internal state
+    private val _networkState = MutableStateFlow<MeshNetworkUiState>(MeshNetworkUiState.Disconnected)
+    val networkState: StateFlow<MeshNetworkUiState> = _networkState.asStateFlow()
     
-    val userLocation: StateFlow<org.maplibre.android.geometry.LatLng?> = meshNetworkRepository.userLocation as StateFlow<org.maplibre.android.geometry.LatLng?>
-    val phoneLocation: StateFlow<org.maplibre.android.geometry.LatLng?> = meshNetworkRepository.phoneLocation as StateFlow<org.maplibre.android.geometry.LatLng?>
-    val bestLocation: StateFlow<org.maplibre.android.geometry.LatLng?> = meshNetworkRepository.bestLocation as StateFlow<org.maplibre.android.geometry.LatLng?>
-    val isDeviceLocationStale: StateFlow<Boolean> = meshNetworkRepository.isDeviceLocationStale as StateFlow<Boolean>
+    private val _connectedPeers = MutableStateFlow<List<MeshPeer>>(emptyList())
+    val connectedPeers: StateFlow<List<MeshPeer>> = _connectedPeers.asStateFlow()
+    
+    private val _peerLocations = MutableStateFlow<Map<String, PeerLocationEntry>>(emptyMap())
+    val peerLocations: StateFlow<Map<String, PeerLocationEntry>> = _peerLocations.asStateFlow()
+    
+    private val _userLocation = MutableStateFlow<LatLng?>(null)
+    val userLocation: StateFlow<LatLng?> = _userLocation.asStateFlow()
+    
+    private val _phoneLocation = MutableStateFlow<LatLng?>(null)
+    val phoneLocation: StateFlow<LatLng?> = _phoneLocation.asStateFlow()
+    
+    private val _bestLocation = MutableStateFlow<LatLng?>(null)
+    val bestLocation: StateFlow<LatLng?> = _bestLocation.asStateFlow()
+    
+    private val _isDeviceLocationStale = MutableStateFlow<Boolean>(false)
+    val isDeviceLocationStale: StateFlow<Boolean> = _isDeviceLocationStale.asStateFlow()
     
     private val _packetSummaries = MutableStateFlow<List<PacketSummary>>(emptyList())
     val packetSummaries: StateFlow<List<PacketSummary>> = _packetSummaries.asStateFlow()
@@ -66,8 +82,16 @@ class MeshNetworkViewModel @Inject constructor(
                 }
             }.collect { newState ->
                 _uiState.value = newState
+                _networkState.value = newState
             }
         }
+        
+        viewModelScope.launch {
+            meshNetworkRepository.connectedPeers.collect { peers ->
+                _connectedPeers.value = peers
+            }
+        }
+        
         viewModelScope.launch {
             meshNetworkRepository.peerLocations.collect { locations ->
                 val selfId = _selfId.value
@@ -76,14 +100,38 @@ class MeshNetworkViewModel @Inject constructor(
                 _peerLocations.value = filtered
             }
         }
-        viewModelScope.launch {
-            meshNetworkRepository.packetSummaries.collect { _packetSummaries.value = it }
-        }
+        
         viewModelScope.launch {
             meshNetworkRepository.userLocation.collect { location ->
+                _userLocation.value = location
                 Log.d("MeshNetworkViewModel", "User location updated: $location")
             }
         }
+        
+        viewModelScope.launch {
+            meshNetworkRepository.phoneLocation.collect { location ->
+                _phoneLocation.value = location
+            }
+        }
+        
+        viewModelScope.launch {
+            meshNetworkRepository.bestLocation.collect { location ->
+                _bestLocation.value = location
+            }
+        }
+        
+        viewModelScope.launch {
+            meshNetworkRepository.isDeviceLocationStale.collect { stale ->
+                _isDeviceLocationStale.value = stale
+            }
+        }
+        
+        viewModelScope.launch {
+            meshNetworkRepository.packetSummaries.collect { summaries ->
+                _packetSummaries.value = summaries
+            }
+        }
+        
         viewModelScope.launch {
             meshNetworkRepository.selfId.collect { nodeId ->
                 _selfId.value = nodeId

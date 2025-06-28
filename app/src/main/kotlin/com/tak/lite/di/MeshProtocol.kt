@@ -5,6 +5,7 @@ import com.tak.lite.data.model.DirectMessageChannel
 import com.tak.lite.data.model.IChannel
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PacketSummary
+import com.tak.lite.model.PeerLocationEntry
 import com.tak.lite.network.MeshPeer
 import com.tak.lite.network.MeshtasticBluetoothProtocol
 import kotlinx.coroutines.flow.StateFlow
@@ -57,13 +58,13 @@ interface MeshProtocol {
     fun sendAnnotation(annotation: MapAnnotation)
     fun sendLocationUpdate(latitude: Double, longitude: Double)
     fun setAnnotationCallback(callback: (MapAnnotation) -> Unit)
-    fun setPeerLocationCallback(callback: (Map<String, LatLng>) -> Unit)
+    fun setPeerLocationCallback(callback: (Map<String, com.tak.lite.model.PeerLocationEntry>) -> Unit)
     fun sendAudioData(audioData: ByteArray, channelId: String = "default")
     fun setLocalNickname(nickname: String)
     fun sendStateSync(
         toIp: String,
         channels: List<IChannel>,
-        peerLocations: Map<String, LatLng>,
+        peerLocations: Map<String, PeerLocationEntry>,
         annotations: List<MapAnnotation>,
         partialUpdate: Boolean = false,
         updateFields: Set<String> = emptySet()

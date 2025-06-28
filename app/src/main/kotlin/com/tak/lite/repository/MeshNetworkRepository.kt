@@ -1,11 +1,14 @@
 package com.tak.lite.repository
 
+import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PacketSummary
+import com.tak.lite.model.PeerLocationEntry
 import com.tak.lite.network.MeshNetworkService
 import com.tak.lite.network.MeshNetworkState
 import com.tak.lite.network.MeshPeer
 import com.tak.lite.network.MeshProtocolProvider
 import com.tak.lite.network.MeshtasticBluetoothProtocol
+import com.geeksville.mesh.MeshProtos
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,7 +34,7 @@ class MeshNetworkRepository @Inject constructor(
     val connectedPeers: Flow<List<MeshPeer>>
         get() = meshNetworkService.peers
     
-    val peerLocations: Flow<Map<String, LatLng>>
+    val peerLocations: Flow<Map<String, PeerLocationEntry>>
         get() = meshNetworkService.peerLocations
     
     val userLocation: Flow<LatLng?>

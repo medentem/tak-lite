@@ -232,8 +232,8 @@ class PredictionSettingsFragment : Fragment() {
     
     private fun getModelExplanation(model: PredictionModel): String {
         return when (model) {
-            PredictionModel.KALMAN_FILTER -> "Smooths out noise and missing data. Good for most movement and honest about it's uncertainty."
-            PredictionModel.LINEAR -> "Simple and fast. Best for straight, constant movement. Not very accurate."
+            PredictionModel.KALMAN_FILTER -> "Middle ground model. Limited pattern adaptation with linear bias."
+            PredictionModel.LINEAR -> "Simple and fast. Best for straight, constant movement. Not very accurate under other conditions."
             PredictionModel.PARTICLE_FILTER -> "Advanced. Handles erratic or unpredictable movement, but uses more battery."
         }
     }

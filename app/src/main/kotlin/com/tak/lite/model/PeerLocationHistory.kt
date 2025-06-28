@@ -9,8 +9,52 @@ data class PeerLocationEntry(
     val timestamp: Long,
     val latitude: Double,
     val longitude: Double,
+    // Additional position data from Meshtastic position packets
+    val gpsTimestamp: Long? = null, // GPS timestamp from position packet
+    val groundSpeed: Double? = null, // Ground speed in m/s
+    val groundTrack: Double? = null, // Ground track/heading in degrees
+    val altitude: Int? = null, // Altitude in meters above MSL
+    val altitudeHae: Int? = null, // Height Above Ellipsoid in meters
+    val gpsAccuracy: Int? = null, // GPS accuracy in mm
+    val fixQuality: Int? = null, // GPS fix quality
+    val fixType: Int? = null, // GPS fix type (2D/3D)
+    val satellitesInView: Int? = null, // Number of satellites in view
+    val pdop: Int? = null, // Position Dilution of Precision
+    val hdop: Int? = null, // Horizontal Dilution of Precision
+    val vdop: Int? = null, // Vertical Dilution of Precision
+    val locationSource: Int? = null, // How location was acquired (manual, GPS, external)
+    val altitudeSource: Int? = null, // How altitude was acquired
+    val sequenceNumber: Int? = null, // Position sequence number
+    val precisionBits: Int? = null // Precision bits set by sending node
 ) {
     fun toLatLng(): LatLng = LatLng(latitude, longitude)
+    
+    /**
+     * Get the most accurate timestamp available
+     * Prefer GPS timestamp if available, otherwise use app timestamp
+     */
+    fun getBestTimestamp(): Long = gpsTimestamp ?: timestamp
+    
+    /**
+     * Check if this entry has velocity data (speed and track)
+     */
+    fun hasVelocityData(): Boolean = groundSpeed != null && groundTrack != null
+    
+    /**
+     * Get velocity as a pair of (speed in m/s, heading in degrees)
+     */
+    fun getVelocity(): Pair<Double, Double>? {
+        return if (hasVelocityData()) {
+            Pair(groundSpeed!!, groundTrack!!)
+        } else null
+    }
+    
+    /**
+     * Check if this entry has GPS quality data
+     */
+    fun hasGpsQualityData(): Boolean = 
+        gpsAccuracy != null || fixQuality != null || fixType != null || 
+        satellitesInView != null || pdop != null || hdop != null || vdop != null
 }
 
 @Serializable

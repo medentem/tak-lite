@@ -18,6 +18,7 @@ import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PacketHeader
 import com.tak.lite.model.PacketSummary
 import com.tak.lite.model.PacketType
+import com.tak.lite.model.PeerLocationEntry
 import com.tak.lite.model.StateSyncMessage
 import com.tak.lite.model.StateVersion
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -72,8 +73,8 @@ class Layer2MeshNetworkProtocol @Inject constructor(
     private var peerUpdateCallback: ((List<MeshPeer>) -> Unit)? = null
     private var annotationCallback: ((MapAnnotation) -> Unit)? = null
     
-    private val peerLocations = mutableMapOf<String, LatLng>()
-    private var peerLocationCallback: ((Map<String, LatLng>) -> Unit)? = null
+    private val peerLocations = mutableMapOf<String, PeerLocationEntry>()
+    private var peerLocationCallback: ((Map<String, com.tak.lite.model.PeerLocationEntry>) -> Unit)? = null
     
     private val json = Json { ignoreUnknownKeys = true }
     
@@ -468,8 +469,20 @@ class Layer2MeshNetworkProtocol @Inject constructor(
             val jsonString = String(packet.data, 0, packet.length)
             val loc = json.decodeFromString<Layer2LocationPacket>(jsonString)
             val peerId = loc.peerId
-            peerLocations[peerId] = LatLng(loc.latitude, loc.longitude)
+            
+            // Create enhanced location entry
+            val locationEntry = com.tak.lite.model.PeerLocationEntry(
+                timestamp = loc.timestamp,
+                latitude = loc.latitude,
+                longitude = loc.longitude
+                // Layer2 protocol doesn't provide additional position data, so other fields remain null
+            )
+            
+            peerLocations[peerId] = locationEntry
+
+            // Call legacy callback for backward compatibility
             peerLocationCallback?.invoke(peerLocations.toMap())
+            
             handleOwnLocationUpdate(loc.latitude, loc.longitude)
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing location packet: ${e.message}")
@@ -488,7 +501,7 @@ class Layer2MeshNetworkProtocol @Inject constructor(
         annotationCallback = callback
     }
     
-    override fun setPeerLocationCallback(callback: (Map<String, LatLng>) -> Unit) {
+    override fun setPeerLocationCallback(callback: (Map<String, com.tak.lite.model.PeerLocationEntry>) -> Unit) {
         peerLocationCallback = callback
     }
     
@@ -630,7 +643,7 @@ class Layer2MeshNetworkProtocol @Inject constructor(
     override fun sendStateSync(
         toIp: String,
         channels: List<IChannel>,
-        peerLocations: Map<String, LatLng>,
+        peerLocations: Map<String, com.tak.lite.model.PeerLocationEntry>,
         annotations: List<MapAnnotation>,
         partialUpdate: Boolean,
         updateFields: Set<String>
@@ -640,11 +653,10 @@ class Layer2MeshNetworkProtocol @Inject constructor(
             version = currentStateVersion.version + 1,
             timestamp = System.currentTimeMillis()
         )
-        val serializableLocations = peerLocations.mapValues { LatLngSerializable.fromMapLibreLatLng(it.value) }
         val msg = StateSyncMessage(
             version = currentStateVersion,
             channels = channels,
-            peerLocations = serializableLocations,
+            peerLocations = peerLocations,
             annotations = annotations,
             partialUpdate = partialUpdate,
             updateFields = updateFields
@@ -700,7 +712,7 @@ class Layer2MeshNetworkProtocol @Inject constructor(
                     lastSeen = it.lastSeen,
                     nickname = it.nickname
                 ) }.let { emptyList() },
-                peerLocations = peerLocations.mapValues { LatLngSerializable.fromMapLibreLatLng(it.value) },
+                peerLocations = peerLocations,
                 annotations = annotations
             )
             val jsonString = json.encodeToString(StateSyncMessage.serializer(), msg)
@@ -876,7 +888,7 @@ class Layer2MeshNetworkProtocol @Inject constructor(
                 "peerLocations" -> {
                     // Update peer locations
                     stateSync.peerLocations.forEach { (peerId, location) ->
-                        peerLocations[peerId] = LatLng(location.lt, location.lng)
+                        peerLocations[peerId] = location
                     }
                     peerLocationCallback?.invoke(peerLocations.toMap())
                 }
@@ -905,7 +917,7 @@ class Layer2MeshNetworkProtocol @Inject constructor(
         // Update all state
         _channels.value = stateSync.channels
         stateSync.peerLocations.forEach { (peerId, location) ->
-            peerLocations[peerId] = LatLng(location.lt, location.lng)
+            peerLocations[peerId] = location
         }
         _annotations.value = stateSync.annotations
         

@@ -523,7 +523,7 @@ class AnnotationController(
             // Create a line from user location to peer
             val points = listOf(
                 userLocation,
-                peerLocation
+                peerLocation.toLatLng()
             )
             Log.d("AnnotationController", "handleDrawLineToPeer: Creating line with points=$points")
             annotationViewModel.addLine(points)

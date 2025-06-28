@@ -10,6 +10,7 @@ import com.tak.lite.di.MeshConnectionState
 import com.tak.lite.di.MeshProtocol
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PacketSummary
+import com.tak.lite.model.PeerLocationEntry
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -64,7 +65,7 @@ class DisabledMeshProtocol(private val context: Context) : MeshProtocol {
         // No-op
     }
 
-    override fun setPeerLocationCallback(callback: (Map<String, LatLng>) -> Unit) {
+    override fun setPeerLocationCallback(callback: (Map<String, PeerLocationEntry>) -> Unit) {
         // No-op
     }
 
@@ -79,7 +80,7 @@ class DisabledMeshProtocol(private val context: Context) : MeshProtocol {
     override fun sendStateSync(
         toIp: String,
         channels: List<IChannel>,
-        peerLocations: Map<String, LatLng>,
+        peerLocations: Map<String, PeerLocationEntry>,
         annotations: List<MapAnnotation>,
         partialUpdate: Boolean,
         updateFields: Set<String>
