@@ -9,8 +9,8 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import com.tak.lite.R
-import com.tak.lite.model.PredictionConfig
-import com.tak.lite.model.PredictionModel
+import com.tak.lite.data.model.PredictionConfig
+import com.tak.lite.data.model.PredictionModel
 import com.tak.lite.viewmodel.PredictionSettingsViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch

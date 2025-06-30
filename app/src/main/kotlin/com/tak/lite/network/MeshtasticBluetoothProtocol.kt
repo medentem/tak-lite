@@ -979,8 +979,8 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                                     latitude = lat,
                                     longitude = lng,
                                     gpsTimestamp = position.timestamp * 1000L, // Convert seconds to milliseconds
-                                    groundSpeed = if (position.hasGroundSpeed()) position.groundSpeed.toDouble() else null,
-                                    groundTrack = if (position.hasGroundTrack()) position.groundTrack / 100.0 else null, // Convert from 1/100 degrees to degrees
+                                    groundSpeed = if (position.hasGroundSpeed()) position.groundSpeed.toDouble() / 3.6 else null, // Convert km/h to m/s
+                                    groundTrack = if (position.hasGroundTrack()) position.groundTrack * 1e-5 else null,
                                     altitude = if (position.hasAltitude()) position.altitude else null,
                                     altitudeHae = if (position.hasAltitudeHae()) position.altitudeHae else null,
                                     gpsAccuracy = position.gpsAccuracy, // Required field

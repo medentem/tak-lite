@@ -122,6 +122,7 @@ class AnnotationFragment : Fragment() {
             mapLibreMap.addOnCameraMoveListener {
                 annotationController.syncAnnotationOverlayView(mapLibreMap)
                 annotationOverlayView.setZoom(mapLibreMap.cameraPosition.zoom.toFloat())
+                predictionOverlayView.setZoom(mapLibreMap.cameraPosition.zoom.toFloat())
                 predictionOverlayView.setProjection(mapLibreMap.projection)
             }
             annotationController.setupAnnotationOverlay(mapLibreMap)

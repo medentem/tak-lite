@@ -1,7 +1,6 @@
 package com.tak.lite.data.model
 
 import kotlinx.serialization.Serializable
-import java.net.IDN
 
 /**
  * Represents the status of a message in the mesh network

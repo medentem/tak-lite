@@ -51,22 +51,22 @@
             android:layout_marginTop="16dp"
             android:textColor="?android:textColorPrimary" />
 
-        <SeekBar
-            android:id="@+id/predictionHorizonSlider"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="29"
-            android:progress="4"
-            android:layout_marginTop="8dp" />
-
         <TextView
             android:id="@+id/predictionHorizonText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="5 minutes"
             android:textAlignment="center"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="8dp"
             android:textColor="?android:textColorPrimary" />
+
+        <SeekBar
+            android:id="@+id/predictionHorizonSlider"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="29"
+            android:progress="4"
+            android:layout_marginTop="4dp" />
 
         <!-- Minimum History Entries -->
         <TextView
@@ -78,22 +78,22 @@
             android:layout_marginTop="16dp"
             android:textColor="?android:textColorPrimary" />
 
-        <SeekBar
-            android:id="@+id/minHistoryEntriesSlider"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="18"
-            android:progress="1"
-            android:layout_marginTop="8dp" />
-
         <TextView
             android:id="@+id/minHistoryEntriesText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="3 entries"
             android:textAlignment="center"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="8dp"
             android:textColor="?android:textColorPrimary" />
+
+        <SeekBar
+            android:id="@+id/minHistoryEntriesSlider"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="18"
+            android:progress="1"
+            android:layout_marginTop="4dp" />
 
         <!-- Maximum History Age -->
         <TextView
@@ -105,22 +105,22 @@
             android:layout_marginTop="16dp"
             android:textColor="?android:textColorPrimary" />
 
-        <SeekBar
-            android:id="@+id/maxHistoryAgeSlider"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="29"
-            android:progress="5"
-            android:layout_marginTop="8dp" />
-
         <TextView
             android:id="@+id/maxHistoryAgeText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="30 minutes"
             android:textAlignment="center"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="8dp"
             android:textColor="?android:textColorPrimary" />
+
+        <SeekBar
+            android:id="@+id/maxHistoryAgeSlider"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="29"
+            android:progress="5"
+            android:layout_marginTop="4dp" />
 
         <!-- Note about automatic uncertainty calculation -->
         <TextView

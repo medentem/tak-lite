@@ -3,16 +3,19 @@ package com.tak.lite.repository
 import android.content.Context
 import android.util.Log
 import com.tak.lite.model.*
-import com.tak.lite.util.LocationPredictionEngine
+import com.tak.lite.di.PredictionFactory
+import com.tak.lite.data.model.PredictionConfig
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.json.Json
 import org.maplibre.android.geometry.LatLng
-import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 import android.content.SharedPreferences
+import com.tak.lite.data.model.ConfidenceCone
+import com.tak.lite.data.model.LocationPrediction
+import com.tak.lite.data.model.PredictionModel
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -20,12 +23,12 @@ import kotlin.math.sqrt
 
 @Singleton
 class PeerLocationHistoryRepository @Inject constructor(
-    private val context: Context
+    private val context: Context,
+    private val predictionFactory: PredictionFactory,
+    private val json: Json,
+    private val prefs: SharedPreferences
 ) {
     private val TAG = "PeerLocationHistoryRepository"
-    
-    private val predictionEngine = LocationPredictionEngine()
-    private val json = Json { ignoreUnknownKeys = true }
     
     // In-memory storage for peer location histories
     private val peerHistories = mutableMapOf<String, PeerLocationHistory>()
@@ -48,8 +51,6 @@ class PeerLocationHistoryRepository @Inject constructor(
     // Prediction model selection
     private val _selectedModel = MutableStateFlow(PredictionModel.LINEAR)
     val selectedModel: StateFlow<PredictionModel> = _selectedModel.asStateFlow()
-    
-    private val prefs: SharedPreferences by lazy { context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE) }
     
     init {
         loadConfiguration()
@@ -143,66 +144,36 @@ class PeerLocationHistoryRepository @Inject constructor(
         
         Log.d(TAG, "Updating prediction for peer $peerId with model $currentModel (history entries: ${history.entries.size})")
         
-        // For Particle Filter, get both prediction and predictedParticles
-        if (currentModel == PredictionModel.PARTICLE_FILTER) {
-            val result = predictionEngine.predictParticleFilter(history, currentConfig)
-            val prediction = result?.first
-            val predictedParticles = result?.second
-            if (prediction != null && predictedParticles != null) {
-                val currentPredictions = _predictions.value.toMutableMap()
-                currentPredictions[peerId] = prediction
-                _predictions.value = currentPredictions
-                // Use particle-based cone
-                val latest = history.getLatestEntry()
-                if (latest != null) {
-                    val cone = predictionEngine.generateParticleConfidenceCone(
-                        predictedParticles,
-                        latest,
-                        currentConfig.predictionHorizonMinutes * 60.0
-                    )
-                    if (cone != null) {
-                        val currentCones = _confidenceCones.value.toMutableMap()
-                        currentCones[peerId] = cone
-                        _confidenceCones.value = currentCones
-                    }
-                }
-                Log.d(TAG, "Updated prediction for peer $peerId: confidence=${prediction.confidence}, model=$currentModel (particle cone)")
-                return
-            }
-        } else {
-            val prediction = when (currentModel) {
-                PredictionModel.LINEAR -> predictionEngine.predictLinear(history, currentConfig)
-                PredictionModel.KALMAN_FILTER -> predictionEngine.predictKalmanFilter(history, currentConfig)
-                else -> null
-            }
-            if (prediction != null) {
-                val currentPredictions = _predictions.value.toMutableMap()
-                currentPredictions[peerId] = prediction
-                _predictions.value = currentPredictions
-                
-                // Generate confidence cone based on prediction model
-                val confidenceCone = when (currentModel) {
-                    PredictionModel.LINEAR -> predictionEngine.generateLinearConfidenceCone(prediction, history, currentConfig)
-                    PredictionModel.KALMAN_FILTER -> predictionEngine.generateKalmanConfidenceCone(prediction, history, currentConfig)
-                    else -> predictionEngine.generateConfidenceCone(prediction, history, currentConfig)
-                }
-                
-                if (confidenceCone != null) {
-                    val currentCones = _confidenceCones.value.toMutableMap()
-                    currentCones[peerId] = confidenceCone
-                    _confidenceCones.value = currentCones
-                }
-                Log.d(TAG, "Updated prediction for peer $peerId: confidence=${prediction.confidence}, model=$currentModel")
-            } else {
-                // Remove prediction if no longer valid
-                val currentPredictions = _predictions.value.toMutableMap()
-                currentPredictions.remove(peerId)
-                _predictions.value = currentPredictions
+        // Get the appropriate predictor for the current model
+        val predictor = predictionFactory.getPredictor(currentModel)
+        
+        // Generate prediction using the selected predictor
+        val prediction = predictor.predictPeerLocation(history, currentConfig)
+        
+        if (prediction != null) {
+            val currentPredictions = _predictions.value.toMutableMap()
+            currentPredictions[peerId] = prediction
+            _predictions.value = currentPredictions
+            
+            // Generate confidence cone using the same predictor
+            val confidenceCone = predictor.generateConfidenceCone(prediction, history, currentConfig)
+            
+            if (confidenceCone != null) {
                 val currentCones = _confidenceCones.value.toMutableMap()
-                currentCones.remove(peerId)
+                currentCones[peerId] = confidenceCone
                 _confidenceCones.value = currentCones
-                Log.w(TAG, "Failed to generate prediction for peer $peerId with model $currentModel")
             }
+            
+            Log.d(TAG, "Updated prediction for peer $peerId: confidence=${prediction.confidence}, model=$currentModel")
+        } else {
+            // Remove prediction if no longer valid
+            val currentPredictions = _predictions.value.toMutableMap()
+            currentPredictions.remove(peerId)
+            _predictions.value = currentPredictions
+            val currentCones = _confidenceCones.value.toMutableMap()
+            currentCones.remove(peerId)
+            _confidenceCones.value = currentCones
+            Log.w(TAG, "Failed to generate prediction for peer $peerId with model $currentModel")
         }
     }
     
@@ -263,6 +234,8 @@ class PeerLocationHistoryRepository @Inject constructor(
      */
     fun setPredictionModel(model: PredictionModel) {
         _selectedModel.value = model
+        // Save to preferences so the factory can read it
+        prefs.edit().putString("prediction_model", model.name).apply()
         saveConfiguration()
         updateAllPredictions()
     }
@@ -475,7 +448,6 @@ class PeerLocationHistoryRepository @Inject constructor(
         try {
             val configJson = json.encodeToString(PredictionConfig.serializer(), _predictionConfig.value)
             prefs.edit().putString("prediction_config", configJson).apply()
-            prefs.edit().putString("prediction_model", _selectedModel.value.name).apply()
         } catch (e: Exception) {
             Log.e(TAG, "Error saving configuration: ${e.message}")
         }

@@ -2,8 +2,8 @@ package com.tak.lite.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.tak.lite.model.PredictionConfig
-import com.tak.lite.model.PredictionModel
+import com.tak.lite.data.model.PredictionConfig
+import com.tak.lite.data.model.PredictionModel
 import com.tak.lite.repository.PeerLocationHistoryRepository
 import com.tak.lite.repository.PredictionStats
 import dagger.hilt.android.lifecycle.HiltViewModel

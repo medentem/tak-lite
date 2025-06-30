@@ -258,7 +258,7 @@ class MeshNetworkService @Inject constructor(
                     }
                     lastSimSettings = Pair(enabled, count)
                 }
-                delay(60000)
+                delay(15000)
             }
         }
     }

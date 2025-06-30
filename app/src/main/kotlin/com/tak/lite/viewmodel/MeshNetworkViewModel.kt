@@ -4,13 +4,10 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.geeksville.mesh.MeshProtos
-import com.tak.lite.model.ConfidenceCone
-import com.tak.lite.model.LocationPrediction
-import com.tak.lite.model.MapAnnotation
+import com.tak.lite.data.model.ConfidenceCone
+import com.tak.lite.data.model.LocationPrediction
 import com.tak.lite.model.PacketSummary
 import com.tak.lite.model.PeerLocationEntry
-import com.tak.lite.model.PredictionConfig
-import com.tak.lite.model.PredictionModel
 import com.tak.lite.network.MeshNetworkState
 import com.tak.lite.network.MeshPeer
 import com.tak.lite.repository.MeshNetworkRepository

@@ -7,8 +7,8 @@ import android.os.Looper
 import android.util.AttributeSet
 import android.util.Log
 import android.view.View
-import com.tak.lite.model.ConfidenceCone
-import com.tak.lite.model.LocationPrediction
+import com.tak.lite.data.model.ConfidenceCone
+import com.tak.lite.data.model.LocationPrediction
 import com.tak.lite.model.PeerLocationEntry
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Projection
@@ -25,6 +25,12 @@ class PredictionOverlayView @JvmOverloads constructor(
     private var confidenceCones: Map<String, ConfidenceCone> = emptyMap()
     private var peerLocations: Map<String, PeerLocationEntry> = emptyMap()
     private var showPredictionOverlay: Boolean = true
+    private var currentZoom: Float = 0f
+    private val minZoomForLabels = 12f // Hide labels below this zoom
+    private val minTextSize = 16f
+    private val maxTextSize = 30f
+    private val minOffset = 18f
+    private val maxOffset = 50f
     
     // Timer for updating time displays
     private val timeUpdateHandler = Handler(Looper.getMainLooper())
@@ -61,14 +67,14 @@ class PredictionOverlayView @JvmOverloads constructor(
     
     private val confidenceTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.YELLOW
-        textSize = 24f
+        textSize = 30f
         textAlign = Paint.Align.CENTER
         typeface = Typeface.DEFAULT_BOLD
     }
     
     private val timeTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.YELLOW
-        textSize = 26f
+        textSize = 30f
         textAlign = Paint.Align.CENTER
         typeface = Typeface.DEFAULT
     }
@@ -99,11 +105,13 @@ class PredictionOverlayView @JvmOverloads constructor(
             }
             absTimeDiff < 3600000 -> { // Less than 1 hour
                 val minutes = TimeUnit.MILLISECONDS.toMinutes(absTimeDiff)
-                if (timeDiff >= 0) "${minutes} min from now" else "${minutes} min ago"
+                val seconds = TimeUnit.MILLISECONDS.toSeconds(absTimeDiff) % 60
+                if (timeDiff >= 0) "${minutes}m ${seconds}s from now" else "${minutes}m ${seconds}s ago"
             }
             else -> { // 1 hour or more
                 val hours = TimeUnit.MILLISECONDS.toHours(absTimeDiff)
-                if (timeDiff >= 0) "${hours}h from now" else "${hours}h ago"
+                val minutes = TimeUnit.MILLISECONDS.toMinutes(absTimeDiff) % 60
+                if (timeDiff >= 0) "${hours}h ${minutes}m from now" else "${hours}h ${minutes}m ago"
             }
         }
     }
@@ -130,6 +138,11 @@ class PredictionOverlayView @JvmOverloads constructor(
     
     fun setShowPredictionOverlay(show: Boolean) {
         this.showPredictionOverlay = show
+        invalidate()
+    }
+    
+    fun setZoom(zoom: Float) {
+        this.currentZoom = zoom
         invalidate()
     }
     
@@ -202,16 +215,20 @@ class PredictionOverlayView @JvmOverloads constructor(
     }
     
     private fun drawPredictions(canvas: Canvas) {
+        if (currentZoom < minZoomForLabels) return // Hide labels if zoomed out too far
+        // Scale text size and offset based on zoom
+        val minZoom = minZoomForLabels
+        val maxZoom = 18f
+        val scale = ((currentZoom - minZoom) / (maxZoom - minZoom)).coerceIn(0f, 1f)
+        val textSize = minTextSize + (maxTextSize - minTextSize) * scale
+        val offset = minOffset + (maxOffset - minOffset) * scale
+        confidenceTextPaint.textSize = textSize
+        timeTextPaint.textSize = textSize
         predictions.forEach { (peerId, prediction) ->
             val peerLocation = peerLocations[peerId] ?: return@forEach
-            
-            // Use safe conversion to handle invalid coordinates
             val predictedLocation = prediction.predictedLocation.toMapLibreLatLngSafe() ?: return@forEach
-            
-            // Convert to screen coordinates
             val peerScreenPoint = projection?.toScreenLocation(peerLocation.toLatLng())
             val predictedScreenPoint = projection?.toScreenLocation(predictedLocation)
-            
             if (peerScreenPoint != null && predictedScreenPoint != null) {
                 // Draw prediction line
                 canvas.drawLine(
@@ -219,49 +236,44 @@ class PredictionOverlayView @JvmOverloads constructor(
                     predictedScreenPoint.x, predictedScreenPoint.y,
                     predictionLinePaint
                 )
-                
                 // Draw prediction dot
                 canvas.drawCircle(
                     predictedScreenPoint.x, predictedScreenPoint.y,
                     12f, predictionDotPaint
                 )
-                
                 // Draw prediction info (speed)
                 val velocity = prediction.velocity
                 if (velocity != null) {
-                    val speedMph = (velocity.speed * 2.23694).toInt()
-                    val speedText = "$speedMph mph"
+                    val speedMph = (velocity.speed * 2.23694)
+                    val speedText = "${String.format("%.2f", speedMph)} mph"
                     val speedTextBounds = Rect()
                     confidenceTextPaint.getTextBounds(speedText, 0, speedText.length, speedTextBounds)
-                    
+                    // Draw speed above dot
                     canvas.drawText(
                         speedText,
                         predictedScreenPoint.x,
-                        predictedScreenPoint.y - 20f,
+                        predictedScreenPoint.y - offset,
                         confidenceTextPaint
                     )
-                    
-                    // Draw time information below speed
+                    // Draw time below dot
                     val timeText = formatTimeDifference(prediction.targetTimestamp)
                     val timeTextBounds = Rect()
                     timeTextPaint.getTextBounds(timeText, 0, timeText.length, timeTextBounds)
-                    
                     canvas.drawText(
                         timeText,
                         predictedScreenPoint.x,
-                        predictedScreenPoint.y + 32f,
+                        predictedScreenPoint.y + offset,
                         timeTextPaint
                     )
                 } else {
-                    // If no velocity, just show time information
+                    // If no velocity, just show time below dot
                     val timeText = formatTimeDifference(prediction.targetTimestamp)
                     val timeTextBounds = Rect()
                     timeTextPaint.getTextBounds(timeText, 0, timeText.length, timeTextBounds)
-                    
                     canvas.drawText(
                         timeText,
                         predictedScreenPoint.x,
-                        predictedScreenPoint.y + 32f,
+                        predictedScreenPoint.y + offset,
                         timeTextPaint
                     )
                 }
