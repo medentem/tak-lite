@@ -9,12 +9,12 @@ import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.RemoteInput
-import com.tak.lite.R
-import com.tak.lite.MessageActivity
 import com.google.mlkit.nl.smartreply.SmartReply
 import com.google.mlkit.nl.smartreply.SmartReplySuggestion
 import com.google.mlkit.nl.smartreply.SmartReplySuggestionResult
 import com.google.mlkit.nl.smartreply.TextMessage
+import com.tak.lite.MessageActivity
+import com.tak.lite.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -57,10 +57,16 @@ class MessageNotificationManager @Inject constructor(
 
     fun showMessageNotification(channelId: String, channelName: String, message: String, fromShortName: String) {
         Log.d("MessageNotificationManager", "Creating notification for channel: $channelName, message: $message")
-        
+
+        val fromShortNameDefaulted = if (fromShortName.isEmpty()) {
+            "Unknown"
+        } else {
+            fromShortName
+        }
+
         // Create conversation history for smart reply
         val conversationHistory = listOf(
-            TextMessage.createForRemoteUser(message, System.currentTimeMillis(), fromShortName)
+            TextMessage.createForRemoteUser(message, System.currentTimeMillis(), fromShortNameDefaulted)
         )
 
         // Generate smart reply suggestions
@@ -69,13 +75,13 @@ class MessageNotificationManager @Inject constructor(
                 val result = smartReply.suggestReplies(conversationHistory).await()
                 if (result.status == SmartReplySuggestionResult.STATUS_SUCCESS) {
                     val suggestions = result.suggestions
-                    showNotificationWithSmartReplies(channelId, channelName, message, fromShortName, suggestions)
+                    showNotificationWithSmartReplies(channelId, channelName, message, fromShortNameDefaulted, suggestions)
                 } else {
-                    showBasicNotification(channelId, channelName, message, fromShortName)
+                    showBasicNotification(channelId, channelName, message, fromShortNameDefaulted)
                 }
             } catch (e: Exception) {
                 Log.e("MessageNotificationManager", "Error getting smart reply suggestions", e)
-                showBasicNotification(channelId, channelName, message, fromShortName)
+                showBasicNotification(channelId, channelName, message, fromShortNameDefaulted)
             }
         }
     }
