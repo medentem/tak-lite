@@ -303,7 +303,7 @@ class MeshNetworkService @Inject constructor(
 
     private fun movePeer(peerId: String, current: PeerLocationEntry, center: LatLng, radiusMiles: Double): PeerLocationEntry {
         // Random walk, but keep within radius
-        val stepMeters = 5 + kotlin.random.Random.nextDouble() * 30 // 2-17 meters per update
+        val stepMeters = 30 + kotlin.random.Random.nextDouble() * 80 // 2-17 meters per update
         
         // Get the peer's current direction and settings
         val currentDirection = simulatedPeerCurrentDirections[peerId] ?: 0.0

@@ -48,7 +48,7 @@ suspend fun saveTileWebpWithType(context: Context, type: String, zoom: Int, x: I
 }
 
 fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-    val R = 6371000.0 // meters
+    val R = 6378137.0 // meters
     val dLat = Math.toRadians(lat2 - lat1)
     val dLon = Math.toRadians(lon2 - lon1)
     val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +

@@ -17,6 +17,7 @@ enum class MovementPattern {
     URBAN_DRIVING,       // Medium variability: turns, stops, traffic patterns
     HIGHWAY_DRIVING,     // Low variability: relatively constant speed and direction
     BOATING,             // Medium-high variability: water currents, wind effects
+    STATIONARY,
     UNKNOWN              // Conservative default when pattern can't be determined
 }
 
@@ -37,7 +38,8 @@ data class MovementFeatures(
 data class Particle(
     var lat: Double, var lon: Double,
     var vLat: Double, var vLon: Double,
-    var weight: Double
+    var weight: Double,
+    var logWeight: Double = 0.0 // Log-weight for numerical stability
 )
 
 @Serializable
