@@ -5,10 +5,7 @@ import android.animation.ObjectAnimator
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
-import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.Paint
 import android.hardware.SensorManager
 import android.os.Build
 import android.os.Bundle
@@ -24,6 +21,9 @@ import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.lifecycleScope
@@ -33,6 +33,7 @@ import com.tak.lite.network.MeshtasticBluetoothProtocol
 import com.tak.lite.service.MeshForegroundService
 import com.tak.lite.ui.audio.AudioController
 import com.tak.lite.ui.channel.ChannelController
+import com.tak.lite.ui.location.CalibrationStatus
 import com.tak.lite.ui.location.LocationController
 import com.tak.lite.ui.location.LocationSource
 import com.tak.lite.ui.map.AnnotationFragment
@@ -49,9 +50,6 @@ import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import javax.inject.Inject
-import kotlin.math.abs
-import com.tak.lite.ui.location.CompassQuality
-import com.tak.lite.ui.location.CalibrationStatus
 
 val DEFAULT_US_CENTER = LatLng(39.8283, -98.5795)
 const val DEFAULT_US_ZOOM = 4.0
@@ -119,6 +117,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
@@ -245,12 +244,6 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
             getFilesDir = { filesDir },
             getDarkModePref = { prefs.getString("dark_mode", "system") ?: "system" }
         )
-        mapController.setOnStyleChangedCallback {
-            // Removed annotationController.setupAnnotationOverlay, renderAllAnnotations
-        }
-        mapController.setOnMapTypeChangedCallback { mapType ->
-            // toggle3dFab.visibility = if (mapType == com.tak.lite.ui.map.MapController.MapType.STREETS) View.VISIBLE else View.GONE
-        }
         mapController.onCreate(savedInstanceState, lastLocation)
 
         locationSourceOverlay = findViewById(R.id.locationSourceOverlay)

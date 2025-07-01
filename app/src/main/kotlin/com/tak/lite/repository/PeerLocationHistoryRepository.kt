@@ -1,10 +1,16 @@
 package com.tak.lite.repository
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.util.Log
-import com.tak.lite.model.*
-import com.tak.lite.di.PredictionFactory
+import com.tak.lite.data.model.ConfidenceCone
+import com.tak.lite.data.model.LocationPrediction
 import com.tak.lite.data.model.PredictionConfig
+import com.tak.lite.data.model.PredictionModel
+import com.tak.lite.di.PredictionFactory
+import com.tak.lite.model.LatLngSerializable
+import com.tak.lite.model.PeerLocationEntry
+import com.tak.lite.model.PeerLocationHistory
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -12,10 +18,6 @@ import kotlinx.serialization.json.Json
 import org.maplibre.android.geometry.LatLng
 import javax.inject.Inject
 import javax.inject.Singleton
-import android.content.SharedPreferences
-import com.tak.lite.data.model.ConfidenceCone
-import com.tak.lite.data.model.LocationPrediction
-import com.tak.lite.data.model.PredictionModel
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -361,17 +363,10 @@ class PeerLocationHistoryRepository @Inject constructor(
      * Calculate performance metrics
      */
     private fun calculatePerformanceMetrics(): PerformanceMetrics {
-        val predictions = _predictions.value
-        
         // Calculate actual prediction accuracy
         val recentAccuracyEntries = predictionAccuracyHistory.takeLast(100) // Last 100 measurements
         val avgPredictionTimeMs = 50.0 // Placeholder - would track actual computation time
         val totalPredictionErrors = recentAccuracyEntries.count { it.actualDistance > 1000 } // Errors > 1km
-        
-        // Calculate average accuracy
-        val avgAccuracy = if (recentAccuracyEntries.isNotEmpty()) {
-            recentAccuracyEntries.map { it.actualDistance }.average()
-        } else 0.0
         
         // Calculate confidence trend (how well confidence correlates with actual accuracy)
         val confidenceTrend = if (recentAccuracyEntries.isNotEmpty()) {

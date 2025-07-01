@@ -1,9 +1,13 @@
 package com.tak.lite.ui.channel
 
 import android.os.Bundle
+import android.view.View
 import android.widget.EditText
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -23,7 +27,19 @@ class ChannelManagementActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Enable edge-to-edge display
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        
         setContentView(R.layout.fragment_channel_management)
+        
+        // Apply top inset to root layout
+        val rootView = findViewById<View>(android.R.id.content)
+        ViewCompat.setOnApplyWindowInsetsListener(rootView) { view, windowInsets ->
+            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.setPadding(insets.left, insets.top, insets.right, 0)
+            WindowInsetsCompat.CONSUMED
+        }
         val toolbar = findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.channelManagementToolbar)
         setSupportActionBar(toolbar)
         toolbar.setNavigationOnClickListener { finish() }

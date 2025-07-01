@@ -4,10 +4,10 @@ import android.util.Log
 import com.geeksville.mesh.ATAKProtos
 import com.geeksville.mesh.MeshProtos
 import com.google.protobuf.ByteString
-import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.AnnotationColor
-import com.tak.lite.model.PointShape
 import com.tak.lite.model.LineStyle
+import com.tak.lite.model.MapAnnotation
+import com.tak.lite.model.PointShape
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -47,14 +47,12 @@ object MeshAnnotationInterop {
                     AnnotationColor.YELLOW -> "y"
                     AnnotationColor.RED -> "r"
                     AnnotationColor.BLACK -> "b"
-                    else -> "g"
                 }
                 val shapeShort = when (annotation.shape) {
                     PointShape.CIRCLE -> "c"
                     PointShape.EXCLAMATION -> "e"
                     PointShape.SQUARE -> "s"
                     PointShape.TRIANGLE -> "t"
-                    else -> "c"
                 }
                 val pos = annotation.position
                 val map = mutableMapOf<String, Any>(
@@ -95,12 +93,10 @@ object MeshAnnotationInterop {
                     AnnotationColor.YELLOW -> "y"
                     AnnotationColor.RED -> "r"
                     AnnotationColor.BLACK -> "b"
-                    else -> "g"
                 }
                 val styleShort = when (annotation.style) {
                     LineStyle.SOLID -> "s"
                     LineStyle.DASHED -> "d"
-                    else -> "s"
                 }
                 // Delta encoding with 5 decimal places
                 val absPoints = annotation.points.map { pt ->

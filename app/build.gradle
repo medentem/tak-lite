@@ -19,12 +19,12 @@ def maptileApiKey = localProperties.getProperty("MAPTILER_API_KEY", "")
 
 android {
     namespace "com.tak.lite"
-    compileSdk 34
+    compileSdk 35
 
     defaultConfig {
         applicationId "com.tak.lite"
         minSdk 26       // <— modern key
-        targetSdk 34
+        targetSdk 35
         versionCode 66
         versionName "1.0.3-alpha.36"
 
@@ -148,7 +148,7 @@ dependencies {
     implementation 'com.github.PhilJay:MPAndroidChart:3.1.0'
     
     // Google Play Billing Library
-    implementation 'com.android.billingclient:billing-ktx:6.1.0'
+    implementation 'com.android.billingclient:billing-ktx:7.0.0'
 
     // Smart replies with local model
     implementation 'com.google.mlkit:smart-reply:17.0.4'

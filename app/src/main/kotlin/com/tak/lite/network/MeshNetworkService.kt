@@ -337,7 +337,7 @@ class MeshNetworkService @Inject constructor(
         val currentLonRad = Math.toRadians(current.longitude)
         
         // Calculate new position using great circle formula
-        val angularDistance = stepMeters / earthRadius
+        var angularDistance = stepMeters / earthRadius
         val newLatRad = asin(
             sin(currentLatRad) * cos(angularDistance) + 
             cos(currentLatRad) * sin(angularDistance) * cos(angleRad)
@@ -356,7 +356,7 @@ class MeshNetworkService @Inject constructor(
         if (dist > radiusMiles * 1609.34) {
             // Snap back to edge - use great circle formula to find point on edge
             val maxDistance = radiusMiles * 1609.34
-            val angularDistance = maxDistance / earthRadius
+            angularDistance = maxDistance / earthRadius
             
             val centerLatRad = Math.toRadians(center.latitude)
             val centerLonRad = Math.toRadians(center.longitude)

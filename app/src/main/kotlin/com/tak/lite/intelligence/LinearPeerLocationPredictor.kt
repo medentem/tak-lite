@@ -9,10 +9,10 @@ import com.tak.lite.data.model.VelocityVector
 import com.tak.lite.model.LatLngSerializable
 import com.tak.lite.model.PeerLocationEntry
 import com.tak.lite.model.PeerLocationHistory
+import javax.inject.Inject
 import kotlin.math.atan2
 import kotlin.math.pow
 import kotlin.math.sqrt
-import javax.inject.Inject
 
 class LinearPeerLocationPredictor @Inject constructor() : BasePeerLocationPredictor() {
     companion object {
@@ -24,7 +24,6 @@ class LinearPeerLocationPredictor @Inject constructor() : BasePeerLocationPredic
     override fun predictPeerLocation(history: PeerLocationHistory, config: PredictionConfig): LocationPrediction? {
         val recentEntries = history.getRecentEntries(config.maxHistoryAgeMinutes)
         if (recentEntries.size < config.minHistoryEntries) return null
-        val latest = history.getLatestEntry() ?: return null
 
         // CRITICAL FIX: Validate chronological order before processing
         if (!validateEntriesChronologicalOrder(recentEntries)) {
@@ -80,7 +79,7 @@ class LinearPeerLocationPredictor @Inject constructor() : BasePeerLocationPredic
         val (headingUncertainty, speedUncertainty) = calculateUncertainties(filteredEntries)
 
         // ENHANCED: Calculate confidence incorporating velocity data quality
-        val confidence = calculateEnhancedLinearConfidence(filteredEntries, validatedSpeed, velocityConfidence, dataSource, config)
+        val confidence = calculateEnhancedLinearConfidence(filteredEntries, velocityConfidence, dataSource)
 
         Log.d(TAG, "LINEAR: Final prediction - confidence=$confidence, uncertainty=(${headingUncertainty}°, ${speedUncertainty * 100}%)")
 
@@ -248,10 +247,8 @@ class LinearPeerLocationPredictor @Inject constructor() : BasePeerLocationPredic
      */
     private fun calculateEnhancedLinearConfidence(
         entries: List<PeerLocationEntry>,
-        currentSpeed: Double,
         velocityConfidence: Double,
-        dataSource: String,
-        config: PredictionConfig
+        dataSource: String
     ): Double {
         if (entries.size < 3) return 0.5
 

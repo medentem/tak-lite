@@ -222,7 +222,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         onBleOperationFailed = { exception ->
             Log.w(TAG, "BLE operation failed, notifying packet queue: ${exception.message}")
             // Complete any pending packet responses with failure
-            queueResponse.forEach { (packetId, deferred) ->
+            queueResponse.forEach { (_, deferred) ->
                 if (!deferred.isCompleted) {
                     deferred.complete(false)
                 }
@@ -1190,7 +1190,6 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         val battery = DeviceController.batteryLevel.value
         // Batch IDs into groups that fit under 252 bytes
         var batch = mutableListOf<String>()
-        var batchSize = 0
         for (id in ids) {
             val testBatch = batch + id
             val data = com.tak.lite.util.MeshAnnotationInterop.bulkDeleteToMeshData(testBatch, nickname, battery)
@@ -1651,7 +1650,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             queueJob = null
             
             // Complete any pending responses with failure
-            queueResponse.forEach { (packetId, deferred) ->
+            queueResponse.forEach { (_, deferred) ->
                 if (!deferred.isCompleted) {
                     deferred.complete(false)
                 }

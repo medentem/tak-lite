@@ -29,13 +29,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlin.math.abs
+import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
-import kotlin.math.atan2
 
 // Enhanced data class for overlay with compass quality
 data class DirectionOverlayData(
@@ -140,7 +139,6 @@ class LocationController(
             if (compassBuffer.size > 20) {
                 compassBuffer.removeAt(0)
             }
-            Log.d("CompassDebug", "Compass buffer size: ${compassBuffer.size}, latest raw: ${normalized}°, filtered raw: ${filteredRawHeading}°")
             
             // Update tracking variables
             lastRawHeading = filteredRawHeading
@@ -149,7 +147,6 @@ class LocationController(
             
             // Get calibration status
             val calibrationStatus = getCalibrationStatus(currentAccuracy)
-            Log.d("CompassDebug", "Final result - Heading: ${filteredRawHeading}°, Cardinal: ${cardinal}, Status: ${calibrationStatus}")
             
             // Rate limit UI updates to prevent jerkiness
             val currentTime = System.currentTimeMillis()
@@ -157,17 +154,6 @@ class LocationController(
                 // Only update heading data if we're using compass as the heading source
                 val currentHeadingSource = _directionOverlayData.value.headingSource
                 if (currentHeadingSource == HeadingSource.COMPASS) {
-                    // Log comprehensive summary of the complete data flow
-                    Log.d("CompassDebug", "=== COMPASS DATA FLOW SUMMARY ===")
-                    Log.d("CompassDebug", "Raw sensor: ${rawHeading}°")
-                    Log.d("CompassDebug", "Normalized: ${normalized}°")
-                    Log.d("CompassDebug", "Filtered raw: ${filteredRawHeading}°")
-                    Log.d("CompassDebug", "Calibration status: ${calibrationStatus}")
-                    Log.d("CompassDebug", "Needs calibration: ${needsCalibration}")
-                    Log.d("CompassDebug", "Sensor accuracy: ${getAccuracyString(currentAccuracy)}")
-                    Log.d("CompassDebug", "Location: (${_directionOverlayData.value.latitude}, ${_directionOverlayData.value.longitude})")
-                    Log.d("CompassDebug", "=====================================")
-                    
                     _directionOverlayData.value = _directionOverlayData.value.copy(
                         headingDegrees = filteredRawHeading,
                         cardinal = cardinal,
@@ -176,8 +162,6 @@ class LocationController(
                         calibrationStatus = calibrationStatus
                     )
                     lastUiUpdateTime = currentTime
-                } else {
-                    Log.d("CompassDebug", "Skipping compass update - using GPS heading (${currentHeadingSource})")
                 }
             }
         }
@@ -185,9 +169,7 @@ class LocationController(
         override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
             currentAccuracy = accuracy
             needsCalibration = checkCalibrationNeeded()
-            
-            Log.d("CompassDebug", "Sensor accuracy changed: ${accuracy} (${getAccuracyString(accuracy)}), needsCalibration: ${needsCalibration}")
-            
+
             // Notify if calibration is needed
             if (needsCalibration && onCalibrationNeeded != null) {
                 onCalibrationNeeded.invoke()
@@ -250,10 +232,8 @@ class LocationController(
             val variance = calculateVariance(lastReadings)
             if (variance > calibrationThreshold) {
                 erraticReadings++
-                Log.d("CompassDebug", "Erratic reading detected - Variance: ${variance}° (threshold: ${calibrationThreshold}°), erratic count: ${erraticReadings}")
             } else {
                 erraticReadings = max(0, erraticReadings - 1)
-                Log.d("CompassDebug", "Stable reading - Variance: ${variance}°, erratic count: ${erraticReadings}")
             }
             
             val wasNeedingCalibration = needsCalibration
@@ -407,14 +387,12 @@ class LocationController(
         // Update location tracking for heading
         lastLatitude = location.latitude
         lastLongitude = location.longitude
-        Log.d("CompassDebug", "Location update - Lat: ${location.latitude}, Lon: ${location.longitude}")
 
         // Add to movement buffer for heading
         movementBuffer.add(location)
         if (movementBuffer.size > 10) {
             movementBuffer.removeAt(0)
         }
-        Log.d("CompassDebug", "Movement buffer size: ${movementBuffer.size}")
 
         // Update overlay data (heading will be updated by sensor logic later)
         val useGpsHeading = location.speed > 3.0f && movementBuffer.size >= 2
@@ -622,7 +600,6 @@ class LocationController(
     fun getComprehensiveCalibrationStatus(): CalibrationStatus {
         // Check if calibration has expired
         if (isCalibrationExpired()) {
-            Log.d("LocationController", "Calibration has expired")
             return CalibrationStatus.UNKNOWN
         }
         

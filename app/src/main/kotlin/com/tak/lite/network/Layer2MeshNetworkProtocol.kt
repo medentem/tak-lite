@@ -11,7 +11,6 @@ import com.tak.lite.di.MeshConnectionState
 import com.tak.lite.di.MeshProtocol
 import com.tak.lite.model.ConnectionMetrics
 import com.tak.lite.model.DiscoveryPacket
-import com.tak.lite.model.LatLngSerializable
 import com.tak.lite.model.Layer2AnnotationPacket
 import com.tak.lite.model.Layer2LocationPacket
 import com.tak.lite.model.MapAnnotation
@@ -410,7 +409,7 @@ class Layer2MeshNetworkProtocol @Inject constructor(
             val peerId = "${packet.address.hostAddress}:${packet.port}"
             val peer = MeshPeer(
                 id = peerId,
-                ipAddress = packet.address.hostAddress,
+                ipAddress = packet.address.hostAddress ?: "Unknown",
                 lastSeen = System.currentTimeMillis(),
                 nickname = discoveryInfo.nickname,
                 capabilities = discoveryInfo.capabilities,
@@ -420,7 +419,7 @@ class Layer2MeshNetworkProtocol @Inject constructor(
             // Update peer cache
             peerCache[peerId] = CachedPeer(
                 id = peerId,
-                ipAddress = packet.address.hostAddress,
+                ipAddress = packet.address.hostAddress ?: "Unknown",
                 nickname = discoveryInfo.nickname,
                 lastSeen = System.currentTimeMillis(),
                 capabilities = discoveryInfo.capabilities,

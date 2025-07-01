@@ -375,7 +375,7 @@ class SettingsActivity : BaseActivity() {
         protocol.configStepCounters.let { countersFlow ->
             lifecycleScope.launch {
                 repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
-                    countersFlow.collect { counters ->
+                    countersFlow.collect { _ ->
                         // Only update if we're in a downloading state and connected
                         val currentStep = protocol.configDownloadStep?.value
                         val isConnected = protocol.connectionState.value !is MeshConnectionState.Disconnected
@@ -505,8 +505,6 @@ class SettingsActivity : BaseActivity() {
         // Get stored calibration data
         val prefs = getSharedPreferences("compass_calibration", MODE_PRIVATE)
         val lastCalibrationTime = prefs.getLong("calibration_timestamp", 0L)
-        val lastCalibrationQuality = prefs.getFloat("calibration_quality", 0f)
-        val osCalibrationTriggered = prefs.getBoolean("os_calibration_triggered", false)
         
         // Update status text
         val statusText = when (calibrationStatus) {
@@ -621,7 +619,7 @@ class SettingsActivity : BaseActivity() {
                     .setItems(deviceNames.toTypedArray()) { _, which ->
                         val deviceInfo = discoveredDevices[which]
                         bluetoothStatusText.text = "Connecting to: ${deviceInfo.name} (${deviceInfo.address})..."
-                        protocol.connectToDevice(deviceInfo) { success ->
+                        protocol.connectToDevice(deviceInfo) { _ ->
                             // UI will update via state observer
                         }
                     }

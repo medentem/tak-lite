@@ -550,7 +550,7 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
             }
 
             // ENHANCED: Calculate confidence incorporating velocity data quality
-            val confidence = calculateEnhancedParticleConfidence(predictedParticles, velocityConfidence, dataSource, config)
+            val confidence = calculateEnhancedParticleConfidence(predictedParticles, velocityConfidence, dataSource)
 
             // Validate velocity calculations
             if (predSpeed.isNaN() || predSpeed.isInfinite() || predHeading.isNaN() || predHeading.isInfinite()) {
@@ -616,8 +616,7 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
     private fun calculateEnhancedParticleConfidence(
         particles: List<Particle>,
         velocityConfidence: Double,
-        dataSource: String,
-        config: PredictionConfig
+        dataSource: String
     ): Double {
         val avgLat = particles.sumOf { it.lat * it.weight }
         val avgLon = particles.sumOf { it.lon * it.weight }
@@ -762,7 +761,7 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
         
         // Log individual particle contributions for first few particles
         for (i in 0 until minOf(5, normalizedParticleVelocities.size)) {
-            val (speed, heading, weight) = normalizedParticleVelocities[i]
+            val (_, heading, weight) = normalizedParticleVelocities[i]
             val sinContrib = sin(heading * DEG_TO_RAD) * weight
             val cosContrib = cos(heading * DEG_TO_RAD) * weight
             Log.d(TAG, "COORDINATE_ANALYSIS: Particle $i - original heading=${particleVelocities[i].second.toInt()}°, normalized heading=${heading.toInt()}°, weight=${String.format("%.4f", weight)}")
@@ -901,7 +900,6 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
 
         val newParticles = mutableListOf<Particle>()
         val step = sum / particles.size
-        var currentWeight = 0.0
         var particleIndex = 0
 
         repeat(particles.size) { i ->
