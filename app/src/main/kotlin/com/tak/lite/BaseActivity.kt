@@ -35,8 +35,12 @@ abstract class BaseActivity : AppCompatActivity() {
     private fun applyTopInsetToRoot() {
         val rootView = findViewById<View>(android.R.id.content)
         ViewCompat.setOnApplyWindowInsetsListener(rootView) { view, windowInsets ->
-            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
-            view.setPadding(insets.left, insets.top, insets.right, 0)
+            val systemBars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val ime = windowInsets.getInsets(WindowInsetsCompat.Type.ime())
+            
+            // Apply system bar insets to top, left, and right
+            // Apply IME (keyboard) insets to bottom
+            view.setPadding(systemBars.left, systemBars.top, systemBars.right, ime.bottom)
             WindowInsetsCompat.CONSUMED
         }
     }

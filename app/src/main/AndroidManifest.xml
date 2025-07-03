@@ -59,7 +59,8 @@
         <activity
             android:name=".MessageActivity"
             android:exported="false"
-            android:theme="@style/Theme.TakLite" />
+            android:theme="@style/Theme.TakLite"
+            android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".ui.location.CompassCalibrationActivity"
             android:exported="false"
