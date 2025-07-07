@@ -724,6 +724,53 @@ enum HardwareModel {
    */
   CROWPANEL = 97;
 
+  /**
+   * Lilygo LINK32 board with sensors
+   */
+  LINK_32 = 98;
+
+  /**
+   * Seeed Tracker L1
+   */
+  SEEED_WIO_TRACKER_L1 = 99;
+
+  /**
+   * Seeed Tracker L1 EINK driver
+   */
+  SEEED_WIO_TRACKER_L1_EINK = 100;
+
+  /*
+   * Reserved ID for future and past use
+   */
+  QWANTZ_TINY_ARMS = 101;
+  
+  /**
+   * Lilygo T-Deck Pro
+   */
+  T_DECK_PRO = 102;
+
+  /**
+   * Lilygo TLora Pager
+   */
+  T_LORA_PAGER = 103;
+
+  /**
+   * GAT562 Mesh Trial Tracker
+   */
+  GAT562_MESH_TRIAL_TRACKER = 104;
+  
+  /**
+  * RAKwireless WisMesh Tag 
+  */
+  WISMESH_TAG = 105;
+
+  /**
+  * RAKwireless WisBlock Core RAK3312 https://docs.rakwireless.com/product-categories/wisduo/rak3112-module/overview/
+  */
+  RAK3312 = 106;
+
+
+
   /*
    * ------------------------------------------------------------------------------------------------------------------------------------------
    * Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
@@ -1009,6 +1056,28 @@ message Data {
    * Bitfield for extra flags. First use is to indicate that user approves the packet being uploaded to MQTT.
    */
   optional uint32 bitfield = 9;
+}
+
+/*
+ * The actual over-the-mesh message doing KeyVerification
+ */
+message KeyVerification {
+
+  /*
+   * random value Selected by the requesting node
+   */
+  uint64 nonce = 1;
+
+  /*
+   * The final authoritative hash, only to be sent by NodeA at the end of the handshake
+   */
+  bytes hash1 = 2;
+
+  /*
+   * The intermediary hash (actually derived from hash1),
+   * sent from NodeB to NodeA in response to the initial message.
+   */
+  bytes hash2 = 3;
 }
 
 /*
@@ -1459,6 +1528,13 @@ message NodeInfo {
    * Persists between NodeDB internal clean ups
    */
   bool is_ignored = 11;
+
+  /*
+   * True if node public key has been verified.
+   * Persists between NodeDB internal clean ups
+   * LSB 0 of the bitfield
+   */
+  bool is_key_manually_verified = 12;
 }
 
 /*
@@ -1793,8 +1869,33 @@ message ClientNotification {
    * The message body of the notification
    */
   string message = 4;
+
+  oneof payload_variant {
+    KeyVerificationNumberInform key_verification_number_inform = 11;
+    KeyVerificationNumberRequest key_verification_number_request = 12;
+    KeyVerificationFinal key_verification_final = 13;
+    DuplicatedPublicKey duplicated_public_key = 14;
+    LowEntropyKey low_entropy_key = 15;
+  }
 }
 
+message KeyVerificationNumberInform {
+  uint64 nonce = 1;
+  string remote_longname = 2;
+  uint32 security_number = 3;
+}
+message KeyVerificationNumberRequest {
+  uint64 nonce = 1;
+  string remote_longname = 2;
+}
+message KeyVerificationFinal {
+  uint64 nonce = 1;
+  string remote_longname = 2;
+  bool isSender = 3;
+  string verification_characters = 4;
+}
+message DuplicatedPublicKey {}
+message LowEntropyKey {}
 /*
  * Individual File info for the device
  */
