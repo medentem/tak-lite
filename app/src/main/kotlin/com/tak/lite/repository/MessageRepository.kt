@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
+import androidx.core.content.ContextCompat
 import com.tak.lite.data.model.ChannelMessage
 import com.tak.lite.data.model.DirectMessageChannel
 import com.tak.lite.network.MeshProtocolProvider
@@ -12,14 +13,12 @@ import com.tak.lite.notification.MessageNotificationManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
-import androidx.lifecycle.viewModelScope
-import com.tak.lite.data.model.MessageStatus
 
 @Singleton
 class MessageRepository @Inject constructor(
@@ -81,13 +80,15 @@ class MessageRepository @Inject constructor(
         }
     }
 
-    fun getCurrentUserShortName(): String? {
+    fun getCurrentUserShortName(): String {
         val protocol = meshProtocolProvider.protocol.value
         val nodeId = protocol.localNodeIdOrNickname.value
-        if (protocol is com.tak.lite.network.MeshtasticBluetoothProtocol) {
-            return protocol.getNodeInfoForPeer(nodeId ?: "")?.user?.shortName
-        }
-        return nodeId
+        return protocol.getPeerName(nodeId ?: "") ?: "Unknown Peer"
+    }
+
+    fun getCurrentUserId(): String? {
+        val protocol = meshProtocolProvider.protocol.value
+        return protocol.localNodeIdOrNickname.value
     }
 
     fun sendMessage(channelId: String, content: String) {

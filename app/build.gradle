@@ -5,6 +5,7 @@ plugins {
     id 'com.google.dagger.hilt.android'
     id 'org.jetbrains.kotlin.plugin.serialization'
     id 'com.google.protobuf'
+    id 'kotlin-parcelize'
 }
 
 // Load MAPTILER_API_KEY from local.properties after plugins block
@@ -54,6 +55,7 @@ android {
     buildFeatures {
         viewBinding true
         buildConfig true
+        aidl true
     }
 
     kapt {

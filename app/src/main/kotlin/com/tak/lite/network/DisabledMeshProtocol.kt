@@ -1,7 +1,6 @@
 package com.tak.lite.network
 
 import android.content.Context
-import android.util.Log
 import com.tak.lite.data.model.ChannelMessage
 import com.tak.lite.data.model.DirectMessageChannel
 import com.tak.lite.data.model.IChannel
@@ -117,6 +116,16 @@ class DisabledMeshProtocol(private val context: Context) : MeshProtocol {
     }
 
     override fun getPeerPublicKey(peerId: String): ByteArray? {
+        // No-op
+        return null
+    }
+
+    override fun getPeerName(peerId: String): String? {
+        // No-op
+        return null
+    }
+
+    override fun getPeerLastHeard(peerId: String): Long? {
         // No-op
         return null
     }

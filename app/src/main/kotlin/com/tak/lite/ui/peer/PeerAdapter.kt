@@ -16,9 +16,9 @@ import com.tak.lite.R
 import com.tak.lite.network.MeshPeer
 import com.tak.lite.viewmodel.MeshNetworkViewModel
 import com.tak.lite.viewmodel.MessageViewModel
-import java.util.concurrent.TimeUnit
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
+import java.util.concurrent.TimeUnit
 
 class PeerAdapter(
     private val onChatClick: (MeshPeer) -> Unit,
@@ -182,9 +182,8 @@ class PeerAdapter(
                 lifecycleScope.launch {
                     try {
                         // Get node info and create/get direct message channel
-                        val nodeInfo = meshNetworkViewModel.getNodeInfo(peer.id)
-                        val peerLongName = nodeInfo?.user?.longName
-                        val channel = messageViewModel.getOrCreateDirectMessageChannel(peer.id, peerLongName)
+                        val peerName = meshNetworkViewModel.getPeerName(peer.id)
+                        val channel = messageViewModel.getOrCreateDirectMessageChannel(peer.id, peerName)
                         Log.d("PeerAdapter", "Get or create direct message channel: ${channel?.id} for peerId: ${peer.id}")
 
                         if (channel != null) {

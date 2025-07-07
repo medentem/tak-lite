@@ -78,6 +78,8 @@ interface MeshProtocol {
     // Direct message operations
     fun sendDirectMessage(peerId: String, content: String)
     fun getPeerPublicKey(peerId: String): ByteArray?
+    fun getPeerName(peerId: String): String?
+    fun getPeerLastHeard(peerId: String): Long?
     fun getOrCreateDirectMessageChannel(peerId: String): DirectMessageChannel?
 
     // Diagnostic and reset operations
@@ -90,14 +92,23 @@ interface MeshProtocol {
 sealed class DeviceInfo {
     abstract val name: String
     abstract val address: String
+    abstract val connectionType: String
     
     data class BluetoothDevice(val device: android.bluetooth.BluetoothDevice) : DeviceInfo() {
         override val name: String get() = device.name ?: "Unknown Device"
         override val address: String get() = device.address
+        override val connectionType: String = "bluetooth"
+    }
+    
+    data class AidlDevice(val appName: String) : DeviceInfo() {
+        override val name: String = appName
+        override val address: String = "aidl"
+        override val connectionType: String = "aidl"
     }
     
     data class NetworkDevice(val ipAddress: String, val port: Int) : DeviceInfo() {
-        override val name: String get() = "Network Device ($ipAddress:$port)"
-        override val address: String get() = "$ipAddress:$port"
+        override val name: String = "Network Device ($ipAddress:$port)"
+        override val address: String = "$ipAddress:$port"
+        override val connectionType: String = "network"
     }
 }

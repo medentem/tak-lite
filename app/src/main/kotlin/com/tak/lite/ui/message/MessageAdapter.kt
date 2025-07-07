@@ -19,13 +19,14 @@ import java.util.Date
 import java.util.Locale
 
 class MessageAdapter(
-    private val currentUserShortName: String?
+    private val currentUserShortName: String?,
+    private val currentUserId: String?
 ) : ListAdapter<ChannelMessage, MessageAdapter.MessageViewHolder>(MessageDiffCallback()) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): MessageViewHolder {
         val view = LayoutInflater.from(parent.context)
             .inflate(R.layout.item_message, parent, false)
-        return MessageViewHolder(view, currentUserShortName)
+        return MessageViewHolder(view, currentUserShortName, currentUserId)
     }
 
     override fun onBindViewHolder(holder: MessageViewHolder, position: Int) {
@@ -34,7 +35,8 @@ class MessageAdapter(
 
     class MessageViewHolder(
         itemView: View,
-        private val currentUserShortName: String?
+        private val currentUserShortName: String?,
+        private val currentUserId: String?
     ) : RecyclerView.ViewHolder(itemView) {
         private val senderName: TextView = itemView.findViewById(R.id.senderName)
         private val messageContent: TextView = itemView.findViewById(R.id.messageContent)
@@ -56,7 +58,7 @@ class MessageAdapter(
             constraintSet.clone(constraintLayout)
 
             // Check if this is our message
-            val isOurMessage = message.senderShortName == currentUserShortName
+            val isOurMessage = message.senderId == currentUserId
             
             messageStatusLayout.visibility = if (isOurMessage) View.VISIBLE else View.GONE
 

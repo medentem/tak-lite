@@ -1008,6 +1008,14 @@ class Layer2MeshNetworkProtocol @Inject constructor(
         TODO("Not yet implemented")
     }
 
+    override fun getPeerName(peerId: String): String? {
+        TODO("Not yet implemented")
+    }
+
+    override fun getPeerLastHeard(peerId: String): Long? {
+        TODO("Not yet implemented")
+    }
+
     override fun getOrCreateDirectMessageChannel(peerId: String): DirectMessageChannel? {
         return null
     }
@@ -1052,6 +1060,10 @@ class Layer2MeshNetworkProtocol @Inject constructor(
     override fun connectToDevice(deviceInfo: com.tak.lite.di.DeviceInfo, onConnected: (Boolean) -> Unit) {
         when (deviceInfo) {
             is com.tak.lite.di.DeviceInfo.BluetoothDevice -> {
+                onConnected(false)
+            }
+            is com.tak.lite.di.DeviceInfo.AidlDevice -> {
+                // Layer2 protocol doesn't support AIDL devices
                 onConnected(false)
             }
             is com.tak.lite.di.DeviceInfo.NetworkDevice -> {

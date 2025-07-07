@@ -424,6 +424,14 @@ class MeshNetworkService @Inject constructor(
         _phoneLocation.value = latLng
     }
 
+    fun getPeerName(peerId: String): String? {
+        return meshProtocol.getPeerName(peerId)
+    }
+
+    fun getPeerLastHeard(peerId: String): Long? {
+        return meshProtocol.getPeerLastHeard(peerId)
+    }
+
     private fun startLocationHistoryCleanup() {
         scope.launch {
             while (true) {

@@ -1,6 +1,5 @@
 package com.tak.lite.ui.map
 
-import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.PointF
@@ -8,7 +7,6 @@ import android.util.Log
 import android.view.View
 import android.widget.Toast
 import androidx.fragment.app.Fragment
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import com.tak.lite.MessageActivity
 import com.tak.lite.databinding.ActivityMainBinding
@@ -19,13 +17,11 @@ import com.tak.lite.model.PointShape
 import com.tak.lite.viewmodel.AnnotationViewModel
 import com.tak.lite.viewmodel.MeshNetworkViewModel
 import com.tak.lite.viewmodel.MessageViewModel
+import kotlinx.coroutines.launch
 import org.maplibre.android.annotations.Marker
 import org.maplibre.android.annotations.Polygon
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
-import kotlinx.coroutines.launch
-import dagger.hilt.android.AndroidEntryPoint
-import javax.inject.Inject
 
 class AnnotationController(
     private val fragment: Fragment,
@@ -469,11 +465,10 @@ class AnnotationController(
     private fun handleDirectMessage(peerId: String) {
         fragment.viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val nodeInfo = meshNetworkViewModel.getNodeInfo(peerId)
-                val peerLongName = nodeInfo?.user?.longName
+                val peerName = meshNetworkViewModel.getPeerName(peerId)
                 
                 // Create or get the direct message channel
-                val channel = messageViewModel.getOrCreateDirectMessageChannel(peerId, peerLongName)
+                val channel = messageViewModel.getOrCreateDirectMessageChannel(peerId, peerName)
 
                 if (channel != null) {
                     // Launch the MessageActivity using the companion object method
@@ -488,8 +483,7 @@ class AnnotationController(
 
     private fun handleLocationRequest(peerId: String) {
         fragment.viewLifecycleOwner.lifecycleScope.launch {
-            val nodeInfo = meshNetworkViewModel.getNodeInfo(peerId)
-            val peerName = nodeInfo?.user?.shortName ?: nodeInfo?.user?.longName ?: peerId
+            val peerName = meshNetworkViewModel.getPeerName(peerId)
             Toast.makeText(fragment.requireContext(), "Waiting for location update from $peerName", Toast.LENGTH_LONG).show()
             meshNetworkViewModel.requestPeerLocation(peerId, onLocationReceived = { timeout ->
                 fragment.viewLifecycleOwner.lifecycleScope.launch {
@@ -506,8 +500,9 @@ class AnnotationController(
     private fun handleViewInfo(peerId: String) {
         // Launch a coroutine to handle the suspend function call
         (fragment as? androidx.fragment.app.Fragment)?.viewLifecycleOwner?.lifecycleScope?.launch {
-            val nodeInfo = meshNetworkViewModel.getNodeInfo(peerId)
-            annotationOverlayView.showPeerPopover(peerId, nodeInfo)
+            val peerName = meshNetworkViewModel.getPeerName(peerId)
+            val peerLastHeard = meshNetworkViewModel.getPeerLastHeard(peerId)
+            annotationOverlayView.showPeerPopover(peerId, peerName, peerLastHeard)
         }
     }
 

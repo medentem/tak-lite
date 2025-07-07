@@ -5,12 +5,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tak.lite.data.model.ChannelMessage
 import com.tak.lite.data.model.DirectMessageChannel
-import com.tak.lite.data.model.IChannel
-import com.tak.lite.repository.MessageRepository
 import com.tak.lite.repository.ChannelRepository
-import com.tak.lite.network.MeshProtocolProvider
+import com.tak.lite.repository.MessageRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -48,6 +47,10 @@ class MessageViewModel @Inject constructor(
 
     fun getCurrentUserShortName(): String? {
         return messageRepository.getCurrentUserShortName()
+    }
+
+    fun getCurrentUserId(): String? {
+        return messageRepository.getCurrentUserId()
     }
 
     fun sendMessage(channelId: String, content: String) {

@@ -3,7 +3,6 @@ package com.tak.lite.viewmodel
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.geeksville.mesh.MeshProtos
 import com.tak.lite.data.model.ConfidenceCone
 import com.tak.lite.data.model.LocationPrediction
 import com.tak.lite.model.PacketSummary
@@ -160,14 +159,18 @@ class MeshNetworkViewModel @Inject constructor(
     fun setPhoneLocation(latLng: LatLng) {
         meshNetworkRepository.setPhoneLocation(latLng)
     }
+
+    fun getPeerName(peerId: String): String? {
+        return meshNetworkRepository.getPeerName(peerId)
+    }
+
+    fun getPeerLastHeard(peerId: String): Long? {
+        return meshNetworkRepository.getPeerLastHeard(peerId)
+    }
     
     override fun onCleared() {
         super.onCleared()
         meshNetworkRepository.cleanup()
-    }
-    
-    suspend fun getNodeInfo(peerId: String): MeshProtos.NodeInfo? {
-        return meshNetworkRepository.getNodeInfo(peerId)
     }
 }
 

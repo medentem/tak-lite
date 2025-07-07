@@ -14,13 +14,12 @@ import android.os.Looper
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
-import com.geeksville.mesh.MeshProtos
 import com.tak.lite.data.model.AnnotationCluster
 import com.tak.lite.model.AnnotationColor
 import com.tak.lite.model.LineStyle
 import com.tak.lite.model.MapAnnotation
-import com.tak.lite.model.PointShape
 import com.tak.lite.model.PeerLocationEntry
+import com.tak.lite.model.PointShape
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.Projection
 import kotlin.math.atan2
@@ -133,7 +132,8 @@ class AnnotationOverlayView @JvmOverloads constructor(
     private val LABEL_DISPLAY_DURATION = 8000L // 3 seconds
     // --- Peer popover state ---
     private var peerPopoverPeerId: String? = null
-    private var peerPopoverNodeInfo: MeshProtos.NodeInfo? = null
+    private var peerPopoverPeerName: String? = null
+    private var peerPopoverPeerLastHeard: Long? = null
     private var peerPopoverDismissHandler: Handler? = null
     private val PEER_POPOVER_DISPLAY_DURATION = 5000L
 
@@ -453,7 +453,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
             val latLng = peerLocations[peerId]
             val pos = latLng?.let { projection?.toScreenLocation(it.toLatLng()) }?.let { PointF(it.x, it.y) }
             if (pos != null) {
-                drawPeerPopover(canvas, peerId, peerPopoverNodeInfo, pos)
+                drawPeerPopover(canvas, peerId, peerPopoverPeerName, peerPopoverPeerLastHeard, pos)
             }
         }
     }
@@ -1327,27 +1327,27 @@ class AnnotationOverlayView @JvmOverloads constructor(
         return null
     }
 
-    fun showPeerPopover(peerId: String, nodeInfo: MeshProtos.NodeInfo?) {
+    fun showPeerPopover(peerId: String, peerName: String?, lastHeard: Long?) {
         peerPopoverPeerId = peerId
-        peerPopoverNodeInfo = nodeInfo
+        peerPopoverPeerName = peerName
+        peerPopoverPeerLastHeard = lastHeard
         peerPopoverDismissHandler?.removeCallbacksAndMessages(null)
         peerPopoverDismissHandler = Handler(Looper.getMainLooper())
         peerPopoverDismissHandler?.postDelayed({
             peerPopoverPeerId = null
-            peerPopoverNodeInfo = null
+            peerPopoverPeerName = null
+            peerPopoverPeerName = null
             invalidate()
         }, PEER_POPOVER_DISPLAY_DURATION.toLong())
         invalidate()
     }
 
-    private fun drawPeerPopover(canvas: Canvas, peerId: String, nodeInfo: MeshProtos.NodeInfo?, pos: PointF) {
+    private fun drawPeerPopover(canvas: Canvas, peerId: String, peerName: String?, lastHeard: Long?, pos: PointF) {
         // Compose info lines
         val lines = mutableListOf<String>()
-        val user = nodeInfo?.user
-        val shortName = user?.shortName ?: "(unknown)"
-        if (shortName.isNotBlank()) {
+        if (!peerName.isNullOrEmpty()) {
             // Add "(Your Device)" suffix if this is the connected node
-            val displayName = if (peerId == connectedNodeId) "$shortName (Your Device)" else shortName
+            val displayName = if (peerId == connectedNodeId) "$peerName (Your Device)" else peerName
             lines.add(displayName)
         }
 
@@ -1364,7 +1364,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
             lines.add(String.format("%.1f mi away", distMiles))
         }
 
-        val lastSeen = nodeInfo?.lastHeard?.toLong() ?: 0L
+        val lastSeen = lastHeard ?: 0L
         if (lastSeen > 0) {
             val now = System.currentTimeMillis() / 1000
             val ageSec = now - lastSeen
@@ -1449,7 +1449,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
     fun hideAllPopovers() {
         hidePoiLabel()
         peerPopoverPeerId = null
-        peerPopoverNodeInfo = null
+        peerPopoverPeerName = null
         peerPopoverDismissHandler?.removeCallbacksAndMessages(null)
         invalidate()
     }

@@ -80,7 +80,8 @@ class MessageActivity : BaseActivity() {
         // Setup RecyclerView
         // Get current user's short name from the protocol
         val currentUserShortName = viewModel.getCurrentUserShortName()
-        adapter = MessageAdapter(currentUserShortName)
+        val currentUserId = viewModel.getCurrentUserId()
+        adapter = MessageAdapter(currentUserShortName, currentUserId)
         messageList.layoutManager = LinearLayoutManager(this).apply {
             stackFromEnd = true
         }

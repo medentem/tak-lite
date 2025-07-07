@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import android.util.Log
 import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
@@ -42,6 +43,8 @@ class SettingsActivity : BaseActivity() {
     private lateinit var minLineSegmentDistEditText: com.google.android.material.textfield.TextInputEditText
     private lateinit var bluetoothConnectButton: Button
     private lateinit var bluetoothStatusText: TextView
+    private lateinit var aidlConnectButton: com.google.android.material.button.MaterialButton
+    private lateinit var aidlStatusText: TextView
     private lateinit var darkModeSpinner: AutoCompleteTextView
     private lateinit var keepScreenAwakeSwitch: SwitchMaterial
     private lateinit var simulatePeersSwitch: SwitchMaterial
@@ -50,6 +53,9 @@ class SettingsActivity : BaseActivity() {
     private lateinit var meshNetworkTypeLayout: com.google.android.material.textfield.TextInputLayout
     private lateinit var unlockAppButton: com.google.android.material.button.MaterialButton
     private var connectedDevice: BluetoothDevice? = null
+    
+    private lateinit var currentProtocol: com.tak.lite.di.MeshProtocol
+    
     private val mapModeOptions = listOf("Last Used", "Street", "Satellite", "Hybrid")
     private val mapModeEnumValues = listOf(
         MapController.MapType.LAST_USED,
@@ -72,7 +78,6 @@ class SettingsActivity : BaseActivity() {
         )
     }
     private val REQUEST_CODE_BLUETOOTH_PERMISSIONS = 1002
-    private var isBluetoothConnected: Boolean = false
     private lateinit var configProgressBar: android.widget.ProgressBar
     private lateinit var configProgressText: TextView
     private lateinit var backgroundProcessingSwitch: SwitchMaterial
@@ -85,6 +90,12 @@ class SettingsActivity : BaseActivity() {
     private val REQUEST_CODE_NOTIFICATION_PERMISSION = 3001
     private val REQUEST_CODE_ALL_PERMISSIONS = 4001
     private val REQUEST_CODE_COMPASS_CALIBRATION = 5001
+    
+    // Protocol observation jobs
+    private var protocolJob: kotlinx.coroutines.Job? = null
+    private var connectionStateJob: kotlinx.coroutines.Job? = null
+    private var configStepJob: kotlinx.coroutines.Job? = null
+    private var configCounterJob: kotlinx.coroutines.Job? = null
     
     // Compass sensor monitoring
     private lateinit var sensorManager: android.hardware.SensorManager
@@ -117,6 +128,8 @@ class SettingsActivity : BaseActivity() {
         minLineSegmentDistEditText = findViewById(R.id.minLineSegmentDistEditText)
         bluetoothConnectButton = findViewById(R.id.bluetoothConnectButton)
         bluetoothStatusText = findViewById(R.id.bluetoothStatusText)
+        aidlConnectButton = findViewById(R.id.aidlConnectButton)
+        aidlStatusText = findViewById(R.id.aidlStatusText)
         darkModeSpinner = findViewById(R.id.darkModeSpinner)
         keepScreenAwakeSwitch = findViewById(R.id.keepScreenAwakeSwitch)
         simulatePeersSwitch = findViewById(R.id.simulatePeersSwitch)
@@ -152,7 +165,7 @@ class SettingsActivity : BaseActivity() {
         val adapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, mapModeOptions)
         mapModeSpinner.setAdapter(adapter)
 
-        val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
+        val prefs = applicationContext.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
         val savedMapMode = prefs.getString("startup_map_mode", "LAST_USED")
         val selectedIndex = mapModeEnumValues.indexOfFirst { it.name == savedMapMode } .takeIf { it >= 0 } ?: 0
         mapModeSpinner.setText(mapModeOptions[selectedIndex], false)
@@ -186,27 +199,100 @@ class SettingsActivity : BaseActivity() {
             bluetoothStatusText.text = "Last connected: $savedDeviceName ($savedDeviceAddr)"
         }
 
-        updateBluetoothButtonState()
+        // Setup AIDL connect button
+        aidlConnectButton.setOnClickListener {
+            // Prevent rapid clicking by disabling the button temporarily
+            aidlConnectButton.isEnabled = false
+            
+            // Use current protocol reference
+            val protocol = currentProtocol
+            val connectionState = protocol.connectionState.value
 
-        val currentProtocol = meshProtocolProvider.protocol.value
+            Log.d("SettingsActivity", "AIDL button clicked - protocol: ${protocol.javaClass.simpleName}, connectionState: $connectionState")
+            Log.d("SettingsActivity", "AIDL button clicked - currentProtocol reference: ${currentProtocol.javaClass.simpleName}")
+
+            // Verify we're using the correct protocol type
+            if (protocol !is com.tak.lite.network.MeshtasticAidlProtocol) {
+                Log.w("SettingsActivity", "AIDL button clicked but protocol is not MeshtasticAidlProtocol: ${protocol.javaClass.simpleName}")
+                aidlConnectButton.isEnabled = true
+                return@setOnClickListener
+            }
+
+            if (connectionState is MeshConnectionState.Connected) {
+                Log.d("SettingsActivity", "AIDL disconnect button clicked - disconnecting...")
+                protocol.disconnectFromDevice()
+                // Re-enable button after a short delay
+                aidlConnectButton.postDelayed({
+                    aidlConnectButton.isEnabled = true
+                }, 1000) // 1 second delay
+            } else {
+                val status = protocol.checkMeshtasticAppStatus()
+                if (status.contains("not installed")) {
+                    checkMeshtasticAppInstallation()
+                    aidlConnectButton.isEnabled = true
+                    return@setOnClickListener
+                }
+                if (status.contains("service may not be running")) {
+                    android.app.AlertDialog.Builder(this)
+                        .setTitle("Meshtastic App Not Running")
+                        .setMessage("Please open the Meshtastic app and keep it running in the background.")
+                        .setPositiveButton("OK", null)
+                        .show()
+                    aidlConnectButton.isEnabled = true
+                    return@setOnClickListener
+                }
+                Log.d("SettingsActivity", "AIDL connect button clicked - connecting...")
+                protocol.connectToDevice(com.tak.lite.di.DeviceInfo.AidlDevice("Meshtastic App")) { _ ->
+                    // UI will update via state observer
+                    aidlConnectButton.isEnabled = true
+                }
+            }
+        }
 
         bluetoothConnectButton.setOnClickListener {
-            val protocol = meshProtocolProvider.protocol.value
-            if (protocol.connectionState.value is MeshConnectionState.Connected) {
+            // Prevent rapid clicking by disabling the button temporarily
+            bluetoothConnectButton.isEnabled = false
+
+            // Use current protocol reference
+            val protocol = currentProtocol
+            val connectionState = protocol.connectionState.value
+
+            Log.d("SettingsActivity", "Bluetooth button clicked - protocol: ${protocol.javaClass.simpleName}, connectionState: $connectionState")
+            Log.d("SettingsActivity", "Bluetooth button clicked - currentProtocol reference: ${currentProtocol.javaClass.simpleName}")
+
+            // Verify we're using the correct protocol type
+            if (protocol !is com.tak.lite.network.MeshtasticBluetoothProtocol) {
+                Log.w("SettingsActivity", "Bluetooth button clicked but protocol is not MeshtasticBluetoothProtocol: ${protocol.javaClass.simpleName}")
+                bluetoothConnectButton.isEnabled = true
+                return@setOnClickListener
+            }
+
+            if (connectionState is MeshConnectionState.Connected) {
+                Log.d("SettingsActivity", "Bluetooth disconnect button clicked - disconnecting...")
                 protocol.disconnectFromDevice()
+                // Re-enable button after a short delay
+                bluetoothConnectButton.postDelayed({
+                    bluetoothConnectButton.isEnabled = true
+                }, 1000) // 1 second delay
             } else {
                 when {
                     !isBluetoothEnabled() -> {
                         promptEnableBluetooth()
+                        bluetoothConnectButton.isEnabled = true
                     }
                     !isLocationEnabled() -> {
                         promptEnableLocation()
+                        bluetoothConnectButton.isEnabled = true
                     }
                     !hasBluetoothPermissions() -> {
                         requestBluetoothPermissions()
+                        bluetoothConnectButton.isEnabled = true
                     }
                     else -> {
-                        showDeviceScanDialog(protocol)
+                        Log.d("SettingsActivity", "Bluetooth connect button clicked - scanning...")
+                        showDeviceScanDialog(currentProtocol)
+                        // Button will be re-enabled when scan dialog closes or connection completes
+                        // This is handled by the connection state observer
                     }
                 }
             }
@@ -214,10 +300,10 @@ class SettingsActivity : BaseActivity() {
 
         // Setup mesh network adapter spinner
         val meshNetworkTypeSpinner = findViewById<com.google.android.material.textfield.MaterialAutoCompleteTextView>(R.id.meshNetworkTypeSpinner)
-        val meshNetworkOptions = listOf("Layer 2", "Meshtastic")
+        val meshNetworkOptions = listOf("Layer 2", "Meshtastic (Bluetooth)", "Meshtastic (App)")
         val meshAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, meshNetworkOptions)
         meshNetworkTypeSpinner.setAdapter(meshAdapter)
-        
+
         // Get saved mesh type, defaulting to "Meshtastic"
         var savedMeshType = prefs.getString("mesh_network_type", null)
         if (savedMeshType == null) {
@@ -225,169 +311,83 @@ class SettingsActivity : BaseActivity() {
             savedMeshType = "Meshtastic"
             prefs.edit().putString("mesh_network_type", savedMeshType).apply()
         }
-        
-        meshNetworkTypeSpinner.setText(savedMeshType, false)
 
-        // Show/hide the connect button based on initial value
-        bluetoothConnectButton.visibility = if (savedMeshType == "Meshtastic") View.VISIBLE else View.GONE
+        // Map display names to internal values
+        val displayToInternal = mapOf(
+            "Layer 2" to "Layer2",
+            "Meshtastic (Bluetooth)" to "Meshtastic",
+            "Meshtastic (App)" to "MeshtasticAidl"
+        )
+        val internalToDisplay = displayToInternal.entries.associate { it.value to it.key }
+
+        // Convert internal value to display value
+        val displayValue = internalToDisplay[savedMeshType] ?: "Meshtastic (Bluetooth)"
+        meshNetworkTypeSpinner.setText(displayValue, false)
+
+        // Show/hide the connect buttons and status texts based on initial value
+        updateConnectionUIForMeshType(savedMeshType)
 
         meshNetworkTypeSpinner.setOnItemClickListener { _, _, position, _ ->
-            val selectedType = meshNetworkOptions[position]
-            prefs.edit().putString("mesh_network_type", selectedType).apply()
-            // Show/hide the connect button based on selection
-            bluetoothConnectButton.visibility = if (selectedType == "Meshtastic") View.VISIBLE else View.GONE
-            if (selectedType != "Meshtastic" && isBluetoothConnected) {
+            val displayType = meshNetworkOptions[position]
+            val internalType = displayToInternal[displayType] ?: "Meshtastic"
+
+            Log.d("SettingsActivity", "Protocol switching - from: ${currentProtocol.javaClass.simpleName} to: $internalType")
+            Log.d("SettingsActivity", "About to save mesh_network_type preference to: $internalType")
+
+            // Disconnect from current connection before switching protocols
+            if (currentProtocol.connectionState.value is MeshConnectionState.Connected) {
+                Log.d("SettingsActivity", "Disconnecting from current protocol before switching to $internalType")
                 currentProtocol.disconnectFromDevice()
             }
-        }
 
-        // Listen for connection state changes
-        currentProtocol.connectionState.let { stateFlow ->
-            lifecycleScope.launch {
-                repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
-                    stateFlow.collect { state ->
-                        when (state) {
-                            is MeshConnectionState.Connected -> {
-                                isBluetoothConnected = true
-                                val deviceName = state.deviceInfo?.name ?: "device"
-                                bluetoothStatusText.text = "Connected: $deviceName"
-                                updateBluetoothButtonState()
-                            }
-                            is MeshConnectionState.Disconnected -> {
-                                isBluetoothConnected = false
-                                connectedDevice = null
-                                bluetoothStatusText.text = "Not connected"
-                                updateBluetoothButtonState()
-                            }
-                            is MeshConnectionState.Error -> {
-                                isBluetoothConnected = false
-                                connectedDevice = null
-                                bluetoothStatusText.text = "Connection failed: ${state.message}"
-                                updateBluetoothButtonState()
-                            }
-                            MeshConnectionState.Connecting -> {
-                                bluetoothStatusText.text = "Connecting..."
-                            }
-                        }
-                    }
-                }
+            prefs.edit().putString("mesh_network_type", internalType).apply()
+            meshProtocolProvider.updateProtocolType(internalType)
+            Log.d("SettingsActivity", "Saved mesh_network_type preference. Current value: ${prefs.getString("mesh_network_type", "NOT_FOUND")}")
+
+            // Force a small delay to see if the SharedPreferences listener triggers
+            Log.d("SettingsActivity", "Waiting to see if SharedPreferences listener triggers...")
+
+            // SharedPreferences listener should handle the protocol change
+            Log.d("SettingsActivity", "SharedPreferences listener should handle protocol change to: $internalType")
+
+            // Update UI for the selected mesh type
+            updateConnectionUIForMeshType(internalType)
+
+            // Check if Meshtastic app is installed when AIDL is selected
+            if (internalType == "MeshtasticAidl") {
+                checkMeshtasticAppInstallation()
             }
         }
 
-        // Setup map dark mode spinner
-        val darkModeAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, darkModeOptions)
-        darkModeSpinner.setAdapter(darkModeAdapter)
-        val savedDarkMode = prefs.getString("dark_mode", "system")
-        val darkModeIndex = darkModeValues.indexOf(savedDarkMode).takeIf { it >= 0 } ?: 0
-        darkModeSpinner.setText(darkModeOptions[darkModeIndex], false)
-        darkModeSpinner.setOnItemClickListener { _, _, position, _ ->
-            prefs.edit().putString("dark_mode", darkModeValues[position]).apply()
-            applyDarkMode(darkModeValues[position])
-        }
+        currentProtocol = meshProtocolProvider.protocol.value
+        startProtocolObservers(currentProtocol)
 
-        // Setup keep screen awake switch
-        val keepAwakeEnabled = prefs.getBoolean("keep_screen_awake", false)
-        keepScreenAwakeSwitch.isChecked = keepAwakeEnabled
-        setKeepScreenAwake(keepAwakeEnabled)
-        keepScreenAwakeSwitch.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean("keep_screen_awake", isChecked).apply()
-            setKeepScreenAwake(isChecked)
-        }
+        // Observe config download progress and connection state with dynamic protocol updates
+        protocolJob = lifecycleScope.launch {
+            Log.d("SettingsActivity", "Starting to observe meshProtocolProvider.protocol")
+            Log.d("SettingsActivity", "Current protocol in provider: ${meshProtocolProvider.protocol.value.javaClass.simpleName}")
+            Log.d("SettingsActivity", "Initial currentProtocol: ${currentProtocol.javaClass.simpleName}")
+            meshProtocolProvider.protocol.collect { newProtocol ->
+                Log.d("SettingsActivity", "Protocol observer triggered - new protocol: ${newProtocol.javaClass.simpleName}")
+                Log.d("SettingsActivity", "Protocol reference comparison: currentProtocol !== newProtocol = ${currentProtocol !== newProtocol}")
 
-        // Load and set Simulate Peers settings
-        val simulatePeersEnabled = prefs.getBoolean("simulate_peers_enabled", false)
-        val simulatedPeersCount = prefs.getInt("simulated_peers_count", 3)
-        simulatePeersSwitch.isChecked = simulatePeersEnabled
-        simulatedPeersCountEditText.setText(simulatedPeersCount.toString())
-        simulatedPeersCountLayout.isEnabled = simulatePeersEnabled
-        simulatedPeersCountEditText.isEnabled = simulatePeersEnabled
+                // Cancel existing protocol-specific jobs
+                connectionStateJob?.cancel()
+                configStepJob?.cancel()
+                configCounterJob?.cancel()
 
-        simulatePeersSwitch.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean("simulate_peers_enabled", isChecked).apply()
-            simulatedPeersCountLayout.isEnabled = isChecked
-            simulatedPeersCountEditText.isEnabled = isChecked
-        }
-        simulatedPeersCountEditText.setOnFocusChangeListener { _, hasFocus ->
-            if (!hasFocus) {
-                val value = simulatedPeersCountEditText.text.toString().toIntOrNull()?.coerceIn(1, 10) ?: 1
-                simulatedPeersCountEditText.setText(value.toString())
-                prefs.edit().putInt("simulated_peers_count", value).apply()
-            }
-        }
-
-        // Observe config download progress if available
-        val protocol = meshProtocolProvider.protocol.value
-        protocol.configDownloadStep?.let { stepFlow ->
-            lifecycleScope.launch {
-                repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
-                    stepFlow.collect { step ->
-                        // Check if we're disconnected - if so, hide handshake progress regardless of step
-                        val isDisconnected = protocol.connectionState.value is MeshConnectionState.Disconnected
-                        if (isDisconnected) {
-                            configProgressBar.visibility = View.GONE
-                            configProgressText.visibility = View.GONE
-                        } else {
-                            when (step) {
-                                is ConfigDownloadStep.NotStarted,
-                                is ConfigDownloadStep.Complete -> {
-                                    configProgressBar.visibility = View.GONE
-                                    configProgressText.visibility = View.GONE
-                                }
-                                is ConfigDownloadStep.Error -> {
-                                    configProgressBar.visibility = View.GONE
-                                    configProgressText.visibility = View.VISIBLE
-                                    configProgressText.text = "Error: ${step.message}"
-                                }
-                                else -> {
-                                    configProgressBar.visibility = View.VISIBLE
-                                    configProgressText.visibility = View.VISIBLE
-                                    updateConfigProgressText(step)
-                                }
-                            }
-                        }
-                    }
+                // Update local protocol reference
+                if (currentProtocol !== newProtocol) {
+                    Log.d("SettingsActivity", "Protocol reference changed from ${currentProtocol.javaClass.simpleName} to ${newProtocol.javaClass.simpleName}")
+                    currentProtocol = newProtocol
+                    Log.d("SettingsActivity", "Updated currentProtocol reference to: ${currentProtocol.javaClass.simpleName}")
+                } else {
+                    Log.d("SettingsActivity", "Protocol reference unchanged: ${currentProtocol.javaClass.simpleName}")
                 }
-            }
-        }
 
-        // Also observe connection state changes to hide handshake progress when disconnected
-        protocol.connectionState.let { connectionFlow ->
-            lifecycleScope.launch {
-                repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
-                    connectionFlow.collect { state ->
-                        when (state) {
-                            is MeshConnectionState.Disconnected -> {
-                                // Hide handshake progress when disconnected
-                                configProgressBar.visibility = View.GONE
-                                configProgressText.visibility = View.GONE
-                            }
-                            else -> {
-                                // For other states, let the handshake step observer handle visibility
-                                // This will be handled by the stepFlow observer above
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Observe counter updates separately
-        protocol.configStepCounters.let { countersFlow ->
-            lifecycleScope.launch {
-                repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
-                    countersFlow.collect { _ ->
-                        // Only update if we're in a downloading state and connected
-                        val currentStep = protocol.configDownloadStep?.value
-                        val isConnected = protocol.connectionState.value !is MeshConnectionState.Disconnected
-                        if (isConnected && (currentStep is ConfigDownloadStep.DownloadingConfig ||
-                            currentStep is ConfigDownloadStep.DownloadingModuleConfig ||
-                            currentStep is ConfigDownloadStep.DownloadingChannel ||
-                            currentStep is ConfigDownloadStep.DownloadingNodeInfo ||
-                            currentStep is ConfigDownloadStep.DownloadingMyInfo)) {
-                            updateConfigProgressText(currentStep)
-                        }
-                    }
-                }
+                // Always start new protocol-specific observers (even if protocol didn't change)
+                // This ensures observers are properly set up
+                startProtocolObservers(newProtocol)
             }
         }
 
@@ -448,6 +448,55 @@ class SettingsActivity : BaseActivity() {
 
         // Setup compass calibration
         setupCompassCalibration()
+
+        // Setup map dark mode spinner
+        val darkModeAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, darkModeOptions)
+        darkModeSpinner.setAdapter(darkModeAdapter)
+        val savedDarkMode = prefs.getString("dark_mode", "system")
+        val darkModeIndex = darkModeValues.indexOf(savedDarkMode).takeIf { it >= 0 } ?: 0
+        darkModeSpinner.setText(darkModeOptions[darkModeIndex], false)
+        darkModeSpinner.setOnItemClickListener { _, _, position, _ ->
+            prefs.edit().putString("dark_mode", darkModeValues[position]).apply()
+            applyDarkMode(darkModeValues[position])
+        }
+
+        // Setup keep screen awake switch
+        val keepAwakeEnabled = prefs.getBoolean("keep_screen_awake", false)
+        keepScreenAwakeSwitch.isChecked = keepAwakeEnabled
+        setKeepScreenAwake(keepAwakeEnabled)
+        keepScreenAwakeSwitch.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean("keep_screen_awake", isChecked).apply()
+            setKeepScreenAwake(isChecked)
+        }
+
+        // Load and set Simulate Peers settings
+        val simulatePeersEnabled = prefs.getBoolean("simulate_peers_enabled", false)
+        val simulatedPeersCount = prefs.getInt("simulated_peers_count", 3)
+        simulatePeersSwitch.isChecked = simulatePeersEnabled
+        simulatedPeersCountEditText.setText(simulatedPeersCount.toString())
+        simulatedPeersCountLayout.isEnabled = simulatePeersEnabled
+        simulatedPeersCountEditText.isEnabled = simulatePeersEnabled
+
+        simulatePeersSwitch.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean("simulate_peers_enabled", isChecked).apply()
+            simulatedPeersCountLayout.isEnabled = isChecked
+            simulatedPeersCountEditText.isEnabled = isChecked
+        }
+        simulatedPeersCountEditText.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) {
+                val value = simulatedPeersCountEditText.text.toString().toIntOrNull()?.coerceIn(1, 10) ?: 1
+                simulatedPeersCountEditText.setText(value.toString())
+                prefs.edit().putInt("simulated_peers_count", value).apply()
+            }
+        }
+
+        currentProtocol = meshProtocolProvider.protocol.value
+        
+        // Initialize protocol observers for the initial protocol
+        startProtocolObservers(currentProtocol)
+        
+        // Initialize button states after currentProtocol is set
+        updateBluetoothButtonState()
     }
 
     private fun setupCompassCalibration() {
@@ -570,7 +619,7 @@ class SettingsActivity : BaseActivity() {
 
     override fun onPause() {
         super.onPause()
-        val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
+        val prefs = applicationContext.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
         val value = minLineSegmentDistEditText.text.toString().toFloatOrNull()
         if (value != null) {
             prefs.edit().putFloat("min_line_segment_dist_miles", value).apply()
@@ -588,10 +637,20 @@ class SettingsActivity : BaseActivity() {
     }
 
     private fun updateBluetoothButtonState() {
-        bluetoothConnectButton.text = if (isBluetoothConnected) "Disconnect" else "Connect to Meshtastic via Bluetooth"
+        // Use current protocol reference
+        val protocol = currentProtocol
+        val isConnected = protocol.connectionState.value is MeshConnectionState.Connected
+        val buttonText = if (isConnected) "Disconnect" else "Connect to Meshtastic via Bluetooth"
+        
+        Log.d("SettingsActivity", "updateBluetoothButtonState - protocol: ${protocol.javaClass.simpleName}, isConnected: $isConnected, buttonText: $buttonText")
+        
+        bluetoothConnectButton.text = buttonText
+        // Ensure button is enabled when connection state changes
+        bluetoothConnectButton.isEnabled = true
     }
 
     private fun showDeviceScanDialog(protocol: MeshProtocol) {
+        Log.d("SettingsActivity", "Connect button clicked - using protocol: ${protocol.javaClass.simpleName}")
         val discoveredDevices = mutableListOf<com.tak.lite.di.DeviceInfo>()
         val deviceNames = mutableListOf<String>()
 
@@ -599,6 +658,9 @@ class SettingsActivity : BaseActivity() {
             .setTitle("Scanning for devices...")
             .setView(android.widget.ProgressBar(this))
             .setCancelable(true)
+            .setOnCancelListener {
+                bluetoothConnectButton.isEnabled = true
+            }
             .create()
         progressDialog.show()
 
@@ -607,6 +669,7 @@ class SettingsActivity : BaseActivity() {
             deviceNames.add("${deviceInfo.name} (${deviceInfo.address})")
         }, onScanFinished = {
             progressDialog.dismiss()
+            bluetoothConnectButton.isEnabled = true // Re-enable button when scan finishes
             if (deviceNames.isEmpty()) {
                 android.app.AlertDialog.Builder(this)
                     .setTitle("No devices found")
@@ -637,7 +700,7 @@ class SettingsActivity : BaseActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQUEST_CODE_BLUETOOTH_PERMISSIONS) {
             if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
-                showDeviceScanDialog(meshProtocolProvider.protocol.value)
+                showDeviceScanDialog(currentProtocol)
             } else {
                 bluetoothStatusText.text = "Bluetooth permissions are required to connect."
             }
@@ -719,7 +782,7 @@ class SettingsActivity : BaseActivity() {
 
     override fun onResume() {
         super.onResume()
-        val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
+        val prefs = applicationContext.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
         val mode = prefs.getString("dark_mode", "system") ?: "system"
         applyDarkMode(mode)
         // Ensure keep screen awake is always set according to preference
@@ -776,7 +839,7 @@ class SettingsActivity : BaseActivity() {
     }
 
     private fun updateConfigProgressText(step: ConfigDownloadStep) {
-        val counters = meshProtocolProvider.protocol.value.configStepCounters.value
+        val counters = currentProtocol.configStepCounters.value
         configProgressText.text = when (step) {
             is ConfigDownloadStep.SendingHandshake -> "Sending handshake..."
             is ConfigDownloadStep.WaitingForConfig -> "Waiting for config..."
@@ -807,11 +870,14 @@ class SettingsActivity : BaseActivity() {
     private fun updateMeshSettingsVisibility(isEnabled: Boolean) {
         if (isEnabled) {
             meshNetworkTypeLayout.visibility = View.VISIBLE
-            bluetoothConnectButton.visibility = View.VISIBLE
             unlockAppButton.visibility = View.GONE
+            // The specific connect buttons and status texts will be shown/hidden by updateConnectionUIForMeshType
         } else {
             meshNetworkTypeLayout.visibility = View.GONE
             bluetoothConnectButton.visibility = View.GONE
+            bluetoothStatusText.visibility = View.GONE
+            aidlConnectButton.visibility = View.GONE
+            aidlStatusText.visibility = View.GONE
             unlockAppButton.visibility = View.VISIBLE
         }
     }
@@ -826,8 +892,253 @@ class SettingsActivity : BaseActivity() {
         dialog.show(supportFragmentManager, "prediction_advanced_settings")
     }
 
+    private fun updateConnectionUIForMeshType(meshType: String) {
+        Log.d("SettingsActivity", "updateConnectionUIForMeshType - meshType: $meshType")
+        
+        when (meshType) {
+            "Meshtastic" -> {
+                bluetoothConnectButton.visibility = View.VISIBLE
+                bluetoothStatusText.visibility = View.VISIBLE
+                aidlConnectButton.visibility = View.GONE
+                aidlStatusText.visibility = View.GONE
+                Log.d("SettingsActivity", "Showing Bluetooth UI, hiding AIDL UI")
+            }
+            "MeshtasticAidl" -> {
+                bluetoothConnectButton.visibility = View.GONE
+                bluetoothStatusText.visibility = View.GONE
+                aidlConnectButton.visibility = View.VISIBLE
+                aidlStatusText.visibility = View.VISIBLE
+                Log.d("SettingsActivity", "Showing AIDL UI, hiding Bluetooth UI")
+            }
+            else -> {
+                bluetoothConnectButton.visibility = View.GONE
+                bluetoothStatusText.visibility = View.GONE
+                aidlConnectButton.visibility = View.GONE
+                aidlStatusText.visibility = View.GONE
+                Log.d("SettingsActivity", "Hiding all connection UI")
+            }
+        }
+    }
+
+    private fun updateConnectionStatus(state: MeshConnectionState) {
+        val prefs = applicationContext.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+        val currentMeshType = prefs.getString("mesh_network_type", "Meshtastic")
+        
+        Log.d("SettingsActivity", "updateConnectionStatus called - state: $state, meshType: $currentMeshType, protocol: ${currentProtocol.javaClass.simpleName}")
+        
+        when (state) {
+            is MeshConnectionState.Connected -> {
+                val deviceName = state.deviceInfo?.name ?: "device"
+                val connectionType = state.deviceInfo?.connectionType
+                
+                Log.d("SettingsActivity", "Connected state - deviceName: $deviceName, connectionType: $connectionType")
+                
+                if (connectionType == "bluetooth" || currentMeshType == "Meshtastic") {
+                    bluetoothStatusText.text = "Connected: $deviceName"
+                    updateBluetoothButtonState()
+                    Log.d("SettingsActivity", "Updated Bluetooth status: Connected: $deviceName")
+                } else if (connectionType == "aidl" || currentMeshType == "MeshtasticAidl") {
+                    aidlStatusText.text = "Connected: $deviceName"
+                    updateAidlButtonState()
+                    Log.d("SettingsActivity", "Updated AIDL status: Connected: $deviceName")
+                }
+            }
+            is MeshConnectionState.Disconnected -> {
+                connectedDevice = null
+                Log.d("SettingsActivity", "Disconnected state")
+                
+                if (currentMeshType == "Meshtastic") {
+                    bluetoothStatusText.text = "Not connected"
+                    updateBluetoothButtonState()
+                    Log.d("SettingsActivity", "Updated Bluetooth status: Not connected")
+                } else if (currentMeshType == "MeshtasticAidl") {
+                    aidlStatusText.text = "Not connected"
+                    updateAidlButtonState()
+                    Log.d("SettingsActivity", "Updated AIDL status: Not connected")
+                }
+            }
+            is MeshConnectionState.Error -> {
+                connectedDevice = null
+                val errorMessage = if (state.message.contains("Meshtastic")) {
+                    // Provide more helpful error messages for AIDL issues
+                    when {
+                        state.message.contains("not installed") -> "Please install Meshtastic app from Play Store"
+                        state.message.contains("service may not be running") -> "Please open Meshtastic app and keep it running"
+                        state.message.contains("service not found") -> "Meshtastic app version may not support AIDL"
+                        else -> state.message
+                    }
+                } else {
+                    state.message
+                }
+                
+                Log.d("SettingsActivity", "Error state - message: $errorMessage")
+                
+                if (currentMeshType == "Meshtastic") {
+                    bluetoothStatusText.text = "Connection failed: $errorMessage"
+                    updateBluetoothButtonState()
+                    Log.d("SettingsActivity", "Updated Bluetooth status: Connection failed: $errorMessage")
+                } else if (currentMeshType == "MeshtasticAidl") {
+                    aidlStatusText.text = "Connection failed: $errorMessage"
+                    updateAidlButtonState()
+                    Log.d("SettingsActivity", "Updated AIDL status: Connection failed: $errorMessage")
+                }
+            }
+            MeshConnectionState.Connecting -> {
+                Log.d("SettingsActivity", "Connecting state")
+                
+                if (currentMeshType == "Meshtastic") {
+                    bluetoothStatusText.text = "Connecting..."
+                    Log.d("SettingsActivity", "Updated Bluetooth status: Connecting...")
+                } else if (currentMeshType == "MeshtasticAidl") {
+                    aidlStatusText.text = "Connecting..."
+                    Log.d("SettingsActivity", "Updated AIDL status: Connecting...")
+                }
+            }
+        }
+    }
+
+    private fun updateAidlButtonState() {
+        // Use current protocol reference
+        val protocol = currentProtocol
+        val isConnected = protocol.connectionState.value is MeshConnectionState.Connected
+        val buttonText = if (isConnected) "Disconnect" else "Connect"
+        
+        Log.d("SettingsActivity", "updateAidlButtonState - protocol: ${protocol.javaClass.simpleName}, isConnected: $isConnected, buttonText: $buttonText")
+        Log.d("SettingsActivity", "updateAidlButtonState - connectionState: ${protocol.connectionState.value}")
+        
+        aidlConnectButton.text = buttonText
+        // Ensure button is enabled when connection state changes
+        aidlConnectButton.isEnabled = true
+        
+        Log.d("SettingsActivity", "AIDL button updated - text: ${aidlConnectButton.text}, enabled: ${aidlConnectButton.isEnabled}")
+    }
+
+    private fun startProtocolObservers(protocol: MeshProtocol) {
+        Log.d("SettingsActivity", "Starting protocol observers for: ${protocol.javaClass.simpleName}")
+        Log.d("SettingsActivity", "Current connection state: ${protocol.connectionState.value}")
+        
+        // Observe connection state changes
+        connectionStateJob = lifecycleScope.launch {
+            Log.d("SettingsActivity", "Starting connection state observer for: ${protocol.javaClass.simpleName}")
+            protocol.connectionState.collect { state ->
+                Log.d("SettingsActivity", "Connection state changed: $state for protocol: ${protocol.javaClass.simpleName}")
+                Log.d("SettingsActivity", "Current protocol reference: ${currentProtocol.javaClass.simpleName}")
+                updateConnectionStatus(state)
+                
+                // Also handle config progress visibility based on connection state
+                when (state) {
+                    is MeshConnectionState.Disconnected -> {
+                        // Hide handshake progress when disconnected
+                        configProgressBar.visibility = View.GONE
+                        configProgressText.visibility = View.GONE
+                    }
+                    else -> {
+                        // For other states, let the handshake step observer handle visibility
+                        // This will be handled by the stepFlow observer below
+                    }
+                }
+            }
+        }
+        
+        // Observe config download step changes
+        protocol.configDownloadStep?.let { stepFlow ->
+            configStepJob = lifecycleScope.launch {
+                stepFlow.collect { step ->
+                    // Check if we're disconnected - if so, hide handshake progress regardless of step
+                    val isDisconnected = protocol.connectionState.value is MeshConnectionState.Disconnected
+                    if (isDisconnected) {
+                        configProgressBar.visibility = View.GONE
+                        configProgressText.visibility = View.GONE
+                    } else {
+                        when (step) {
+                            is ConfigDownloadStep.NotStarted,
+                            is ConfigDownloadStep.Complete -> {
+                                configProgressBar.visibility = View.GONE
+                                configProgressText.visibility = View.GONE
+                            }
+                            is ConfigDownloadStep.Error -> {
+                                configProgressBar.visibility = View.GONE
+                                configProgressText.visibility = View.VISIBLE
+                                configProgressText.text = "Error: ${step.message}"
+                            }
+                            else -> {
+                                configProgressBar.visibility = View.VISIBLE
+                                configProgressText.visibility = View.VISIBLE
+                                updateConfigProgressText(step)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Observe counter updates
+        configCounterJob = lifecycleScope.launch {
+            protocol.configStepCounters.collect { _ ->
+                // Only update if we're in a downloading state and connected
+                val currentStep = protocol.configDownloadStep?.value
+                val isConnected = protocol.connectionState.value !is MeshConnectionState.Disconnected
+                if (isConnected && (currentStep is ConfigDownloadStep.DownloadingConfig ||
+                    currentStep is ConfigDownloadStep.DownloadingModuleConfig ||
+                    currentStep is ConfigDownloadStep.DownloadingChannel ||
+                    currentStep is ConfigDownloadStep.DownloadingNodeInfo ||
+                    currentStep is ConfigDownloadStep.DownloadingMyInfo)) {
+                    updateConfigProgressText(currentStep)
+                }
+            }
+        }
+    }
+
+    private fun checkMeshtasticAppInstallation() {
+        val protocol = currentProtocol
+        if (protocol is com.tak.lite.network.MeshtasticAidlProtocol) {
+            val status = protocol.checkMeshtasticAppStatus()
+            Log.d("SettingsActivity", "Meshtastic app status: $status")
+            
+            val isMeshtasticInstalled = try {
+                packageManager.getPackageInfo("com.geeksville.mesh", 0)
+                true
+            } catch (e: Exception) {
+                Log.e("SettingsActivity", "Error checking Meshtastic app: ${e.message}")
+                false
+            }
+            
+            if (!isMeshtasticInstalled) {
+                // Show dialog to install Meshtastic
+                android.app.AlertDialog.Builder(this)
+                    .setTitle("Meshtastic App Required")
+                    .setMessage("The Meshtastic AIDL protocol requires the Meshtastic app to be installed. Would you like to install it from the Play Store?")
+                    .setPositiveButton("Install") { _, _ ->
+                        try {
+                            val intent = Intent(Intent.ACTION_VIEW).apply {
+                                data = android.net.Uri.parse("market://details?id=com.geeksville.mesh")
+                            }
+                            startActivity(intent)
+                        } catch (e: Exception) {
+                            // Fallback to web browser
+                            val intent = Intent(Intent.ACTION_VIEW).apply {
+                                data = android.net.Uri.parse("https://play.google.com/store/apps/details?id=com.geeksville.mesh")
+                            }
+                            startActivity(intent)
+                        }
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            } else {
+                // App is installed, show status
+                Log.i("SettingsActivity", "Meshtastic app is installed: $status")
+            }
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        // Cancel all protocol observation jobs
+        protocolJob?.cancel()
+        connectionStateJob?.cancel()
+        configStepJob?.cancel()
+        configCounterJob?.cancel()
+        
         // Unregister sensor listener to prevent memory leaks
         sensorManager.unregisterListener(sensorListener)
     }

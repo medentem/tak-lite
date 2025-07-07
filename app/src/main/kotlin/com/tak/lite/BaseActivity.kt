@@ -6,6 +6,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import com.tak.lite.di.ActivityContextProvider
 import com.tak.lite.repository.MessageRepository
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -14,9 +15,15 @@ import javax.inject.Inject
 abstract class BaseActivity : AppCompatActivity() {
     @Inject
     lateinit var messageRepository: MessageRepository
+    
+    @Inject
+    lateinit var activityContextProvider: ActivityContextProvider
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Set the activity context for broadcast receiver registration
+        activityContextProvider.setActivityContext(this)
         
         // Enable edge-to-edge display for all activities
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -43,5 +50,11 @@ abstract class BaseActivity : AppCompatActivity() {
             view.setPadding(systemBars.left, systemBars.top, systemBars.right, ime.bottom)
             WindowInsetsCompat.CONSUMED
         }
+    }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        // Clear the activity context when activity is destroyed
+        activityContextProvider.setActivityContext(null)
     }
 } 

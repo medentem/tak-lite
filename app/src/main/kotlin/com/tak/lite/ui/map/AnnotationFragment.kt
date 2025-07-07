@@ -10,23 +10,20 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
-import com.geeksville.mesh.MeshProtos
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.tak.lite.MainActivity
 import com.tak.lite.R
 import com.tak.lite.databinding.DialogRestoreAnnotationsBinding
 import com.tak.lite.databinding.FragmentAnnotationBinding
 import com.tak.lite.model.AnnotationColor
 import com.tak.lite.model.PointShape
-import com.tak.lite.repository.AnnotationRepository
 import com.tak.lite.viewmodel.AnnotationUiState
 import com.tak.lite.viewmodel.AnnotationViewModel
 import com.tak.lite.viewmodel.MeshNetworkViewModel
 import com.tak.lite.viewmodel.MessageViewModel
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
 @AndroidEntryPoint
 class AnnotationFragment : Fragment() {
@@ -210,8 +207,9 @@ class AnnotationFragment : Fragment() {
             annotationOverlayView.peerDotTapListener = object : AnnotationOverlayView.OnPeerDotTapListener {
                 override fun onPeerDotTapped(peerId: String, screenPosition: PointF) {
                     viewLifecycleOwner.lifecycleScope.launch {
-                        val nodeInfo: MeshProtos.NodeInfo? = meshNetworkViewModel.getNodeInfo(peerId)
-                        annotationOverlayView.showPeerPopover(peerId, nodeInfo)
+                        val peerName: String? = meshNetworkViewModel.getPeerName(peerId)
+                        val peerLastHeard: Long? = meshNetworkViewModel.getPeerLastHeard(peerId)
+                        annotationOverlayView.showPeerPopover(peerId, peerName, peerLastHeard)
                     }
                 }
             }
