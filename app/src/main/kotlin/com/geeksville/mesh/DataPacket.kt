@@ -203,7 +203,9 @@ data class DataPacket(
         const val PKC_CHANNEL_INDEX = 8
 
         fun nodeNumToDefaultId(n: Int): String = "!%08x".format(n)
-        fun idToDefaultNodeNum(id: String?): Long? = runCatching { id?.toLong(16) }.getOrNull()
+        fun idToDefaultNodeNum(id: String?): Long? = runCatching { 
+            id?.removePrefix("!")?.toLong(16) 
+        }.getOrNull()
 
         override fun createFromParcel(parcel: Parcel): DataPacket {
             return DataPacket(parcel)

@@ -11,7 +11,44 @@ enum class MessageStatus {
     DELIVERED,  // Message was delivered to the mesh
     RECEIVED,   // Message was received by the intended recipient
     FAILED,     // Message failed to be acknowledged by another node
-    ERROR       // Message failed to send or was rejected
+    ERROR;      // Message failed to send or was rejected
+
+    /**
+     * Returns the ordinal value representing the progression of this status.
+     * Higher values represent more advanced states in the message lifecycle.
+     */
+    fun getProgressionValue(): Int = when (this) {
+        SENDING -> 0
+        SENT -> 1
+        DELIVERED -> 2
+        RECEIVED -> 3
+        FAILED -> 4  // Terminal state
+        ERROR -> 4   // Terminal state
+    }
+
+    /**
+     * Checks if this status can be transitioned to from the given current status.
+     * Returns true if the new status represents progress or is a valid terminal state.
+     */
+    fun canTransitionFrom(currentStatus: MessageStatus): Boolean {
+        // Terminal states (FAILED, ERROR) can only be set once and cannot be overridden
+        if (currentStatus == FAILED || currentStatus == ERROR) {
+            return false
+        }
+        
+        // If the new status is also a terminal state, it can always be set
+        if (this == FAILED || this == ERROR) {
+            return true
+        }
+        
+        // For non-terminal states, only allow progression forward
+        return this.getProgressionValue() >= currentStatus.getProgressionValue()
+    }
+
+    /**
+     * Checks if this status represents a terminal state that cannot be overridden.
+     */
+    fun isTerminal(): Boolean = this == FAILED || this == ERROR
 }
 
 /**
@@ -26,7 +63,32 @@ data class ChannelMessage(
     val requestId: Int,  // ID used to track message delivery status
     var status: MessageStatus = MessageStatus.SENDING,
     val channelId: String  // Make channelId non-null
-)
+) {
+    /**
+     * Safely updates the message status, preventing backward transitions.
+     * Returns true if the status was updated, false if the update was rejected.
+     */
+    fun updateStatus(newStatus: MessageStatus): Boolean {
+        return if (newStatus.canTransitionFrom(status)) {
+            status = newStatus
+            true
+        } else {
+            false
+        }
+    }
+
+    /**
+     * Creates a copy of this message with the new status, but only if the transition is valid.
+     * Returns null if the status transition is not allowed.
+     */
+    fun copyWithStatus(newStatus: MessageStatus): ChannelMessage? {
+        return if (newStatus.canTransitionFrom(status)) {
+            copy(status = newStatus)
+        } else {
+            null
+        }
+    }
+}
 
 /**
  * Base interface for all channel implementations

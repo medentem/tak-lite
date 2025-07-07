@@ -313,6 +313,11 @@ abstract class MeshtasticBaseProtocol(
 
         addPacketSummary(PayloadVariantCase.NODE_INFO, PortNum.NODEINFO_APP, nodeNum, peerName)
 
+        // Process position data if available in NodeInfo
+        if (updatedNodeInfo.hasPosition()) {
+            processPositionData(updatedNodeInfo.position, nodeNum, "NodeInfo")
+        }
+
         // Update direct message channel if it exists
         val channelId = DirectMessageChannel.createId(nodeNum)
         val existingChannel = _channels.value.find { it.id == channelId }
@@ -345,6 +350,84 @@ abstract class MeshtasticBaseProtocol(
                 _channels.value = currentChannels
                 Log.d(TAG, "Updated direct message channel for node $nodeNum with new name: $channelName, readyToSend: ${updatedChannel.readyToSend}")
             }
+        }
+    }
+
+    /**
+     * Shared function to process position data from either POSITION_APP packets or NodeInfo packets
+     * @param position The position data to process
+     * @param peerId The peer ID this position belongs to
+     * @param source The source of the position data (e.g., "POSITION_APP", "NodeInfo")
+     */
+    private fun processPositionData(position: MeshProtos.Position, peerId: String, source: String) {
+        try {
+            val lat = position.latitudeI / 1e7
+            val lng = position.longitudeI / 1e7
+            Log.d(TAG, "Parsed position from $source for peer $peerId: lat=$lat, lng=$lng")
+
+            // Create enhanced location entry with additional position data
+            val locationEntry = PeerLocationEntry(
+                timestamp = System.currentTimeMillis(),
+                latitude = lat,
+                longitude = lng,
+                gpsTimestamp = position.time * 1000L, // Convert seconds to milliseconds
+                groundSpeed = if (position.hasGroundSpeed()) position.groundSpeed.toDouble() / 3.6 else null, // Convert km/h to m/s
+                groundTrack = if (position.hasGroundTrack()) position.groundTrack * 1e-5 else null,
+                altitude = if (position.hasAltitude()) position.altitude else null,
+                altitudeHae = if (position.hasAltitudeHae()) position.altitudeHae else null,
+                gpsAccuracy = position.gpsAccuracy, // Required field
+                fixQuality = position.fixQuality, // Required field
+                fixType = position.fixType, // Required field
+                satellitesInView = position.satsInView, // Required field
+                pdop = position.pdop, // Required field
+                hdop = position.hdop, // Required field
+                vdop = position.vdop, // Required field
+                locationSource = position.locationSource.number, // Required field
+                altitudeSource = position.altitudeSource.number, // Required field
+                sequenceNumber = position.seqNumber, // Required field
+                precisionBits = position.precisionBits // Required field
+            )
+
+            // Log additional position data if available
+            if (locationEntry.hasVelocityData()) {
+                val (speed, track) = locationEntry.getVelocity()!!
+                Log.d(TAG, "Position from $source for peer $peerId includes velocity: ${speed.toInt()} m/s at ${track.toInt()}°")
+            }
+            if (locationEntry.hasGpsQualityData()) {
+                Log.d(TAG, "Position from $source for peer $peerId includes GPS quality: accuracy=${locationEntry.gpsAccuracy}mm, fix=${locationEntry.fixType}, sats=${locationEntry.satellitesInView}")
+            }
+
+            peerLocations[peerId] = locationEntry
+
+            Log.d(TAG, "Updated peer location from $source for $peerId: ${locationEntry.latitude}, ${locationEntry.longitude}")
+            Log.d(TAG, "Total peer locations now: ${peerLocations.size}, peer IDs: ${peerLocations.keys}")
+
+            // Call enhanced callback with full location entry data
+            peerLocationCallback?.invoke(peerLocations.toMap())
+
+            // Update last seen for node info
+            nodeInfoMap[peerId]?.let { info ->
+                val updatedNodeInfo = info.toBuilder().setLastHeard((System.currentTimeMillis() / 1000).toInt()).build()
+                nodeInfoMap[peerId] = updatedNodeInfo
+            }
+
+            if (isOwnNode(peerId)) {
+                userLocationCallback?.invoke(LatLng(lat, lng))
+            }
+
+            // Check if this is a response to a location request
+            // Find any pending location requests for this peer
+            val pendingRequest = pendingLocationRequests.entries.find { (_, request) ->
+                request.peerId == peerId
+            }
+            if (pendingRequest != null) {
+                Log.d(TAG, "Received location response from peer $peerId")
+                pendingRequest.value.callback(false) // Call with timeout = false
+                pendingLocationRequests.remove(pendingRequest.key)
+            }
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to parse position from $source for peer $peerId: ${e.message}", e)
         }
     }
 
@@ -529,72 +612,9 @@ abstract class MeshtasticBaseProtocol(
             } else if (decoded.portnum == PortNum.POSITION_APP) {
                 try {
                     val position = MeshProtos.Position.parseFrom(decoded.payload)
-                    val lat = position.latitudeI / 1e7
-                    val lng = position.longitudeI / 1e7
-                    Log.d(TAG, "Parsed position from peer $peerId: lat=$lat, lng=$lng")
-
-                    // Create enhanced location entry with additional position data
-                    val locationEntry = PeerLocationEntry(
-                        timestamp = System.currentTimeMillis(),
-                        latitude = lat,
-                        longitude = lng,
-                        gpsTimestamp = position.timestamp * 1000L, // Convert seconds to milliseconds
-                        groundSpeed = if (position.hasGroundSpeed()) position.groundSpeed.toDouble() / 3.6 else null, // Convert km/h to m/s
-                        groundTrack = if (position.hasGroundTrack()) position.groundTrack * 1e-5 else null,
-                        altitude = if (position.hasAltitude()) position.altitude else null,
-                        altitudeHae = if (position.hasAltitudeHae()) position.altitudeHae else null,
-                        gpsAccuracy = position.gpsAccuracy, // Required field
-                        fixQuality = position.fixQuality, // Required field
-                        fixType = position.fixType, // Required field
-                        satellitesInView = position.satsInView, // Required field
-                        pdop = position.pdop, // Required field
-                        hdop = position.hdop, // Required field
-                        vdop = position.vdop, // Required field
-                        locationSource = position.locationSource.number, // Required field
-                        altitudeSource = position.altitudeSource.number, // Required field
-                        sequenceNumber = position.seqNumber, // Required field
-                        precisionBits = position.precisionBits // Required field
-                    )
-
-                    // Log additional position data if available
-                    if (locationEntry.hasVelocityData()) {
-                        val (speed, track) = locationEntry.getVelocity()!!
-                        Log.d(TAG, "Position from peer $peerId includes velocity: ${speed.toInt()} m/s at ${track.toInt()}°")
-                    }
-                    if (locationEntry.hasGpsQualityData()) {
-                        Log.d(TAG, "Position from peer $peerId includes GPS quality: accuracy=${locationEntry.gpsAccuracy}mm, fix=${locationEntry.fixType}, sats=${locationEntry.satellitesInView}")
-                    }
-
-                    peerLocations[peerId] = locationEntry
-
-                    Log.d(TAG, "Updated peer location for $peerId: ${locationEntry.latitude}, ${locationEntry.longitude}")
-                    Log.d(TAG, "Total peer locations now: ${peerLocations.size}, peer IDs: ${peerLocations.keys}")
-
-                    // Call enhanced callback with full location entry data
-                    peerLocationCallback?.invoke(peerLocations.toMap())
-
-                    // Update last seen for node info
-                    nodeInfoMap[peerId]?.let { info ->
-                        val updatedNodeInfo = info.toBuilder().setLastHeard((System.currentTimeMillis() / 1000).toInt()).build()
-                        nodeInfoMap[peerId] = updatedNodeInfo
-                    }
-
-                    if (isOwnNode(peerId)) {
-                        userLocationCallback?.invoke(LatLng(lat, lng))
-                    }
-
-                    // Check if this is a response to a location request
-                    // Find any pending location requests for this peer
-                    val pendingRequest = pendingLocationRequests.entries.find { (_, request) ->
-                        request.peerId == peerId
-                    }
-                    if (pendingRequest != null) {
-                        Log.d(TAG, "Received location response from peer $peerId")
-                        pendingRequest.value.callback(false) // Call with timeout = false
-                        pendingLocationRequests.remove(pendingRequest.key)
-                    }
+                    processPositionData(position, peerId, "POSITION_APP")
                 } catch (e: Exception) {
-                    Log.e(TAG, "Failed to parse position: "+e.message)
+                    Log.e(TAG, "Failed to parse POSITION_APP payload: ${e.message}", e)
                 }
             } else if (decoded.portnum == PortNum.ATAK_PLUGIN) {
                 // Try to parse as bulk deletion
@@ -696,9 +716,17 @@ abstract class MeshtasticBaseProtocol(
         val messageIndex = channelMessages.indexOfFirst { it.requestId == unsignedRequestId }
 
         if (messageIndex != -1) {
-            channelMessages[messageIndex] = channelMessages[messageIndex].copy(status = newStatus)
-            currentMessages[channelId] = channelMessages
-            _channelMessages.value = currentMessages
+            val currentMessage = channelMessages[messageIndex]
+            val updatedMessage = currentMessage.copyWithStatus(newStatus)
+            
+            if (updatedMessage != null) {
+                channelMessages[messageIndex] = updatedMessage
+                currentMessages[channelId] = channelMessages
+                _channelMessages.value = currentMessages
+                Log.d(TAG, "Updated message ${unsignedRequestId} status from ${currentMessage.status} to ${newStatus}")
+            } else {
+                Log.w(TAG, "Rejected status update for message ${unsignedRequestId}: cannot transition from ${currentMessage.status} to ${newStatus}")
+            }
         } else {
             Log.e(TAG, "Could not find message with id $unsignedRequestId in channel $channelId")
         }
