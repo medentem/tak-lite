@@ -300,7 +300,7 @@ class SettingsActivity : BaseActivity() {
 
         // Setup mesh network adapter spinner
         val meshNetworkTypeSpinner = findViewById<com.google.android.material.textfield.MaterialAutoCompleteTextView>(R.id.meshNetworkTypeSpinner)
-        val meshNetworkOptions = listOf("Layer 2", "Meshtastic (Bluetooth)", "Meshtastic (App)")
+        val meshNetworkOptions = listOf("Layer 2", "Meshtastic (Bluetooth)", "Meshtastic (App) **Experimental**")
         val meshAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, meshNetworkOptions)
         meshNetworkTypeSpinner.setAdapter(meshAdapter)
 
@@ -316,7 +316,7 @@ class SettingsActivity : BaseActivity() {
         val displayToInternal = mapOf(
             "Layer 2" to "Layer2",
             "Meshtastic (Bluetooth)" to "Meshtastic",
-            "Meshtastic (App)" to "MeshtasticAidl"
+            "Meshtastic (App) **Experimental**" to "MeshtasticAidl"
         )
         val internalToDisplay = displayToInternal.entries.associate { it.value to it.key }
 
