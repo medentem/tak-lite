@@ -122,6 +122,15 @@ class AnnotationFragment : Fragment() {
                 predictionOverlayView.setZoom(mapLibreMap.cameraPosition.zoom.toFloat())
                 predictionOverlayView.setProjection(mapLibreMap.projection)
             }
+            
+            // Add viewport update listener for prediction optimization
+            predictionOverlayView.viewportUpdateListener = object : PredictionOverlayView.ViewportUpdateListener {
+                override fun onViewportChanged(viewportBounds: android.graphics.RectF?) {
+                    // Update repository with new viewport bounds
+                    meshNetworkViewModel.updatePredictionViewport(viewportBounds)
+                }
+            }
+            
             annotationController.setupAnnotationOverlay(mapLibreMap)
             predictionOverlayView.setProjection(mapLibreMap.projection)
             annotationController.setupPoiLongPressListener()

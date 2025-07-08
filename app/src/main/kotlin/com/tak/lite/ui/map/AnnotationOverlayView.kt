@@ -15,6 +15,7 @@ import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
 import com.tak.lite.data.model.AnnotationCluster
+import com.tak.lite.data.model.PeerCluster
 import com.tak.lite.model.AnnotationColor
 import com.tak.lite.model.LineStyle
 import com.tak.lite.model.MapAnnotation
@@ -52,10 +53,39 @@ class AnnotationOverlayView @JvmOverloads constructor(
     private var lastTimerUpdate: Long = 0
     private var timerAngle: Float = 0f
     private var clusters: List<AnnotationCluster> = emptyList()
+    private var peerClusters: List<PeerCluster> = emptyList()
     private val clusterThreshold = 100f // pixels
     private val minZoomForClustering = 14f // zoom level below which clustering occurs
+    private val minZoomForPeerClustering = 10f // zoom level below which peer clustering occurs (more zoomed out)
+    
+    // Dynamic clustering threshold that increases as you zoom out
+    private fun getDynamicClusterThreshold(): Float {
+        return when {
+            currentZoom < 8f -> clusterThreshold * 3f  // Very zoomed out: 300px threshold
+            currentZoom < 10f -> clusterThreshold * 2f // Moderately zoomed out: 200px threshold
+            currentZoom < 12f -> clusterThreshold * 1.5f // Slightly zoomed out: 150px threshold
+            else -> clusterThreshold // Normal: 100px threshold
+        }
+    }
 
-    // Timer update handler
+    // --- PERFORMANCE OPTIMIZATION 1: Viewport Culling ---
+    private var visibleBounds: RectF? = null
+    private var lastViewportUpdate: Long = 0
+    private val VIEWPORT_UPDATE_THROTTLE_MS = 100L // Update viewport max every 100ms
+
+    // --- PERFORMANCE OPTIMIZATION 2: Optimized Clustering ---
+    private val clusteringGrid = mutableMapOf<String, MutableList<Pair<MapAnnotation, PointF>>>()
+    private val peerClusteringGrid = mutableMapOf<String, MutableList<Pair<String, PointF>>>()
+    private var lastClusteringUpdate: Long = 0
+    private var lastPeerClusteringUpdate: Long = 0
+    private val CLUSTERING_UPDATE_THROTTLE_MS = 200L // Update clustering max every 200ms
+
+    // --- PERFORMANCE OPTIMIZATION 3: Timer Optimization ---
+    private var hasVisibleTimerAnnotations: Boolean = false
+    private var lastTimerAnnotationCheck: Long = 0
+    private val TIMER_CHECK_THROTTLE_MS = 2000L // Check timer annotations every 2 seconds
+
+    // Timer update handler - OPTIMIZED VERSION
     private val timerHandler = Handler(Looper.getMainLooper())
     private val timerRunnable = object : Runnable {
         override fun run() {
@@ -63,7 +93,11 @@ class AnnotationOverlayView @JvmOverloads constructor(
             if (now - lastTimerUpdate >= 1000) { // Update every second
                 timerAngle = (timerAngle + 6f) % 360f // 6 degrees per second (360/60)
                 lastTimerUpdate = now
-                invalidate()
+                
+                // Only invalidate if we have timer annotations in viewport
+                if (hasVisibleTimerAnnotations) {
+                    invalidate()
+                }
             }
             timerHandler.postDelayed(this, 16) // ~60fps
         }
@@ -90,9 +124,23 @@ class AnnotationOverlayView @JvmOverloads constructor(
 
     // --- Peer Location Dot Support ---
     private var peerLocations: Map<String, PeerLocationEntry> = emptyMap()
+    private var lastPeerUpdateTime: Long = 0
+    private val PEER_UPDATE_THROTTLE_MS = 1000L // 1 second minimum between updates
+    
     fun updatePeerLocations(locations: Map<String, PeerLocationEntry>) {
-        peerLocations = locations
-        invalidate()
+        val now = System.currentTimeMillis()
+        if (now - lastPeerUpdateTime < PEER_UPDATE_THROTTLE_MS) return
+        
+        // Only update if locations actually changed
+        if (peerLocations != locations) {
+            peerLocations = locations
+            lastPeerUpdateTime = now
+            // Force peer clustering update when locations change
+            if (currentZoom < minZoomForPeerClustering) {
+                lastPeerClusteringUpdate = 0 // Force peer clustering update
+            }
+            invalidate()
+        }
     }
 
     // Store the connected node ID
@@ -169,12 +217,16 @@ class AnnotationOverlayView @JvmOverloads constructor(
 
     fun setProjection(projection: Projection?) {
         this.projection = projection
+        // Force viewport update when projection changes
+        visibleBounds = null
         invalidate()
     }
 
     fun updateAnnotations(annotations: List<MapAnnotation>) {
         android.util.Log.d("AnnotationOverlayView", "updateAnnotations called: ${annotations.map { it.id }}")
         this.annotations = annotations
+        // Force clustering update when annotations change
+        lastClusteringUpdate = 0
         invalidate()
     }
 
@@ -185,6 +237,13 @@ class AnnotationOverlayView @JvmOverloads constructor(
         } else {
             clusters = emptyList()
         }
+        if (zoom < minZoomForPeerClustering) {
+            updatePeerClusters()
+        } else {
+            peerClusters = emptyList()
+        }
+        // Force viewport update on zoom change
+        visibleBounds = null
         invalidate()
     }
 
@@ -192,59 +251,473 @@ class AnnotationOverlayView @JvmOverloads constructor(
         tempLinePoints = points
         invalidate()
     }
+    
+    /**
+     * Force a viewport update (useful when map bounds change significantly)
+     */
+    fun forceViewportUpdate() {
+        visibleBounds = null
+        lastViewportUpdate = 0
+        lastClusteringUpdate = 0
+        invalidate()
+    }
 
+    // --- PERFORMANCE OPTIMIZATION 1: Viewport Culling Methods ---
+    
+    /**
+     * Get the current visible map bounds with margin for annotations partially off-screen
+     */
+    private fun getVisibleMapBounds(): RectF {
+        val now = System.currentTimeMillis()
+        
+        // Throttle viewport updates to avoid excessive calculations
+        if (now - lastViewportUpdate < VIEWPORT_UPDATE_THROTTLE_MS && visibleBounds != null) {
+            return visibleBounds!!
+        }
+        
+        if (projection == null || width == 0 || height == 0) {
+            return RectF(-180f, -90f, 180f, 90f) // Default to full world
+        }
+        
+        // Get screen corners and convert to lat/lng
+        val topLeft = projection?.fromScreenLocation(PointF(0f, 0f))
+        val bottomRight = projection?.fromScreenLocation(PointF(width.toFloat(), height.toFloat()))
+        
+        if (topLeft == null || bottomRight == null) {
+            return RectF(-180f, -90f, 180f, 90f)
+        }
+        
+        // Add margin for annotations partially off-screen (0.1 degrees ≈ 10km at equator)
+        val margin = 0.1f
+        val bounds = RectF(
+            (topLeft.longitude - margin).toFloat(),  // left (minimum longitude)
+            (topLeft.latitude + margin).toFloat(),   // top (maximum latitude)
+            (bottomRight.longitude + margin).toFloat(), // right (maximum longitude)
+            (bottomRight.latitude - margin).toFloat()   // bottom (minimum latitude)
+        )
+        
+        // Debug: verify bounds are correct
+        android.util.Log.d("AnnotationOverlayView", "Bounds verification: left=${bounds.left}, top=${bounds.top}, right=${bounds.right}, bottom=${bounds.bottom}")
+        android.util.Log.d("AnnotationOverlayView", "Expected: left=${topLeft.longitude - margin}, top=${topLeft.latitude + margin}, right=${bottomRight.longitude + margin}, bottom=${bottomRight.latitude - margin}")
+        
+        // Debug logging for viewport bounds
+        android.util.Log.d("AnnotationOverlayView", "Viewport calculation: topLeft=$topLeft, bottomRight=$bottomRight")
+        android.util.Log.d("AnnotationOverlayView", "Calculated bounds: $bounds")
+        
+        visibleBounds = bounds
+        lastViewportUpdate = now
+        return bounds
+    }
+    
+    /**
+     * Get only annotations that are visible in the current viewport
+     */
+    private fun getVisibleAnnotations(): List<MapAnnotation> {
+        val bounds = getVisibleMapBounds()
+        val visible = annotations.filter { annotation ->
+            val latLng = annotation.toMapLibreLatLng()
+            val lat = latLng.latitude.toFloat()
+            val lon = latLng.longitude.toFloat()
+            // Explicit bounds checking instead of RectF.contains()
+            lat >= bounds.bottom && lat <= bounds.top && lon >= bounds.left && lon <= bounds.right
+        }
+        
+        // Log performance metrics occasionally
+        if (annotations.size > 100 && visible.size < annotations.size / 2) {
+            android.util.Log.d("AnnotationOverlayView", "Viewport culling: ${annotations.size} total, ${visible.size} visible (${(visible.size * 100 / annotations.size)}%)")
+        }
+        
+        return visible
+    }
+    
+    /**
+     * Get only peer locations that are visible in the current viewport
+     */
+    private fun getVisiblePeerLocations(): Map<String, PeerLocationEntry> {
+        val bounds = getVisibleMapBounds()
+        val visible = peerLocations.filter { (_, entry) ->
+            // Explicit bounds checking instead of RectF.contains() which might have coordinate interpretation issues
+            val lat = entry.latitude.toFloat()
+            val lon = entry.longitude.toFloat()
+            val inBounds = lat >= bounds.bottom && lat <= bounds.top && lon >= bounds.left && lon <= bounds.right
+            inBounds
+        }
+        
+        // Enhanced debug logging for peer visibility
+        if (peerLocations.isNotEmpty()) {
+            android.util.Log.d("AnnotationOverlayView", "=== PEER VIEWPORT CULLING DEBUG ===")
+            android.util.Log.d("AnnotationOverlayView", "Total peers: ${peerLocations.size}, Visible peers: ${visible.size}")
+            android.util.Log.d("AnnotationOverlayView", "Viewport bounds: left=${bounds.left}, top=${bounds.top}, right=${bounds.right}, bottom=${bounds.bottom}")
+
+            // Log the phone location for comparison
+            phoneLocation?.let { phone ->
+                val phoneLat = phone.latitude.toFloat()
+                val phoneLon = phone.longitude.toFloat()
+                val phoneInBounds = phoneLat >= bounds.bottom && phoneLat <= bounds.top && phoneLon >= bounds.left && phoneLon <= bounds.right
+                android.util.Log.d("AnnotationOverlayView", "Phone location: lat=${phone.latitude}, lon=${phone.longitude}, inBounds=$phoneInBounds")
+            }
+            android.util.Log.d("AnnotationOverlayView", "=== END PEER VIEWPORT CULLING DEBUG ===")
+        }
+        
+        return visible
+    }
+    
+    /**
+     * Check if any timer annotations are visible in the current viewport
+     */
+    private fun checkForVisibleTimerAnnotations(): Boolean {
+        val now = System.currentTimeMillis()
+        
+        // Throttle timer annotation checks
+        if (now - lastTimerAnnotationCheck < TIMER_CHECK_THROTTLE_MS) {
+            return hasVisibleTimerAnnotations
+        }
+        
+        val bounds = getVisibleMapBounds()
+        val hasTimers = annotations.any { annotation ->
+            annotation.expirationTime != null && 
+            annotation.toMapLibreLatLng().let { latLng ->
+                val lat = latLng.latitude.toFloat()
+                val lon = latLng.longitude.toFloat()
+                // Explicit bounds checking instead of RectF.contains()
+                lat >= bounds.bottom && lat <= bounds.top && lon >= bounds.left && lon <= bounds.right
+            }
+        }
+        
+        hasVisibleTimerAnnotations = hasTimers
+        lastTimerAnnotationCheck = now
+        
+        // Log timer optimization metrics
+        if (hasTimers != hasVisibleTimerAnnotations) {
+            android.util.Log.d("AnnotationOverlayView", "Timer optimization: ${if (hasTimers) "enabled" else "disabled"} timer invalidates")
+        }
+        
+        return hasTimers
+    }
+
+    // --- PERFORMANCE OPTIMIZATION 2: Optimized Clustering Algorithm ---
+    
     private fun updateClusters() {
+        val now = System.currentTimeMillis()
+        
+        // Throttle clustering updates
+        if (now - lastClusteringUpdate < CLUSTERING_UPDATE_THROTTLE_MS) {
+            return
+        }
+        
         if (projection == null) return
         
-        val screenPoints = annotations.mapNotNull { annotation ->
+        // Use viewport culling for clustering
+        val visibleAnnotations = getVisibleAnnotations()
+        
+        // Clear previous grid
+        clusteringGrid.clear()
+        
+        // Single pass to assign annotations to grid cells
+        val screenPoints = visibleAnnotations.mapNotNull { annotation ->
             val latLng = annotation.toMapLibreLatLng()
             projection?.toScreenLocation(latLng)?.let { point ->
                 Pair(annotation, PointF(point.x, point.y))
             }
         }
-
+        
+        // Use dynamic threshold for grid assignment
+        val dynamicThreshold = getDynamicClusterThreshold()
+        
+        // Assign to grid cells
+        screenPoints.forEach { (annotation, point) ->
+            val gridX = (point.x / dynamicThreshold).toInt()
+            val gridY = (point.y / dynamicThreshold).toInt()
+            val cellKey = "$gridX,$gridY"
+            
+            clusteringGrid.getOrPut(cellKey) { mutableListOf() }.add(Pair(annotation, point))
+        }
+        
         val newClusters = mutableListOf<AnnotationCluster>()
         val processed = mutableSetOf<MapAnnotation>()
-
-        for ((annotation, point) in screenPoints) {
-            if (annotation in processed) continue
-
-            val clusterAnnotations = mutableListOf(annotation)
-            val bounds = RectF(point.x - clusterThreshold/2, point.y - clusterThreshold/2,
-                             point.x + clusterThreshold/2, point.y + clusterThreshold/2)
-            
-            // Find nearby annotations
-            for ((otherAnnotation, otherPoint) in screenPoints) {
-                if (otherAnnotation != annotation && otherAnnotation !in processed) {
-                    if (bounds.contains(otherPoint.x, otherPoint.y)) {
-                        clusterAnnotations.add(otherAnnotation)
-                        processed.add(otherAnnotation)
-                        bounds.union(otherPoint.x, otherPoint.y)
-                    }
-                }
-            }
-
-            if (clusterAnnotations.size > 1) {
-                // Calculate cluster center
-                val centerX = bounds.centerX()
-                val centerY = bounds.centerY()
-                val centerPointF = PointF(centerX, centerY)
-                val centerLatLng = projection?.fromScreenLocation(centerPointF)
+        
+        // Process each grid cell
+        clusteringGrid.values.forEach { cellAnnotations ->
+            if (cellAnnotations.size > 1) {
+                // Create cluster from this cell
+                val annotations = cellAnnotations.map { it.first }
+                val points = cellAnnotations.map { it.second }
+                val center = calculateClusterCenter(points)
+                val bounds = calculateClusterBounds(points)
                 
-                centerLatLng?.let {
-                    newClusters.add(AnnotationCluster(it, clusterAnnotations, bounds))
+                center?.let {
+                    newClusters.add(AnnotationCluster(it, annotations, bounds))
+                }
+                processed.addAll(annotations)
+            }
+        }
+        
+        // Simplified clustering: only merge cells that are directly adjacent and have overlapping annotations
+        // This prevents unstable cluster configurations when panning
+        val processedCells = mutableSetOf<String>()
+        
+        clusteringGrid.keys.sorted().forEach { cellKey ->
+            if (cellKey in processedCells) return@forEach
+            
+            val (gridX, gridY) = cellKey.split(",").let { it[0].toInt() to it[1].toInt() }
+            val currentCell = clusteringGrid[cellKey] ?: return@forEach
+            
+            // Only check the 4 direct neighbors (not diagonal) for more stable clustering
+            val neighbors = listOf(
+                "${gridX-1},$gridY", // left
+                "${gridX+1},$gridY", // right  
+                "$gridX,${gridY-1}", // top
+                "$gridX,${gridY+1}"  // bottom
+            )
+            
+            val cellsToMerge = mutableListOf(currentCell)
+            val annotationsToMerge = mutableSetOf<MapAnnotation>()
+            annotationsToMerge.addAll(currentCell.map { it.first })
+            processedCells.add(cellKey)
+            
+            // Check each neighbor
+            neighbors.forEach { neighborKey ->
+                if (neighborKey in processedCells) return@forEach
+                
+                val neighborCell = clusteringGrid[neighborKey] ?: return@forEach
+                
+                // Only merge if there are annotations within dynamic threshold distance
+                var shouldMerge = false
+                for ((_, point1) in currentCell) {
+                    for ((_, point2) in neighborCell) {
+                        val distance = hypot((point1.x - point2.x).toDouble(), (point1.y - point2.y).toDouble())
+                        if (distance < dynamicThreshold) {
+                            shouldMerge = true
+                            break
+                        }
+                    }
+                    if (shouldMerge) break
+                }
+                
+                if (shouldMerge) {
+                    cellsToMerge.add(neighborCell)
+                    annotationsToMerge.addAll(neighborCell.map { it.first })
+                    processedCells.add(neighborKey)
                 }
             }
             
-            processed.add(annotation)
+            // Create cluster if we have multiple cells or multiple annotations in a single cell
+            if (cellsToMerge.size > 1 || annotationsToMerge.size > 1) {
+                val allPoints = cellsToMerge.flatMap { it.map { pair -> pair.second } }
+                val center = calculateClusterCenter(allPoints)
+                val bounds = calculateClusterBounds(allPoints)
+                
+                center?.let {
+                    newClusters.add(AnnotationCluster(it, annotationsToMerge.toList(), bounds))
+                }
+            }
         }
-
+        
         clusters = newClusters
+        lastClusteringUpdate = now
+        
+        // Log clustering performance metrics
+        if (visibleAnnotations.size > 50) {
+            android.util.Log.d("AnnotationOverlayView", "Clustering: ${visibleAnnotations.size} visible annotations, ${newClusters.size} clusters created")
+        }
     }
+    
+    private fun calculateClusterCenter(points: List<PointF>): LatLng? {
+        if (points.isEmpty()) return null
+        
+        val centerX = points.map { it.x }.average().toFloat()
+        val centerY = points.map { it.y }.average().toFloat()
+        val centerPointF = PointF(centerX, centerY)
+        
+        return projection?.fromScreenLocation(centerPointF)
+    }
+    
+    private fun calculateClusterBounds(points: List<PointF>): RectF {
+        if (points.isEmpty()) return RectF()
+        
+        val minX = points.minOf { it.x }
+        val maxX = points.maxOf { it.x }
+        val minY = points.minOf { it.y }
+        val maxY = points.maxOf { it.y }
+        
+        return RectF(minX, minY, maxX, maxY)
+    }
+    
+
+
+    // --- PERFORMANCE OPTIMIZATION 2: Optimized Peer Clustering Algorithm ---
+    
+    private fun updatePeerClusters() {
+        val now = System.currentTimeMillis()
+        
+        // Throttle clustering updates
+        if (now - lastPeerClusteringUpdate < CLUSTERING_UPDATE_THROTTLE_MS) {
+            android.util.Log.d("AnnotationOverlayView", "Peer clustering throttled, skipping update")
+            return
+        }
+        
+        if (projection == null) {
+            android.util.Log.d("AnnotationOverlayView", "Projection is null, skipping peer clustering")
+            return
+        }
+        
+        // Use viewport culling for clustering
+        val visiblePeers = getVisiblePeerLocations()
+        android.util.Log.d("AnnotationOverlayView", "updatePeerClusters: ${visiblePeers.size} visible peers out of ${peerLocations.size} total")
+        
+        // Clear previous grid
+        peerClusteringGrid.clear()
+        
+        // Single pass to assign peers to grid cells
+        val screenPoints = visiblePeers.mapNotNull { (peerId, entry) ->
+            val latLng = LatLng(entry.latitude, entry.longitude)
+            projection?.toScreenLocation(latLng)?.let { point ->
+                Pair(peerId, PointF(point.x, point.y))
+            }
+        }
+        
+        android.util.Log.d("AnnotationOverlayView", "updatePeerClusters: ${screenPoints.size} peers converted to screen points")
+        
+        // Use dynamic threshold for grid assignment
+        val dynamicThreshold = getDynamicClusterThreshold()
+        android.util.Log.d("AnnotationOverlayView", "updatePeerClusters: using dynamic threshold ${dynamicThreshold}px at zoom level $currentZoom")
+        
+        // Assign to grid cells
+        screenPoints.forEach { (peerId, point) ->
+            val gridX = (point.x / dynamicThreshold).toInt()
+            val gridY = (point.y / dynamicThreshold).toInt()
+            val cellKey = "$gridX,$gridY"
+            
+            peerClusteringGrid.getOrPut(cellKey) { mutableListOf() }.add(Pair(peerId, point))
+        }
+        
+        android.util.Log.d("AnnotationOverlayView", "updatePeerClusters: ${peerClusteringGrid.size} grid cells created")
+        
+        val newPeerClusters = mutableListOf<PeerCluster>()
+        val processedPeers = mutableSetOf<String>() // Track which peers have been assigned to clusters
+        val processedCells = mutableSetOf<String>() // Track which cells have been processed
+        
+        // Single-phase clustering: process cells and merge neighbors in one pass
+        peerClusteringGrid.keys.sorted().forEach { cellKey ->
+            if (cellKey in processedCells) return@forEach
+            
+            val (gridX, gridY) = cellKey.split(",").let { it[0].toInt() to it[1].toInt() }
+            val currentCell = peerClusteringGrid[cellKey] ?: return@forEach
+            
+            // Skip cells that only have already-processed peers
+            val unprocessedPeers = currentCell.filter { (peerId, _) -> peerId !in processedPeers }
+            if (unprocessedPeers.isEmpty()) {
+                processedCells.add(cellKey)
+                return@forEach
+            }
+            
+            // Start building a cluster from this cell
+            val cellsToMerge = mutableListOf(currentCell)
+            val peersToMerge = mutableSetOf<String>()
+            val pointsToMerge = mutableListOf<PointF>()
+            
+            // Add unprocessed peers from current cell
+            unprocessedPeers.forEach { (peerId, point) ->
+                peersToMerge.add(peerId)
+                pointsToMerge.add(point)
+            }
+            
+            processedCells.add(cellKey)
+            
+            // Check neighbors for additional peers to merge
+            val neighbors = listOf(
+                "${gridX-1},$gridY", // left
+                "${gridX+1},$gridY", // right  
+                "$gridX,${gridY-1}", // top
+                "$gridX,${gridY+1}"  // bottom
+            )
+            
+            neighbors.forEach { neighborKey ->
+                if (neighborKey in processedCells) return@forEach
+                
+                val neighborCell = peerClusteringGrid[neighborKey] ?: return@forEach
+                
+                // Check if any unprocessed peers in neighbor cell are within threshold
+                val neighborUnprocessedPeers = neighborCell.filter { (peerId, _) -> peerId !in processedPeers }
+                if (neighborUnprocessedPeers.isEmpty()) return@forEach
+                
+                var shouldMerge = false
+                for ((_, point1) in unprocessedPeers) {
+                    for ((_, point2) in neighborUnprocessedPeers) {
+                        val distance = hypot((point1.x - point2.x).toDouble(), (point1.y - point2.y).toDouble())
+                        if (distance < dynamicThreshold) {
+                            shouldMerge = true
+                            break
+                        }
+                    }
+                    if (shouldMerge) break
+                }
+                
+                if (shouldMerge) {
+                    cellsToMerge.add(neighborCell)
+                    neighborUnprocessedPeers.forEach { (peerId, point) ->
+                        peersToMerge.add(peerId)
+                        pointsToMerge.add(point)
+                    }
+                    processedCells.add(neighborKey)
+                }
+            }
+            
+            // Create cluster if we have multiple peers
+            if (peersToMerge.size > 1) {
+                val peerEntries = peersToMerge.map { peerId -> 
+                    Pair(peerId, visiblePeers[peerId]!!) 
+                }
+                val center = calculateClusterCenter(pointsToMerge)
+                val bounds = calculateClusterBounds(pointsToMerge)
+                
+                center?.let {
+                    newPeerClusters.add(PeerCluster(it, peerEntries, bounds))
+                    // Mark all peers in this cluster as processed
+                    processedPeers.addAll(peersToMerge)
+                }
+            }
+        }
+        
+        peerClusters = newPeerClusters
+        lastPeerClusteringUpdate = now
+        
+        // Log clustering performance metrics
+        android.util.Log.d("AnnotationOverlayView", "Peer clustering final result: ${visiblePeers.size} visible peers, ${newPeerClusters.size} clusters created")
+        if (newPeerClusters.isNotEmpty()) {
+            newPeerClusters.forEachIndexed { index, cluster ->
+                android.util.Log.d("AnnotationOverlayView", "Cluster $index: ${cluster.peers.size} peers at ${cluster.center}")
+            }
+        }
+        
+        // Verify no duplicate peers across clusters
+        val allPeerIds = newPeerClusters.flatMap { it.peers.map { peer -> peer.first } }
+        val uniquePeerIds = allPeerIds.toSet()
+        if (allPeerIds.size != uniquePeerIds.size) {
+            android.util.Log.w("AnnotationOverlayView", "WARNING: Duplicate peers detected in clusters! Total: ${allPeerIds.size}, Unique: ${uniquePeerIds.size}")
+        } else {
+            android.util.Log.d("AnnotationOverlayView", "✓ No duplicate peers in clusters")
+        }
+    }
+    
+
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         if (projection == null) return
+
+        // --- PERFORMANCE OPTIMIZATION 3: Check for timer annotations ---
+        checkForVisibleTimerAnnotations()
+
+        // Update clusters if needed
+        if (currentZoom < minZoomForClustering) {
+            android.util.Log.d("AnnotationOverlayView", "Updating annotation clusters at zoom level $currentZoom")
+            updateClusters()
+        }
+        if (currentZoom < minZoomForPeerClustering) {
+            android.util.Log.d("AnnotationOverlayView", "Updating peer clusters at zoom level $currentZoom")
+            updatePeerClusters()
+        }
 
         android.util.Log.d("AnnotationOverlayView", "onDraw: deviceLocation=$deviceLocation, phoneLocation=$phoneLocation")
 
@@ -308,13 +781,48 @@ class AnnotationOverlayView @JvmOverloads constructor(
             }
         }
 
-        // Draw peer location dots (solid green, not user annotations)
-        peerLocations.values.forEach { entry ->
-            val latLng = LatLng(entry.latitude, entry.longitude)
-            val point = projection?.toScreenLocation(latLng)
-            if (point != null) {
-                val pointF = PointF(point.x, point.y)
-                drawPeerLocationDot(canvas, pointF)
+        // Draw peer location dots with clustering support
+        if (currentZoom < minZoomForPeerClustering) {
+            android.util.Log.d("AnnotationOverlayView", "Drawing peer clusters: ${peerClusters.size} clusters")
+            // Draw peer clusters
+            peerClusters.forEach { cluster ->
+                val point = projection?.toScreenLocation(cluster.center)
+                if (point != null) {
+                    val pointF = PointF(point.x, point.y)
+                    drawPeerCluster(canvas, pointF, cluster)
+                }
+            }
+
+            // Draw non-clustered peers
+            val clusteredPeerIds = peerClusters.flatMap { it.peers.map { peer -> peer.first } }.toSet()
+            val visiblePeers = getVisiblePeerLocations()
+            android.util.Log.d("AnnotationOverlayView", "Drawing ${visiblePeers.size}/${peerLocations.size} peers with clustering (${peerClusters.size} clusters)")
+            visiblePeers.filter { (peerId, _) -> peerId !in clusteredPeerIds }.forEach { (_, entry) ->
+                val latLng = LatLng(entry.latitude, entry.longitude)
+                val point = projection?.toScreenLocation(latLng)
+                if (point != null) {
+                    val pointF = PointF(point.x, point.y)
+                    drawPeerLocationDot(canvas, pointF)
+                } else {
+                    android.util.Log.w("AnnotationOverlayView", "Peer at lat=${entry.latitude}, lon=${entry.longitude} could not be converted to screen coordinates")
+                }
+            }
+        } else {
+            // Draw all peers normally without clustering
+            val visiblePeers = getVisiblePeerLocations()
+            android.util.Log.d("AnnotationOverlayView", "Drawing ${visiblePeers.size}/${peerLocations.size} peers (no clustering)")
+            visiblePeers.values.forEach { entry ->
+                val latLng = LatLng(entry.latitude, entry.longitude)
+                val point = projection?.toScreenLocation(latLng)
+                if (point != null) {
+                    val pointF = PointF(point.x, point.y)
+                    // Debug: log screen coordinates and check if on-screen
+                    val onScreen = pointF.x >= -50 && pointF.x <= width + 50 && pointF.y >= -50 && pointF.y <= height + 50
+                    android.util.Log.d("AnnotationOverlayView", "Peer at lat=${entry.latitude}, lon=${entry.longitude} -> screen=(${pointF.x}, ${pointF.y}), onScreen=$onScreen")
+                    drawPeerLocationDot(canvas, pointF)
+                } else {
+                    android.util.Log.w("AnnotationOverlayView", "Peer at lat=${entry.latitude}, lon=${entry.longitude} could not be converted to screen coordinates")
+                }
             }
         }
 
@@ -332,9 +840,9 @@ class AnnotationOverlayView @JvmOverloads constructor(
                 }
             }
 
-            // Draw non-clustered annotations
+            // Draw non-clustered annotations - OPTIMIZED WITH VIEWPORT CULLING
             val clusteredAnnotations = clusters.flatMap { it.annotations }.toSet()
-            annotations.filter { it !in clusteredAnnotations }.forEach { annotation ->
+            getVisibleAnnotations().filter { it !in clusteredAnnotations }.forEach { annotation ->
                 val point = annotation.toMapLibreLatLng().let { latLng ->
                     projection?.toScreenLocation(latLng)
                 }
@@ -377,8 +885,8 @@ class AnnotationOverlayView @JvmOverloads constructor(
                 }
             }
         } else {
-            // Draw all annotations normally
-            annotations.forEach { annotation ->
+            // Draw all annotations normally - OPTIMIZED WITH VIEWPORT CULLING
+            getVisibleAnnotations().forEach { annotation ->
                 val point = annotation.toMapLibreLatLng().let { latLng ->
                     projection?.toScreenLocation(latLng)
                 }
@@ -748,6 +1256,39 @@ class AnnotationOverlayView @JvmOverloads constructor(
         }
         canvas.drawText(
             cluster.annotations.size.toString(),
+            center.x,
+            center.y + textPaint.textSize/3,
+            textPaint
+        )
+    }
+
+    private fun drawPeerCluster(canvas: Canvas, center: PointF, cluster: PeerCluster) {
+        // Draw cluster circle with green fill
+        val clusterPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#4CAF50") // Material green 500 (same as peer dots)
+            style = Paint.Style.FILL
+        }
+        val radius = 40f
+        canvas.drawCircle(center.x, center.y, radius, clusterPaint)
+
+        // Draw cluster border
+        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            style = Paint.Style.STROKE
+            strokeWidth = 3f
+        }
+        canvas.drawCircle(center.x, center.y, radius, borderPaint)
+
+        // Draw count
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            textSize = 32f
+            textAlign = Paint.Align.CENTER
+            isFakeBoldText = true // Make text bold
+            typeface = Typeface.DEFAULT_BOLD // Use bold typeface
+        }
+        canvas.drawText(
+            cluster.peers.size.toString(),
             center.x,
             center.y + textPaint.textSize/3,
             textPaint
@@ -1315,6 +1856,21 @@ class AnnotationOverlayView @JvmOverloads constructor(
 
     // Helper to find a peer dot at a screen position
     private fun findPeerDotAt(x: Float, y: Float): String? {
+        // First check if we're touching a peer cluster
+        if (currentZoom < minZoomForPeerClustering) {
+            for (cluster in peerClusters) {
+                val point = projection?.toScreenLocation(cluster.center) ?: continue
+                val dx = x - point.x
+                val dy = y - point.y
+                if (hypot(dx.toDouble(), dy.toDouble()) < 40) {
+                    // Return the first peer in the cluster for now
+                    // In the future, this could show a list of peers in the cluster
+                    return cluster.peers.firstOrNull()?.first
+                }
+            }
+        }
+        
+        // Then check individual peer dots
         for ((peerId, entry) in peerLocations) {
             val point = projection?.toScreenLocation(entry.toLatLng()) ?: continue
             val dx = x - point.x

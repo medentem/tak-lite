@@ -32,6 +32,19 @@ class PredictionOverlayView @JvmOverloads constructor(
     private val minOffset = 18f
     private val maxOffset = 50f
     
+    // Viewport calculation for performance optimization
+    private var lastViewportUpdate: Long = 0
+    private val VIEWPORT_UPDATE_THROTTLE_MS = 200L // Same as repository
+    private var currentViewportBounds: android.graphics.RectF? = null
+    
+    // Interface for viewport updates
+    interface ViewportUpdateListener {
+        fun onViewportChanged(viewportBounds: android.graphics.RectF?)
+    }
+    
+    // Property for viewport update listener
+    var viewportUpdateListener: ViewportUpdateListener? = null
+    
     // Timer for updating time displays
     private val timeUpdateHandler = Handler(Looper.getMainLooper())
     private val timeUpdateRunnable = object : Runnable {
@@ -116,8 +129,58 @@ class PredictionOverlayView @JvmOverloads constructor(
         }
     }
     
+    /**
+     * Get the current visible map bounds with margin for predictions partially off-screen
+     */
+    private fun getVisibleMapBounds(): android.graphics.RectF? {
+        val now = System.currentTimeMillis()
+        
+        // Throttle viewport updates to avoid excessive calculations
+        if (now - lastViewportUpdate < VIEWPORT_UPDATE_THROTTLE_MS && currentViewportBounds != null) {
+            return currentViewportBounds
+        }
+        
+        if (projection == null || width == 0 || height == 0) {
+            return null
+        }
+        
+        // Get screen corners and convert to lat/lng
+        val topLeft = projection?.fromScreenLocation(android.graphics.PointF(0f, 0f))
+        val bottomRight = projection?.fromScreenLocation(android.graphics.PointF(width.toFloat(), height.toFloat()))
+        
+        if (topLeft == null || bottomRight == null) {
+            return null
+        }
+        
+        // Add margin for predictions partially off-screen (0.1 degrees ≈ 10km at equator)
+        val margin = 0.1f
+        val bounds = android.graphics.RectF(
+            (topLeft.longitude - margin).toFloat(),  // left (minimum longitude)
+            (topLeft.latitude + margin).toFloat(),   // top (maximum latitude)
+            (bottomRight.longitude + margin).toFloat(), // right (maximum longitude)
+            (bottomRight.latitude - margin).toFloat()   // bottom (minimum latitude)
+        )
+        
+        Log.d("PredictionOverlayView", "Viewport bounds: $bounds")
+        
+        currentViewportBounds = bounds
+        lastViewportUpdate = now
+        return bounds
+    }
+    
+    /**
+     * Update viewport and notify listener
+     */
+    private fun updateViewport() {
+        val viewportBounds = getVisibleMapBounds()
+        viewportUpdateListener?.onViewportChanged(viewportBounds)
+    }
+    
     fun setProjection(projection: Projection?) {
         this.projection = projection
+        // Force viewport update when projection changes
+        currentViewportBounds = null
+        updateViewport()
         invalidate()
     }
     
@@ -143,6 +206,9 @@ class PredictionOverlayView @JvmOverloads constructor(
     
     fun setZoom(zoom: Float) {
         this.currentZoom = zoom
+        // Force viewport update on zoom change
+        currentViewportBounds = null
+        updateViewport()
         invalidate()
     }
     

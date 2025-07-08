@@ -191,6 +191,104 @@ class PeerLocationHistoryRepository @Inject constructor(
         }
     }
     
+    // Viewport state for performance optimization
+    private var lastViewportUpdate: Long = 0
+    private val VIEWPORT_UPDATE_THROTTLE_MS = 200L // Throttle viewport updates
+    private var currentViewportBounds: android.graphics.RectF? = null
+    
+    /**
+     * Update predictions for only peers visible in the current viewport
+     * This provides significant performance improvements by avoiding prediction calculations
+     * for peers that are off-screen
+     */
+    fun updateVisiblePredictions(viewportBounds: android.graphics.RectF?) {
+        val startTime = System.currentTimeMillis()
+        val currentConfig = _predictionConfig.value
+        val currentModel = _selectedModel.value
+        
+        if (viewportBounds == null) {
+            // Fallback to updating all predictions when viewport is unknown
+            Log.d(TAG, "Viewport bounds null, falling back to updateAllPredictions")
+            updateAllPredictions()
+            return
+        }
+        
+        Log.d(TAG, "Updating predictions for viewport: $viewportBounds")
+        
+        // Filter peers to only those in viewport
+        val visiblePeers = peerHistories.filter { (peerId, history) ->
+            val latestEntry = history.entries.lastOrNull() ?: return@filter false
+            val lat = latestEntry.latitude.toFloat()
+            val lon = latestEntry.longitude.toFloat()
+            val inBounds = lat >= viewportBounds.bottom && lat <= viewportBounds.top && 
+                          lon >= viewportBounds.left && lon <= viewportBounds.right
+            
+            if (inBounds) {
+                Log.d(TAG, "Peer $peerId in viewport: lat=$lat, lon=$lon")
+            }
+            inBounds
+        }
+        
+        Log.d(TAG, "Viewport filtering: ${peerHistories.size} total peers, ${visiblePeers.size} visible")
+        
+        // Update predictions only for visible peers
+        visiblePeers.forEach { (peerId, history) ->
+            updatePrediction(peerId, history, currentConfig, currentModel)
+        }
+        
+        // Remove predictions for non-visible peers to save memory
+        val currentPredictions = _predictions.value.toMutableMap()
+        val currentCones = _confidenceCones.value.toMutableMap()
+        
+        val removedPredictions = mutableListOf<String>()
+        peerHistories.keys.forEach { peerId ->
+            if (!visiblePeers.containsKey(peerId)) {
+                if (currentPredictions.remove(peerId) != null) {
+                    removedPredictions.add(peerId)
+                }
+                currentCones.remove(peerId)
+            }
+        }
+        
+        if (removedPredictions.isNotEmpty()) {
+            Log.d(TAG, "Removed predictions for off-screen peers: $removedPredictions")
+        }
+        
+        _predictions.value = currentPredictions
+        _confidenceCones.value = currentCones
+        
+        val endTime = System.currentTimeMillis()
+        val duration = endTime - startTime
+        Log.d(TAG, "Viewport prediction update completed in ${duration}ms: ${visiblePeers.size} visible peers processed")
+    }
+    
+    /**
+     * Update viewport bounds with throttling to prevent excessive updates
+     */
+    fun updateViewportBounds(viewportBounds: android.graphics.RectF?) {
+        val now = System.currentTimeMillis()
+        
+        // Throttle viewport updates to avoid excessive prediction recalculations
+        if (now - lastViewportUpdate < VIEWPORT_UPDATE_THROTTLE_MS && 
+            currentViewportBounds == viewportBounds) {
+            return
+        }
+        
+        currentViewportBounds = viewportBounds
+        lastViewportUpdate = now
+        
+        // Update predictions for the new viewport
+        updateVisiblePredictions(viewportBounds)
+    }
+    
+    /**
+     * Force full prediction update when needed (fallback method)
+     */
+    fun forceFullPredictionUpdate() {
+        Log.d(TAG, "Forcing full prediction update")
+        updateAllPredictions()
+    }
+    
     /**
      * Get location history for a specific peer
      */

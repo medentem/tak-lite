@@ -168,6 +168,15 @@ class MeshNetworkViewModel @Inject constructor(
         return meshNetworkRepository.getPeerLastHeard(peerId)
     }
     
+    /**
+     * Update prediction viewport bounds for performance optimization
+     * This triggers viewport-based filtering in the prediction repository
+     */
+    fun updatePredictionViewport(viewportBounds: android.graphics.RectF?) {
+        Log.d("MeshNetworkViewModel", "Updating prediction viewport: $viewportBounds")
+        peerLocationHistoryRepository.updateViewportBounds(viewportBounds)
+    }
+    
     override fun onCleared() {
         super.onCleared()
         meshNetworkRepository.cleanup()
