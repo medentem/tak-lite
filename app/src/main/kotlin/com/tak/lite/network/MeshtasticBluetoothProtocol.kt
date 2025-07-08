@@ -533,16 +533,15 @@ class MeshtasticBluetoothProtocol @Inject constructor(
      * @return String with diagnostic information
      */
     override fun getDiagnosticInfo(): String {
-        val deviceStatus = deviceManager.getConnectionStateSummary()
-        val reconnectionStatus = deviceManager.getReconnectionStatus()
-        val queueStatus = deviceManager.getQueueStatus()
-        val handshakeFailed = isHandshakeFailed()
-        
-        return "Device Status: $deviceStatus\n" +
-               "Reconnection Status: $reconnectionStatus\n" +
-               "Queue Status: ${queueStatus.first}, In Progress: ${queueStatus.second}, Current Op: ${queueStatus.third}\n" +
-               "Protocol State: ${_connectionState.value}, Handshake: ${_configDownloadStep.value}\n" +
-               "Handshake Failed: $handshakeFailed"
+        return "Bluetooth Protocol State: ${_connectionState.value}, " +
+               "Connected Device: ${deviceManager.connectedGatt?.device?.name ?: "None"}, " +
+               "Handshake Complete: $handshakeComplete, " +
+               "Config Step: ${_configDownloadStep.value}, " +
+               "My ID: ${_localNodeIdOrNickname.value}"
+    }
+    
+    override fun getLocalUserInfo(): Pair<String, String>? {
+        return super.getLocalUserInfoInternal()
     }
 
     /**

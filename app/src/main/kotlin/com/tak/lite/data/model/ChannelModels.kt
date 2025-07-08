@@ -31,9 +31,9 @@ enum class MessageStatus {
      * Returns true if the new status represents progress or is a valid terminal state.
      */
     fun canTransitionFrom(currentStatus: MessageStatus): Boolean {
-        // Terminal states (FAILED, ERROR) can only be set once and cannot be overridden
+        // Terminal states (FAILED, ERROR) can be reset by queueing
         if (currentStatus == FAILED || currentStatus == ERROR) {
-            return false
+            return true
         }
         
         // If the new status is also a terminal state, it can always be set

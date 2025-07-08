@@ -1346,6 +1346,26 @@ abstract class MeshtasticBaseProtocol(
         return nodeInfoMap[peerId]
     }
 
+    /**
+     * Get the local user's shortname and hwmodel for display purposes
+     * @return Pair of shortname and hwmodel string, or null if not available
+     */
+    protected fun getLocalUserInfoInternal(): Pair<String, String>? {
+        val localNodeId = connectedNodeId ?: return null
+        val nodeInfo = nodeInfoMap[localNodeId] ?: return null
+        val user = nodeInfo.user ?: return null
+        
+        val shortname = user.shortName.takeIf { it.isNotBlank() } ?: return null
+        val hwmodel = user.hwModel.toString()
+        
+        Log.d(TAG, "Local user info available: shortname=$shortname, hwmodel=$hwmodel")
+        return Pair(shortname, hwmodel)
+    }
+
+    override fun getLocalUserInfo(): Pair<String, String>? {
+        return getLocalUserInfoInternal()
+    }
+
     internal open fun cleanupState() {
         // Stop any ongoing operations first
         stopPacketQueue()

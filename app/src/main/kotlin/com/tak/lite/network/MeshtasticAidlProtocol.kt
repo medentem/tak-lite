@@ -685,6 +685,7 @@ class MeshtasticAidlProtocol @Inject constructor(
     override fun sendPacket(packet: MeshPacket): Boolean {
         if (meshService == null) {
             Log.w(TAG, "MeshService is not bound, cannot send packet")
+            queueResponse.remove(packet.id)?.complete(false)
             return false
         }
         
@@ -695,15 +696,18 @@ class MeshtasticAidlProtocol @Inject constructor(
             val dataPacket = packet.toDataPacket()
             
             Log.d(TAG, "Sending DataPacket via AIDL service: from=${dataPacket.from}, to=${dataPacket.to}, dataType=${dataPacket.dataType}")
+            Log.d(TAG, "DataPacket: $dataPacket")
             
             // Send via AIDL service
             meshService?.send(dataPacket)
             
-            Log.d(TAG, "Packet sent successfully via AIDL service")
+            Log.d(TAG, "Packet id=${packet.id} sent successfully via AIDL service")
+            queueResponse.remove(packet.id)?.complete(true)
             return true
             
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to send packet via AIDL service", e)
+            Log.e(TAG, "Failed to send packet id=${packet.id} via AIDL service", e)
+            queueResponse.remove(packet.id)?.complete(false)
             return false
         }
     }
@@ -787,6 +791,14 @@ class MeshtasticAidlProtocol @Inject constructor(
         }
         
         return appAccessible
+    }
+
+    /**
+     * Get the local user's shortname and hwmodel for display purposes
+     * @return Pair of shortname and hwmodel string, or null if not available
+     */
+    override fun getLocalUserInfo(): Pair<String, String>? {
+        return super.getLocalUserInfoInternal()
     }
 
     // Data conversion utilities
@@ -903,6 +915,14 @@ class MeshtasticAidlProtocol @Inject constructor(
                 .setHwModel(user.hwModel)
                 .setIsLicensed(user.isLicensed)
                 .setRoleValue(user.role)
+            
+            // This is a hack because AIDL interface doesn't provide PK to us,
+            // but the code expects it to do things like send over the magic PKC channel
+            // Generate a deterministic spoofed public key based on the user ID
+            // This ensures the same user always gets the same public key
+            val spoofedPublicKey = generateSpoofedPublicKey(user.id)
+            userBuilder.setPublicKey(ByteString.copyFrom(spoofedPublicKey))
+            
             builder.setUser(userBuilder.build())
         }
         
@@ -924,6 +944,36 @@ class MeshtasticAidlProtocol @Inject constructor(
         } catch (e: Exception) {
             Log.e(TAG, "Error converting NodeInfo to MeshProtos.NodeInfo: ${e.message}", e)
             throw e
+        }
+    }
+    
+    /**
+     * Generates a deterministic spoofed public key based on the user ID.
+     * This ensures that the same user always gets the same public key,
+     * which is necessary for private messaging to work consistently.
+     */
+    private fun generateSpoofedPublicKey(userId: String): ByteArray {
+        try {
+            // Use a simple hash-based approach to generate a deterministic "public key"
+            // This creates a 32-byte array that looks like a public key
+            val hash = userId.hashCode()
+            val keyBytes = ByteArray(32)
+            
+            // Fill the key with deterministic data based on the user ID
+            for (i in keyBytes.indices) {
+                keyBytes[i] = ((hash + i * 7) % 256).toByte()
+            }
+            
+            // Set the first byte to indicate this is a "spoofed" key (for debugging)
+            keyBytes[0] = 0xAA.toByte()
+            
+            Log.d(TAG, "Generated spoofed public key for user $userId: ${keyBytes.take(8).joinToString(", ") { "0x%02X".format(it) }}...")
+            
+            return keyBytes
+        } catch (e: Exception) {
+            Log.e(TAG, "Error generating spoofed public key for user $userId", e)
+            // Return a fallback key if generation fails
+            return ByteArray(32) { 0x00 }
         }
     }
     

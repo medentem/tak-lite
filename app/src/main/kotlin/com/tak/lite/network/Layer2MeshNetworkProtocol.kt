@@ -1097,9 +1097,13 @@ class Layer2MeshNetworkProtocol @Inject constructor(
     }
 
     override fun getDiagnosticInfo(): String {
-        return "Layer 2 Protocol State: ${_connectionState.value}, " +
-               "Peers: ${_peers.value.size}, " +
-               "Annotations: ${_annotations.value.size}, " +
-               "Discovery Active: ${discoveryJob?.isActive ?: false}"
+        return "Layer2 Protocol State: ${_connectionState.value}, " +
+               "Connected Peers: ${_peers.value.size}, " +
+               "Local Node ID: ${_localNodeIdOrNickname.value}, "
+    }
+    
+    override fun getLocalUserInfo(): Pair<String, String>? {
+        // Layer2 protocol doesn't have user information like Meshtastic
+        return null
     }
 } 

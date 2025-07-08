@@ -159,6 +159,10 @@ class DisabledMeshProtocol(private val context: Context) : MeshProtocol {
     }
 
     override fun getDiagnosticInfo(): String {
-        return "Disabled Protocol - No connections possible"
+        return "Disabled Protocol - Trial period ended"
+    }
+    
+    override fun getLocalUserInfo(): Pair<String, String>? {
+        return null
     }
 } 

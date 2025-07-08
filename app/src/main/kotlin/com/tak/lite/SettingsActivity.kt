@@ -938,9 +938,21 @@ class SettingsActivity : BaseActivity() {
                     updateBluetoothButtonState()
                     Log.d("SettingsActivity", "Updated Bluetooth status: Connected: $deviceName")
                 } else if (connectionType == "aidl" || currentMeshType == "MeshtasticAidl") {
-                    aidlStatusText.text = "Connected: $deviceName"
+                    // For AIDL, try to get user information
+                    val userInfo = currentProtocol.getLocalUserInfo()
+                    
+                    Log.d("SettingsActivity", "AIDL connection - userInfo: $userInfo")
+                    
+                    val statusText = if (userInfo != null) {
+                        val (shortname, hwmodel) = userInfo
+                        "Connected: $deviceName ($shortname - $hwmodel)"
+                    } else {
+                        "Connected: $deviceName"
+                    }
+                    
+                    aidlStatusText.text = statusText
                     updateAidlButtonState()
-                    Log.d("SettingsActivity", "Updated AIDL status: Connected: $deviceName")
+                    Log.d("SettingsActivity", "Updated AIDL status: $statusText")
                 }
             }
             is MeshConnectionState.Disconnected -> {

@@ -86,6 +86,9 @@ interface MeshProtocol {
     fun forceReset()
     fun isReadyForNewConnection(): Boolean
     fun getDiagnosticInfo(): String
+    
+    // Local user information
+    fun getLocalUserInfo(): Pair<String, String>?
 }
 
 // Device information abstraction
