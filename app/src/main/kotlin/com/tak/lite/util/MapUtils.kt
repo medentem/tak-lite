@@ -11,12 +11,19 @@ import kotlin.math.*
 suspend fun saveTilePngWithType(context: Context, type: String, zoom: Int, x: Int, y: Int, bytes: ByteArray): Boolean = withContext(Dispatchers.IO) {
     try {
         val dir = File(context.filesDir, "tiles/$type/$zoom/$x")
-        if (!dir.exists()) dir.mkdirs()
+        android.util.Log.d("OfflineTiles", "Creating directory: ${dir.absolutePath}")
+        if (!dir.exists()) {
+            val created = dir.mkdirs()
+            android.util.Log.d("OfflineTiles", "Directory creation result: $created")
+        }
         val file = File(dir, "$y.png")
+        android.util.Log.d("OfflineTiles", "Saving $type tile to: ${file.absolutePath}, size: ${bytes.size} bytes")
         FileOutputStream(file).use { it.write(bytes) }
+        val savedSize = file.length()
+        android.util.Log.d("OfflineTiles", "Successfully saved $type tile $zoom/$x/$y, file size: $savedSize bytes")
         true
     } catch (e: Exception) {
-        android.util.Log.e("OfflineTiles", "Failed to save $type tile $zoom/$x/$y: ${e.message}")
+        android.util.Log.e("OfflineTiles", "Failed to save $type tile $zoom/$x/$y: ${e.message}", e)
         false
     }
 }
@@ -24,12 +31,19 @@ suspend fun saveTilePngWithType(context: Context, type: String, zoom: Int, x: In
 suspend fun saveTilePbfWithType(context: Context, type: String, zoom: Int, x: Int, y: Int, bytes: ByteArray): Boolean = withContext(Dispatchers.IO) {
     try {
         val dir = File(context.filesDir, "tiles/$type/$zoom/$x")
-        if (!dir.exists()) dir.mkdirs()
+        android.util.Log.d("OfflineTiles", "Creating directory: ${dir.absolutePath}")
+        if (!dir.exists()) {
+            val created = dir.mkdirs()
+            android.util.Log.d("OfflineTiles", "Directory creation result: $created")
+        }
         val file = File(dir, "$y.pbf")
+        android.util.Log.d("OfflineTiles", "Saving $type tile to: ${file.absolutePath}, size: ${bytes.size} bytes")
         FileOutputStream(file).use { it.write(bytes) }
+        val savedSize = file.length()
+        android.util.Log.d("OfflineTiles", "Successfully saved $type tile $zoom/$x/$y, file size: $savedSize bytes")
         true
     } catch (e: Exception) {
-        android.util.Log.e("OfflineTiles", "Failed to save $type tile $zoom/$x/$y: ${e.message}")
+        android.util.Log.e("OfflineTiles", "Failed to save $type tile $zoom/$x/$y: ${e.message}", e)
         false
     }
 }
@@ -37,12 +51,19 @@ suspend fun saveTilePbfWithType(context: Context, type: String, zoom: Int, x: In
 suspend fun saveTileWebpWithType(context: Context, type: String, zoom: Int, x: Int, y: Int, bytes: ByteArray): Boolean = withContext(Dispatchers.IO) {
     try {
         val dir = File(context.filesDir, "tiles/$type/$zoom/$x")
-        if (!dir.exists()) dir.mkdirs()
+        android.util.Log.d("OfflineTiles", "Creating directory: ${dir.absolutePath}")
+        if (!dir.exists()) {
+            val created = dir.mkdirs()
+            android.util.Log.d("OfflineTiles", "Directory creation result: $created")
+        }
         val file = File(dir, "$y.webp")
+        android.util.Log.d("OfflineTiles", "Saving $type tile to: ${file.absolutePath}, size: ${bytes.size} bytes")
         FileOutputStream(file).use { it.write(bytes) }
+        val savedSize = file.length()
+        android.util.Log.d("OfflineTiles", "Successfully saved $type tile $zoom/$x/$y, file size: $savedSize bytes")
         true
     } catch (e: Exception) {
-        android.util.Log.e("OfflineTiles", "Failed to save $type tile $zoom/$x/$y: ${e.message}")
+        android.util.Log.e("OfflineTiles", "Failed to save $type tile $zoom/$x/$y: ${e.message}", e)
         false
     }
 }

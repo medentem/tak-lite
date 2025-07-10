@@ -357,20 +357,29 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
         }
 
         downloadSectorButton.setOnClickListener {
+            android.util.Log.d("MainActivity", "Starting offline tile download")
             Toast.makeText(this, "Downloading offline tiles...", Toast.LENGTH_SHORT).show()
             binding.tileDownloadProgressBar.progress = 0
             binding.tileDownloadProgressBar.visibility = View.VISIBLE
             lifecycleScope.launch {
-                val (successCount, failCount) = mapController.downloadVisibleTiles { completed, total ->
-                    runOnUiThread {
-                        if (total > 0) {
-                            val percent = (completed * 100) / total
-                            binding.tileDownloadProgressBar.progress = percent
+                try {
+                    val (successCount, failCount) = mapController.downloadVisibleTiles { completed, total ->
+                        runOnUiThread {
+                            if (total > 0) {
+                                val percent = (completed * 100) / total
+                                binding.tileDownloadProgressBar.progress = percent
+                                android.util.Log.d("MainActivity", "Download progress: $completed/$total ($percent%)")
+                            }
                         }
                     }
+                    binding.tileDownloadProgressBar.visibility = View.GONE
+                    android.util.Log.d("MainActivity", "Offline tile download completed - Success: $successCount, Failed: $failCount")
+                    Toast.makeText(this@MainActivity, "Offline tile download complete: $successCount success, $failCount failed", Toast.LENGTH_LONG).show()
+                } catch (e: Exception) {
+                    android.util.Log.e("MainActivity", "Exception during tile download: ${e.message}", e)
+                    binding.tileDownloadProgressBar.visibility = View.GONE
+                    Toast.makeText(this@MainActivity, "Download failed: ${e.message}", Toast.LENGTH_LONG).show()
                 }
-                binding.tileDownloadProgressBar.visibility = View.GONE
-                Toast.makeText(this@MainActivity, "Offline tile download complete: $successCount success, $failCount failed", Toast.LENGTH_LONG).show()
             }
         }
 

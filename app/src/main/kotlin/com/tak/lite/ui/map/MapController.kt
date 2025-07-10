@@ -753,13 +753,32 @@ class MapController(
     }
 
     private fun allOfflineTilesExist(tileCoords: List<Triple<Int, Int, Int>>): Boolean {
+        android.util.Log.d("OfflineTiles", "Checking offline tiles existence for ${tileCoords.size} tiles")
         for ((z, x, y) in tileCoords) {
             val osmFile = File(getFilesDir(), "tiles/osm/$z/$x/$y.png")
             val satFile = File(getFilesDir(), "tiles/satellite-v2/$z/$x/$y.png")
             val vectorFile = File(getFilesDir(), "tiles/vector/$z/$x/$y.pbf")
             val terrainFile = File(getFilesDir(), "tiles/terrain-dem/$z/$x/$y.webp")
-            if (!osmFile.exists() || !satFile.exists() || !vectorFile.exists() || !terrainFile.exists()) return false
+            
+            val osmExists = osmFile.exists()
+            val satExists = satFile.exists()
+            val vectorExists = vectorFile.exists()
+            val terrainExists = terrainFile.exists()
+            
+            // Check required tiles based on zoom level
+            val requiresVector = z <= 15
+            val requiresTerrain = z <= 14
+            
+            val missingRequired = !osmExists || !satExists || 
+                                (requiresVector && !vectorExists) || 
+                                (requiresTerrain && !terrainExists)
+            
+            if (missingRequired) {
+                android.util.Log.d("OfflineTiles", "Missing tiles for $z/$x/$y - OSM: $osmExists, SAT: $satExists, VECTOR: $vectorExists (required: $requiresVector), TERRAIN: $terrainExists (required: $requiresTerrain)")
+                return false
+            }
         }
+        android.util.Log.d("OfflineTiles", "All offline tiles exist for ${tileCoords.size} tiles")
         return tileCoords.isNotEmpty()
     }
 
@@ -782,83 +801,166 @@ class MapController(
         val mapTilerUrl = getMapTilerUrl()
         val mapTilerVectorUrl = getVectorTileUrl()
         val hillshadingTileUrl = getHillshadingTileUrl()
+        
+        android.util.Log.d("OfflineTiles", "Starting tile download - bounds: $bounds, currentZoom: $currentZoom, zoomLevels: $zoomLevels")
+        android.util.Log.d("OfflineTiles", "MapTiler URL: $mapTilerUrl")
+        android.util.Log.d("OfflineTiles", "MapTiler Vector URL: $mapTilerVectorUrl")
+        android.util.Log.d("OfflineTiles", "Hillshading URL: $hillshadingTileUrl")
+        
         // Calculate total number of tile downloads (OSM + satellite + vector + terrain-dem for each tile)
         var totalTiles = 0
         val tileCoordsByZoom = zoomLevels.associateWith { com.tak.lite.util.OsmTileUtils.getTileRange(bounds.southWest, bounds.northEast, it) }
         tileCoordsByZoom.forEach { (zoom, tilePairs) ->
-            totalTiles += tilePairs.size * 3 // OSM + satellite + terrain-dem
-            if (zoom <= 15) totalTiles += tilePairs.size // vector
+            totalTiles += tilePairs.size * 2 // OSM + satellite (always downloaded)
+            if (zoom <= 14) totalTiles += tilePairs.size // terrain-dem (only for zoom <= 14)
+            if (zoom <= 15) totalTiles += tilePairs.size // vector (only for zoom <= 15)
+            android.util.Log.d("OfflineTiles", "Zoom $zoom: ${tilePairs.size} tiles")
         }
+        android.util.Log.d("OfflineTiles", "Total tiles to download: $totalTiles")
+        
         var completedTiles = 0
         for (zoom in zoomLevels) {
             val tilePairs = tileCoordsByZoom[zoom] ?: continue
+            android.util.Log.d("OfflineTiles", "Processing zoom level $zoom with ${tilePairs.size} tiles")
+            
             for ((x, y) in tilePairs) {
+                android.util.Log.d("OfflineTiles", "Processing tile $zoom/$x/$y")
+                
                 // Download OSM tile
                 val osmUrl = "https://tile.openstreetmap.org/$zoom/$x/$y.png"
+                android.util.Log.d("OfflineTiles", "Downloading OSM tile: $osmUrl")
                 try {
                     val bytes = withContext(kotlinx.coroutines.Dispatchers.IO) {
                         val connection = java.net.URL(osmUrl).openConnection() as java.net.HttpURLConnection
                         connection.setRequestProperty("User-Agent", "tak-lite/1.0 (https://github.com/developer)")
+                        connection.connectTimeout = 10000
+                        connection.readTimeout = 10000
+                        val responseCode = connection.responseCode
+                        android.util.Log.d("OfflineTiles", "OSM tile $zoom/$x/$y response code: $responseCode")
+                        if (responseCode != 200) {
+                            android.util.Log.e("OfflineTiles", "OSM tile $zoom/$x/$y failed with response code: $responseCode")
+                            throw Exception("HTTP $responseCode")
+                        }
                         connection.inputStream.use { it.readBytes() }
                     }
+                    android.util.Log.d("OfflineTiles", "OSM tile $zoom/$x/$y downloaded successfully, size: ${bytes.size} bytes")
                     val saved = com.tak.lite.util.saveTilePngWithType(context, "osm", zoom, x, y, bytes)
-                    if (saved) successCount++ else failCount++
+                    if (saved) {
+                        successCount++
+                        android.util.Log.d("OfflineTiles", "OSM tile $zoom/$x/$y saved successfully")
+                    } else {
+                        failCount++
+                        android.util.Log.e("OfflineTiles", "Failed to save OSM tile $zoom/$x/$y")
+                    }
                 } catch (e: Exception) {
                     failCount++
+                    android.util.Log.e("OfflineTiles", "Exception downloading OSM tile $zoom/$x/$y from $osmUrl: ${e.message}", e)
                 }
                 completedTiles++
                 onProgress?.invoke(completedTiles, totalTiles)
+                
                 // Download satellite tile
                 val satUrl = mapTilerUrl
                     .replace("{z}", zoom.toString())
                     .replace("{x}", x.toString())
                     .replace("{y}", y.toString())
+                android.util.Log.d("OfflineTiles", "Downloading satellite tile: $satUrl")
                 try {
                     val bytes = withContext(kotlinx.coroutines.Dispatchers.IO) {
                         val connection = java.net.URL(satUrl).openConnection() as java.net.HttpURLConnection
                         connection.setRequestProperty("User-Agent", "tak-lite/1.0 (https://github.com/developer)")
+                        connection.connectTimeout = 10000
+                        connection.readTimeout = 10000
+                        val responseCode = connection.responseCode
+                        android.util.Log.d("OfflineTiles", "Satellite tile $zoom/$x/$y response code: $responseCode")
+                        if (responseCode != 200) {
+                            android.util.Log.e("OfflineTiles", "Satellite tile $zoom/$x/$y failed with response code: $responseCode")
+                            throw Exception("HTTP $responseCode")
+                        }
                         connection.inputStream.use { it.readBytes() }
                     }
+                    android.util.Log.d("OfflineTiles", "Satellite tile $zoom/$x/$y downloaded successfully, size: ${bytes.size} bytes")
                     val saved = com.tak.lite.util.saveTilePngWithType(context, "satellite-v2", zoom, x, y, bytes)
-                    if (saved) successCount++ else failCount++
-                } catch (e: Exception) {
-                    failCount++
-                }
-                completedTiles++
-                onProgress?.invoke(completedTiles, totalTiles)
-                // Download terrain-dem tile
-                val terrainUrl = hillshadingTileUrl
-                    .replace("{z}", zoom.toString())
-                    .replace("{x}", x.toString())
-                    .replace("{y}", y.toString())
-                try {
-                    val bytes = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                        val connection = java.net.URL(terrainUrl).openConnection() as java.net.HttpURLConnection
-                        connection.setRequestProperty("User-Agent", "tak-lite/1.0 (https://github.com/developer)")
-                        connection.inputStream.use { it.readBytes() }
+                    if (saved) {
+                        successCount++
+                        android.util.Log.d("OfflineTiles", "Satellite tile $zoom/$x/$y saved successfully")
+                    } else {
+                        failCount++
+                        android.util.Log.e("OfflineTiles", "Failed to save satellite tile $zoom/$x/$y")
                     }
-                    val saved = com.tak.lite.util.saveTileWebpWithType(context, "terrain-dem", zoom, x, y, bytes)
-                    if (saved) successCount++ else failCount++
                 } catch (e: Exception) {
                     failCount++
+                    android.util.Log.e("OfflineTiles", "Exception downloading satellite tile $zoom/$x/$y from $satUrl: ${e.message}", e)
                 }
                 completedTiles++
                 onProgress?.invoke(completedTiles, totalTiles)
+                
+                // Download terrain-dem tile (only for zoom levels <= 14 due to MapTiler service limitations)
+                if (zoom <= 14) {
+                    val terrainUrl = hillshadingTileUrl
+                        .replace("{z}", zoom.toString())
+                        .replace("{x}", x.toString())
+                        .replace("{y}", y.toString())
+                    android.util.Log.d("OfflineTiles", "Downloading terrain tile: $terrainUrl")
+                    try {
+                        val bytes = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            val connection = java.net.URL(terrainUrl).openConnection() as java.net.HttpURLConnection
+                            connection.setRequestProperty("User-Agent", "tak-lite/1.0 (https://github.com/developer)")
+                            connection.connectTimeout = 10000
+                            connection.readTimeout = 10000
+                            val responseCode = connection.responseCode
+                            android.util.Log.d("OfflineTiles", "Terrain tile $zoom/$x/$y response code: $responseCode")
+                            if (responseCode != 200) {
+                                android.util.Log.e("OfflineTiles", "Terrain tile $zoom/$x/$y failed with response code: $responseCode")
+                                throw Exception("HTTP $responseCode")
+                            }
+                            connection.inputStream.use { it.readBytes() }
+                        }
+                        android.util.Log.d("OfflineTiles", "Terrain tile $zoom/$x/$y downloaded successfully, size: ${bytes.size} bytes")
+                        val saved = com.tak.lite.util.saveTileWebpWithType(context, "terrain-dem", zoom, x, y, bytes)
+                        if (saved) {
+                            successCount++
+                            android.util.Log.d("OfflineTiles", "Terrain tile $zoom/$x/$y saved successfully")
+                        } else {
+                            failCount++
+                            android.util.Log.e("OfflineTiles", "Failed to save terrain tile $zoom/$x/$y")
+                        }
+                    } catch (e: Exception) {
+                        failCount++
+                        android.util.Log.e("OfflineTiles", "Exception downloading terrain tile $zoom/$x/$y from $terrainUrl: ${e.message}", e)
+                    }
+                } else {
+                    android.util.Log.d("OfflineTiles", "Skipping terrain tile download for zoom $zoom (MapTiler terrain service limited to zoom <= 14)")
+                }
+                completedTiles++
+                onProgress?.invoke(completedTiles, totalTiles)
+                
                 // Download vector tile (only if zoom <= 15)
                 if (zoom <= 15) {
                     val vectorUrl = mapTilerVectorUrl
                         .replace("{z}", zoom.toString())
                         .replace("{x}", x.toString())
                         .replace("{y}", y.toString())
+                    android.util.Log.d("OfflineTiles", "Downloading vector tile: $vectorUrl")
                     try {
                         val bytes = withContext(kotlinx.coroutines.Dispatchers.IO) {
                             val connection = java.net.URL(vectorUrl).openConnection() as java.net.HttpURLConnection
                             connection.setRequestProperty("User-Agent", "tak-lite/1.0 (https://github.com/developer)")
+                            connection.connectTimeout = 10000
+                            connection.readTimeout = 10000
+                            val responseCode = connection.responseCode
+                            android.util.Log.d("OfflineTiles", "Vector tile $zoom/$x/$y response code: $responseCode")
+                            if (responseCode != 200) {
+                                android.util.Log.e("OfflineTiles", "Vector tile $zoom/$x/$y failed with response code: $responseCode")
+                                throw Exception("HTTP $responseCode")
+                            }
                             connection.inputStream.use { it.readBytes() }
                         }
+                        android.util.Log.d("OfflineTiles", "Vector tile $zoom/$x/$y downloaded successfully, size: ${bytes.size} bytes")
                         val saved = com.tak.lite.util.saveTilePbfWithType(context, "vector", zoom, x, y, bytes)
                         if (saved) {
                             successCount++
+                            android.util.Log.d("OfflineTiles", "Vector tile $zoom/$x/$y saved successfully")
                         } else {
                             android.util.Log.e("OfflineTiles", "Failed to save vector tile $zoom/$x/$y from $vectorUrl (saveTilePbfWithType returned false)")
                             failCount++
@@ -872,6 +974,8 @@ class MapController(
                 }
             }
         }
+        
+        android.util.Log.d("OfflineTiles", "Download complete - Success: $successCount, Failed: $failCount, Total: $totalTiles")
         return successCount to failCount
     }
 
@@ -921,22 +1025,45 @@ class MapController(
 
     /**
      * Downloads a single terrain-dem tile (webp) for the given zoom/x/y. Returns true if successful.
+     * Only downloads for zoom levels <= 14 due to MapTiler service limitations.
      */
     suspend fun downloadTerrainDemTile(zoom: Int, x: Int, y: Int): Boolean {
+        // Skip terrain downloads for zoom levels > 14 due to MapTiler service limitations
+        if (zoom > 14) {
+            android.util.Log.d("OfflineTiles", "Skipping terrain-dem tile download for zoom $zoom (MapTiler terrain service limited to zoom <= 14)")
+            return false
+        }
+        
         val hillshadingTileUrl = getHillshadingTileUrl()
         val terrainUrl = hillshadingTileUrl
             .replace("{z}", zoom.toString())
             .replace("{x}", x.toString())
             .replace("{y}", y.toString())
+        android.util.Log.d("OfflineTiles", "Downloading single terrain-dem tile: $terrainUrl")
         return try {
             val bytes = withContext(Dispatchers.IO) {
                 val connection = java.net.URL(terrainUrl).openConnection() as java.net.HttpURLConnection
                 connection.setRequestProperty("User-Agent", "tak-lite/1.0 (https://github.com/developer)")
+                connection.connectTimeout = 10000
+                connection.readTimeout = 10000
+                val responseCode = connection.responseCode
+                android.util.Log.d("OfflineTiles", "Terrain-dem tile $zoom/$x/$y response code: $responseCode")
+                if (responseCode != 200) {
+                    android.util.Log.e("OfflineTiles", "Terrain-dem tile $zoom/$x/$y failed with response code: $responseCode")
+                    throw Exception("HTTP $responseCode")
+                }
                 connection.inputStream.use { it.readBytes() }
             }
-            saveTileWebpWithType(context, "terrain-dem", zoom, x, y, bytes)
+            android.util.Log.d("OfflineTiles", "Terrain-dem tile $zoom/$x/$y downloaded successfully, size: ${bytes.size} bytes")
+            val saved = saveTileWebpWithType(context, "terrain-dem", zoom, x, y, bytes)
+            if (saved) {
+                android.util.Log.d("OfflineTiles", "Terrain-dem tile $zoom/$x/$y saved successfully")
+            } else {
+                android.util.Log.e("OfflineTiles", "Failed to save terrain-dem tile $zoom/$x/$y")
+            }
+            saved
         } catch (e: Exception) {
-            android.util.Log.e("OfflineTiles", "Failed to download terrain-dem tile $zoom/$x/$y: ${e.message}")
+            android.util.Log.e("OfflineTiles", "Failed to download terrain-dem tile $zoom/$x/$y: ${e.message}", e)
             false
         }
     }
