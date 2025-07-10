@@ -1153,11 +1153,35 @@ class MeshtasticAidlProtocol @Inject constructor(
         
         // Convert to base message status
         val baseStatus = status.toBaseMessageStatus()
+        Log.d(TAG, "Converted status $status to base status $baseStatus")
         
         // Find the packet in flight messages and update its status
         val packet = inFlightMessages[packetId]
         if (packet != null) {
+            Log.d(TAG, "Found packet $packetId in inFlightMessages, current count: ${inFlightMessages.size}")
             updateMessageStatusForPacket(packet, baseStatus)
+            
+            // Only remove packets from inFlightMessages for successful final statuses
+            // This allows the timeout system to retry failed messages
+            if (baseStatus == BaseMessageStatus.DELIVERED || 
+                baseStatus == BaseMessageStatus.RECEIVED) {
+                
+                Log.d(TAG, "Message $packetId reached successful final status $baseStatus, removing from inFlightMessages")
+                inFlightMessages.remove(packetId)
+                messageRetryCount.remove(packetId)
+                timeoutJobManager.cancelTimeout(packetId)
+                Log.d(TAG, "Removed packet $packetId from tracking, remaining inFlightMessages: ${inFlightMessages.size}")
+            } else if (baseStatus == BaseMessageStatus.FAILED || 
+                       baseStatus == BaseMessageStatus.ERROR) {
+                // For failed statuses, don't remove from inFlightMessages yet
+                // Let the timeout system handle retries
+                Log.d(TAG, "Message $packetId reached failed status $baseStatus, keeping in inFlightMessages for potential retry")
+                // Don't remove from inFlightMessages - let timeout system handle retries
+            } else if (baseStatus == BaseMessageStatus.SENT) {
+                // For SENT status, we don't remove from inFlightMessages yet (waiting for delivery confirmation)
+                Log.d(TAG, "Message $packetId reached SENT status, waiting for delivery confirmation")
+                // Don't cancel timeout yet - let it wait for delivery confirmation
+            }
         } else {
             Log.w(TAG, "Could not find packet $packetId in flight messages")
         }

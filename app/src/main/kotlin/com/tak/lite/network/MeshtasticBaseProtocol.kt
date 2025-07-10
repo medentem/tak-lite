@@ -78,7 +78,7 @@ abstract class MeshtasticBaseProtocol(
 
     internal val inFlightMessages = ConcurrentHashMap<Int, MeshProtos.MeshPacket>()
     // Add message retry tracking
-    private val messageRetryCount = ConcurrentHashMap<Int, Int>()
+    internal val messageRetryCount = ConcurrentHashMap<Int, Int>()
 
     internal val peerLocations = ConcurrentHashMap<String, PeerLocationEntry>()
 
