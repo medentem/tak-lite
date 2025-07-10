@@ -918,18 +918,12 @@ class MeshtasticAidlProtocol @Inject constructor(
             
             // Convert node numbers to IDs
             Log.d(TAG, "MeshPacket from: ${this.from}")
-            var fromId = DataPacket.nodeNumToDefaultId(this.from)
+            var fromId = DataPacket.ID_LOCAL
             
-            // If fromId is null (no from field set), use the local node ID
-            if (fromId == null) {
-                val localNodeId = _localNodeIdOrNickname.value
-                if (localNodeId != null) {
-                    fromId = localNodeId
-                    Log.d(TAG, "Using local node ID for from field: $fromId")
-                } else {
-                    Log.w(TAG, "No local node ID available, using ID_LOCAL")
-                    fromId = DataPacket.ID_LOCAL
-                }
+            // If fromId is set, use it
+            if (this.from != 0) {
+                Log.w(TAG, "ID set on packet, using it")
+                fromId = DataPacket.nodeNumToDefaultId(this.from)
             }
             
             val toId = if (this.to == 0xffffffffL.toInt()) {
