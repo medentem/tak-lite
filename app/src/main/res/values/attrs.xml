@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Custom attribute for message received background color -->
+    <attr name="messageReceivedBackground" format="color" />
+    <!-- Custom attribute for message sent background color -->
+    <attr name="messageSentBackground" format="color" />
+</resources> 

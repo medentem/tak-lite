@@ -16,4 +16,9 @@
     <color name="primary_variant_dark">#64B5F6</color>  <!-- Material Blue 300 -->
     <color name="link_color_dark">#90CAF9</color>  <!-- Material Blue 200 -->
     <color name="interactive_color_dark">#42A5F5</color>  <!-- Material Blue 400 -->
+    
+    <!-- Message background colors for dark mode -->
+    <color name="message_sent_bg_dark">#64B5F6</color>  <!-- Darker blue for sent messages -->
+    <color name="message_received_bg_dark">#424242</color>  <!-- Dark gray with good contrast -->
+    <color name="message_received_text_dark">#FFFFFF</color>  <!-- White text for dark background -->
 </resources> 

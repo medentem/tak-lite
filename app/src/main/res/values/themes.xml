@@ -15,6 +15,9 @@
         <item name="windowNoTitle">true</item>
         <!-- Add link color for better visibility -->
         <item name="android:textColorLink">@color/link_color_light</item>
+        <!-- Message background colors -->
+        <item name="messageSentBackground">@color/message_sent_bg_light</item>
+        <item name="messageReceivedBackground">@color/message_received_bg_light</item>
     </style>
     <style name="Theme.TakLite.Splash" parent="Theme.TakLite">
         <item name="android:windowBackground">@color/splash_background</item>

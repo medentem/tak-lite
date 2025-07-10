@@ -91,15 +91,39 @@ class MeshtasticAidlProtocol @Inject constructor(
             meshService = null
             isMeshServiceBound = false
             Log.w(TAG, "Disconnected from Meshtastic AIDL Service")
+            Log.w(TAG, "ComponentName: $name")
+            Log.w(TAG, "User initiated disconnect: $userInitiatedDisconnect")
             _connectionState.value = MeshConnectionState.Disconnected
             
             // Only attempt to rebind if this wasn't a user-initiated disconnect
             if (!userInitiatedDisconnect) {
                 Log.d(TAG, "Service disconnected unexpectedly, attempting to rebind...")
                 CoroutineScope(coroutineContext).launch {
-                    kotlinx.coroutines.delay(2000) // Wait 2 seconds before rebinding
-                    if (!userInitiatedDisconnect) {
-                        bindMeshService()
+                    // Use exponential backoff for rebinding attempts
+                    var retryCount = 0
+                    val maxRetries = 5
+                    val baseDelay = 2000L
+                    
+                    while (retryCount < maxRetries && !userInitiatedDisconnect && !isMeshServiceBound) {
+                        val delay = baseDelay * (1 shl retryCount) // Exponential backoff: 2s, 4s, 8s, 16s, 32s
+                        Log.d(TAG, "Rebinding attempt ${retryCount + 1}/$maxRetries after ${delay}ms delay")
+                        kotlinx.coroutines.delay(delay)
+                        
+                        if (!userInitiatedDisconnect) {
+                            val success = bindMeshService()
+                            if (success) {
+                                Log.i(TAG, "Successfully rebound to Meshtastic AIDL Service")
+                                break
+                            } else {
+                                Log.w(TAG, "Rebinding attempt ${retryCount + 1} failed")
+                            }
+                        }
+                        retryCount++
+                    }
+                    
+                    if (retryCount >= maxRetries && !isMeshServiceBound) {
+                        Log.e(TAG, "Failed to rebind after $maxRetries attempts")
+                        _connectionState.value = MeshConnectionState.Error("Failed to reconnect to Meshtastic service after multiple attempts")
                     }
                 }
             } else {
@@ -199,7 +223,12 @@ class MeshtasticAidlProtocol @Inject constructor(
             val meshtasticRunning = runningProcesses?.any { it.processName == "com.geeksville.mesh" } ?: false
             Log.d(TAG, "Meshtastic app running: $meshtasticRunning")
             
-            val bound = context.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
+            // Use stronger binding flags for background operation
+            // BIND_IMPORTANT ensures the binding is maintained even when the app is backgrounded
+            // BIND_AUTO_CREATE allows the service to be created if it's not running
+            val bindingFlags = Context.BIND_AUTO_CREATE or Context.BIND_IMPORTANT
+            Log.d(TAG, "Binding with flags: BIND_AUTO_CREATE | BIND_IMPORTANT")
+            val bound = context.bindService(intent, serviceConnection, bindingFlags)
             if (bound) {
                 Log.i(TAG, "Successfully bound to Meshtastic AIDL Service")
             } else {
@@ -690,6 +719,7 @@ class MeshtasticAidlProtocol @Inject constructor(
             val dataPacket = packet.toDataPacket()
             
             Log.d(TAG, "Sending DataPacket via AIDL service: from=${dataPacket.from}, to=${dataPacket.to}, dataType=${dataPacket.dataType}")
+            Log.d(TAG, "Local node ID: ${_localNodeIdOrNickname.value}")
             Log.d(TAG, "DataPacket: $dataPacket")
             
             // Send via AIDL service
@@ -744,8 +774,11 @@ class MeshtasticAidlProtocol @Inject constructor(
             false
         }
 
+        val serviceResponsive = isServiceResponsive()
+
         return "AIDL Protocol State: ${_connectionState.value}, " +
                "Service Bound: $isMeshServiceBound, " +
+               "Service Responsive: $serviceResponsive, " +
                "User Initiated Disconnect: $userInitiatedDisconnect, " +
                "Handshake Complete: $handshakeComplete, " +
                "Config Step: ${_configDownloadStep.value}, " +
@@ -784,7 +817,38 @@ class MeshtasticAidlProtocol @Inject constructor(
             "Meshtastic app installed but not accessible: ${e.message}"
         }
         
-        return appAccessible
+        // Check if service is responsive
+        val serviceResponsive = if (isMeshServiceBound && meshService != null) {
+            try {
+                val connectionState = meshService?.connectionState()
+                "Service responsive: $connectionState"
+            } catch (e: Exception) {
+                "Service not responsive: ${e.message}"
+            }
+        } else {
+            "Service not bound"
+        }
+        
+        return "$appAccessible, $serviceResponsive"
+    }
+    
+    /**
+     * Check if the AIDL service is still responsive by making a simple call
+     * @return true if the service responds, false otherwise
+     */
+    fun isServiceResponsive(): Boolean {
+        return if (isMeshServiceBound && meshService != null) {
+            try {
+                // Make a simple call to test service responsiveness
+                meshService?.connectionState()
+                true
+            } catch (e: Exception) {
+                Log.w(TAG, "Service not responsive: ${e.message}")
+                false
+            }
+        } else {
+            false
+        }
     }
 
     /**
@@ -854,7 +918,19 @@ class MeshtasticAidlProtocol @Inject constructor(
             
             // Convert node numbers to IDs
             Log.d(TAG, "MeshPacket from: ${this.from}")
-            val fromId = DataPacket.nodeNumToDefaultId(this.from)
+            var fromId = DataPacket.nodeNumToDefaultId(this.from)
+            
+            // If fromId is null (no from field set), use the local node ID
+            if (fromId == null) {
+                val localNodeId = _localNodeIdOrNickname.value
+                if (localNodeId != null) {
+                    fromId = localNodeId
+                    Log.d(TAG, "Using local node ID for from field: $fromId")
+                } else {
+                    Log.w(TAG, "No local node ID available, using ID_LOCAL")
+                    fromId = DataPacket.ID_LOCAL
+                }
+            }
             
             val toId = if (this.to == 0xffffffffL.toInt()) {
                 DataPacket.ID_BROADCAST

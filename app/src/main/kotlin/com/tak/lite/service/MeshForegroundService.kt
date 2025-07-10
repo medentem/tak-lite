@@ -44,6 +44,7 @@ class MeshForegroundService : Service() {
     private var protocolJob: Job? = null
     private var notificationUpdateJob: Job? = null
     private var connectionStateJob: Job? = null
+    private var healthCheckJob: Job? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -54,6 +55,7 @@ class MeshForegroundService : Service() {
         observeProtocolChanges()
         observeConnectionState()
         startPeriodicNotificationUpdates()
+        startHealthCheck()
     }
 
     private fun observePacketSummaries() {
@@ -177,6 +179,24 @@ class MeshForegroundService : Service() {
             }
         }
     }
+    
+    private fun startHealthCheck() {
+        healthCheckJob?.cancel()
+        healthCheckJob = CoroutineScope(Dispatchers.Default).launch {
+            while (true) {
+                delay(30000) // Check every 30 seconds
+                val protocol = currentProtocol
+                if (protocol is com.tak.lite.network.MeshtasticAidlProtocol) {
+                    val isResponsive = protocol.isServiceResponsive()
+                    if (!isResponsive) {
+                        Log.w("MeshForegroundService", "AIDL service not responsive, attempting to reconnect...")
+                        // Force a reset to trigger reconnection
+                        protocol.forceReset()
+                    }
+                }
+            }
+        }
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d("MeshForegroundService", "onStartCommand called: intent=$intent, flags=$flags, startId=$startId")
@@ -213,6 +233,7 @@ class MeshForegroundService : Service() {
         protocolJob?.cancel()
         notificationUpdateJob?.cancel()
         connectionStateJob?.cancel()
+        healthCheckJob?.cancel()
         // Clear the protocol reference
         currentProtocol = null
         // Optionally clean up protocol if needed

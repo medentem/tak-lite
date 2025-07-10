@@ -16,6 +16,9 @@
         <item name="windowNoTitle">true</item>
         <!-- Add link color for better visibility in dark mode -->
         <item name="android:textColorLink">@color/link_color_dark</item>
+        <!-- Message background colors -->
+        <item name="messageSentBackground">@color/message_sent_bg_dark</item>
+        <item name="messageReceivedBackground">@color/message_received_bg_dark</item>
     </style>
     
     <style name="Theme.TakLite.Dialog" parent="ThemeOverlay.MaterialComponents.Dialog.Alert">

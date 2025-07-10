@@ -8,6 +8,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.ConstraintSet
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -60,7 +61,7 @@ class MessageAdapter(
             // Check if this is our message
             val isOurMessage = message.senderId == currentUserId
             
-            messageStatusLayout.visibility = if (isOurMessage) View.VISIBLE else View.GONE
+            messageStatusLayout.visibility = if (!currentUserId.isNullOrEmpty() && isOurMessage) View.VISIBLE else View.GONE
 
             if (isOurMessage) {
                 // Align to the right for our messages
@@ -75,6 +76,8 @@ class MessageAdapter(
                 constraintSet.connect(R.id.messageContent, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
 
                 messageContent.setBackgroundResource(R.drawable.message_background_sent)
+                // Reset text color to default for sent messages
+                messageContent.setTextColor(ContextCompat.getColor(itemView.context, android.R.color.white))
 
                 val isDirectMessage = message.channelId.startsWith("dm_")
                 statusCheck3.visibility = if (isDirectMessage) View.VISIBLE else View.GONE
@@ -126,6 +129,13 @@ class MessageAdapter(
                 constraintSet.connect(R.id.messageContent, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START)
 
                 messageContent.setBackgroundResource(R.drawable.message_background_received)
+                // Set text color for received messages based on theme
+                val textColorRes = if (itemView.context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK == android.content.res.Configuration.UI_MODE_NIGHT_YES) {
+                    R.color.message_received_text_dark
+                } else {
+                    R.color.message_received_text_light
+                }
+                messageContent.setTextColor(ContextCompat.getColor(itemView.context, textColorRes))
             }
 
             // Apply the constraints
