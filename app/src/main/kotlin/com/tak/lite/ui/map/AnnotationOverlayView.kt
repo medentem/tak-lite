@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.DashPathEffect
+import androidx.core.content.ContextCompat
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PointF
@@ -14,6 +15,7 @@ import android.os.Looper
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
+import com.tak.lite.R
 import com.tak.lite.data.model.AnnotationCluster
 import com.tak.lite.data.model.PeerCluster
 import com.tak.lite.model.AnnotationColor
@@ -28,6 +30,7 @@ import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
 import kotlin.math.sqrt
+import kotlin.math.tan
 
 class AnnotationOverlayView @JvmOverloads constructor(
     context: Context,
@@ -733,14 +736,39 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     val phonePt = projection?.toScreenLocation(phoneLocation!!)
                     android.util.Log.d("AnnotationOverlayView", "onDraw: phonePt=$phonePt")
                     if (phonePt != null) {
-                        val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                            color = Color.parseColor("#2196F3") // Blue
-                            style = Paint.Style.STROKE;
-                            strokeWidth = 8f
-                            pathEffect = DashPathEffect(floatArrayOf(24f, 16f), 0f)
+                        // --- PERFORMANCE OPTIMIZATION: Distance-based line drawing ---
+                        val distance = hypot((devicePt.x - phonePt.x).toDouble(), (devicePt.y - phonePt.y).toDouble())
+                        val maxLineDistance = width * 2f // Only draw if line is within 2x screen width
+                        val extremeDistance = width * 4f // Use direction indicator beyond this
+                        
+                        if (distance <= maxLineDistance) {
+                            // Check if either endpoint is within reasonable screen bounds
+                            val deviceInBounds = devicePt.x >= -width && devicePt.x <= width * 2 && 
+                                               devicePt.y >= -height && devicePt.y <= height * 2
+                            val phoneInBounds = phonePt.x >= -width && phonePt.x <= width * 2 && 
+                                              phonePt.y >= -height && phonePt.y <= height * 2
+                            
+                            if (deviceInBounds || phoneInBounds) {
+                                val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                                    color = ContextCompat.getColor(context, R.color.interactive_color_light)
+                                    style = Paint.Style.STROKE;
+                                    strokeWidth = 8f
+                                    // Adjust dash pattern based on distance to prevent too many dashes
+                                    val dashLength = if (distance > width) 48f else 24f
+                                    val gapLength = if (distance > width) 32f else 16f
+                                    pathEffect = DashPathEffect(floatArrayOf(dashLength, gapLength), 0f)
+                                }
+                                canvas.drawLine(devicePt.x, devicePt.y, phonePt.x, phonePt.y, linePaint)
+                                android.util.Log.d("AnnotationOverlayView", "onDraw: drew dotted line from $devicePt to $phonePt (distance: ${distance.toInt()}px)")
+                            } else {
+                                android.util.Log.d("AnnotationOverlayView", "onDraw: both endpoints too far off-screen, skipping line")
+                            }
+                        } else if (distance <= extremeDistance) {
+                            // Draw direction indicator instead of full line
+                            drawDeviceDirectionIndicator(canvas, devicePt, phonePt, distance)
+                        } else {
+                            android.util.Log.d("AnnotationOverlayView", "onDraw: line too long (${distance.toInt()}px > ${extremeDistance.toInt()}px), skipping")
                         }
-                        canvas.drawLine(devicePt.x, devicePt.y, phonePt.x, phonePt.y, linePaint)
-                        android.util.Log.d("AnnotationOverlayView", "onDraw: drew dotted line from $devicePt to $phonePt")
                     } else {
                         android.util.Log.d("AnnotationOverlayView", "onDraw: phonePt is null, cannot draw line")
                     }
@@ -1996,10 +2024,126 @@ class AnnotationOverlayView @JvmOverloads constructor(
         canvas.drawCircle(point.x, point.y, borderRadius, borderPaint)
         // Draw blue fill
         val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#2196F3") // Blue
+            color = ContextCompat.getColor(context, R.color.interactive_color_light)
             style = Paint.Style.FILL
         }
         canvas.drawCircle(point.x, point.y, dotRadius, fillPaint)
+    }
+
+    /**
+     * Draw a direction indicator when the device is far away but still within reasonable distance
+     * This shows which direction the device is relative to the phone location
+     */
+    private fun drawDeviceDirectionIndicator(canvas: Canvas, devicePt: PointF, phonePt: PointF, distance: Double) {
+        // Calculate direction from phone to device
+        val dx = devicePt.x - phonePt.x
+        val dy = devicePt.y - phonePt.y
+        val angle = atan2(dy.toDouble(), dx.toDouble())
+        
+        // Draw a small arrow at the edge of the screen pointing toward the device
+        val arrowLength = 60f
+        val arrowWidth = 20f
+        val margin = 40f // Distance from screen edge
+        
+        // Calculate arrow position at screen edge
+        val screenCenterX = width / 2f
+        val screenCenterY = height / 2f
+        
+        // Find intersection with screen bounds
+        val arrowX: Float
+        val arrowY: Float
+        
+        when {
+            angle >= -Math.PI/4 && angle < Math.PI/4 -> {
+                // Right edge
+                arrowX = width - margin
+                arrowY = screenCenterY + (arrowX - screenCenterX) * tan(angle).toFloat()
+            }
+            angle >= Math.PI/4 && angle < 3*Math.PI/4 -> {
+                // Bottom edge
+                arrowY = height - margin
+                arrowX = screenCenterX + (arrowY - screenCenterY) / tan(angle).toFloat()
+            }
+            angle >= 3*Math.PI/4 || angle < -3*Math.PI/4 -> {
+                // Left edge
+                arrowX = margin
+                arrowY = screenCenterY + (arrowX - screenCenterX) * tan(angle).toFloat()
+            }
+            else -> {
+                // Top edge
+                arrowY = margin
+                arrowX = screenCenterX + (arrowY - screenCenterY) / tan(angle).toFloat()
+            }
+        }
+        
+        // Clamp arrow position to screen bounds
+        val clampedArrowX = arrowX.coerceIn(margin, width - margin)
+        val clampedArrowY = arrowY.coerceIn(margin, height - margin)
+        
+        // Draw arrow
+        val arrowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = ContextCompat.getColor(context, R.color.interactive_color_light)
+            style = Paint.Style.FILL_AND_STROKE
+            strokeWidth = 3f
+        }
+        
+        // Calculate arrow points
+        val arrowEndX = clampedArrowX + (arrowLength * cos(angle)).toFloat()
+        val arrowEndY = clampedArrowY + (arrowLength * sin(angle)).toFloat()
+        
+        // Draw arrow shaft
+        canvas.drawLine(clampedArrowX, clampedArrowY, arrowEndX, arrowEndY, arrowPaint)
+        
+        // Draw arrow head
+        val headLength = 20f
+        val headAngle = Math.PI / 6 // 30 degrees
+        val angle1 = angle + headAngle
+        val angle2 = angle - headAngle
+        
+        val head1X = arrowEndX - headLength * cos(angle1).toFloat()
+        val head1Y = arrowEndY - headLength * sin(angle1).toFloat()
+        val head2X = arrowEndX - headLength * cos(angle2).toFloat()
+        val head2Y = arrowEndY - headLength * sin(angle2).toFloat()
+        
+        val arrowPath = Path()
+        arrowPath.moveTo(arrowEndX, arrowEndY)
+        arrowPath.lineTo(head1X, head1Y)
+        arrowPath.moveTo(arrowEndX, arrowEndY)
+        arrowPath.lineTo(head2X, head2Y)
+        canvas.drawPath(arrowPath, arrowPaint)
+        
+        // Draw distance indicator
+        val distanceMiles = (distance * 0.000189394).toInt() // Rough conversion from pixels to miles
+        val distanceText = "${distanceMiles}mi"
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            textSize = 24f
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.DEFAULT_BOLD
+        }
+        
+        // Draw background for text
+        val textBounds = android.graphics.Rect()
+        textPaint.getTextBounds(distanceText, 0, distanceText.length, textBounds)
+        val padding = 8f
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(180, 0, 0, 0)
+            style = Paint.Style.FILL
+        }
+        
+        canvas.drawRoundRect(
+            clampedArrowX - textBounds.width()/2 - padding,
+            clampedArrowY - textBounds.height()/2 - padding,
+            clampedArrowX + textBounds.width()/2 + padding,
+            clampedArrowY + textBounds.height()/2 + padding,
+            padding,
+            padding,
+            bgPaint
+        )
+        
+        canvas.drawText(distanceText, clampedArrowX, clampedArrowY + textBounds.height()/2, textPaint)
+        
+        android.util.Log.d("AnnotationOverlayView", "onDraw: drew direction indicator at ($clampedArrowX, $clampedArrowY) pointing toward device (distance: ${distance.toInt()}px)")
     }
 
     fun hideAllPopovers() {

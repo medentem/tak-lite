@@ -6,11 +6,13 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import androidx.core.content.ContextCompat
 import com.github.mikephil.charting.charts.LineChart
 import com.github.mikephil.charting.data.Entry
 import com.github.mikephil.charting.data.LineData
 import com.github.mikephil.charting.data.LineDataSet
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import com.tak.lite.R
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.util.getOfflineElevation
 import com.tak.lite.util.haversine
@@ -40,7 +42,7 @@ class ElevationChartBottomSheet(
         // Detect dark mode
         val isDarkMode = (context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
         val bgColor = if (isDarkMode) Color.parseColor("#181A20") else Color.WHITE
-        val lineColor = if (isDarkMode) Color.parseColor("#90CAF9") else Color.parseColor("#1976D2")
+        val lineColor = if (isDarkMode) ContextCompat.getColor(context, R.color.primary_dark) else ContextCompat.getColor(context, R.color.primary_light)
         val textColor = if (isDarkMode) Color.parseColor("#B0B3B8") else Color.DKGRAY
 
         chart.setBackgroundColor(bgColor)

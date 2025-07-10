@@ -209,9 +209,9 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
                     // Set source to PHONE if not mesh
                     locationSourceOverlay.visibility = View.VISIBLE
                     locationSourceIcon.setImageResource(R.drawable.ic_baseline_my_location_24)
-                    locationSourceIcon.setColorFilter(Color.parseColor("#2196F3"))
+                    locationSourceIcon.setColorFilter(ContextCompat.getColor(this, R.color.interactive_color_light))
                     locationSourceLabel.text = "Phone"
-                    locationSourceLabel.setTextColor(Color.parseColor("#2196F3"))
+                    locationSourceLabel.setTextColor(ContextCompat.getColor(this, R.color.interactive_color_light))
                 }
                 // Only try to get location if we have permissions
                 if (androidx.core.app.ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED ||
@@ -283,9 +283,9 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
                 if (locationSourceLabel.text != "Mesh") {
                     locationSourceOverlay.visibility = View.VISIBLE
                     locationSourceIcon.setImageResource(R.drawable.ic_baseline_my_location_24)
-                    locationSourceIcon.setColorFilter(Color.parseColor("#2196F3"))
+                    locationSourceIcon.setColorFilter(ContextCompat.getColor(this, R.color.interactive_color_light))
                     locationSourceLabel.text = "Phone"
-                    locationSourceLabel.setTextColor(Color.parseColor("#2196F3"))
+                    locationSourceLabel.setTextColor(ContextCompat.getColor(this, R.color.interactive_color_light))
                 }
                 // --- NEW: propagate phone location to ViewModel ---
                 viewModel.setPhoneLocation(org.maplibre.android.geometry.LatLng(location.latitude, location.longitude))
@@ -299,16 +299,16 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
                         LocationSource.MESH_RIDER -> {
                             locationSourceOverlay.visibility = View.VISIBLE
                             locationSourceIcon.setImageResource(R.drawable.mesh_rider_icon)
-                            locationSourceIcon.setColorFilter(Color.parseColor("#2196F3")) // Blue
+                            locationSourceIcon.setColorFilter(ContextCompat.getColor(this, R.color.interactive_color_light))
                             locationSourceLabel.text = "Mesh"
-                            locationSourceLabel.setTextColor(Color.parseColor("#2196F3"))
+                            locationSourceLabel.setTextColor(ContextCompat.getColor(this, R.color.interactive_color_light))
                         }
                         LocationSource.PHONE -> {
                             locationSourceOverlay.visibility = View.VISIBLE
                             locationSourceIcon.setImageResource(R.drawable.ic_baseline_my_location_24)
-                            locationSourceIcon.setColorFilter(Color.parseColor("#2196F3")) // Blue
+                            locationSourceIcon.setColorFilter(ContextCompat.getColor(this, R.color.interactive_color_light))
                             locationSourceLabel.text = "Phone"
-                            locationSourceLabel.setTextColor(Color.parseColor("#2196F3"))
+                            locationSourceLabel.setTextColor(ContextCompat.getColor(this, R.color.interactive_color_light))
                         }
                         LocationSource.UNKNOWN -> {
                             locationSourceOverlay.visibility = View.VISIBLE
@@ -514,9 +514,9 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
                         // No location available, fallback to phone
                         locationSourceOverlay.visibility = View.VISIBLE
                         locationSourceIcon.setImageResource(R.drawable.ic_baseline_my_location_24)
-                        locationSourceIcon.setColorFilter(Color.parseColor("#2196F3")) // Blue
+                        locationSourceIcon.setColorFilter(ContextCompat.getColor(this@MainActivity, R.color.interactive_color_light))
                         locationSourceLabel.text = "Phone"
-                        locationSourceLabel.setTextColor(Color.parseColor("#2196F3"))
+                        locationSourceLabel.setTextColor(ContextCompat.getColor(this@MainActivity, R.color.interactive_color_light))
                     }
                 }
             }

@@ -435,7 +435,7 @@ class SettingsActivity : BaseActivity() {
         }
 
         // Setup prediction overlay switch
-        val showPredictionOverlayEnabled = prefs.getBoolean("show_prediction_overlay", true)
+        val showPredictionOverlayEnabled = prefs.getBoolean("show_prediction_overlay", false)
         showPredictionOverlaySwitch.isChecked = showPredictionOverlayEnabled
         showPredictionOverlaySwitch.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean("show_prediction_overlay", isChecked).apply()

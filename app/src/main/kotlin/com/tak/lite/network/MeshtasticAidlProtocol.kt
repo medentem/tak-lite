@@ -673,12 +673,6 @@ class MeshtasticAidlProtocol @Inject constructor(
         Log.i(TAG, "Connection state set to Disconnected")
     }
     
-    override fun sendBulkAnnotationDeletions(ids: List<String>) {
-        // Not supported in AIDL mode
-        Log.w(TAG, "Bulk annotation deletion not supported in AIDL mode")
-    }
-
-    
     // Packets are queued on the abstract base protocol class by each specific send function
     // The queue is processed and calls sendPacket here if the AIDL protocol is selected
     // Handles the actual transmission through this protocols device interface (AIDL)

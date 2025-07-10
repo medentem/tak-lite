@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.graphics.PointF
 import android.util.Log
 import android.view.View
+import android.view.inputmethod.EditorInfo
 import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
@@ -387,20 +388,41 @@ class AnnotationController(
                     is FanMenuView.Option.Color -> onAction(BulkEditAction.ChangeColor(option.color))
                     is FanMenuView.Option.Timer -> {
                         // Show expiration input dialog
-                        val input = android.widget.EditText(fragment.requireContext())
-                        input.inputType = android.text.InputType.TYPE_CLASS_NUMBER
-                        input.hint = "Expiration in minutes"
-                        androidx.appcompat.app.AlertDialog.Builder(fragment.requireContext())
+                        val input = android.widget.EditText(fragment.requireContext()).apply {
+                            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+                            hint = "Expiration in minutes"
+                        }
+                        
+                        // Helper function to handle expiration submission
+                        fun submitExpiration() {
+                            val minutes = input.text.toString().toLongOrNull() ?: 0L
+                            if (minutes > 0) {
+                                onAction(BulkEditAction.SetExpiration(minutes * 60 * 1000))
+                            }
+                        }
+                        
+                        // Add editor action listener to handle Enter key
+                        input.setOnEditorActionListener { _, actionId, _ ->
+                            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
+                                submitExpiration()
+                                true // Consume the event
+                            } else {
+                                false // Don't consume other events
+                            }
+                        }
+                        
+                        val dialog = androidx.appcompat.app.AlertDialog.Builder(fragment.requireContext())
                             .setTitle("Set Expiration (minutes)")
                             .setView(input)
                             .setPositiveButton("OK") { _, _ ->
-                                val minutes = input.text.toString().toLongOrNull() ?: 0L
-                                if (minutes > 0) {
-                                    onAction(BulkEditAction.SetExpiration(minutes * 60 * 1000))
-                                }
+                                submitExpiration()
                             }
                             .setNegativeButton("Cancel", null)
-                            .show()
+                            .create()
+                        
+                        // Show the dialog and request focus for the EditText
+                        dialog.show()
+                        input.requestFocus()
                     }
                     is FanMenuView.Option.Delete -> onAction(BulkEditAction.Delete)
                     else -> {}
@@ -539,16 +561,37 @@ class AnnotationController(
         val editText = android.widget.EditText(context).apply {
             setText(currentLabel)
             filters = arrayOf(android.text.InputFilter.LengthFilter(50)) // Limit label length
+            // Set input type to prevent newlines
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
         }
         
-        androidx.appcompat.app.AlertDialog.Builder(context)
+        // Helper function to handle label submission
+        fun submitLabel() {
+            val newLabel = editText.text.toString().takeIf { it.isNotBlank() }
+            annotationViewModel.updatePointOfInterest(poiId, newLabel = newLabel)
+        }
+        
+        // Add editor action listener to handle Enter key
+        editText.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
+                submitLabel()
+                true // Consume the event
+            } else {
+                false // Don't consume other events
+            }
+        }
+        
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(context)
             .setTitle("Edit Label")
             .setView(editText)
             .setPositiveButton("OK") { _, _ ->
-                val newLabel = editText.text.toString().takeIf { it.isNotBlank() }
-                annotationViewModel.updatePointOfInterest(poiId, newLabel = newLabel)
+                submitLabel()
             }
             .setNegativeButton("Cancel", null)
-            .show()
+            .create()
+        
+        // Show the dialog and request focus for the EditText
+        dialog.show()
+        editText.requestFocus()
     }
 }

@@ -1,5 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Override the main theme for dark mode -->
+    <style name="Theme.TakLite" parent="Theme.MaterialComponents.DayNight.DarkActionBar">
+        <item name="colorPrimary">@color/primary_dark</item>
+        <item name="colorPrimaryVariant">@color/primary_variant_dark</item>
+        <item name="colorOnPrimary">@color/black</item>
+        <item name="colorSecondary">@color/teal_200</item>
+        <item name="colorSecondaryVariant">@color/teal_700</item>
+        <item name="colorOnSecondary">@color/black</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <!-- Add link color for better visibility in dark mode -->
+        <item name="android:textColorLink">@color/link_color_dark</item>
+    </style>
+    
     <style name="Theme.TakLite.Dialog" parent="ThemeOverlay.MaterialComponents.Dialog.Alert">
         <item name="android:windowBackground">@android:color/black</item>
         <item name="android:windowMinWidthMajor">90%</item>
@@ -8,5 +26,7 @@
         <item name="colorOnSurface">@android:color/white</item>
         <item name="colorOnSurfaceVariant">#B3FFFFFF</item>
         <item name="colorSurface">@android:color/black</item>
+        <!-- Add link color for better visibility in dark mode dialogs -->
+        <item name="android:textColorLink">@color/link_color_dark</item>
     </style>
 </resources> 

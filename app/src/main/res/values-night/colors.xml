@@ -10,4 +10,10 @@
     <color name="ic_launcher_background">#222222</color>
     <color name="ptt_button_default">#263238</color> <!-- dark blue-grey -->
     <color name="splash_background">#111111</color>
+    
+    <!-- Better color scheme for dark mode -->
+    <color name="primary_dark">#90CAF9</color>  <!-- Material Blue 200 -->
+    <color name="primary_variant_dark">#64B5F6</color>  <!-- Material Blue 300 -->
+    <color name="link_color_dark">#90CAF9</color>  <!-- Material Blue 200 -->
+    <color name="interactive_color_dark">#42A5F5</color>  <!-- Material Blue 400 -->
 </resources> 

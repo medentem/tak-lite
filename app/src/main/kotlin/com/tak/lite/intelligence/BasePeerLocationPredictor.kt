@@ -1,7 +1,6 @@
 package com.tak.lite.intelligence
 
 import android.util.Log
-import com.tak.lite.data.model.MovementPattern
 import com.tak.lite.data.model.Quadruple
 import com.tak.lite.di.IPeerLocationPredictor
 import com.tak.lite.model.PeerLocationEntry
@@ -157,7 +156,6 @@ abstract class BasePeerLocationPredictor : IPeerLocationPredictor {
             // ENHANCED: Use best available timestamp for more accurate time calculations
             val dt = (current.getBestTimestamp() - previous.getBestTimestamp()) / 1000.0
             if (dt <= 0) {
-                Log.w(TAG, "GPS_FILTER: Skipping entry $i - invalid time difference: ${dt}s")
                 continue
             }
 

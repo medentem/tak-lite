@@ -2,6 +2,7 @@ package com.tak.lite.ui.channel
 
 import android.os.Bundle
 import android.view.View
+import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
@@ -63,36 +64,80 @@ class ChannelManagementActivity : AppCompatActivity() {
     }
 
     private fun showAddChannelDialog() {
-        val editText = EditText(this)
-        editText.hint = "Channel name"
-        MaterialAlertDialogBuilder(this)
+        val editText = EditText(this).apply {
+            hint = "Channel name"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_WORDS
+        }
+        
+        // Helper function to handle channel creation
+        fun createChannel() {
+            val name = editText.text.toString().trim()
+            if (name.isNotEmpty()) viewModel.createChannel(name)
+        }
+        
+        // Add editor action listener to handle Enter key
+        editText.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
+                createChannel()
+                true // Consume the event
+            } else {
+                false // Don't consume other events
+            }
+        }
+        
+        val dialog = MaterialAlertDialogBuilder(this)
             .setTitle("Add Channel")
             .setView(editText)
             .setPositiveButton("Add") { _, _ ->
-                val name = editText.text.toString().trim()
-                if (name.isNotEmpty()) viewModel.createChannel(name)
+                createChannel()
             }
             .setNegativeButton("Cancel", null)
-            .show()
+            .create()
+        
+        // Show the dialog and request focus for the EditText
+        dialog.show()
+        editText.requestFocus()
     }
 
     private fun showEditChannelDialog(channel: IChannel) {
-        val editText = EditText(this)
-        editText.setText(channel.name)
-        editText.setSelection(channel.name.length)
-        MaterialAlertDialogBuilder(this)
+        val editText = EditText(this).apply {
+            setText(channel.name)
+            setSelection(channel.name.length)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_WORDS
+        }
+        
+        // Helper function to handle channel editing
+        fun saveChannel() {
+            val newName = editText.text.toString().trim()
+            if (newName.isNotEmpty() && newName != channel.name) {
+                // For now, delete and re-create (since no rename in model)
+                viewModel.deleteChannel(channel.id)
+                viewModel.createChannel(newName)
+            }
+        }
+        
+        // Add editor action listener to handle Enter key
+        editText.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
+                saveChannel()
+                true // Consume the event
+            } else {
+                false // Don't consume other events
+            }
+        }
+        
+        val dialog = MaterialAlertDialogBuilder(this)
             .setTitle("Edit Channel")
             .setView(editText)
             .setPositiveButton("Save") { _, _ ->
-                val newName = editText.text.toString().trim()
-                if (newName.isNotEmpty() && newName != channel.name) {
-                    // For now, delete and re-create (since no rename in model)
-                    viewModel.deleteChannel(channel.id)
-                    viewModel.createChannel(newName)
-                }
+                saveChannel()
             }
             .setNegativeButton("Cancel", null)
-            .show()
+            .create()
+        
+        // Show the dialog and request focus for the EditText
+        dialog.show()
+        editText.requestFocus()
     }
 
     private fun showDeleteChannelDialog(channel: IChannel) {

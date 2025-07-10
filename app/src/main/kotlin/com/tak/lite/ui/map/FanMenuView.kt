@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import androidx.core.content.ContextCompat
 import android.graphics.PointF
 import android.util.AttributeSet
 import android.util.Log
@@ -461,7 +462,7 @@ class FanMenuView @JvmOverloads constructor(
         canvas.drawCircle(x, y, iconRadius, borderPaint)
         // Draw a more angular, zigzag chart line
         val chartPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#1976D2") // Blue
+            color = ContextCompat.getColor(context, R.color.primary_light)
             style = Paint.Style.STROKE
             strokeWidth = 5f
         }

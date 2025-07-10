@@ -11,4 +11,10 @@
     <color name="ptt_button_default">#4CAF50</color>  <!-- Material Design Green -->
     <color name="splash_background">#222222</color>
     <color name="green_500">#4CAF50</color>
+    
+    <!-- Better color scheme for light mode -->
+    <color name="primary_light">#1976D2</color>  <!-- Material Blue 700 -->
+    <color name="primary_variant_light">#1565C0</color>  <!-- Material Blue 800 -->
+    <color name="link_color_light">#1976D2</color>  <!-- Material Blue 700 -->
+    <color name="interactive_color_light">#2196F3</color>  <!-- Material Blue 500 -->
 </resources> 

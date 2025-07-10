@@ -69,7 +69,7 @@ class AnnotationFragment : Fragment() {
         
         // Set initial prediction overlay visibility based on user preference
         val prefs = requireContext().getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
-        val showPredictionOverlay = prefs.getBoolean("show_prediction_overlay", true)
+        val showPredictionOverlay = prefs.getBoolean("show_prediction_overlay", false)
         predictionOverlayView.setShowPredictionOverlay(showPredictionOverlay)
 
         // Observe mapReadyLiveData from MainActivity
@@ -281,7 +281,7 @@ class AnnotationFragment : Fragment() {
         super.onResume()
         // Update prediction overlay visibility in case user changed the setting
         val prefs = requireContext().getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
-        val showPredictionOverlay = prefs.getBoolean("show_prediction_overlay", true)
+        val showPredictionOverlay = prefs.getBoolean("show_prediction_overlay", false)
         predictionOverlayView.setShowPredictionOverlay(showPredictionOverlay)
     }
 } 

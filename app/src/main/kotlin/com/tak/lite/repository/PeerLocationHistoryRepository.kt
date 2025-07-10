@@ -153,6 +153,20 @@ class PeerLocationHistoryRepository @Inject constructor(
         val prediction = predictor.predictPeerLocation(history, currentConfig)
         
         if (prediction != null) {
+            // Check if we should filter out this prediction
+            val latestEntry = history.getLatestEntry()
+            if (latestEntry != null && shouldFilterPrediction(prediction, latestEntry)) {
+                Log.d(TAG, "Filtering out prediction for peer $peerId: speed is 0 and location hasn't changed")
+                // Remove prediction if it should be filtered
+                val currentPredictions = _predictions.value.toMutableMap()
+                currentPredictions.remove(peerId)
+                _predictions.value = currentPredictions
+                val currentCones = _confidenceCones.value.toMutableMap()
+                currentCones.remove(peerId)
+                _confidenceCones.value = currentCones
+                return
+            }
+            
             val currentPredictions = _predictions.value.toMutableMap()
             currentPredictions[peerId] = prediction
             _predictions.value = currentPredictions
@@ -177,6 +191,28 @@ class PeerLocationHistoryRepository @Inject constructor(
             _confidenceCones.value = currentCones
             Log.w(TAG, "Failed to generate prediction for peer $peerId with model $currentModel")
         }
+    }
+    
+    /**
+     * Check if a prediction should be filtered out based on speed and location change
+     * Returns true if the prediction should be filtered (not shown)
+     */
+    private fun shouldFilterPrediction(prediction: LocationPrediction, latestEntry: PeerLocationEntry): Boolean {
+        // Check if speed is 0 or very low
+        val speed = prediction.velocity?.speed ?: 0.0
+        if (speed > 0.1) { // Allow small speed values (0.1 m/s)
+            return false
+        }
+        
+        // Check if predicted location is significantly different from current location
+        val currentLocation = LatLngSerializable(latestEntry.latitude, latestEntry.longitude)
+        val distance = calculateDistance(
+            currentLocation.lt, currentLocation.lng,
+            prediction.predictedLocation.lt, prediction.predictedLocation.lng
+        )
+        
+        // If distance is less than 3 meters, consider it the same location
+        return distance < 5.0
     }
     
     /**

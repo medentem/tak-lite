@@ -10,10 +10,12 @@ import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.View
 import android.view.animation.LinearInterpolator
-import kotlin.math.cos
-import kotlin.math.sin
-import kotlin.math.min
+import androidx.core.content.ContextCompat
+import com.tak.lite.R
 import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.min
+import kotlin.math.sin
 
 class CalibrationView @JvmOverloads constructor(
     context: Context,
@@ -35,7 +37,7 @@ class CalibrationView @JvmOverloads constructor(
     private val phoneStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = 3f
-        color = Color.parseColor("#2196F3")
+                    color = ContextCompat.getColor(context, R.color.interactive_color_light)
     }
     
     private val arrowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
