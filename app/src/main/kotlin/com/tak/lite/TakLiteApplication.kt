@@ -19,18 +19,6 @@ class TakLiteApplication : Application() {
         // MeshProtocolProvider.initialize(this) // No longer needed with DI
         instance = this
     }
-    
-    override fun onTerminate() {
-        super.onTerminate()
-        // Cleanup AIDL protocol if needed
-        try {
-            // This will be handled by the protocol provider cleanup
-            // Note: In a real app, you might want to inject MeshProtocolProvider here
-            // For now, we'll rely on the protocol's own cleanup
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
 
     companion object {
         lateinit var instance: TakLiteApplication
