@@ -12,6 +12,7 @@ import com.tak.lite.network.MeshProtocolProvider
 import com.tak.lite.notification.MessageNotificationManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -33,51 +34,80 @@ class MessageRepository @Inject constructor(
 
     // Create a coroutine scope for the repository
     private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    
+    // Track the current channel messages observation job
+    private var channelMessagesJob: Job? = null
 
     init {
+        Log.d(TAG, "=== MessageRepository Constructor ===")
+        Log.d(TAG, "MessageRepository is being created")
+        Log.d(TAG, "Protocol provider: ${meshProtocolProvider.javaClass.simpleName}")
+        
         // Observe messages from the protocol
         repositoryScope.launch {
+            Log.d(TAG, "Starting to observe protocol changes")
             meshProtocolProvider.protocol.collect { protocol ->
-                // Observe channel messages
-                var previousMessages = _messages.value
-                protocol.channelMessages.collect { channelMessages ->
-                    // Check for new messages in each channel
-                    channelMessages.forEach { (channelId, messages) ->
-                        val previousChannelMessages = previousMessages[channelId] ?: emptyList()
-                        val newMessages = messages.filter { newMessage ->
-                            !previousChannelMessages.any { it.timestamp == newMessage.timestamp &&
-                                                         it.senderShortName == newMessage.senderShortName &&
-                                                         it.content == newMessage.content }
+                Log.d(TAG, "=== MessageRepository Protocol Change ===")
+                Log.d(TAG, "Protocol changed to: ${protocol.javaClass.simpleName}")
+                
+                // Cancel any existing channel messages observation
+                channelMessagesJob?.cancel()
+                
+                // Start observing channel messages for this protocol
+                Log.d(TAG, "Starting to observe channel messages for new protocol")
+                channelMessagesJob = launch {
+                    protocol.channelMessages.collect { channelMessages ->
+                        Log.d(TAG, "=== MessageRepository Channel Messages Update ===")
+                        Log.d(TAG, "Received channel messages update")
+                        Log.d(TAG, "Number of channels with messages: ${channelMessages.size}")
+                        channelMessages.forEach { (channelId, messages) ->
+                            Log.d(TAG, "Channel $channelId has ${messages.size} messages")
+                            if (messages.isNotEmpty()) {
+                                Log.d(TAG, "Last message in $channelId: ${messages.last()}")
+                            }
                         }
+                        
+                        // Check for new messages in each channel
+                        val previousMessages = _messages.value
+                        channelMessages.forEach { (channelId, messages) ->
+                            val previousChannelMessages = previousMessages[channelId] ?: emptyList()
+                            val newMessages = messages.filter { newMessage ->
+                                !previousChannelMessages.any { it.timestamp == newMessage.timestamp &&
+                                                             it.senderShortName == newMessage.senderShortName &&
+                                                             it.content == newMessage.content }
+                            }
 
-                        // Show notifications for new messages
-                        newMessages.forEach { message ->
-                            if (meshProtocolProvider.protocol.value.localNodeIdOrNickname.value == message.senderId) {
-                                Log.d(TAG, "Message sent from our node, skipping notification")
-                            } else {
-                                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-                                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
-                                    Log.d(TAG, "Showing notification for new message in channel $channelId")
-                                    val channelName = protocol.getChannelName(channelId) ?: channelId
-                                    messageNotificationManager.showMessageNotification(
-                                        channelId = channelId,
-                                        channelName = channelName,
-                                        message = message.content,
-                                        message.senderShortName
-                                    )
+                            // Show notifications for new messages
+                            newMessages.forEach { message ->
+                                if (protocol.localNodeIdOrNickname.value == message.senderId) {
+                                    Log.d(TAG, "Message sent from our node, skipping notification")
                                 } else {
-                                    Log.d(TAG, "No notification permission, skipping notification")
+                                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                                        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+                                        Log.d(TAG, "Showing notification for new message in channel $channelId")
+                                        val channelName = protocol.getChannelName(channelId) ?: channelId
+                                        messageNotificationManager.showMessageNotification(
+                                            channelId = channelId,
+                                            channelName = channelName,
+                                            message = message.content,
+                                            message.senderShortName
+                                        )
+                                    } else {
+                                        Log.d(TAG, "No notification permission, skipping notification")
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    // Update our messages state
-                    _messages.value = channelMessages
-                    previousMessages = channelMessages
+                        // Update our messages state
+                        _messages.value = channelMessages
+                        Log.d(TAG, "Updated _messages.value, total channels: ${_messages.value.size}")
+                        Log.d(TAG, "=== MessageRepository Update Complete ===")
+                    }
                 }
             }
         }
+        Log.d(TAG, "=== MessageRepository Constructor Complete ===")
     }
 
     fun getCurrentUserShortName(): String {

@@ -46,6 +46,10 @@ class MeshtasticAidlProtocol @Inject constructor(
     private var meshService: IMeshService? = null
     private var isMeshServiceBound = false
     private var userInitiatedDisconnect = false // Track user-initiated disconnects
+    
+    // Track broadcast receiver registration
+    private var isReceiverRegistered = false
+    private var registrationContext: Context? = null
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             Log.d(TAG, "=== Service Connection Debug ===")
@@ -136,6 +140,7 @@ class MeshtasticAidlProtocol @Inject constructor(
     private val meshReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             Log.d(TAG, "=== BroadcastReceiver.onReceive called ===")
+            Log.d(TAG, "Instance ID: ${this@MeshtasticAidlProtocol.hashCode()}")
             Log.d(TAG, "Context: ${context?.javaClass?.name}")
             Log.d(TAG, "Intent: ${intent?.action}")
             Log.d(TAG, "Intent extras: ${intent?.extras?.keySet()}")
@@ -146,8 +151,12 @@ class MeshtasticAidlProtocol @Inject constructor(
     }
     
     init {
-        Log.d(TAG, "Initializing MeshtasticAidlProtocol")
+        Log.d(TAG, "=== Initializing MeshtasticAidlProtocol ===")
+        Log.d(TAG, "Instance ID: ${this.hashCode()}")
+        Log.d(TAG, "Registering mesh broadcast receiver...")
         registerMeshReceiver()
+        
+        Log.d(TAG, "Attempting to bind to mesh service...")
         while (!bindMeshService()) {
             try {
                 // Wait for the service to bind
@@ -170,6 +179,8 @@ class MeshtasticAidlProtocol @Inject constructor(
             broadcastContext.sendBroadcast(testIntent)
             Log.d(TAG, "Test broadcast sent using context: ${broadcastContext.javaClass.simpleName}")
         }
+        
+        Log.d(TAG, "=== MeshtasticAidlProtocol initialization complete ===")
     }
     
     private fun bindMeshService(): Boolean {
@@ -261,6 +272,12 @@ class MeshtasticAidlProtocol @Inject constructor(
     }
     
     private fun registerMeshReceiver() {
+        // Prevent duplicate registration
+        if (isReceiverRegistered) {
+            Log.d(TAG, "Broadcast receiver already registered, skipping registration")
+            return
+        }
+        
         val filter = IntentFilter().apply {
             addAction("com.geeksville.mesh.NODE_CHANGE")
             addAction("com.geeksville.mesh.RECEIVED.NODEINFO_APP")
@@ -275,36 +292,59 @@ class MeshtasticAidlProtocol @Inject constructor(
         }
         
         // Try to use activity context first, fall back to application context
-        val registrationContext = activityContextProvider.getActivityContext() ?: context
+        val contextToUse = activityContextProvider.getActivityContext() ?: context
         
         try {
             Log.d(TAG, "Attempting to register mesh broadcast receiver with filter: ${filter.actionsIterator().asSequence().toList()}")
-            Log.d(TAG, "Context type: ${registrationContext.javaClass.name}")
-            Log.d(TAG, "Context package: ${registrationContext.packageName}")
-            Log.d(TAG, "Using activity context: ${registrationContext != context}")
+            Log.d(TAG, "Context type: ${contextToUse.javaClass.name}")
+            Log.d(TAG, "Context package: ${contextToUse.packageName}")
+            Log.d(TAG, "Using activity context: ${contextToUse != context}")
             
             // Try with RECEIVER_EXPORTED first (needed for cross-app broadcasts)
             try {
-                registrationContext.registerReceiver(meshReceiver, filter, Context.RECEIVER_EXPORTED)
+                contextToUse.registerReceiver(meshReceiver, filter, Context.RECEIVER_EXPORTED)
                 Log.d(TAG, "Successfully registered mesh broadcast receiver with RECEIVER_EXPORTED")
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to register with RECEIVER_EXPORTED, trying RECEIVER_NOT_EXPORTED: ${e.message}")
-                registrationContext.registerReceiver(meshReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+                contextToUse.registerReceiver(meshReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
                 Log.d(TAG, "Successfully registered mesh broadcast receiver with RECEIVER_NOT_EXPORTED")
             }
+            
+            // Track successful registration
+            isReceiverRegistered = true
+            registrationContext = contextToUse
+            Log.d(TAG, "Broadcast receiver registration tracked - isReceiverRegistered: $isReceiverRegistered")
+            
         } catch (e: Exception) {
             Log.e(TAG, "Failed to register mesh receiver", e)
+            // Reset tracking on failure
+            isReceiverRegistered = false
+            registrationContext = null
         }
     }
     
     private fun unregisterMeshReceiver() {
+        if (!isReceiverRegistered) {
+            Log.d(TAG, "Broadcast receiver not registered, skipping unregistration")
+            return
+        }
+        
         try {
-            // Use the same context that was used for registration
-            val registrationContext = activityContextProvider.getActivityContext() ?: context
-            registrationContext.unregisterReceiver(meshReceiver)
-            Log.d(TAG, "Unregistered mesh broadcast receiver")
+            // Use the tracked context that was used for registration
+            val contextToUse = registrationContext ?: context
+            contextToUse.unregisterReceiver(meshReceiver)
+            Log.d(TAG, "Unregistered mesh broadcast receiver using context: ${contextToUse.javaClass.simpleName}")
+            
+            // Reset tracking state
+            isReceiverRegistered = false
+            registrationContext = null
+            Log.d(TAG, "Broadcast receiver unregistration tracked - isReceiverRegistered: $isReceiverRegistered")
+            
         } catch (e: Exception) {
             Log.w(TAG, "Failed to unregister mesh receiver", e)
+            // Reset tracking even on failure to prevent stuck state
+            isReceiverRegistered = false
+            registrationContext = null
         }
     }
     
@@ -415,11 +455,6 @@ class MeshtasticAidlProtocol @Inject constructor(
     }
 
     private suspend fun performAidlHandshake() {
-        if (handshakeComplete.get()) {
-            Log.d(TAG, "Handshake already complete, skipping")
-            return
-        }
-        
         Log.i(TAG, "Starting AIDL handshake...")
         _configDownloadStep.value = ConfigDownloadStep.NotStarted
         
@@ -496,8 +531,6 @@ class MeshtasticAidlProtocol @Inject constructor(
                     Log.d(TAG, "Conversion successful, MeshProtos.MyNodeInfo details:")
                     Log.d(TAG, "  - myNodeNum: ${meshProtosMyNodeInfo.myNodeNum}")
                     Log.d(TAG, "  - minAppVersion: ${meshProtosMyNodeInfo.minAppVersion}")
-                    Log.d(TAG, "  - myNodeNum: ${meshProtosMyNodeInfo.myNodeNum}")
-                    Log.d(TAG, "  - minAppVersion: ${meshProtosMyNodeInfo.minAppVersion}")
                     
                     Log.d(TAG, "Calling base class handleMyInfo()...")
                     try {
@@ -516,6 +549,8 @@ class MeshtasticAidlProtocol @Inject constructor(
                     val myId = meshService?.getMyId()
                     Log.d(TAG, "getMyId() fallback result: $myId")
                     if (!myId.isNullOrEmpty()) {
+                        // Check for node change even with fallback ID
+                        checkForNodeChange(myId)
                         _localNodeIdOrNickname.value = myId
                         Log.d(TAG, "Using getMyId() as fallback: $myId")
                     } else {
@@ -679,7 +714,8 @@ class MeshtasticAidlProtocol @Inject constructor(
     }
     
     override fun disconnectFromDevice() {
-        Log.i(TAG, "User-initiated disconnect requested")
+        Log.i(TAG, "=== User-initiated disconnect requested ===")
+        Log.d(TAG, "Instance ID: ${this.hashCode()}")
         userInitiatedDisconnect = true
         
         // Stop providing location if service is available
@@ -696,10 +732,9 @@ class MeshtasticAidlProtocol @Inject constructor(
 
         cleanup()
         cleanupState()
-
-        // Immediately update connection state to disconnected
         _connectionState.value = MeshConnectionState.Disconnected
         Log.i(TAG, "Connection state set to Disconnected")
+        Log.i(TAG, "=== User-initiated disconnect complete ===")
     }
     
     // Packets are queued on the abstract base protocol class by each specific send function
@@ -743,8 +778,6 @@ class MeshtasticAidlProtocol @Inject constructor(
 
     override fun forceReset() {
         Log.i(TAG, "Force reset requested")
-        handshakeComplete.set(false)
-        _configDownloadStep.value = ConfigDownloadStep.NotStarted
         userInitiatedDisconnect = false // Reset disconnect flag for force reset
         disconnectFromDevice()
         // Reconnect after a short delay
@@ -788,9 +821,19 @@ class MeshtasticAidlProtocol @Inject constructor(
     }
     
     fun cleanup() {
-        Log.i(TAG, "Cleaning up AIDL protocol")
+        Log.i(TAG, "=== Cleaning up AIDL protocol ===")
+        Log.d(TAG, "Instance ID: ${this.hashCode()}")
+        Log.d(TAG, "Broadcast receiver registered: $isReceiverRegistered")
+        Log.d(TAG, "Registration context: ${registrationContext?.javaClass?.simpleName}")
+        
         unregisterMeshReceiver()
         unbindMeshService()
+        
+        // Ensure tracking state is reset
+        isReceiverRegistered = false
+        registrationContext = null
+        Log.d(TAG, "AIDL protocol cleanup complete - broadcast receiver tracking reset")
+        Log.i(TAG, "=== AIDL protocol cleanup complete ===")
     }
     
     fun checkMeshtasticAppStatus(): String {
@@ -1098,7 +1141,7 @@ class MeshtasticAidlProtocol @Inject constructor(
         }
         
         Log.d(TAG, "Handling node change for node ${nodeInfo.num}")
-        
+
         // Convert to protobuf format and use base class handler
         val meshProtosNodeInfo = nodeInfo.toMeshProtosNodeInfo()
         handleNodeInfo(meshProtosNodeInfo)

@@ -94,16 +94,10 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             deviceManager.connectionState.collect { state ->
                 _connectionState.value = when (state) {
                     is BluetoothDeviceManager.ConnectionState.Connected -> {
-                        // Check if this is a fresh connection or reconnection
-                        val isReconnection = deviceManager.isReconnectionAttempt()
-                        if (isReconnection) {
-                            Log.i(TAG, "Reconnection established - preserving existing state")
-                            // For reconnections, don't reset handshake state - let it resume
-                        } else {
-                            Log.i(TAG, "Fresh connection established - resetting handshake state")
-                            resetHandshakeState()
-                        }
-                        // Keep connection state as Connecting until handshake completes
+                        Log.i(TAG, "Connection established - clearing state for fresh start")
+                        // Always clear state for fresh connections to ensure clean state
+                        cleanupState()
+                        resetHandshakeState()
                         MeshConnectionState.Connecting
                     }
                     is BluetoothDeviceManager.ConnectionState.Connecting -> {
@@ -112,17 +106,8 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                     }
                     is BluetoothDeviceManager.ConnectionState.Disconnected -> {
                         stopPacketQueue()
-                        if (deviceManager.isUserInitiatedDisconnect()) {
-                            Log.i(TAG, "User initiated disconnect - clearing state")
-                            cleanupState()
-                        } else {
-                            Log.i(TAG, "Connection lost - preserving state for reconnection")
-                            // Don't call cleanupState() here - preserve protocol state for reconnection
-                            // Only stop the packet queue and cancel timeouts
-                            stopPacketQueue()
-                            handshakeTimeoutJob?.cancel()
-                            handshakeTimeoutJob = null
-                        }
+                        Log.i(TAG, "Connection lost - clearing state")
+                        cleanupState()
                         MeshConnectionState.Disconnected
                     }
                     is BluetoothDeviceManager.ConnectionState.Failed -> {
@@ -438,8 +423,8 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         CoroutineScope(coroutineContext).launch {
             _configDownloadStep.collect { step ->
                 if (step == ConfigDownloadStep.Complete) {
-                    Log.i(TAG, "Handshake complete, recovering in-flight messages")
-                    recoverInFlightMessages()
+                    Log.i(TAG, "Handshake complete")
+                    // No need to recover in-flight messages since we clear state on every connection
                 }
             }
         }
@@ -491,34 +476,10 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     override fun forceReset() {
         Log.i(TAG, "Force reset requested from protocol layer")
         deviceManager.forceReset()
-        
-        // Also cleanup protocol state
         cleanupState()
     }
 
-    /**
-     * Force a complete reset when handshake issues occur
-     * This should be called when the device doesn't respond to handshake after reconnection
-     */
-    fun forceResetAfterHandshakeFailure() {
-        Log.w(TAG, "Force reset after handshake failure - clearing all state")
-        // Cancel any ongoing handshake
-        handshakeTimeoutJob?.cancel()
-        handshakeTimeoutJob = null
-        
-        // Reset handshake state
-        handshakeComplete.set(false)
-        _configDownloadStep.value = ConfigDownloadStep.NotStarted
-        _configStepCounters.value = emptyMap()
-        
-        // Force cleanup of device manager
-        deviceManager.forceCleanup()
-        
-        // Clear protocol state
-        cleanupState()
-        
-        Log.i(TAG, "Force reset after handshake failure completed")
-    }
+
 
     /**
      * Check if the system is ready for new connections
@@ -565,14 +526,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         return deviceManager.getOsConnectionInfo()
     }
 
-    /**
-     * Check if the system is in a handshake failure state
-     * @return true if handshake has failed and system needs reset, false otherwise
-     */
-    fun isHandshakeFailed(): Boolean {
-        return _configDownloadStep.value is ConfigDownloadStep.Error && 
-               _connectionState.value is MeshConnectionState.Error
-    }
+
 
     /**
      * Get a list of all connected devices that support the Meshtastic service

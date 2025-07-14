@@ -65,6 +65,7 @@ abstract class MeshtasticBaseProtocol(
     // Add location request tracking
     private data class LocationRequest(
         val peerId: String,
+        val requestId: Int,  // Add request ID for tracking like text messages
         val callback: (timeout: Boolean) -> Unit,
         val timestamp: Long = System.currentTimeMillis()
     )
@@ -358,8 +359,9 @@ abstract class MeshtasticBaseProtocol(
      * @param position The position data to process
      * @param peerId The peer ID this position belongs to
      * @param source The source of the position data (e.g., "POSITION_APP", "NodeInfo")
+     * @param meshPacket The original mesh packet (optional, for request ID matching)
      */
-    private fun processPositionData(position: MeshProtos.Position, peerId: String, source: String) {
+    private fun processPositionData(position: MeshProtos.Position, peerId: String, source: String, meshPacket: MeshProtos.MeshPacket? = null) {
         try {
             val lat = position.latitudeI / 1e7
             val lng = position.longitudeI / 1e7
@@ -416,14 +418,34 @@ abstract class MeshtasticBaseProtocol(
             }
 
             // Check if this is a response to a location request
-            // Find any pending location requests for this peer
-            val pendingRequest = pendingLocationRequests.entries.find { (_, request) ->
-                request.peerId == peerId
+            Log.d(TAG, "Checking for pending location requests. Current pending: ${pendingLocationRequests.keys}")
+            
+            // First, try to find a direct routing response by request ID
+            val directRequest = pendingLocationRequests.entries.find { (packetId, request) ->
+                request.peerId == peerId && 
+                (meshPacket?.hasDecoded() == true && meshPacket.decoded.requestId == request.requestId)
             }
-            if (pendingRequest != null) {
-                Log.d(TAG, "Received location response from peer $peerId")
-                pendingRequest.value.callback(false) // Call with timeout = false
-                pendingLocationRequests.remove(pendingRequest.key)
+            
+            if (directRequest != null) {
+                Log.d(TAG, "Found direct routing response for location request to peer $peerId, requestId: ${directRequest.value.requestId}")
+                directRequest.value.callback(false) // Call with timeout = false
+                pendingLocationRequests.remove(directRequest.key)
+            } else {
+                // Fallback: check for any recent requests to this peer (for broadcast updates)
+                val now = System.currentTimeMillis()
+                val pendingRequest = pendingLocationRequests.entries.find { (packetId, request) ->
+                    request.peerId == peerId && 
+                    (now - request.timestamp) < 30000 &&  // Within 30 seconds of request
+                    (now - request.timestamp) > 1000      // At least 1 second after request
+                }
+                
+                if (pendingRequest != null) {
+                    Log.d(TAG, "Position update from peer $peerId received ${now - pendingRequest.value.timestamp}ms after request - treating as broadcast response")
+                    pendingRequest.value.callback(false) // Call with timeout = false
+                    pendingLocationRequests.remove(pendingRequest.key)
+                } else {
+                    Log.d(TAG, "Position update from peer $peerId - no recent request found, treating as regular broadcast")
+                }
             }
 
         } catch (e: Exception) {
@@ -457,30 +479,6 @@ abstract class MeshtasticBaseProtocol(
         )
         val updated = (_packetSummaries.value + summary).takeLast(3)
         _packetSummaries.value = updated
-    }
-
-    internal fun handleMyInfo(myInfo: MeshProtos.MyNodeInfo) {
-        Log.d(TAG, "=== Base Protocol handleMyInfo() Debug ===")
-        Log.d(TAG, "Input MyNodeInfo details:")
-        Log.d(TAG, "  - myNodeNum: ${myInfo.myNodeNum}")
-        Log.d(TAG, "  - minAppVersion: ${myInfo.minAppVersion}")
-        Log.d(TAG, "  - myNodeNum: ${myInfo.myNodeNum}")
-        Log.d(TAG, "  - minAppVersion: ${myInfo.minAppVersion}")
-        
-        val rawNodeNum = myInfo.myNodeNum
-        val unsignedNodeNum = (rawNodeNum.toLong() and 0xFFFFFFFFL)
-        connectedNodeId = unsignedNodeNum.toString()
-        
-        Log.d(TAG, "Processing results:")
-        Log.d(TAG, "  - Raw myNodeNum: $rawNodeNum")
-        Log.d(TAG, "  - Unsigned conversion: $unsignedNodeNum")
-        Log.d(TAG, "  - Final connectedNodeId: $connectedNodeId")
-        Log.d(TAG, "  - Previous _localNodeIdOrNickname: ${_localNodeIdOrNickname.value}")
-        
-        _localNodeIdOrNickname.value = connectedNodeId
-        
-        Log.d(TAG, "  - Updated _localNodeIdOrNickname: ${_localNodeIdOrNickname.value}")
-        Log.d(TAG, "=== Base Protocol handleMyInfo() Complete ===")
     }
 
     internal fun handleChannelUpdate(channel: com.geeksville.mesh.ChannelProtos.Channel) {
@@ -542,12 +540,22 @@ abstract class MeshtasticBaseProtocol(
         val packet = inFlightMessages.remove(requestId)
         if (packet != null) {
             // Cancel the timeout job since we got a response
-            timeoutJobManager.cancelTimeout(packet.id)
+            timeoutJobManager.cancelTimeout(requestId)
             messageRetryCount.remove(requestId)
 
             val isAck = routing.errorReason == MeshProtos.Routing.Error.NONE
             val packetTo = (packet.to.toLong() and 0xFFFFFFFFL).toString()
             Log.d(TAG, "Routing response for requestId $requestId - fromId: $fromId, packet originally to: $packetTo, errorReason: ${routing.errorReason} (code: ${routing.errorReason.number})")
+            
+            // Check if this is a position request response
+            if (packet.hasDecoded() && packet.decoded.portnum == PortNum.POSITION_APP) {
+                val locationRequest = pendingLocationRequests.remove(requestId)
+                if (locationRequest != null) {
+                    Log.d(TAG, "Received routing response for position request to peer ${locationRequest.peerId}")
+                    locationRequest.callback(false) // Call with timeout = false
+                }
+            }
+            
             val newStatus = when {
                 isAck && fromId == packetTo -> MessageStatus.RECEIVED
                 isAck -> MessageStatus.DELIVERED
@@ -557,7 +565,7 @@ abstract class MeshtasticBaseProtocol(
             Log.d(TAG, "Updated packet ${packet.id} status to $newStatus (fromId: $fromId, isAck: $isAck)")
 
             // Complete the queue response if it exists
-            queueResponse.remove(packet.id)?.complete(isAck)
+            queueResponse.remove(requestId)?.complete(isAck)
             Log.d(TAG, "Completed queue response for requestId $requestId with success=$isAck")
         }
     }
@@ -612,7 +620,7 @@ abstract class MeshtasticBaseProtocol(
             } else if (decoded.portnum == PortNum.POSITION_APP) {
                 try {
                     val position = MeshProtos.Position.parseFrom(decoded.payload)
-                    processPositionData(position, peerId, "POSITION_APP")
+                    processPositionData(position, peerId, "POSITION_APP", meshPacket)
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to parse POSITION_APP payload: ${e.message}", e)
                 }
@@ -675,10 +683,10 @@ abstract class MeshtasticBaseProtocol(
 
         // Complete the future for this packet
         if (meshPacketId != 0) {
-            queueResponse.remove(meshPacketId)?.complete(success)
+            queueResponse.remove(meshPacketId.toInt())?.complete(success)
 
             // Update message status if this was a text message
-            val packet = inFlightMessages[unsignedMeshPacketId.toInt()]
+            val packet = inFlightMessages[meshPacketId.toInt()]
             if (packet != null) {
                 val newStatus = if (success) MessageStatus.SENT else MessageStatus.ERROR
                 updateMessageStatusForPacket(packet, newStatus)
@@ -690,13 +698,23 @@ abstract class MeshtasticBaseProtocol(
     }
 
     internal fun updateMessageStatusForPacket(packet: MeshProtos.MeshPacket, newStatus: MessageStatus) {
+        Log.d(TAG, "=== updateMessageStatusForPacket Debug ===")
+        Log.d(TAG, "Packet ID: ${packet.id}")
+        Log.d(TAG, "New status: $newStatus")
+        Log.d(TAG, "Has decoded: ${packet.hasDecoded()}")
+        
         if (!packet.hasDecoded() || packet.decoded.portnum != PortNum.TEXT_MESSAGE_APP) {
+            Log.d(TAG, "Not a text message, skipping status update")
             return // Only update status for text messages
         }
+        Log.d(TAG, "Port number: ${packet.decoded.portnum}")
 
         val requestId = packet.id
         val unsignedRequestId = (requestId.toLong() and 0xFFFFFFFFL).toInt()
         val toId = (packet.to.toLong() and 0xFFFFFFFFL)
+        Log.d(TAG, "Request ID: $requestId, unsigned: $unsignedRequestId")
+        Log.d(TAG, "To ID: $toId")
+        
         val channelId = if (toId != 0xFFFFFFFFL) {
             // This is a direct message
             Log.d(TAG, "Direct message status update: ${packet.channel}")
@@ -710,13 +728,18 @@ abstract class MeshtasticBaseProtocol(
             }
             "${channel.index}_${channel.name}"
         }
+        Log.d(TAG, "Channel ID for status update: $channelId")
 
         val currentMessages = _channelMessages.value.toMutableMap()
         val channelMessages = currentMessages[channelId]?.toMutableList() ?: mutableListOf()
+        Log.d(TAG, "Current messages in channel $channelId: ${channelMessages.size}")
+        
         val messageIndex = channelMessages.indexOfFirst { it.requestId == unsignedRequestId }
+        Log.d(TAG, "Message index for request ID $unsignedRequestId: $messageIndex")
 
         if (messageIndex != -1) {
             val currentMessage = channelMessages[messageIndex]
+            Log.d(TAG, "Found message: $currentMessage")
             val updatedMessage = currentMessage.copyWithStatus(newStatus)
             
             if (updatedMessage != null) {
@@ -729,7 +752,9 @@ abstract class MeshtasticBaseProtocol(
             }
         } else {
             Log.e(TAG, "Could not find message with id $unsignedRequestId in channel $channelId")
+            Log.e(TAG, "Available messages in channel: ${channelMessages.map { "${it.requestId} (${it.status})" }}")
         }
+        Log.d(TAG, "=== updateMessageStatusForPacket Complete ===")
     }
     /**
      * Queue a packet for sending. This is the main entry point for all packet queuing.
@@ -901,6 +926,18 @@ abstract class MeshtasticBaseProtocol(
         onPeerLocationReceived: (timeout: Boolean) -> Unit
     ) {
         Log.d(TAG, "Sending location request to peer $peerId")
+        
+        // Check for existing request to prevent duplicates
+        val existingRequest = pendingLocationRequests.entries.find { (_, request) ->
+            request.peerId == peerId && 
+            (System.currentTimeMillis() - request.timestamp) < 5000  // 5 second window
+        }
+        
+        if (existingRequest != null) {
+            Log.d(TAG, "Location request to peer $peerId already pending, skipping duplicate")
+            return
+        }
+        
         // Get the peer's node info to check PKI status
         val peerNodeInfo = nodeInfoMap[peerId]
         if (peerNodeInfo == null) {
@@ -918,22 +955,29 @@ abstract class MeshtasticBaseProtocol(
             portnum = PortNum.POSITION_APP
             wantResponse = true
         }
+        
+        // Set request ID after packet is built (like text messages)
+        val packetWithRequestId = packet.toBuilder()
+            .setDecoded(packet.decoded.toBuilder().setRequestId(packet.id).build())
+            .build()
 
         // Store the callback with the packet ID
-        pendingLocationRequests[packet.id] = LocationRequest(peerId, onPeerLocationReceived)
+        pendingLocationRequests[packetWithRequestId.id] = LocationRequest(peerId, packetWithRequestId.id, onPeerLocationReceived)
+        Log.d(TAG, "Stored location request: peerId=$peerId, packetId=${packetWithRequestId.id}, requestId=${packetWithRequestId.id}")
+        Log.d(TAG, "Pending location requests after sending: ${pendingLocationRequests.keys}")
 
         // Queue the packet
-        queuePacket(packet)
+        queuePacket(packetWithRequestId)
 
         // Start a timeout coroutine
         CoroutineScope(coroutineContext).launch {
             delay(LOCATION_REQUEST_TIMEOUT_MS)
             // Check if the request is still pending
-            val request = pendingLocationRequests[packet.id]
+            val request = pendingLocationRequests[packetWithRequestId.id]
             if (request != null) {
                 Log.d(TAG, "Location request to peer $peerId timed out")
                 request.callback(true) // Call with timeout = true
-                pendingLocationRequests.remove(packet.id)
+                pendingLocationRequests.remove(packetWithRequestId.id)
             }
         }
     }
@@ -1020,14 +1064,22 @@ abstract class MeshtasticBaseProtocol(
     }
 
     override fun sendTextMessage(channelId: String, content: String) {
+        Log.d(TAG, "=== sendTextMessage Debug ===")
+        Log.d(TAG, "Channel ID: $channelId")
+        Log.d(TAG, "Content: $content")
+        Log.d(TAG, "Connected node ID: $connectedNodeId")
+        Log.d(TAG, "Available channels: ${_channels.value.map { "${it.name} (${it.id})" }}")
+        
         // Get the channel index from the channel ID
         val channelIndex = channelId.split("_").firstOrNull()?.toIntOrNull()
         if (channelIndex == null) {
             Log.e(TAG, "Invalid channel ID format: $channelId")
             return
         }
+        Log.d(TAG, "Channel index: $channelIndex")
 
         val textMessagePacketId = generatePacketId()
+        Log.d(TAG, "Generated packet ID: $textMessagePacketId")
 
         // Create the mesh packet using the new helper method
         val packet = newMeshPacketTo().buildMeshPacket(
@@ -1044,6 +1096,7 @@ abstract class MeshtasticBaseProtocol(
         // Get the sender's short name from node info
         val senderShortName = getNodeInfoForPeer(connectedNodeId ?: "")?.user?.shortName
             ?: connectedNodeId ?: "Unknown"
+        Log.d(TAG, "Sender short name: $senderShortName")
 
         // Create the message object for UI
         val message = ChannelMessage(
@@ -1055,23 +1108,29 @@ abstract class MeshtasticBaseProtocol(
             requestId = textMessagePacketId,
             senderId = connectedNodeId ?: "0"
         )
+        Log.d(TAG, "Created message object: $message")
 
         // Store this message as the last sent message
         lastSentMessage = message
         inFlightMessages[textMessagePacketId] = packet
+        Log.d(TAG, "Added to inFlightMessages, count: ${inFlightMessages.size}")
 
         // Add to channel messages immediately
         val currentMessages = _channelMessages.value.toMutableMap()
         val channelMessages = currentMessages[channelId]?.toMutableList() ?: mutableListOf()
+        Log.d(TAG, "Current messages for channel $channelId: ${channelMessages.size}")
         channelMessages.add(message)
         currentMessages[channelId] = channelMessages
         _channelMessages.value = currentMessages
+        Log.d(TAG, "Updated channel messages, new count for channel $channelId: ${channelMessages.size}")
+        Log.d(TAG, "Total channels with messages: ${_channelMessages.value.size}")
 
         // Start message timeout
         startMessageTimeout(packet)
 
         // Queue the packet
         queuePacket(packet)
+        Log.d(TAG, "=== sendTextMessage Complete ===")
     }
 
     override fun getChannelName(channelId: String): String? {
@@ -1334,13 +1393,7 @@ abstract class MeshtasticBaseProtocol(
         }
     }
 
-    internal fun recoverInFlightMessages() {
-        Log.i(TAG, "Recovering in-flight messages after reconnection")
-        inFlightMessages.values.forEach { packet ->
-            queuePacket(packet)
-            startMessageTimeout(packet)
-        }
-    }
+
 
     private fun getNodeInfoForPeer(peerId: String): MeshProtos.NodeInfo? {
         return nodeInfoMap[peerId]
@@ -1367,10 +1420,12 @@ abstract class MeshtasticBaseProtocol(
     }
 
     internal open fun cleanupState() {
+        Log.i(TAG, "=== COMPREHENSIVE STATE CLEANUP ===")
+        
         // Stop any ongoing operations first
         stopPacketQueue()
 
-        // Clear all state
+        // Clear all state uniformly for all scenarios
         peerLocations.clear()
         _annotations.value = emptyList()
         _peers.value = emptyList()
@@ -1388,5 +1443,69 @@ abstract class MeshtasticBaseProtocol(
         channelLastMessages.clear()
         _channels.value = emptyList()
         _channelMessages.value = emptyMap()
+        _localNodeIdOrNickname.value = null
+        
+        // Clear location request tracking
+        pendingLocationRequests.clear()
+        
+        Log.i(TAG, "=== STATE CLEANUP COMPLETE ===")
+    }
+    
+    /**
+     * Check if the connected node has changed and trigger state cleanup if needed
+     * This should be called whenever we receive new node information
+     */
+    internal fun checkForNodeChange(newNodeId: String?) {
+        if (newNodeId == null) {
+            Log.d(TAG, "New node ID is null, skipping node change check")
+            return
+        }
+        
+        val currentNodeId = connectedNodeId
+        if (currentNodeId != null && currentNodeId != newNodeId) {
+            Log.w(TAG, "=== NODE CHANGE DETECTED ===")
+            Log.w(TAG, "Previous node ID: $currentNodeId")
+            Log.w(TAG, "New node ID: $newNodeId")
+            Log.w(TAG, "Clearing all state for node change")
+            
+            // Clear all state uniformly for the node change
+            cleanupState()
+        } else if (currentNodeId == null) {
+            Log.d(TAG, "First node connection, node ID: $newNodeId")
+        } else {
+            Log.d(TAG, "Same node ID, no change: $newNodeId")
+        }
+    }
+    
+    /**
+     * Enhanced handleMyInfo that checks for node changes and triggers state cleanup
+     */
+    internal fun handleMyInfo(myInfo: MeshProtos.MyNodeInfo) {
+        Log.d(TAG, "=== Base Protocol handleMyInfo() Debug ===")
+        Log.d(TAG, "Input MyNodeInfo details:")
+        Log.d(TAG, "  - myNodeNum: ${myInfo.myNodeNum}")
+        Log.d(TAG, "  - minAppVersion: ${myInfo.minAppVersion}")
+        
+        val rawNodeNum = myInfo.myNodeNum
+        val unsignedNodeNum = (rawNodeNum.toLong() and 0xFFFFFFFFL)
+        val newNodeId = unsignedNodeNum.toString()
+        
+        Log.d(TAG, "Processing results:")
+        Log.d(TAG, "  - Raw myNodeNum: $rawNodeNum")
+        Log.d(TAG, "  - Unsigned conversion: $unsignedNodeNum")
+        Log.d(TAG, "  - New node ID: $newNodeId")
+        Log.d(TAG, "  - Previous connectedNodeId: $connectedNodeId")
+        Log.d(TAG, "  - Previous _localNodeIdOrNickname: ${_localNodeIdOrNickname.value}")
+        
+        // Check for node change and clear state if needed
+        checkForNodeChange(newNodeId)
+        
+        // Update node ID after potential cleanup
+        connectedNodeId = newNodeId
+        _localNodeIdOrNickname.value = connectedNodeId
+        
+        Log.d(TAG, "  - Updated connectedNodeId: $connectedNodeId")
+        Log.d(TAG, "  - Updated _localNodeIdOrNickname: ${_localNodeIdOrNickname.value}")
+        Log.d(TAG, "=== Base Protocol handleMyInfo() Complete ===")
     }
 }

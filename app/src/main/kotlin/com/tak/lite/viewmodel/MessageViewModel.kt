@@ -28,7 +28,17 @@ class MessageViewModel @Inject constructor(
     private val TAG = "MessageViewModel"
 
     fun getMessages(channelId: String): Flow<List<ChannelMessage>> {
-        return messageRepository.messages.map { it[channelId] ?: emptyList() }
+        Log.d(TAG, "=== MessageViewModel getMessages ===")
+        Log.d(TAG, "Requesting messages for channelId: $channelId")
+        
+        return messageRepository.messages.map { channelMessages ->
+            val messages = channelMessages[channelId] ?: emptyList()
+            Log.d(TAG, "Received ${messages.size} messages for channel $channelId")
+            if (messages.isNotEmpty()) {
+                Log.d(TAG, "Last message: ${messages.last()}")
+            }
+            messages
+        }
     }
 
     fun getChannelInfo(channelId: String): Flow<ChannelInfo> {
