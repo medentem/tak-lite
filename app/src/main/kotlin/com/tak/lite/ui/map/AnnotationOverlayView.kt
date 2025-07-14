@@ -153,6 +153,15 @@ class AnnotationOverlayView @JvmOverloads constructor(
         invalidate()
     }
 
+    // Helper method to check if a peer location is stale
+    private fun isPeerLocationStale(entry: PeerLocationEntry): Boolean {
+        val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+        val stalenessThresholdMinutes = prefs.getInt("peer_staleness_threshold_minutes", 10)
+        val stalenessThresholdMs = stalenessThresholdMinutes * 60 * 1000L
+        val now = System.currentTimeMillis()
+        return (now - entry.timestamp) > stalenessThresholdMs
+    }
+
     // Callback for peer dot taps
     interface OnPeerDotTapListener {
         fun onPeerDotTapped(peerId: String, screenPosition: PointF)
@@ -830,7 +839,8 @@ class AnnotationOverlayView @JvmOverloads constructor(
                 val point = projection?.toScreenLocation(latLng)
                 if (point != null) {
                     val pointF = PointF(point.x, point.y)
-                    drawPeerLocationDot(canvas, pointF)
+                    val isStale = isPeerLocationStale(entry)
+                    drawPeerLocationDot(canvas, pointF, isStale)
                 } else {
                     android.util.Log.w("AnnotationOverlayView", "Peer at lat=${entry.latitude}, lon=${entry.longitude} could not be converted to screen coordinates")
                 }
@@ -847,7 +857,8 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     // Debug: log screen coordinates and check if on-screen
                     val onScreen = pointF.x >= -50 && pointF.x <= width + 50 && pointF.y >= -50 && pointF.y <= height + 50
                     android.util.Log.d("AnnotationOverlayView", "Peer at lat=${entry.latitude}, lon=${entry.longitude} -> screen=(${pointF.x}, ${pointF.y}), onScreen=$onScreen")
-                    drawPeerLocationDot(canvas, pointF)
+                    val isStale = isPeerLocationStale(entry)
+                    drawPeerLocationDot(canvas, pointF, isStale)
                 } else {
                     android.util.Log.w("AnnotationOverlayView", "Peer at lat=${entry.latitude}, lon=${entry.longitude} could not be converted to screen coordinates")
                 }
@@ -1702,8 +1713,8 @@ class AnnotationOverlayView @JvmOverloads constructor(
         return R * c
     }
 
-    // Draw a solid green dot with white border and shadow for peer locations
-    private fun drawPeerLocationDot(canvas: Canvas, point: PointF) {
+    // Draw a peer location dot with color based on staleness
+    private fun drawPeerLocationDot(canvas: Canvas, point: PointF, isStale: Boolean) {
         val dotRadius = 13f
         val borderRadius = 18f
         val shadowRadius = 20f
@@ -1719,9 +1730,9 @@ class AnnotationOverlayView @JvmOverloads constructor(
             style = Paint.Style.FILL
         }
         canvas.drawCircle(point.x, point.y, borderRadius, borderPaint)
-        // Draw solid green dot
+        // Draw dot with color based on staleness
         val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#4CAF50") // Material green 500
+            color = if (isStale) Color.GRAY else Color.parseColor("#4CAF50") // Gray if stale, green if fresh
             style = Paint.Style.FILL
         }
         canvas.drawCircle(point.x, point.y, dotRadius, fillPaint)

@@ -86,6 +86,7 @@ class SettingsActivity : BaseActivity() {
     private lateinit var compassCalibrateButton: com.google.android.material.button.MaterialButton
     private lateinit var showPredictionOverlaySwitch: SwitchMaterial
     private lateinit var predictionAdvancedLink: TextView
+    private lateinit var peerStalenessThresholdEditText: com.google.android.material.textfield.TextInputEditText
     private val REQUEST_CODE_FOREGROUND_SERVICE_CONNECTED_DEVICE = 2003
     private val REQUEST_CODE_NOTIFICATION_PERMISSION = 3001
     private val REQUEST_CODE_ALL_PERMISSIONS = 4001
@@ -145,6 +146,7 @@ class SettingsActivity : BaseActivity() {
         compassCalibrateButton = findViewById(R.id.compassCalibrateButton)
         showPredictionOverlaySwitch = findViewById(R.id.showPredictionOverlaySwitch)
         predictionAdvancedLink = findViewById(R.id.predictionAdvancedLink)
+        peerStalenessThresholdEditText = findViewById(R.id.peerStalenessThresholdEditText)
 
         // Check premium status and update UI accordingly
         lifecycleScope.launch {
@@ -444,6 +446,17 @@ class SettingsActivity : BaseActivity() {
         // Setup prediction advanced settings link
         predictionAdvancedLink.setOnClickListener {
             showPredictionAdvancedSettings()
+        }
+
+        // Load and set peer staleness threshold
+        val peerStalenessThreshold = prefs.getInt("peer_staleness_threshold_minutes", 10)
+        peerStalenessThresholdEditText.setText(peerStalenessThreshold.toString())
+        peerStalenessThresholdEditText.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) {
+                val value = peerStalenessThresholdEditText.text.toString().toIntOrNull()?.coerceIn(1, 60) ?: 10
+                peerStalenessThresholdEditText.setText(value.toString())
+                prefs.edit().putInt("peer_staleness_threshold_minutes", value).apply()
+            }
         }
 
         // Setup compass calibration

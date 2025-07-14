@@ -437,12 +437,12 @@ abstract class MeshtasticBaseProtocol(
                     request.peerId == peerId && 
                     (now - request.timestamp) < 30000 &&  // Within 30 seconds of request
                     (now - request.timestamp) > 1000      // At least 1 second after request
-                }
+            }
                 
-                if (pendingRequest != null) {
+            if (pendingRequest != null) {
                     Log.d(TAG, "Position update from peer $peerId received ${now - pendingRequest.value.timestamp}ms after request - treating as broadcast response")
-                    pendingRequest.value.callback(false) // Call with timeout = false
-                    pendingLocationRequests.remove(pendingRequest.key)
+                pendingRequest.value.callback(false) // Call with timeout = false
+                pendingLocationRequests.remove(pendingRequest.key)
                 } else {
                     Log.d(TAG, "Position update from peer $peerId - no recent request found, treating as regular broadcast")
                 }
@@ -945,14 +945,23 @@ abstract class MeshtasticBaseProtocol(
             return
         }
 
+        // Get our own position to include in the request
+        val ourPosition = getOurPositionForRequest()
+        if (ourPosition == null) {
+            Log.w(TAG, "Cannot send position request - no valid position available")
+            return
+        }
+
         // Convert peerId to unsigned int for the packet
         val peerIdInt = peerId.toLong().toInt() // This preserves the unsigned value
-        // Create the mesh packet using the new helper method
+        
+        // Create the mesh packet with our position as payload
         val packet = newMeshPacketTo(peerIdInt).buildMeshPacket(
             channel = peerNodeInfo.channel,
             priority = MeshProtos.MeshPacket.Priority.BACKGROUND
         ) {
             portnum = PortNum.POSITION_APP
+            payload = ourPosition.toByteString()
             wantResponse = true
         }
         
@@ -1397,6 +1406,59 @@ abstract class MeshtasticBaseProtocol(
 
     private fun getNodeInfoForPeer(peerId: String): MeshProtos.NodeInfo? {
         return nodeInfoMap[peerId]
+    }
+
+    /**
+     * Get our own position to include in position requests
+     * Follows the same logic as the official implementation
+     */
+    private fun getOurPositionForRequest(): MeshProtos.Position? {
+        val localNodeId = connectedNodeId ?: return null
+        
+        // First, try to get our position from node info (device GPS or static position)
+        val ourNodeInfo = nodeInfoMap[localNodeId]
+        if (ourNodeInfo?.hasPosition() == true) {
+            val position = ourNodeInfo.position
+            if (isValidPosition(position)) {
+                Log.d(TAG, "Using device position for request: lat=${position.latitudeI / 1e7}, lng=${position.longitudeI / 1e7}")
+                return position
+            }
+        }
+        
+        // Fallback: try to get position from peer locations (if we have a recent position)
+        val ourLocationEntry = peerLocations[localNodeId]
+        if (ourLocationEntry != null) {
+            val now = System.currentTimeMillis()
+            val positionAge = now - ourLocationEntry.timestamp
+            
+            // Use position if it's recent (less than 5 minutes old)
+            if (positionAge < 5 * 60 * 1000) {
+                val position = MeshProtos.Position.newBuilder()
+                    .setLatitudeI((ourLocationEntry.latitude * 1e7).toInt())
+                    .setLongitudeI((ourLocationEntry.longitude * 1e7).toInt())
+                    .setTime((now / 1000).toInt()) // Current time in seconds
+                    .build()
+                
+                Log.d(TAG, "Using recent cached position for request: lat=${ourLocationEntry.latitude}, lng=${ourLocationEntry.longitude}")
+                return position
+            }
+        }
+        
+        Log.w(TAG, "No valid position available for request")
+        return null
+    }
+
+    /**
+     * Check if a position is valid (has reasonable coordinates)
+     */
+    private fun isValidPosition(position: MeshProtos.Position): Boolean {
+        val lat = position.latitudeI / 1e7
+        val lng = position.longitudeI / 1e7
+        
+        // Check for reasonable coordinate ranges
+        return lat >= -90.0 && lat <= 90.0 && 
+               lng >= -180.0 && lng <= 180.0 &&
+               lat != 0.0 && lng != 0.0  // Avoid null island
     }
 
     /**
