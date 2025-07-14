@@ -165,4 +165,8 @@ class DisabledMeshProtocol(private val context: Context) : MeshProtocol {
     override fun getLocalUserInfo(): Pair<String, String>? {
         return null
     }
+
+    override fun sendStatusUpdate(status: com.tak.lite.model.UserStatus) {
+        // Disabled protocol doesn't send status updates
+    }
 } 

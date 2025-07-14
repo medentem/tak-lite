@@ -54,6 +54,11 @@ class MeshNetworkService @Inject constructor(
     private val _isDeviceLocationStale = MutableStateFlow(false)
     val isDeviceLocationStale: StateFlow<Boolean> = _isDeviceLocationStale
 
+    private val _userStatus = MutableStateFlow(com.tak.lite.model.UserStatus.GREEN)
+    val userStatus: StateFlow<com.tak.lite.model.UserStatus> = _userStatus.asStateFlow()
+
+
+
     private var simulatedPeersJob: Job? = null
     private val simulatedPeerPrefix = "sim_peer_"
     private val simulatedPeers = mutableMapOf<String, PeerLocationEntry>()
@@ -431,6 +436,18 @@ class MeshNetworkService @Inject constructor(
     fun getPeerLastHeard(peerId: String): Long? {
         return meshProtocol.getPeerLastHeard(peerId)
     }
+
+    fun setUserStatus(status: com.tak.lite.model.UserStatus) {
+        _userStatus.value = status
+        // Send status update through mesh
+        meshProtocol.sendStatusUpdate(status)
+    }
+
+    fun getUserStatus(): com.tak.lite.model.UserStatus {
+        return _userStatus.value
+    }
+
+
 
     private fun startLocationHistoryCleanup() {
         scope.launch {

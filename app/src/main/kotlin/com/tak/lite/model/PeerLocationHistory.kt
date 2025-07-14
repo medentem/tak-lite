@@ -25,7 +25,8 @@ data class PeerLocationEntry(
     val locationSource: Int? = null, // How location was acquired (manual, GPS, external)
     val altitudeSource: Int? = null, // How altitude was acquired
     val sequenceNumber: Int? = null, // Position sequence number
-    val precisionBits: Int? = null // Precision bits set by sending node
+    val precisionBits: Int? = null, // Precision bits set by sending node
+    val userStatus: com.tak.lite.model.UserStatus? = null // User status color
 ) {
     fun toLatLng(): LatLng = LatLng(latitude, longitude)
     

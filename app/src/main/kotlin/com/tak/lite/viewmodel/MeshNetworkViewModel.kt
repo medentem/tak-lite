@@ -50,6 +50,9 @@ class MeshNetworkViewModel @Inject constructor(
     
     private val _isDeviceLocationStale = MutableStateFlow<Boolean>(false)
     val isDeviceLocationStale: StateFlow<Boolean> = _isDeviceLocationStale.asStateFlow()
+
+    private val _userStatus = MutableStateFlow(com.tak.lite.model.UserStatus.GREEN)
+    val userStatus: StateFlow<com.tak.lite.model.UserStatus> = _userStatus.asStateFlow()
     
     private val _packetSummaries = MutableStateFlow<List<PacketSummary>>(emptyList())
     val packetSummaries: StateFlow<List<PacketSummary>> = _packetSummaries.asStateFlow()
@@ -140,6 +143,12 @@ class MeshNetworkViewModel @Inject constructor(
         viewModelScope.launch {
             peerLocationHistoryRepository.confidenceCones.collect { _confidenceCones.value = it }
         }
+
+        viewModelScope.launch {
+            meshNetworkRepository.userStatus.collect { status ->
+                _userStatus.value = status
+            }
+        }
     }
 
     fun requestPeerLocation(peerId: String, onLocationReceived: (timeout: Boolean) -> Unit) {
@@ -166,6 +175,10 @@ class MeshNetworkViewModel @Inject constructor(
 
     fun getPeerLastHeard(peerId: String): Long? {
         return meshNetworkRepository.getPeerLastHeard(peerId)
+    }
+
+    fun setUserStatus(status: com.tak.lite.model.UserStatus) {
+        meshNetworkRepository.setUserStatus(status)
     }
     
     /**

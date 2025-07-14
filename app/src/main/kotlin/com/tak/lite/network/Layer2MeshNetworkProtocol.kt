@@ -229,6 +229,7 @@ class Layer2MeshNetworkProtocol @Inject constructor(
         startDiscoveryListener()
         startAnnotationListener()
         startDiscoveryPacketListener()
+        startStatusListener()
         startPeriodicStateRebroadcast()
         startConnectionMonitoring()
     }
@@ -287,6 +288,26 @@ class Layer2MeshNetworkProtocol @Inject constructor(
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error setting up discovery packet listener: ", e)
+            }
+        }
+    }
+
+    private fun startStatusListener() {
+        CoroutineScope(coroutineContext).launch {
+            try {
+                val socket = createBoundSocket(STATUS_PORT)
+                val buffer = ByteArray(1024)
+                val packet = DatagramPacket(buffer, buffer.size)
+                while (isActive) {
+                    try {
+                        socket.receive(packet)
+                        handleStatusPacket(packet, packet.data.copyOfRange(0, packet.length))
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error receiving status packet: ", e)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error setting up status listener: ", e)
             }
         }
     }
@@ -379,6 +400,7 @@ class Layer2MeshNetworkProtocol @Inject constructor(
                 PacketType.ANNOTATION -> handleAnnotationPacket(packet)
                 PacketType.AUDIO -> handleAudioPacket(packet, header, payload)
                 PacketType.STATE_SYNC -> handleStateSyncPacket(packet)
+                PacketType.STATUS -> handleStatusPacket(packet, payload)
                 PacketType.ACK -> {
                     // Remove from pending acks
                     pendingAcks.remove(header.sequenceNumber)
@@ -951,6 +973,31 @@ class Layer2MeshNetworkProtocol @Inject constructor(
         }
     }
 
+    private fun handleStatusPacket(packet: DatagramPacket, payload: ByteArray) {
+        try {
+            val peerId = "${packet.address.hostAddress}:${packet.port}"
+            val packetJson = String(payload, Charsets.UTF_8)
+            val statusPacket = json.decodeFromString<StatusPacket>(packetJson)
+            
+            Log.d(TAG, "Received status update from $peerId: ${statusPacket.status}")
+            
+            // Update the peer's status in their location entry
+            val currentLocation = peerLocations[statusPacket.senderId]
+            if (currentLocation != null) {
+                val userStatus = com.tak.lite.model.UserStatus.valueOf(statusPacket.status)
+                val updatedLocation = currentLocation.copy(userStatus = userStatus)
+                peerLocations[statusPacket.senderId] = updatedLocation
+                peerLocationCallback?.invoke(peerLocations.toMap())
+                Log.d(TAG, "Updated status for peer ${statusPacket.senderId} to: $userStatus")
+            } else {
+                Log.d(TAG, "Received status update for peer ${statusPacket.senderId} but no location entry exists")
+            }
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error handling status packet: ${e.message}")
+        }
+    }
+
     private fun handleAudioPacket(packet: DatagramPacket, header: PacketHeader, payload: ByteArray) {
         try {
             val peerId = "${packet.address.hostAddress}:${packet.port}"
@@ -1106,4 +1153,36 @@ class Layer2MeshNetworkProtocol @Inject constructor(
         // Layer2 protocol doesn't have user information like Meshtastic
         return null
     }
+
+    override fun sendStatusUpdate(status: com.tak.lite.model.UserStatus) {
+        Log.d(TAG, "Sending dedicated status update: $status")
+        
+        val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+        val nickname = prefs.getString("nickname", null) ?: "local"
+        
+        // For Layer2, send as a special packet type
+        val statusPacket = StatusPacket(
+            type = "status",
+            status = status.name,
+            timestamp = System.currentTimeMillis(),
+            senderId = localNodeIdOrNickname.value ?: "UnknownId",
+            nickname = nickname
+        )
+        
+        val packetJson = json.encodeToString(statusPacket)
+        sendToAllPeers(packetJson.toByteArray(), STATUS_PORT, PacketType.STATUS)
+    }
+
+    companion object {
+        private const val STATUS_PORT = 4568
+    }
+
+    @Serializable
+    private data class StatusPacket(
+        val type: String,
+        val status: String,
+        val timestamp: Long,
+        val senderId: String,
+        val nickname: String?
+    )
 } 

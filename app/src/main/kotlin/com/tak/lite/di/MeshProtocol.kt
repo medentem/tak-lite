@@ -89,6 +89,9 @@ interface MeshProtocol {
     
     // Local user information
     fun getLocalUserInfo(): Pair<String, String>?
+
+    // User status operations
+    fun sendStatusUpdate(status: com.tak.lite.model.UserStatus)
 }
 
 // Device information abstraction

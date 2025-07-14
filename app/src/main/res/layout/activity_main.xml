@@ -81,7 +81,7 @@
         android:orientation="vertical"
         android:gravity="center"
         android:layout_marginEnd="16dp"
-        android:layout_marginBottom="80dp"
+        android:layout_marginBottom="165dp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintBottom_toBottomOf="parent">
 
@@ -135,6 +135,36 @@
     </LinearLayout>
 
     <include layout="@layout/fab_menu_container" />
+
+    <LinearLayout
+        android:id="@+id/statusButtonContainer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="80dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/statusButton"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:src="@android:drawable/ic_menu_info_details"
+            android:contentDescription="User Status"
+            app:backgroundTint="@android:color/holo_green_dark" />
+
+        <TextView
+            android:id="@+id/statusLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Status"
+            android:textSize="12sp"
+            android:textColor="#888888"
+            android:layout_marginTop="2dp"
+            android:gravity="center" />
+    </LinearLayout>
 
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fabMenu"

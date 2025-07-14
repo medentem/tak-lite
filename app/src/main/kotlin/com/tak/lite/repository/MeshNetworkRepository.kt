@@ -43,6 +43,9 @@ class MeshNetworkRepository @Inject constructor(
     val isDeviceLocationStale: Flow<Boolean>
         get() = meshNetworkService.isDeviceLocationStale
     
+    val userStatus: Flow<com.tak.lite.model.UserStatus>
+        get() = meshNetworkService.userStatus
+    
     val packetSummaries: Flow<List<PacketSummary>>
         get() = meshNetworkService.packetSummaries
     
@@ -67,6 +70,10 @@ class MeshNetworkRepository @Inject constructor(
 
     fun getPeerLastHeard(peerId: String): Long? {
         return meshNetworkService.getPeerLastHeard(peerId)
+    }
+
+    fun setUserStatus(status: com.tak.lite.model.UserStatus) {
+        meshNetworkService.setUserStatus(status)
     }
     
     fun cleanup() {

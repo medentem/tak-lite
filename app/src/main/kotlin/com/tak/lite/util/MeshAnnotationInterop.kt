@@ -11,6 +11,7 @@ import com.tak.lite.model.PointShape
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
@@ -474,6 +475,71 @@ object MeshAnnotationInterop {
             .setPayload(takPacketBuilder.build().toByteString())
             .build()
         return data
+    }
+
+    /**
+     * Create a MeshProtos.Data for a user status update
+     */
+    fun statusUpdateToMeshData(
+        status: com.tak.lite.model.UserStatus,
+        nickname: String? = null,
+        batteryLevel: Int? = null
+    ): MeshProtos.Data {
+        val takPacketBuilder = ATAKProtos.TAKPacket.newBuilder()
+        
+        // Use the proper serializable data class for status updates
+        val statusUpdate = com.tak.lite.model.UserStatusUpdate(
+            userId = "local", // Will be replaced by actual user ID if available
+            status = status,
+            timestamp = System.currentTimeMillis()
+        )
+        val statusJson = Json.encodeToString(statusUpdate)
+        takPacketBuilder.detail = ByteString.copyFrom(statusJson.toByteArray(Charsets.UTF_8))
+        
+        if (!nickname.isNullOrBlank()) {
+            takPacketBuilder.contact = ATAKProtos.Contact.newBuilder().setCallsign(nickname).build()
+        }
+        if (batteryLevel != null) {
+            takPacketBuilder.status = ATAKProtos.Status.newBuilder().setBattery(batteryLevel).build()
+        }
+        
+        val data = MeshProtos.Data.newBuilder()
+            .setPortnum(com.geeksville.mesh.Portnums.PortNum.ATAK_PLUGIN)
+            .setPayload(takPacketBuilder.build().toByteString())
+            .build()
+        
+        Log.d(TAG, "Built status update MeshProtos.Data: status=$status, payload size=${data.payload.size()}")
+        return data
+    }
+
+    /**
+     * Try to parse a status update from a MeshProtos.Data. Returns UserStatus if it's a status message, else null.
+     */
+    fun meshDataToStatusUpdate(data: MeshProtos.Data): com.tak.lite.model.UserStatus? {
+        if (data.portnum != com.geeksville.mesh.Portnums.PortNum.ATAK_PLUGIN) return null
+        
+        return try {
+            val takPacket = ATAKProtos.TAKPacket.parseFrom(data.payload)
+            val jsonString = takPacket.detail.toStringUtf8()
+            
+            // Try to parse as UserStatusUpdate first
+            try {
+                val statusUpdate = Json.decodeFromString<com.tak.lite.model.UserStatusUpdate>(jsonString)
+                return statusUpdate.status
+            } catch (e: Exception) {
+                // Fallback to old format for backward compatibility
+                val parsed = Json.parseToJsonElement(jsonString)
+                if (parsed is JsonObject && parsed["type"]?.jsonPrimitive?.content == "status") {
+                    val statusName = parsed["status"]?.jsonPrimitive?.content
+                    if (statusName != null) {
+                        com.tak.lite.model.UserStatus.valueOf(statusName)
+                    } else null
+                } else null
+            }
+        } catch (e: Exception) {
+            Log.d(TAG, "Failed to parse status update: ${e.message}")
+            null
+        }
     }
 
     /**

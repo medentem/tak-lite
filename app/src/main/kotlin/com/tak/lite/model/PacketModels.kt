@@ -17,6 +17,7 @@ enum class PacketType {
     ANNOTATION,
     AUDIO,
     STATE_SYNC,
+    STATUS,
     ACK
 }
 

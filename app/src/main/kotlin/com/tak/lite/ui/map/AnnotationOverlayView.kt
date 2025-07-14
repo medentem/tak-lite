@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.DashPathEffect
-import androidx.core.content.ContextCompat
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PointF
@@ -15,6 +14,7 @@ import android.os.Looper
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
+import androidx.core.content.ContextCompat
 import com.tak.lite.R
 import com.tak.lite.data.model.AnnotationCluster
 import com.tak.lite.data.model.PeerCluster
@@ -23,6 +23,7 @@ import com.tak.lite.model.LineStyle
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PeerLocationEntry
 import com.tak.lite.model.PointShape
+import com.tak.lite.model.toColor
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.Projection
 import kotlin.math.atan2
@@ -160,6 +161,38 @@ class AnnotationOverlayView @JvmOverloads constructor(
         val stalenessThresholdMs = stalenessThresholdMinutes * 60 * 1000L
         val now = System.currentTimeMillis()
         return (now - entry.timestamp) > stalenessThresholdMs
+    }
+
+    // Helper method to get peer dot color based on status or staleness
+    private fun getPeerDotColor(entry: PeerLocationEntry): Int {
+        return if (isPeerLocationStale(entry)) {
+            // Stale peers get a gray dot
+            Color.GRAY
+        } else {
+            // Fresh peers get their status color, or green if no status
+            when (entry.userStatus) {
+                com.tak.lite.model.UserStatus.GREEN -> com.tak.lite.model.UserStatus.GREEN.toColor()
+                com.tak.lite.model.UserStatus.YELLOW -> com.tak.lite.model.UserStatus.YELLOW.toColor()
+                com.tak.lite.model.UserStatus.RED -> com.tak.lite.model.UserStatus.RED.toColor()
+                null -> com.tak.lite.model.UserStatus.GREEN.toColor()
+            }
+        }
+    }
+
+    // Helper method to get peer border color based on status or staleness
+    private fun getPeerBorderColor(entry: PeerLocationEntry): Int {
+        return if (isPeerLocationStale(entry)) {
+            // Stale peers get a status-colored border, or green if no status
+            when (entry.userStatus) {
+                com.tak.lite.model.UserStatus.GREEN -> com.tak.lite.model.UserStatus.GREEN.toColor()
+                com.tak.lite.model.UserStatus.YELLOW -> com.tak.lite.model.UserStatus.YELLOW.toColor()
+                com.tak.lite.model.UserStatus.RED -> com.tak.lite.model.UserStatus.RED.toColor()
+                null -> com.tak.lite.model.UserStatus.GREEN.toColor()
+            }
+        } else {
+            // Fresh peers get a white border
+            Color.WHITE
+        }
     }
 
     // Callback for peer dot taps
@@ -839,8 +872,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
                 val point = projection?.toScreenLocation(latLng)
                 if (point != null) {
                     val pointF = PointF(point.x, point.y)
-                    val isStale = isPeerLocationStale(entry)
-                    drawPeerLocationDot(canvas, pointF, isStale)
+                    drawPeerLocationDot(canvas, pointF, entry)
                 } else {
                     android.util.Log.w("AnnotationOverlayView", "Peer at lat=${entry.latitude}, lon=${entry.longitude} could not be converted to screen coordinates")
                 }
@@ -857,8 +889,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     // Debug: log screen coordinates and check if on-screen
                     val onScreen = pointF.x >= -50 && pointF.x <= width + 50 && pointF.y >= -50 && pointF.y <= height + 50
                     android.util.Log.d("AnnotationOverlayView", "Peer at lat=${entry.latitude}, lon=${entry.longitude} -> screen=(${pointF.x}, ${pointF.y}), onScreen=$onScreen")
-                    val isStale = isPeerLocationStale(entry)
-                    drawPeerLocationDot(canvas, pointF, isStale)
+                    drawPeerLocationDot(canvas, pointF, entry)
                 } else {
                     android.util.Log.w("AnnotationOverlayView", "Peer at lat=${entry.latitude}, lon=${entry.longitude} could not be converted to screen coordinates")
                 }
@@ -1713,8 +1744,8 @@ class AnnotationOverlayView @JvmOverloads constructor(
         return R * c
     }
 
-    // Draw a peer location dot with color based on staleness
-    private fun drawPeerLocationDot(canvas: Canvas, point: PointF, isStale: Boolean) {
+    // Draw a peer location dot with color based on status or staleness
+    private fun drawPeerLocationDot(canvas: Canvas, point: PointF, entry: PeerLocationEntry) {
         val dotRadius = 13f
         val borderRadius = 18f
         val shadowRadius = 20f
@@ -1724,15 +1755,15 @@ class AnnotationOverlayView @JvmOverloads constructor(
             style = Paint.Style.FILL
         }
         canvas.drawCircle(point.x, point.y + 4f, shadowRadius, shadowPaint)
-        // Draw white border
+        // Draw border with color based on status or staleness
         val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.WHITE
+            color = getPeerBorderColor(entry)
             style = Paint.Style.FILL
         }
         canvas.drawCircle(point.x, point.y, borderRadius, borderPaint)
-        // Draw dot with color based on staleness
+        // Draw dot with color based on status or staleness
         val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = if (isStale) Color.GRAY else Color.parseColor("#4CAF50") // Gray if stale, green if fresh
+            color = getPeerDotColor(entry)
             style = Paint.Style.FILL
         }
         canvas.drawCircle(point.x, point.y, dotRadius, fillPaint)

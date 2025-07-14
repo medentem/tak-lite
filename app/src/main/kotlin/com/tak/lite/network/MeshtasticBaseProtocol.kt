@@ -60,6 +60,7 @@ abstract class MeshtasticBaseProtocol(
     private var peerLocationCallback: ((Map<String, PeerLocationEntry>) -> Unit)? = null
     private var userLocationCallback: ((LatLng) -> Unit)? = null
 
+
     abstract fun sendPacket(packet: MeshProtos.MeshPacket): Boolean
 
     // Add location request tracking
@@ -367,6 +368,8 @@ abstract class MeshtasticBaseProtocol(
             val lng = position.longitudeI / 1e7
             Log.d(TAG, "Parsed position from $source for peer $peerId: lat=$lat, lng=$lng")
 
+
+
             // Create enhanced location entry with additional position data
             val locationEntry = PeerLocationEntry(
                 timestamp = System.currentTimeMillis(),
@@ -625,37 +628,53 @@ abstract class MeshtasticBaseProtocol(
                     Log.e(TAG, "Failed to parse POSITION_APP payload: ${e.message}", e)
                 }
             } else if (decoded.portnum == PortNum.ATAK_PLUGIN) {
-                // Try to parse as bulk deletion
-                val bulkDeleteIds = MeshAnnotationInterop.meshDataToBulkDeleteIds(decoded)
-                if (bulkDeleteIds != null) {
-                    Log.d(TAG, "Parsed bulk deletion of ${bulkDeleteIds.size} IDs from peer $peerId")
-                    // Remove all matching annotations
-                    _annotations.value = _annotations.value.filter { it.id !in bulkDeleteIds }
-                    annotationCallback?.let { cb ->
-                        bulkDeleteIds.forEach { id ->
-                            cb(MapAnnotation.Deletion(id = id, creatorId = peerId))
-                        }
+                // Try to parse as status update first
+                val statusUpdate = MeshAnnotationInterop.meshDataToStatusUpdate(decoded)
+                if (statusUpdate != null) {
+                    Log.d(TAG, "Parsed status update from peer $peerId: $statusUpdate")
+                    // Update the peer's status in their location entry
+                    val currentLocation = peerLocations[peerId]
+                    if (currentLocation != null) {
+                        val updatedLocation = currentLocation.copy(userStatus = statusUpdate)
+                        peerLocations[peerId] = updatedLocation
+                        peerLocationCallback?.invoke(peerLocations.toMap())
+                        Log.d(TAG, "Updated status for peer $peerId to: $statusUpdate")
+                    } else {
+                        Log.d(TAG, "Received status update for peer $peerId but no location entry exists")
                     }
                 } else {
-                    val annotation = MeshAnnotationInterop.meshDataToMapAnnotation(decoded)
-                    if (annotation != null) {
-                        Log.d(TAG, "Parsed annotation from peer $peerId: $annotation")
-                        annotationCallback?.invoke(annotation)
-                        // Replace or remove annotation by ID
-                        when (annotation) {
-                            is MapAnnotation.Deletion -> {
-                                _annotations.value = _annotations.value.filter { it.id != annotation.id }
-                            }
-                            else -> {
-                                // Replace if exists, add if new, keep most recent by timestamp
-                                val existing = _annotations.value.find { it.id == annotation.id }
-                                if (existing == null || annotation.timestamp > existing.timestamp) {
-                                    _annotations.value = _annotations.value.filter { it.id != annotation.id } + annotation
-                                }
+                    // Try to parse as bulk deletion
+                    val bulkDeleteIds = MeshAnnotationInterop.meshDataToBulkDeleteIds(decoded)
+                    if (bulkDeleteIds != null) {
+                        Log.d(TAG, "Parsed bulk deletion of ${bulkDeleteIds.size} IDs from peer $peerId")
+                        // Remove all matching annotations
+                        _annotations.value = _annotations.value.filter { it.id !in bulkDeleteIds }
+                        annotationCallback?.let { cb ->
+                            bulkDeleteIds.forEach { id ->
+                                cb(MapAnnotation.Deletion(id = id, creatorId = peerId))
                             }
                         }
                     } else {
-                        Log.d(TAG, "Received ATAK_PLUGIN message from $peerId but failed to parse annotation")
+                        val annotation = MeshAnnotationInterop.meshDataToMapAnnotation(decoded)
+                        if (annotation != null) {
+                            Log.d(TAG, "Parsed annotation from peer $peerId: $annotation")
+                            annotationCallback?.invoke(annotation)
+                            // Replace or remove annotation by ID
+                            when (annotation) {
+                                is MapAnnotation.Deletion -> {
+                                    _annotations.value = _annotations.value.filter { it.id != annotation.id }
+                                }
+                                else -> {
+                                    // Replace if exists, add if new, keep most recent by timestamp
+                                    val existing = _annotations.value.find { it.id == annotation.id }
+                                    if (existing == null || annotation.timestamp > existing.timestamp) {
+                                        _annotations.value = _annotations.value.filter { it.id != annotation.id } + annotation
+                                    }
+                                }
+                            }
+                        } else {
+                            Log.d(TAG, "Received ATAK_PLUGIN message from $peerId but failed to parse as status, bulk deletion, or annotation")
+                        }
                     }
                 }
             } else {
@@ -1479,6 +1498,29 @@ abstract class MeshtasticBaseProtocol(
 
     override fun getLocalUserInfo(): Pair<String, String>? {
         return getLocalUserInfoInternal()
+    }
+
+    override fun sendStatusUpdate(status: com.tak.lite.model.UserStatus) {
+        Log.d(TAG, "Sending dedicated status update: $status")
+        
+        val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+        val nickname = prefs.getString("nickname", null)
+        val battery = DeviceController.batteryLevel.value
+        
+        val data = MeshAnnotationInterop.statusUpdateToMeshData(
+            status = status,
+            nickname = nickname,
+            batteryLevel = battery
+        )
+        
+        val packet = MeshProtos.MeshPacket.newBuilder()
+            .setTo(0xffffffffL.toInt())
+            .setDecoded(data)
+            .setChannel(selectedChannelIndex)
+            .setId(generatePacketId())
+            .build()
+        
+        queuePacket(packet)
     }
 
     internal open fun cleanupState() {

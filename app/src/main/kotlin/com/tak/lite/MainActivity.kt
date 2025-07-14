@@ -33,6 +33,8 @@ import com.tak.lite.network.MeshtasticBluetoothProtocol
 import com.tak.lite.service.MeshForegroundService
 import com.tak.lite.ui.audio.AudioController
 import com.tak.lite.ui.channel.ChannelController
+import com.tak.lite.model.toColor
+import com.tak.lite.model.toDisplayName
 import com.tak.lite.ui.location.CalibrationStatus
 import com.tak.lite.ui.location.LocationController
 import com.tak.lite.ui.location.LocationSource
@@ -84,6 +86,8 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
     private lateinit var mapTypeToggleButton: View
     private lateinit var downloadSectorButton: View
     private lateinit var settingsButton: View
+    private lateinit var statusButton: com.google.android.material.floatingactionbutton.FloatingActionButton
+    private lateinit var statusLabel: TextView
 
     // Direction overlay views
     private lateinit var directionOverlay: LinearLayout
@@ -250,6 +254,10 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
         locationSourceIcon = findViewById(R.id.locationSourceIcon)
         locationSourceLabel = findViewById(R.id.locationSourceLabel)
 
+        // Initialize status button
+        statusButton = findViewById(R.id.statusButton)
+        statusLabel = findViewById(R.id.statusLabel)
+
         // Set to unknown by default
         locationSourceOverlay.visibility = View.VISIBLE
         locationSourceIcon.setImageResource(R.drawable.baseline_help_24) // Use a gray question mark icon
@@ -387,6 +395,9 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
             val intent = android.content.Intent(this, SettingsActivity::class.java)
             startActivity(intent)
         }
+
+        // Setup status button
+        setupStatusButton()
 
         toggle3dFab.setOnClickListener {
             is3DBuildingsEnabled = !is3DBuildingsEnabled
@@ -1145,5 +1156,60 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
             SensorManager.SENSOR_STATUS_UNRELIABLE -> "UNRELIABLE"
             else -> "UNKNOWN"
         }
+    }
+
+    private fun setupStatusButton() {
+        // Load current status from preferences
+        val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
+        val currentStatusName = prefs.getString("user_status", "GREEN") ?: "GREEN"
+        val currentStatus = try {
+            com.tak.lite.model.UserStatus.valueOf(currentStatusName)
+        } catch (e: Exception) {
+            com.tak.lite.model.UserStatus.GREEN
+        }
+
+        // Update button appearance
+        updateStatusButtonAppearance(currentStatus)
+
+        // Set click listener
+        statusButton.setOnClickListener {
+            showStatusSelectionDialog(currentStatus)
+        }
+
+        // Observe status changes from ViewModel
+        lifecycleScope.launch {
+            repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                viewModel.userStatus.collectLatest { status ->
+                    updateStatusButtonAppearance(status)
+                }
+            }
+        }
+    }
+
+    private fun updateStatusButtonAppearance(status: com.tak.lite.model.UserStatus) {
+        statusButton.backgroundTintList = android.content.res.ColorStateList.valueOf(status.toColor())
+        statusLabel.text = status.toDisplayName()
+    }
+
+    private fun showStatusSelectionDialog(currentStatus: com.tak.lite.model.UserStatus) {
+        val dialog = com.tak.lite.ui.StatusSelectionDialog(
+            context = this,
+            currentStatus = currentStatus,
+            onStatusSelected = { newStatus ->
+                // Save to preferences
+                val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
+                prefs.edit().putString("user_status", newStatus.name).apply()
+
+                // Send status update through ViewModel
+                viewModel.setUserStatus(newStatus)
+
+                // Update button appearance
+                updateStatusButtonAppearance(newStatus)
+
+                // Show feedback
+                Toast.makeText(this, "Status updated to: ${newStatus.toDisplayName()}", Toast.LENGTH_SHORT).show()
+            }
+        )
+        dialog.show(statusButton)
     }
 }
