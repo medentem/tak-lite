@@ -94,9 +94,15 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             deviceManager.connectionState.collect { state ->
                 _connectionState.value = when (state) {
                     is BluetoothDeviceManager.ConnectionState.Connected -> {
-                        Log.i(TAG, "Connection established - clearing state for fresh start")
-                        // Always clear state for fresh connections to ensure clean state
-                        cleanupState()
+                        Log.i(TAG, "Connection established")
+                        // Only clear state if we were previously connected to avoid race condition
+                        val wasPreviouslyConnected = _connectionState.value is MeshConnectionState.Connected
+                        if (wasPreviouslyConnected) {
+                            Log.i(TAG, "Transitioning from previous connection - clearing state")
+                            cleanupState()
+                        } else {
+                            Log.i(TAG, "Fresh connection - preserving state for handshake")
+                        }
                         resetHandshakeState()
                         MeshConnectionState.Connecting
                     }
@@ -155,10 +161,9 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             val toRadioBytes = toRadio.toByteArray()
 
             val gatt = deviceManager.connectedGatt
-            val service = gatt?.getService(MESHTASTIC_SERVICE_UUID)
-            val toRadioChar = service?.getCharacteristic(TORADIO_CHARACTERISTIC_UUID)
+            val toRadioChar = deviceManager.getCachedToRadioCharacteristic()
 
-            if (gatt != null && service != null && toRadioChar != null) {
+            if (gatt != null && toRadioChar != null) {
                 deviceManager.reliableWrite(toRadioChar, toRadioBytes) { result ->
                     result.onSuccess { success ->
                         Log.d(TAG, "Packet id=${packet.id} sent successfully using channel index ${packet.channel}")
@@ -170,7 +175,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                 }
                 return true
             } else {
-                Log.e(TAG, "GATT/service/ToRadio characteristic missing, cannot send packet")
+                Log.e(TAG, "ToRadio characteristic not found in cache, cannot send packet")
                 queueResponse.remove(packet.id)?.complete(false)
                 return false
             }
@@ -193,9 +198,8 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         val toRadioBytes = toRadio.toByteArray()
         CoroutineScope(coroutineContext).launch {
             val gatt = deviceManager.connectedGatt
-            val service = gatt?.getService(MESHTASTIC_SERVICE_UUID)
-            val toRadioChar = service?.getCharacteristic(TORADIO_CHARACTERISTIC_UUID)
-            if (gatt != null && service != null && toRadioChar != null) {
+            val toRadioChar = deviceManager.getCachedToRadioCharacteristic()
+            if (gatt != null && toRadioChar != null) {
                 Log.d(TAG, "Sending want_config_id handshake packet")
                 deviceManager.reliableWrite(toRadioChar, toRadioBytes) { result ->
                     result.onSuccess { success ->
@@ -217,9 +221,9 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                     }
                 }
             } else {
-                Log.e(TAG, "GATT/service/ToRadio characteristic missing, cannot send handshake")
-                _configDownloadStep.value = ConfigDownloadStep.Error("GATT/service/ToRadio characteristic missing")
-                _connectionState.value = MeshConnectionState.Error("GATT/service/ToRadio characteristic missing")
+                Log.e(TAG, "ToRadio characteristic not found in cache, cannot send handshake")
+                _configDownloadStep.value = ConfigDownloadStep.Error("ToRadio characteristic not found in cache")
+                _connectionState.value = MeshConnectionState.Error("ToRadio characteristic not found in cache")
             }
         }
     }
@@ -227,8 +231,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     private fun drainFromRadioUntilHandshakeComplete() {
         CoroutineScope(coroutineContext).launch {
             val gatt = deviceManager.connectedGatt
-            val service = gatt?.getService(MESHTASTIC_SERVICE_UUID)
-            val fromRadioChar = service?.getCharacteristic(FROMRADIO_CHARACTERISTIC_UUID)
+            val fromRadioChar = deviceManager.getCachedFromRadioCharacteristic()
             
             if (gatt != null && fromRadioChar != null) {
                 try {
@@ -257,10 +260,10 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                     cleanupState()
                 }
             } else {
-                Log.e(TAG, "GATT/service/FROMRADIO characteristic missing, cannot drain during handshake.")
-                _configDownloadStep.value = ConfigDownloadStep.Error("GATT/service/FROMRADIO characteristic missing")
+                Log.e(TAG, "FromRadio characteristic not found in cache, cannot drain during handshake.")
+                _configDownloadStep.value = ConfigDownloadStep.Error("FromRadio characteristic not found in cache")
                 // Set connection state to error since handshake failed
-                _connectionState.value = MeshConnectionState.Error("GATT/service/FROMRADIO characteristic missing")
+                _connectionState.value = MeshConnectionState.Error("FromRadio characteristic not found in cache")
                 cleanupState()
             }
         }

@@ -31,6 +31,17 @@ import kotlin.coroutines.CoroutineContext
 import com.tak.lite.data.model.MessageStatus as BaseMessageStatus
 
 
+/**
+ * AIDL-based mesh protocol implementation.
+ * 
+ * Uses @ApplicationContext for all background operations to ensure:
+ * - Reliable background operation
+ * - No context leaks
+ * - Consistent broadcast receiver registration/unregistration
+ * 
+ * ActivityContextProvider is only used for UI operations, not for
+ * protocol or background operations.
+ */
 class MeshtasticAidlProtocol @Inject constructor(
     @ApplicationContext private val context: Context,
     private val activityContextProvider: ActivityContextProvider,
@@ -47,9 +58,8 @@ class MeshtasticAidlProtocol @Inject constructor(
     private var isMeshServiceBound = false
     private var userInitiatedDisconnect = false // Track user-initiated disconnects
     
-    // Track broadcast receiver registration
+    // Track broadcast receiver registration - ALWAYS use application context
     private var isReceiverRegistered = false
-    private var registrationContext: Context? = null
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             Log.d(TAG, "=== Service Connection Debug ===")
@@ -153,7 +163,9 @@ class MeshtasticAidlProtocol @Inject constructor(
     init {
         Log.d(TAG, "=== Initializing MeshtasticAidlProtocol ===")
         Log.d(TAG, "Instance ID: ${this.hashCode()}")
-        Log.d(TAG, "Registering mesh broadcast receiver...")
+        Log.d(TAG, "Using application context for all background operations")
+        
+        // Register broadcast receiver using application context (best practice for background operations)
         registerMeshReceiver()
         
         Log.d(TAG, "Attempting to bind to mesh service...")
@@ -174,10 +186,9 @@ class MeshtasticAidlProtocol @Inject constructor(
             val testIntent = Intent("com.geeksville.mesh.TEST_BROADCAST")
             Log.d(TAG, "Sending test broadcast with action: ${testIntent.action}")
             
-            // Use activity context if available for sending broadcast
-            val broadcastContext = activityContextProvider.getActivityContext() ?: context
-            broadcastContext.sendBroadcast(testIntent)
-            Log.d(TAG, "Test broadcast sent using context: ${broadcastContext.javaClass.simpleName}")
+            // Always use application context for sending broadcasts (consistent with registration)
+            context.sendBroadcast(testIntent)
+            Log.d(TAG, "Test broadcast sent using application context")
         }
         
         Log.d(TAG, "=== MeshtasticAidlProtocol initialization complete ===")
@@ -291,35 +302,32 @@ class MeshtasticAidlProtocol @Inject constructor(
             addAction("com.geeksville.mesh.TEST_BROADCAST") // Add test broadcast action
         }
         
-        // Try to use activity context first, fall back to application context
-        val contextToUse = activityContextProvider.getActivityContext() ?: context
-        
+        // ALWAYS use application context for background broadcast receivers (best practice)
         try {
-            Log.d(TAG, "Attempting to register mesh broadcast receiver with filter: ${filter.actionsIterator().asSequence().toList()}")
-            Log.d(TAG, "Context type: ${contextToUse.javaClass.name}")
-            Log.d(TAG, "Context package: ${contextToUse.packageName}")
-            Log.d(TAG, "Using activity context: ${contextToUse != context}")
+            Log.d(TAG, "=== Broadcast Receiver Registration ===")
+            Log.d(TAG, "Context type: ${context.javaClass.name}")
+            Log.d(TAG, "Context package: ${context.packageName}")
+            Log.d(TAG, "Using application context for background mesh operations")
+            Log.d(TAG, "Filter actions: ${filter.actionsIterator().asSequence().toList()}")
             
             // Try with RECEIVER_EXPORTED first (needed for cross-app broadcasts)
             try {
-                contextToUse.registerReceiver(meshReceiver, filter, Context.RECEIVER_EXPORTED)
+                context.registerReceiver(meshReceiver, filter, Context.RECEIVER_EXPORTED)
                 Log.d(TAG, "Successfully registered mesh broadcast receiver with RECEIVER_EXPORTED")
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to register with RECEIVER_EXPORTED, trying RECEIVER_NOT_EXPORTED: ${e.message}")
-                contextToUse.registerReceiver(meshReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+                context.registerReceiver(meshReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
                 Log.d(TAG, "Successfully registered mesh broadcast receiver with RECEIVER_NOT_EXPORTED")
             }
             
             // Track successful registration
             isReceiverRegistered = true
-            registrationContext = contextToUse
-            Log.d(TAG, "Broadcast receiver registration tracked - isReceiverRegistered: $isReceiverRegistered")
+            Log.d(TAG, "Broadcast receiver registration successful - isReceiverRegistered: $isReceiverRegistered")
             
         } catch (e: Exception) {
             Log.e(TAG, "Failed to register mesh receiver", e)
             // Reset tracking on failure
             isReceiverRegistered = false
-            registrationContext = null
         }
     }
     
@@ -330,21 +338,18 @@ class MeshtasticAidlProtocol @Inject constructor(
         }
         
         try {
-            // Use the tracked context that was used for registration
-            val contextToUse = registrationContext ?: context
-            contextToUse.unregisterReceiver(meshReceiver)
-            Log.d(TAG, "Unregistered mesh broadcast receiver using context: ${contextToUse.javaClass.simpleName}")
+            // Always use application context for unregistration (same as registration)
+            context.unregisterReceiver(meshReceiver)
+            Log.d(TAG, "Successfully unregistered mesh broadcast receiver using application context")
             
             // Reset tracking state
             isReceiverRegistered = false
-            registrationContext = null
-            Log.d(TAG, "Broadcast receiver unregistration tracked - isReceiverRegistered: $isReceiverRegistered")
+            Log.d(TAG, "Broadcast receiver unregistration complete - isReceiverRegistered: $isReceiverRegistered")
             
         } catch (e: Exception) {
             Log.w(TAG, "Failed to unregister mesh receiver", e)
             // Reset tracking even on failure to prevent stuck state
             isReceiverRegistered = false
-            registrationContext = null
         }
     }
     
@@ -808,6 +813,7 @@ class MeshtasticAidlProtocol @Inject constructor(
         }
 
         val serviceResponsive = isServiceResponsive()
+        val activityContextAvailable = activityContextProvider.getActivityContext() != null
 
         return "AIDL Protocol State: ${_connectionState.value}, " +
                "Service Bound: $isMeshServiceBound, " +
@@ -817,21 +823,23 @@ class MeshtasticAidlProtocol @Inject constructor(
                "Config Step: ${_configDownloadStep.value}, " +
                "Meshtastic Installed: $meshtasticInstalled, " +
                "Meshtastic Running: $meshtasticRunning, " +
-               "My ID: ${_localNodeIdOrNickname.value}"
+               "My ID: ${_localNodeIdOrNickname.value}, " +
+               "Broadcast Receiver Registered: $isReceiverRegistered, " +
+               "Activity Context Available: $activityContextAvailable, " +
+               "Using Application Context: true"
     }
     
     fun cleanup() {
         Log.i(TAG, "=== Cleaning up AIDL protocol ===")
         Log.d(TAG, "Instance ID: ${this.hashCode()}")
         Log.d(TAG, "Broadcast receiver registered: $isReceiverRegistered")
-        Log.d(TAG, "Registration context: ${registrationContext?.javaClass?.simpleName}")
+        Log.d(TAG, "Using application context for all operations")
         
         unregisterMeshReceiver()
         unbindMeshService()
         
         // Ensure tracking state is reset
         isReceiverRegistered = false
-        registrationContext = null
         Log.d(TAG, "AIDL protocol cleanup complete - broadcast receiver tracking reset")
         Log.i(TAG, "=== AIDL protocol cleanup complete ===")
     }

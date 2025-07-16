@@ -12,6 +12,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * Provides mesh protocol implementations with proper context usage.
+ * 
+ * Uses @ApplicationContext for all protocol operations to ensure
+ * background compatibility and prevent context leaks.
+ * 
+ * ActivityContextProvider is only used for UI operations, not for
+ * protocol or background operations.
+ */
 @Singleton
 class MeshProtocolProvider @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -28,6 +37,7 @@ class MeshProtocolProvider @Inject constructor(
         Log.d(TAG, "=== MeshProtocolProvider Constructor ===")
         Log.d(TAG, "Initializing MeshProtocolProvider instance with initial protocol: ${_protocol.value.javaClass.simpleName}")
         Log.d(TAG, "Protocol StateFlow value: ${protocol.value.javaClass.simpleName}")
+        Log.d(TAG, "Using @ApplicationContext for all protocol operations")
         Log.d(TAG, "=== MeshProtocolProvider Constructor Complete ===")
     }
 
@@ -48,15 +58,15 @@ class MeshProtocolProvider @Inject constructor(
 
         val protocol = when (type) {
             "Meshtastic" -> {
-                Log.d(TAG, "Creating MeshtasticBluetoothProtocol")
+                Log.d(TAG, "Creating MeshtasticBluetoothProtocol with @ApplicationContext")
                 MeshtasticBluetoothProtocol(bluetoothDeviceManager, context)
             }
             "MeshtasticAidl" -> {
-                Log.d(TAG, "Creating MeshtasticAidlProtocol")
+                Log.d(TAG, "Creating MeshtasticAidlProtocol with @ApplicationContext")
                 MeshtasticAidlProtocol(context, activityContextProvider)
             }
             else -> {
-                Log.d(TAG, "Creating Layer2MeshNetworkProtocol")
+                Log.d(TAG, "Creating Layer2MeshNetworkProtocol with @ApplicationContext")
                 Layer2MeshNetworkProtocol(context)
             }
         }

@@ -63,10 +63,9 @@ class MeshForegroundService : Service() {
         // Get and store a strong reference to the protocol
         currentProtocol = meshProtocolProvider.protocol.value
         val protocol = currentProtocol ?: return
-        val context = applicationContext
         packetSummaryJob = CoroutineScope(Dispatchers.Default).launch {
             protocol.packetSummaries.collectLatest { summaries ->
-                val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+                val prefs = applicationContext.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
                 val showSummary = prefs.getBoolean("show_packet_summary", false)
                 if (showSummary && summaries.isNotEmpty()) {
                     updateNotificationWithSummary(summaries)

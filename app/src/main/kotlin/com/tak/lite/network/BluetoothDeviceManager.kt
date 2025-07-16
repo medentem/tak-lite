@@ -40,6 +40,11 @@ class BluetoothDeviceManager(private val context: Context) {
     private var bluetoothGatt: BluetoothGatt? = null
     val connectedGatt: BluetoothGatt?
         get() = bluetoothGatt
+        
+    // Cache discovered characteristics to avoid repeated lookups
+    private var cachedFromNumChar: BluetoothGattCharacteristic? = null
+    private var cachedFromRadioChar: BluetoothGattCharacteristic? = null
+    private var cachedToRadioChar: BluetoothGattCharacteristic? = null
 
     private var gattCallback: BluetoothGattCallback? = null
 
@@ -126,6 +131,26 @@ class BluetoothDeviceManager(private val context: Context) {
         // Reset the flag after checking
         userInitiatedDisconnect = false
         return wasUserInitiated
+    }
+    
+    // Methods to access cached characteristics
+    fun getCachedFromNumCharacteristic(): BluetoothGattCharacteristic? {
+        return cachedFromNumChar
+    }
+    
+    fun getCachedFromRadioCharacteristic(): BluetoothGattCharacteristic? {
+        return cachedFromRadioChar
+    }
+    
+    fun getCachedToRadioCharacteristic(): BluetoothGattCharacteristic? {
+        return cachedToRadioChar
+    }
+    
+    fun clearCachedCharacteristics() {
+        Log.d("BluetoothDeviceManager", "Clearing cached characteristics")
+        cachedFromNumChar = null
+        cachedFromRadioChar = null
+        cachedToRadioChar = null
     }
 
     private fun enqueueBleOperation(op: BleOperation) {
@@ -549,10 +574,11 @@ class BluetoothDeviceManager(private val context: Context) {
                         // Try to find characteristics with retry logic
                         var fromNumChar: BluetoothGattCharacteristic? = null
                         var fromRadioChar: BluetoothGattCharacteristic? = null
+                        var toRadioChar: BluetoothGattCharacteristic? = null
                         var retryCount = 0
                         val maxRetries = if (isReconnectionAttempt) 5 else 3 // More retries for reconnection
                         
-                        while (retryCount < maxRetries && (fromNumChar == null || fromRadioChar == null)) {
+                        while (retryCount < maxRetries && (fromNumChar == null || fromRadioChar == null || toRadioChar == null)) {
                             val service = gatt.getService(MESHTASTIC_SERVICE_UUID)
                             if (service == null) {
                                 Log.w("BluetoothDeviceManager", "Meshtastic service not found on attempt ${retryCount + 1}")
@@ -560,6 +586,7 @@ class BluetoothDeviceManager(private val context: Context) {
                                 Log.d("BluetoothDeviceManager", "Found Meshtastic service, looking for characteristics...")
                                 fromNumChar = service.getCharacteristic(FROMNUM_CHARACTERISTIC_UUID)
                                 fromRadioChar = service.getCharacteristic(FROMRADIO_CHARACTERISTIC_UUID)
+                                toRadioChar = service.getCharacteristic(TORADIO_CHARACTERISTIC_UUID)
                                 
                                 if (fromNumChar != null) {
                                     Log.d("BluetoothDeviceManager", "Found FROMNUM characteristic")
@@ -567,9 +594,12 @@ class BluetoothDeviceManager(private val context: Context) {
                                 if (fromRadioChar != null) {
                                     Log.d("BluetoothDeviceManager", "Found FROMRADIO characteristic")
                                 }
+                                if (toRadioChar != null) {
+                                    Log.d("BluetoothDeviceManager", "Found TORADIO characteristic")
+                                }
                             }
                             
-                            if (fromNumChar == null || fromRadioChar == null) {
+                            if (fromNumChar == null || fromRadioChar == null || toRadioChar == null) {
                                 retryCount++
                                 if (retryCount < maxRetries) {
                                     val retryDelay = if (isReconnectionAttempt) retryCount * 1500L else retryCount * 1000L
@@ -579,8 +609,18 @@ class BluetoothDeviceManager(private val context: Context) {
                             }
                         }
                         
-                        if (fromNumChar != null && fromRadioChar != null) {
+                        if (fromNumChar != null && fromRadioChar != null && toRadioChar != null) {
                             Log.i("BluetoothDeviceManager", "All characteristics found successfully after ${retryCount + 1} attempts")
+                            Log.d("BluetoothDeviceManager", "Cached characteristics:")
+                            Log.d("BluetoothDeviceManager", "  - FROMNUM: ${fromNumChar.uuid}")
+                            Log.d("BluetoothDeviceManager", "  - FROMRADIO: ${fromRadioChar.uuid}")
+                            Log.d("BluetoothDeviceManager", "  - TORADIO: ${toRadioChar.uuid}")
+                            
+                            // Cache the characteristics for later use
+                            cachedFromNumChar = fromNumChar
+                            cachedFromRadioChar = fromRadioChar
+                            cachedToRadioChar = toRadioChar
+                            
                             isReconnectionAttempt = false // Reset the flag on successful connection
                             // Do NOT subscribe to FROMNUM notifications here anymore
                             _connectionState.value = ConnectionState.Connected(device)
@@ -597,6 +637,7 @@ class BluetoothDeviceManager(private val context: Context) {
                         } else {
                             if (fromNumChar == null) Log.e("BluetoothDeviceManager", "FROMNUM characteristic not found after $maxRetries attempts!")
                             if (fromRadioChar == null) Log.e("BluetoothDeviceManager", "FROMRADIO characteristic not found after $maxRetries attempts!")
+                            if (toRadioChar == null) Log.e("BluetoothDeviceManager", "TORADIO characteristic not found after $maxRetries attempts!")
                             _connectionState.value = ConnectionState.Failed("Missing characteristic after service discovery")
                             onConnected(false)
                             scheduleReconnect("Missing characteristic after service discovery")
@@ -940,6 +981,9 @@ class BluetoothDeviceManager(private val context: Context) {
         pendingReliableWriteCallback = null
         currentReliableWriteValue = null
         notificationHandlers.clear()
+        
+        // Clear cached characteristics
+        clearCachedCharacteristics()
         
         // Reset connection state
         _connectionState.value = ConnectionState.Disconnected

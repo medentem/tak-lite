@@ -11,6 +11,12 @@ import com.tak.lite.repository.MessageRepository
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
+/**
+ * Base activity that provides common functionality for all activities.
+ * 
+ * This activity manages the activity context for UI operations only.
+ * Background operations should use @ApplicationContext instead.
+ */
 @AndroidEntryPoint
 abstract class BaseActivity : AppCompatActivity() {
     @Inject
@@ -22,7 +28,8 @@ abstract class BaseActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Set the activity context for broadcast receiver registration
+        // Set the activity context for UI operations only
+        // Background operations (protocols, services) should use @ApplicationContext
         activityContextProvider.setActivityContext(this)
         
         // Enable edge-to-edge display for all activities
@@ -55,6 +62,7 @@ abstract class BaseActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         // Clear the activity context when activity is destroyed
+        // This prevents background operations from using a destroyed activity context
         activityContextProvider.setActivityContext(null)
     }
 } 
