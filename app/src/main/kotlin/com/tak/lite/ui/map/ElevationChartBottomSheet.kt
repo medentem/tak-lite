@@ -6,6 +6,8 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import android.widget.ProgressBar
+import android.widget.TextView
 import androidx.core.content.ContextCompat
 import com.github.mikephil.charting.charts.LineChart
 import com.github.mikephil.charting.data.Entry
@@ -31,19 +33,54 @@ class ElevationChartBottomSheet(
         val context = requireContext()
         val layout = LinearLayout(context)
         layout.orientation = LinearLayout.VERTICAL
-        layout.setPadding(0, 0, 0, 0)
-
-        val chart = LineChart(context)
-        chart.layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            500
-        )
+        layout.setPadding(32, 32, 32, 32)
 
         // Detect dark mode
         val isDarkMode = (context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
         val bgColor = if (isDarkMode) Color.parseColor("#181A20") else Color.WHITE
         val lineColor = if (isDarkMode) ContextCompat.getColor(context, R.color.primary_dark) else ContextCompat.getColor(context, R.color.primary_light)
         val textColor = if (isDarkMode) Color.parseColor("#B0B3B8") else Color.DKGRAY
+
+        layout.setBackgroundColor(bgColor)
+
+        // Add title
+        val titleText = TextView(context)
+        titleText.text = "Elevation Profile"
+        titleText.textSize = 18f
+        titleText.setTextColor(textColor)
+        titleText.typeface = android.graphics.Typeface.DEFAULT_BOLD
+        titleText.setPadding(0, 0, 0, 16)
+        layout.addView(titleText)
+
+        // Add progress indicator
+        val progressLayout = LinearLayout(context)
+        progressLayout.orientation = LinearLayout.VERTICAL
+        progressLayout.visibility = View.VISIBLE
+        progressLayout.setPadding(0, 16, 0, 16)
+
+        val progressText = TextView(context)
+        progressText.text = "Loading elevation data..."
+        progressText.textSize = 14f
+        progressText.setTextColor(textColor)
+        progressText.setPadding(0, 0, 0, 8)
+        progressLayout.addView(progressText)
+
+        val progressBar = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal)
+        progressBar.isIndeterminate = true
+        progressBar.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
+        progressLayout.addView(progressBar)
+
+        layout.addView(progressLayout)
+
+        val chart = LineChart(context)
+        chart.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            500
+        )
+        chart.visibility = View.GONE
 
         chart.setBackgroundColor(bgColor)
         chart.setNoDataText("No elevation data")
@@ -96,7 +133,25 @@ class ElevationChartBottomSheet(
             var minElevation = Float.MAX_VALUE
             var maxElevation = Float.MIN_VALUE
 
-            // --- Interpolate more points for smoother chart ---
+            // Calculate total line length for adaptive sampling
+            var totalLineLength = 0.0
+            for (i in 0 until points.size - 1) {
+                val p1 = points[i].toMapLibreLatLng()
+                val p2 = points[i + 1].toMapLibreLatLng()
+                totalLineLength += haversine(p1.latitude, p1.longitude, p2.latitude, p2.longitude)
+            }
+
+            // Adaptive sampling based on line length
+            val samplingDistance = when {
+                totalLineLength < 1000 -> 30.0  // Short lines: 30m intervals
+                totalLineLength < 5000 -> 50.0  // Medium lines: 50m intervals  
+                totalLineLength < 20000 -> 100.0 // Long lines: 100m intervals
+                else -> 200.0 // Very long lines: 200m intervals
+            }
+
+            android.util.Log.d("ElevationChartBottomSheet", "Line length: ${totalLineLength}m, using ${samplingDistance}m sampling")
+
+            // --- Interpolate more points for smoother chart with adaptive sampling ---
             fun interpolatePoints(p1: org.maplibre.android.geometry.LatLng, p2: org.maplibre.android.geometry.LatLng, steps: Int): List<org.maplibre.android.geometry.LatLng> {
                 val result = mutableListOf<org.maplibre.android.geometry.LatLng>()
                 for (i in 1 until steps) {
@@ -114,32 +169,103 @@ class ElevationChartBottomSheet(
                 if (i < points.size - 1) {
                     val p2 = points[i + 1].toMapLibreLatLng()
                     val dist = haversine(p1.latitude, p1.longitude, p2.latitude, p2.longitude)
-                    val steps = (dist / 30.0).toInt().coerceAtLeast(1)
+                    val steps = (dist / samplingDistance).toInt().coerceAtLeast(1)
                     densePoints.addAll(interpolatePoints(p1, p2, steps))
                 }
             }
 
-            // --- Sample elevations for all dense points ---
+            // Limit the number of points for very long lines to maintain performance
+            val maxPoints = when {
+                totalLineLength < 10000 -> densePoints.size // No limit for shorter lines
+                totalLineLength < 50000 -> 500 // Limit to 500 points for medium lines
+                else -> 300 // Limit to 300 points for very long lines
+            }
+
+            if (densePoints.size > maxPoints) {
+                val step = densePoints.size / maxPoints
+                val limitedPoints = mutableListOf<org.maplibre.android.geometry.LatLng>()
+                for (i in densePoints.indices step step) {
+                    limitedPoints.add(densePoints[i])
+                }
+                // Always include the last point
+                if (limitedPoints.last() != densePoints.last()) {
+                    limitedPoints.add(densePoints.last())
+                }
+                densePoints.clear()
+                densePoints.addAll(limitedPoints)
+                android.util.Log.d("ElevationChartBottomSheet", "Reduced points from ${densePoints.size} to ${limitedPoints.size} for performance")
+            }
+
+            // --- Sample elevations for all dense points with progress updates ---
             var cumulativeDistance: Float = 0f
             var prevLat: Double? = null
             var prevLon: Double? = null
-            for ((idx, pt) in densePoints.withIndex()) {
+            var tilesDownloaded = 0
+            var totalTilesNeeded = 0
+            val tilesToDownload = mutableSetOf<Pair<Int, Int>>()
+
+            // First pass: identify which tiles need to be downloaded
+            for (pt in densePoints) {
                 val lat = pt.latitude
                 val lon = pt.longitude
-                var elevation = getOfflineElevation(lat, lon, zoom, filesDir)
-                if (elevation == null && mapController != null) {
+                val elevation = getOfflineElevation(lat, lon, zoom, filesDir)
+                if (elevation == null) {
                     val n = Math.pow(2.0, zoom.toDouble())
                     val x = ((lon + 180.0) / 360.0 * n).toInt()
                     val latRad = Math.toRadians(lat)
                     val y = ((1.0 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2.0 * n).toInt()
-                    withContext(kotlinx.coroutines.Dispatchers.IO) {
-                        mapController.downloadTerrainDemTile(zoom, x, y)
-                    }
-                    elevation = getOfflineElevation(lat, lon, zoom, filesDir)
+                    tilesToDownload.add(Pair(x, y))
                 }
+            }
+            totalTilesNeeded = tilesToDownload.size
+
+            android.util.Log.d("ElevationChartBottomSheet", "Need to download $totalTilesNeeded terrain tiles")
+
+            if (totalTilesNeeded > 0) {
+                progressText.text = "Downloading terrain data... (0/$totalTilesNeeded tiles)"
+                progressBar.isIndeterminate = false
+                progressBar.max = totalTilesNeeded
+                progressBar.progress = 0
+
+                // Download missing tiles
+                var downloadSuccess = true
+                for ((x, y) in tilesToDownload) {
+                    if (mapController != null) {
+                        val success = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            mapController.downloadTerrainDemTile(zoom, x, y)
+                        }
+                        tilesDownloaded++
+                        progressText.text = "Downloading terrain data... ($tilesDownloaded/$totalTilesNeeded tiles)"
+                        progressBar.progress = tilesDownloaded
+                        
+                        if (!success) {
+                            downloadSuccess = false
+                        }
+                    } else {
+                        downloadSuccess = false
+                        break
+                    }
+                }
+
+                if (!downloadSuccess) {
+                    progressText.text = "Warning: Some terrain data unavailable. Using estimated elevations."
+                    progressText.setTextColor(Color.parseColor("#FFA500")) // Orange warning color
+                }
+            }
+
+            progressText.text = "Processing elevation data..."
+            progressBar.isIndeterminate = true
+
+            // Second pass: collect elevation data
+            for ((idx, pt) in densePoints.withIndex()) {
+                val lat = pt.latitude
+                val lon = pt.longitude
+                val elevation = getOfflineElevation(lat, lon, zoom, filesDir)
                 val usedElevation = elevation ?: (100 + (idx * 2)) // fallback stub
+                
                 if (usedElevation.toFloat() < minElevation) minElevation = usedElevation.toFloat()
                 if (usedElevation.toFloat() > maxElevation) maxElevation = usedElevation.toFloat()
+                
                 if (prevLat != null && prevLon != null) {
                     val dist = haversine(prevLat, prevLon, lat, lon).toFloat()
                     cumulativeDistance += dist
@@ -148,6 +274,26 @@ class ElevationChartBottomSheet(
                 prevLat = lat
                 prevLon = lon
             }
+
+            // Check if we have any real elevation data
+            val hasRealElevationData = entries.any { entry ->
+                val elevation = entry.y
+                // Check if elevation is not the fallback pattern (100 + idx * 2)
+                val idx = entries.indexOf(entry)
+                elevation != (100 + (idx * 2)).toFloat()
+            }
+
+            if (!hasRealElevationData) {
+                progressText.text = "No terrain data available for this area. Showing estimated profile."
+                progressText.setTextColor(Color.parseColor("#FF6B6B")) // Red warning color
+            }
+
+            android.util.Log.d("ElevationChartBottomSheet", "Processed ${entries.size} elevation points, real data: $hasRealElevationData")
+
+            // Hide progress and show chart
+            progressLayout.visibility = View.GONE
+            chart.visibility = View.VISIBLE
+
             val dataSet = LineDataSet(entries, null)
             dataSet.color = lineColor
             dataSet.setDrawCircles(false)
@@ -273,6 +419,28 @@ class ElevationChartBottomSheet(
 
             chart.notifyDataSetChanged()
             chart.invalidate()
+
+            // Add elevation summary
+            val summaryLayout = LinearLayout(context)
+            summaryLayout.orientation = LinearLayout.VERTICAL
+            summaryLayout.setPadding(0, 16, 0, 0)
+            summaryLayout.setBackgroundColor(Color.argb(30, 128, 128, 128))
+            summaryLayout.setPadding(16, 12, 16, 12)
+
+            val totalDistanceMi = cumulativeDistance / 1609.344f
+            val elevationRangeFt = (maxElevation - minElevation) * 3.28084f
+            val avgElevationFt = ((minElevation + maxElevation) / 2) * 3.28084f
+
+            val summaryText = TextView(context)
+            summaryText.text = "Total Distance: %.2f mi | Elevation Range: %.0f ft | Avg Elevation: %.0f ft | Sampling: %.0f m intervals".format(
+                totalDistanceMi, elevationRangeFt, avgElevationFt, samplingDistance
+            )
+            summaryText.textSize = 12f
+            summaryText.setTextColor(textColor)
+            summaryText.typeface = android.graphics.Typeface.MONOSPACE
+            summaryLayout.addView(summaryText)
+
+            layout.addView(summaryLayout)
         }
 
         layout.addView(chart)
