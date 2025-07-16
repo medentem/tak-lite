@@ -86,6 +86,9 @@ class MeshForegroundService : Service() {
                     is MeshConnectionState.Connected -> {
                         updateNotificationDefault("Connected to mesh network")
                     }
+                    is MeshConnectionState.ServiceConnected -> {
+                        updateNotificationDefault("Meshtastic app connected: No device attached")
+                    }
                     is MeshConnectionState.Connecting -> {
                         updateNotificationDefault("Connecting to mesh network...")
                     }

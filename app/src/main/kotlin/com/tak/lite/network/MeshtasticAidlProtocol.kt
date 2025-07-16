@@ -88,7 +88,8 @@ class MeshtasticAidlProtocol @Inject constructor(
             
             isMeshServiceBound = true
             Log.i(TAG, "Connected to Meshtastic AIDL Service")
-            _connectionState.value = MeshConnectionState.Connected(com.tak.lite.di.DeviceInfo.AidlDevice("Meshtastic App"))
+            // Set to Connecting initially - we'll update to Connected only after successful handshake
+            _connectionState.value = MeshConnectionState.Connecting
             
             // Start AIDL handshake to get initial data
             CoroutineScope(coroutineContext).launch {
@@ -433,11 +434,11 @@ class MeshtasticAidlProtocol @Inject constructor(
                 handleRoutingApp(dataPacket)
             }
             "com.geeksville.mesh.MESH_CONNECTED" -> {
-                Log.i(TAG, "Mesh connected")
+                Log.i(TAG, "Received MESH_CONNECTED broadcast - Meshtastic app connected to mesh device")
                 _connectionState.value = MeshConnectionState.Connected(com.tak.lite.di.DeviceInfo.AidlDevice("Meshtastic App"))
             }
             "com.geeksville.mesh.MESH_DISCONNECTED" -> {
-                Log.i(TAG, "Mesh disconnected")
+                Log.i(TAG, "Received MESH_DISCONNECTED broadcast - Meshtastic app disconnected from mesh device")
                 _connectionState.value = MeshConnectionState.Disconnected
             }
             "com.geeksville.mesh.MESSAGE_STATUS" -> {
@@ -478,7 +479,16 @@ class MeshtasticAidlProtocol @Inject constructor(
             // Test basic service connectivity first
             try {
                 val connectionState = meshService?.connectionState()
-                Log.d(TAG, "Service connection state: $connectionState")
+                Log.d(TAG, "Meshtastic app connection state: $connectionState")
+                if (connectionState == "DISCONNECTED") {
+                    Log.w(TAG, "Meshtastic app is not connected to any mesh device")
+                    // Early return - no point in continuing if app is disconnected
+                    _connectionState.value = MeshConnectionState.ServiceConnected(com.tak.lite.di.DeviceInfo.AidlDevice("Meshtastic App"))
+                    Log.i(TAG, "Setting connection state to ServiceConnected - AIDL service connected but no mesh device attached")
+                    return
+                } else if (connectionState == "CONNECTED") {
+                    Log.i(TAG, "Meshtastic app is connected to a mesh device")
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to get connection state: ${e.javaClass.simpleName}: ${e.message}")
             }
@@ -541,14 +551,25 @@ class MeshtasticAidlProtocol @Inject constructor(
                     try {
                         handleMyInfo(meshProtosMyNodeInfo)
                         Log.d(TAG, "Successfully processed MyNodeInfo using base class handler")
+                        // Set connection state to Connected since we have valid mesh device connection
+                        _connectionState.value = MeshConnectionState.Connected(com.tak.lite.di.DeviceInfo.AidlDevice("Meshtastic App"))
+                        Log.i(TAG, "Mesh device connection confirmed - connection state set to Connected")
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to process MyNodeInfo in base class handler: ${e.message}", e)
+                        // Failed to process MyNodeInfo - set connection state to Disconnected
+                        _connectionState.value = MeshConnectionState.Disconnected
+                        Log.i(TAG, "Failed to process MyNodeInfo - setting connection state to Disconnected")
+                        return
                     }
                 } else {
                     Log.e(TAG, "Failed to convert MyNodeInfo to MeshProtos.MyNodeInfo")
+                    // Failed to convert MyNodeInfo - set connection state to Disconnected
+                    _connectionState.value = MeshConnectionState.Disconnected
+                    Log.i(TAG, "Failed to convert MyNodeInfo - setting connection state to Disconnected")
+                    return
                 }
             } else {
-                Log.w(TAG, "MyNodeInfo is null - this may be expected if service is not fully initialized")
+                Log.w(TAG, "MyNodeInfo is null - Meshtastic app is not connected to a mesh device")
                 // Try to get node ID from getMyId() as fallback
                 try {
                     val myId = meshService?.getMyId()
@@ -558,11 +579,22 @@ class MeshtasticAidlProtocol @Inject constructor(
                         checkForNodeChange(myId)
                         _localNodeIdOrNickname.value = myId
                         Log.d(TAG, "Using getMyId() as fallback: $myId")
+                        // Set connection state to Connected since we have a valid node ID
+                        _connectionState.value = MeshConnectionState.Connected(com.tak.lite.di.DeviceInfo.AidlDevice("Meshtastic App"))
+                        Log.i(TAG, "Mesh device connection confirmed via fallback ID - connection state set to Connected")
                     } else {
                         Log.w(TAG, "getMyId() returned null or empty")
+                        // No mesh device connection - set connection state to ServiceConnected
+                        Log.i(TAG, "No mesh device connection detected - setting connection state to ServiceConnected")
+                        _connectionState.value = MeshConnectionState.ServiceConnected(com.tak.lite.di.DeviceInfo.AidlDevice("Meshtastic App"))
+                        return
                     }
                 } catch (e: Exception) {
                     Log.w(TAG, "getMyId() fallback also failed: ${e.message}")
+                    // No mesh device connection - set connection state to ServiceConnected
+                    Log.i(TAG, "No mesh device connection detected - setting connection state to ServiceConnected")
+                    _connectionState.value = MeshConnectionState.ServiceConnected(com.tak.lite.di.DeviceInfo.AidlDevice("Meshtastic App"))
+                    return
                 }
             }
             
@@ -790,6 +822,12 @@ class MeshtasticAidlProtocol @Inject constructor(
             kotlinx.coroutines.delay(1000)
             bindMeshService()
         }
+    }
+    
+    override fun cleanupState() {
+        Log.i(TAG, "Cleaning up AIDL protocol state")
+        cleanup()
+        super.cleanupState()
     }
     
     override fun isReadyForNewConnection(): Boolean {

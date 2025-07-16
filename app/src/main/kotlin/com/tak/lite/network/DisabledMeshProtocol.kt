@@ -154,6 +154,10 @@ class DisabledMeshProtocol(private val context: Context) : MeshProtocol {
         // No-op for disabled protocol
     }
 
+    override fun cleanupState() {
+        // No-op for disabled protocol
+    }
+
     override fun isReadyForNewConnection(): Boolean {
         return false // Always false for disabled protocol
     }

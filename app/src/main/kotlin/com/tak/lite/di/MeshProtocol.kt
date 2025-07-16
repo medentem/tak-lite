@@ -13,6 +13,7 @@ import org.maplibre.android.geometry.LatLng
 
 sealed class MeshConnectionState {
     data class Connected(val deviceInfo: DeviceInfo?) : MeshConnectionState()
+    data class ServiceConnected(val deviceInfo: DeviceInfo?) : MeshConnectionState()
     object Disconnected : MeshConnectionState()
     object Connecting : MeshConnectionState()
     data class Error(val message: String) : MeshConnectionState()
@@ -84,6 +85,7 @@ interface MeshProtocol {
 
     // Diagnostic and reset operations
     fun forceReset()
+    fun cleanupState()
     fun isReadyForNewConnection(): Boolean
     fun getDiagnosticInfo(): String
     

@@ -220,7 +220,7 @@ class SettingsActivity : BaseActivity() {
                 return@setOnClickListener
             }
 
-            if (connectionState is MeshConnectionState.Connected) {
+            if (connectionState is MeshConnectionState.Connected || connectionState is MeshConnectionState.ServiceConnected) {
                 Log.d("SettingsActivity", "AIDL disconnect button clicked - disconnecting...")
                 protocol.disconnectFromDevice()
                 // Re-enable button after a short delay
@@ -337,7 +337,8 @@ class SettingsActivity : BaseActivity() {
             Log.d("SettingsActivity", "About to save mesh_network_type preference to: $internalType")
 
             // Disconnect from current connection before switching protocols
-            if (currentProtocol.connectionState.value is MeshConnectionState.Connected) {
+            if (currentProtocol.connectionState.value is MeshConnectionState.Connected || 
+                currentProtocol.connectionState.value is MeshConnectionState.ServiceConnected) {
                 Log.d("SettingsActivity", "Disconnecting from current protocol before switching to $internalType")
                 currentProtocol.disconnectFromDevice()
             }
@@ -681,26 +682,38 @@ class SettingsActivity : BaseActivity() {
             discoveredDevices.add(deviceInfo)
             deviceNames.add("${deviceInfo.name} (${deviceInfo.address})")
         }, onScanFinished = {
-            progressDialog.dismiss()
-            bluetoothConnectButton.isEnabled = true // Re-enable button when scan finishes
-            if (deviceNames.isEmpty()) {
-                android.app.AlertDialog.Builder(this)
-                    .setTitle("No devices found")
-                    .setMessage("No compatible devices were found. Make sure your device is powered on and try again.")
-                    .setPositiveButton("OK", null)
-                    .show()
-            } else {
-                android.app.AlertDialog.Builder(this)
-                    .setTitle("Select Device")
-                    .setItems(deviceNames.toTypedArray()) { _, which ->
-                        val deviceInfo = discoveredDevices[which]
-                        bluetoothStatusText.text = "Connecting to: ${deviceInfo.name} (${deviceInfo.address})..."
-                        protocol.connectToDevice(deviceInfo) { _ ->
-                            // UI will update via state observer
+            // Check if activity is still valid before showing dialogs
+            if (isFinishing || isDestroyed) {
+                Log.w("SettingsActivity", "Activity is finishing or destroyed, skipping dialog display")
+                return@scanForDevices
+            }
+            
+            try {
+                progressDialog.dismiss()
+                bluetoothConnectButton.isEnabled = true // Re-enable button when scan finishes
+                if (deviceNames.isEmpty()) {
+                    android.app.AlertDialog.Builder(this)
+                        .setTitle("No devices found")
+                        .setMessage("No compatible devices were found. Make sure your device is powered on and try again.")
+                        .setPositiveButton("OK", null)
+                        .show()
+                } else {
+                    android.app.AlertDialog.Builder(this)
+                        .setTitle("Select Device")
+                        .setItems(deviceNames.toTypedArray()) { _, which ->
+                            val deviceInfo = discoveredDevices[which]
+                            bluetoothStatusText.text = "Connecting to: ${deviceInfo.name} (${deviceInfo.address})..."
+                            protocol.connectToDevice(deviceInfo) { _ ->
+                                // UI will update via state observer
+                            }
                         }
-                    }
-                    .setCancelable(true)
-                    .show()
+                        .setCancelable(true)
+                        .show()
+                }
+            } catch (e: Exception) {
+                Log.e("SettingsActivity", "Error showing scan result dialog: ${e.message}", e)
+                // Re-enable button even if dialog fails
+                bluetoothConnectButton.isEnabled = true
             }
         })
     }
@@ -711,6 +724,13 @@ class SettingsActivity : BaseActivity() {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        
+        // Check if activity is still valid
+        if (isFinishing || isDestroyed) {
+            Log.w("SettingsActivity", "Activity is finishing or destroyed, skipping permission result handling")
+            return
+        }
+        
         if (requestCode == REQUEST_CODE_BLUETOOTH_PERMISSIONS) {
             if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
                 showDeviceScanDialog(currentProtocol)
@@ -725,8 +745,12 @@ class SettingsActivity : BaseActivity() {
                 )
                 promptDisableBatteryOptimizationsIfNeeded()
             } else {
-                android.widget.Toast.makeText(this, "All permissions are required to enable background processing.", android.widget.Toast.LENGTH_LONG).show()
-                backgroundProcessingSwitch.isChecked = false
+                try {
+                    android.widget.Toast.makeText(this, "All permissions are required to enable background processing.", android.widget.Toast.LENGTH_LONG).show()
+                    backgroundProcessingSwitch.isChecked = false
+                } catch (e: Exception) {
+                    Log.e("SettingsActivity", "Error showing permission denied toast: ${e.message}", e)
+                }
             }
         } else if (requestCode == REQUEST_CODE_FOREGROUND_SERVICE_CONNECTED_DEVICE) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
@@ -736,14 +760,24 @@ class SettingsActivity : BaseActivity() {
                 )
                 promptDisableBatteryOptimizationsIfNeeded()
             } else {
-                android.widget.Toast.makeText(this, "Background processing permission denied.", android.widget.Toast.LENGTH_LONG).show()
-                backgroundProcessingSwitch.isChecked = false
+                try {
+                    android.widget.Toast.makeText(this, "Background processing permission denied.", android.widget.Toast.LENGTH_LONG).show()
+                    backgroundProcessingSwitch.isChecked = false
+                } catch (e: Exception) {
+                    Log.e("SettingsActivity", "Error showing permission denied toast: ${e.message}", e)
+                }
             }
         }
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        
+        // Check if activity is still valid
+        if (isFinishing || isDestroyed) {
+            Log.w("SettingsActivity", "Activity is finishing or destroyed, skipping activity result handling")
+            return
+        }
         
         when (requestCode) {
             REQUEST_CODE_COMPASS_CALIBRATION -> {
@@ -764,13 +798,21 @@ class SettingsActivity : BaseActivity() {
                     }
                     
                     val message = getString(R.string.compass_calibration_completed, qualityText)
-                    if (osCalibrationTriggered) {
-                        android.widget.Toast.makeText(this, "$message ${getString(R.string.compass_calibration_os_applied)}", android.widget.Toast.LENGTH_LONG).show()
-                    } else {
-                        android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
+                    try {
+                        if (osCalibrationTriggered) {
+                            android.widget.Toast.makeText(this, "$message ${getString(R.string.compass_calibration_os_applied)}", android.widget.Toast.LENGTH_LONG).show()
+                        } else {
+                            android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    } catch (e: Exception) {
+                        Log.e("SettingsActivity", "Error showing compass calibration success toast: ${e.message}", e)
                     }
                 } else if (resultCode == RESULT_CANCELED) {
-                    android.widget.Toast.makeText(this, getString(R.string.compass_calibration_cancelled), android.widget.Toast.LENGTH_SHORT).show()
+                    try {
+                        android.widget.Toast.makeText(this, getString(R.string.compass_calibration_cancelled), android.widget.Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        Log.e("SettingsActivity", "Error showing compass calibration cancelled toast: ${e.message}", e)
+                    }
                 }
             }
             2001 -> { // Bluetooth enable request
@@ -829,14 +871,23 @@ class SettingsActivity : BaseActivity() {
     }
 
     private fun promptEnableLocation() {
-        android.app.AlertDialog.Builder(this)
-            .setTitle("Enable Location")
-            .setMessage("Location services are required to scan for Bluetooth devices. Please enable location.")
-            .setPositiveButton("Open Settings") { _, _ ->
-                startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
+        if (isFinishing || isDestroyed) {
+            Log.w("SettingsActivity", "Activity is finishing or destroyed, skipping location prompt dialog")
+            return
+        }
+        
+        try {
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Enable Location")
+                .setMessage("Location services are required to scan for Bluetooth devices. Please enable location.")
+                .setPositiveButton("Open Settings") { _, _ ->
+                    startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        } catch (e: Exception) {
+            Log.e("SettingsActivity", "Error showing location prompt dialog: ${e.message}", e)
+        }
     }
 
     private fun promptDisableBatteryOptimizationsIfNeeded() {
@@ -968,6 +1019,20 @@ class SettingsActivity : BaseActivity() {
                     Log.d("SettingsActivity", "Updated AIDL status: $statusText")
                 }
             }
+            is MeshConnectionState.ServiceConnected -> {
+                connectedDevice = null
+                val deviceName = state.deviceInfo?.name ?: "Unknown Device"
+                val connectionType = state.deviceInfo?.connectionType ?: "unknown"
+                val currentMeshType = currentProtocol.javaClass.simpleName
+                
+                Log.d("SettingsActivity", "ServiceConnected state - deviceName: $deviceName, connectionType: $connectionType, currentMeshType: $currentMeshType")
+                
+                if (connectionType == "aidl" || currentMeshType == "MeshtasticAidl") {
+                    aidlStatusText.text = "Meshtastic App Connected: No Device Attached"
+                    updateAidlButtonState()
+                    Log.d("SettingsActivity", "Updated AIDL status: Meshtastic App Connected: No Device Attached")
+                }
+            }
             is MeshConnectionState.Disconnected -> {
                 connectedDevice = null
                 Log.d("SettingsActivity", "Disconnected state")
@@ -1025,7 +1090,8 @@ class SettingsActivity : BaseActivity() {
     private fun updateAidlButtonState() {
         // Use current protocol reference
         val protocol = currentProtocol
-        val isConnected = protocol.connectionState.value is MeshConnectionState.Connected
+        val isConnected = protocol.connectionState.value is MeshConnectionState.Connected || 
+                         protocol.connectionState.value is MeshConnectionState.ServiceConnected
         val buttonText = if (isConnected) "Disconnect" else "Connect"
         
         Log.d("SettingsActivity", "updateAidlButtonState - protocol: ${protocol.javaClass.simpleName}, isConnected: $isConnected, buttonText: $buttonText")
@@ -1057,6 +1123,11 @@ class SettingsActivity : BaseActivity() {
                         configProgressBar.visibility = View.GONE
                         configProgressText.visibility = View.GONE
                     }
+                    is MeshConnectionState.ServiceConnected -> {
+                        // Hide handshake progress when service connected but no device attached
+                        configProgressBar.visibility = View.GONE
+                        configProgressText.visibility = View.GONE
+                    }
                     else -> {
                         // For other states, let the handshake step observer handle visibility
                         // This will be handled by the stepFlow observer below
@@ -1069,9 +1140,10 @@ class SettingsActivity : BaseActivity() {
         protocol.configDownloadStep?.let { stepFlow ->
             configStepJob = lifecycleScope.launch {
                 stepFlow.collect { step ->
-                    // Check if we're disconnected - if so, hide handshake progress regardless of step
+                    // Check if we're disconnected or service connected - if so, hide handshake progress regardless of step
                     val isDisconnected = protocol.connectionState.value is MeshConnectionState.Disconnected
-                    if (isDisconnected) {
+                    val isServiceConnected = protocol.connectionState.value is MeshConnectionState.ServiceConnected
+                    if (isDisconnected || isServiceConnected) {
                         configProgressBar.visibility = View.GONE
                         configProgressText.visibility = View.GONE
                     } else {
@@ -1102,7 +1174,8 @@ class SettingsActivity : BaseActivity() {
             protocol.configStepCounters.collect { _ ->
                 // Only update if we're in a downloading state and connected
                 val currentStep = protocol.configDownloadStep?.value
-                val isConnected = protocol.connectionState.value !is MeshConnectionState.Disconnected
+                val isConnected = protocol.connectionState.value !is MeshConnectionState.Disconnected && 
+                                protocol.connectionState.value !is MeshConnectionState.ServiceConnected
                 if (isConnected && (currentStep is ConfigDownloadStep.DownloadingConfig ||
                     currentStep is ConfigDownloadStep.DownloadingModuleConfig ||
                     currentStep is ConfigDownloadStep.DownloadingChannel ||

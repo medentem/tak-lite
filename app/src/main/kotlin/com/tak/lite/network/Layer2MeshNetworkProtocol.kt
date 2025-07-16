@@ -1138,6 +1138,11 @@ class Layer2MeshNetworkProtocol @Inject constructor(
         _annotations.value = emptyList()
         peerLocations.clear()
     }
+    
+    override fun cleanupState() {
+        Log.i(TAG, "Cleaning up Layer 2 protocol state")
+        forceReset()
+    }
 
     override fun isReadyForNewConnection(): Boolean {
         return _connectionState.value is MeshConnectionState.Disconnected

@@ -1523,7 +1523,7 @@ abstract class MeshtasticBaseProtocol(
         queuePacket(packet)
     }
 
-    internal open fun cleanupState() {
+    override fun cleanupState() {
         Log.i(TAG, "=== COMPREHENSIVE STATE CLEANUP ===")
         
         // Stop any ongoing operations first

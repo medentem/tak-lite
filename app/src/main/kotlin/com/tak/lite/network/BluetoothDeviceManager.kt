@@ -394,7 +394,11 @@ class BluetoothDeviceManager(private val context: Context) {
                                     if (service != null) {
                                         Log.i("BluetoothDeviceManager", "Found Meshtastic service on connected device: ${device.name ?: "Unknown"} (${device.address})")
                                         discovered.add(device.address)
-                                        onResult(device)
+                                        try {
+                                            onResult(device)
+                                        } catch (e: Exception) {
+                                            Log.e("BluetoothDeviceManager", "Error calling onResult callback for connected device: ${e.message}", e)
+                                        }
                                     } else {
                                         Log.d("BluetoothDeviceManager", "Connected device ${device.address} does not support Meshtastic service")
                                     }
@@ -436,12 +440,20 @@ class BluetoothDeviceManager(private val context: Context) {
                     if (device.address !in discovered) {
                         discovered.add(device.address)
                         Log.d("BluetoothDeviceManager", "Found device via scan: ${device.name ?: "Unknown"} (${device.address})")
-                        onResult(device)
+                        try {
+                            onResult(device)
+                        } catch (e: Exception) {
+                            Log.e("BluetoothDeviceManager", "Error calling onResult callback: ${e.message}", e)
+                        }
                     }
                 }
                 override fun onScanFailed(errorCode: Int) {
                     Log.e("BluetoothDeviceManager", "BLE scan failed: $errorCode")
-                    onScanFinished()
+                    try {
+                        onScanFinished()
+                    } catch (e: Exception) {
+                        Log.e("BluetoothDeviceManager", "Error calling onScanFinished callback on scan failure: ${e.message}", e)
+                    }
                 }
             }
             
@@ -452,7 +464,11 @@ class BluetoothDeviceManager(private val context: Context) {
             delay(4000)
             bleScanner.stopScan(scanCallback)
             Log.d("BluetoothDeviceManager", "BLE scan completed, found ${discovered.size} total devices")
-            onScanFinished()
+            try {
+                onScanFinished()
+            } catch (e: Exception) {
+                Log.e("BluetoothDeviceManager", "Error calling onScanFinished callback: ${e.message}", e)
+            }
         }
     }
 

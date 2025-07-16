@@ -115,6 +115,7 @@ class MeshNetworkService @Inject constructor(
                     newProtocol.connectionState.collect { state ->
                         _networkState.value = when (state) {
                             is MeshConnectionState.Connected -> MeshNetworkState.Connected
+                            is MeshConnectionState.ServiceConnected -> MeshNetworkState.Disconnected
                             is MeshConnectionState.Disconnected -> MeshNetworkState.Disconnected
                             is MeshConnectionState.Connecting -> MeshNetworkState.Connecting
                             is MeshConnectionState.Error -> MeshNetworkState.Error(state.message)

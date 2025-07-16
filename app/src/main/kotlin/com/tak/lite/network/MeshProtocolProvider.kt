@@ -79,9 +79,7 @@ class MeshProtocolProvider @Inject constructor(
     fun cleanup() {
         try {
             val currentProtocol = _protocol.value
-            if (currentProtocol is MeshtasticAidlProtocol) {
-                currentProtocol.cleanup()
-            }
+            currentProtocol.cleanupState()
             Log.d(TAG, "Cleaned up protocol provider")
         } catch (e: Exception) {
             Log.e(TAG, "Error during cleanup", e)
@@ -101,10 +99,9 @@ class MeshProtocolProvider @Inject constructor(
             // Disconnect and clean up the old protocol
             oldProtocol.disconnectFromDevice()
             
-            // Additional cleanup for AIDL protocol
-            if (oldProtocol is MeshtasticAidlProtocol) {
-                oldProtocol.cleanup()
-            }
+            // Force cleanup state for all protocol types to ensure clean transition
+            Log.d(TAG, "Forcing cleanup state for protocol: $oldProtocolName")
+            oldProtocol.cleanupState()
             
             Log.d(TAG, "Successfully cleaned up old protocol: $oldProtocolName")
         } catch (e: Exception) {
