@@ -66,7 +66,8 @@ enum class AnnotationColor {
     @SerialName("green") GREEN,
     @SerialName("yellow") YELLOW,
     @SerialName("red") RED,
-    @SerialName("black") BLACK
+    @SerialName("black") BLACK,
+    @SerialName("white") WHITE,
 }
 
 @Serializable

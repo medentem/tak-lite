@@ -22,6 +22,7 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
+import java.util.Collections
 
 @Singleton
 class PeerLocationHistoryRepository @Inject constructor(
@@ -33,7 +34,7 @@ class PeerLocationHistoryRepository @Inject constructor(
     private val TAG = "PeerLocationHistoryRepository"
     
     // In-memory storage for peer location histories
-    private val peerHistories = mutableMapOf<String, PeerLocationHistory>()
+    private val peerHistories = Collections.synchronizedMap(mutableMapOf<String, PeerLocationHistory>())
     
     // Prediction accuracy tracking
     private val predictionAccuracyHistory = mutableListOf<PredictionAccuracyEntry>()
@@ -114,7 +115,7 @@ class PeerLocationHistoryRepository @Inject constructor(
             Log.d(TAG, "Prediction accuracy for peer $peerId: ${distance.toInt()}m error, ${timeHorizon}min horizon")
         }
         
-        val currentHistory = peerHistories[peerId] ?: PeerLocationHistory(peerId)
+        val currentHistory = peerHistories.getOrPut(peerId) { PeerLocationHistory(peerId) }
         val updatedHistory = currentHistory.addEntry(entry)
         
         // Validate the updated history has proper chronological order
@@ -123,7 +124,7 @@ class PeerLocationHistoryRepository @Inject constructor(
             // This should never happen with our fix, but log it if it does
         }
         
-        peerHistories[peerId] = updatedHistory
+        peerHistories.put(peerId, updatedHistory)
         
         // Update predictions
         updatePrediction(peerId, updatedHistory)
@@ -222,7 +223,12 @@ class PeerLocationHistoryRepository @Inject constructor(
         val currentConfig = _predictionConfig.value
         val currentModel = _selectedModel.value
         
-        peerHistories.forEach { (peerId, history) ->
+        // Create a snapshot to avoid concurrent modification
+        val peerHistoriesSnapshot = synchronized(peerHistories) {
+            peerHistories.toMap()
+        }
+        
+        peerHistoriesSnapshot.forEach { (peerId, history) ->
             updatePrediction(peerId, history, currentConfig, currentModel)
         }
     }
@@ -251,8 +257,13 @@ class PeerLocationHistoryRepository @Inject constructor(
         
         Log.d(TAG, "Updating predictions for viewport: $viewportBounds")
         
+        // Create a snapshot of peer histories to avoid concurrent modification
+        val peerHistoriesSnapshot = synchronized(peerHistories) {
+            peerHistories.toMap()
+        }
+        
         // Filter peers to only those in viewport
-        val visiblePeers = peerHistories.filter { (peerId, history) ->
+        val visiblePeers = peerHistoriesSnapshot.filter { (peerId, history) ->
             val latestEntry = history.entries.lastOrNull() ?: return@filter false
             val lat = latestEntry.latitude.toFloat()
             val lon = latestEntry.longitude.toFloat()
@@ -265,7 +276,7 @@ class PeerLocationHistoryRepository @Inject constructor(
             inBounds
         }
         
-        Log.d(TAG, "Viewport filtering: ${peerHistories.size} total peers, ${visiblePeers.size} visible")
+        Log.d(TAG, "Viewport filtering: ${peerHistoriesSnapshot.size} total peers, ${visiblePeers.size} visible")
         
         // Update predictions only for visible peers
         visiblePeers.forEach { (peerId, history) ->
@@ -277,7 +288,7 @@ class PeerLocationHistoryRepository @Inject constructor(
         val currentCones = _confidenceCones.value.toMutableMap()
         
         val removedPredictions = mutableListOf<String>()
-        peerHistories.keys.forEach { peerId ->
+        peerHistoriesSnapshot.keys.forEach { peerId ->
             if (!visiblePeers.containsKey(peerId)) {
                 if (currentPredictions.remove(peerId) != null) {
                     removedPredictions.add(peerId)
@@ -329,14 +340,16 @@ class PeerLocationHistoryRepository @Inject constructor(
      * Get location history for a specific peer
      */
     fun getPeerHistory(peerId: String): PeerLocationHistory? {
-        return peerHistories[peerId]
+        return peerHistories.get(peerId)
     }
     
     /**
      * Get all peer histories
      */
     fun getAllPeerHistories(): Map<String, PeerLocationHistory> {
-        return peerHistories.toMap()
+        return synchronized(peerHistories) {
+            peerHistories.toMap()
+        }
     }
     
     /**
@@ -384,11 +397,16 @@ class PeerLocationHistoryRepository @Inject constructor(
         val currentConfig = _predictionConfig.value
         val currentModel = _selectedModel.value
         
-        peerHistories.forEach { (peerId, history) ->
+        // Create a snapshot to avoid concurrent modification
+        val peerHistoriesSnapshot = synchronized(peerHistories) {
+            peerHistories.toMap()
+        }
+        
+        peerHistoriesSnapshot.forEach { (peerId, history) ->
             val filteredEntries = history.entries.filter { it.timestamp >= cutoffTime }
             if (filteredEntries.size != history.entries.size) {
-                peerHistories[peerId] = history.copy(entries = filteredEntries)
-                updatePrediction(peerId, peerHistories[peerId]!!, currentConfig, currentModel)
+                peerHistories.put(peerId, history.copy(entries = filteredEntries))
+                updatePrediction(peerId, peerHistories.get(peerId)!!, currentConfig, currentModel)
             }
         }
 
@@ -404,7 +422,9 @@ class PeerLocationHistoryRepository @Inject constructor(
         val modelCounts = predictions.values.groupBy { it.predictionModel }.mapValues { it.value.size }
         
         // Calculate enhanced statistics
-        val totalPeers = peerHistories.size
+        val totalPeers = synchronized(peerHistories) {
+            peerHistories.size
+        }
         val peersWithPredictions = predictions.size
         val predictionSuccessRate = if (totalPeers > 0) peersWithPredictions.toDouble() / totalPeers else 0.0
         
@@ -456,7 +476,9 @@ class PeerLocationHistoryRepository @Inject constructor(
      * Calculate data quality metrics
      */
     private fun calculateDataQualityMetrics(): DataQualityMetrics {
-        val histories = peerHistories.values.toList()
+        val histories = synchronized(peerHistories) {
+            peerHistories.values.toList()
+        }
         if (histories.isEmpty()) {
             return DataQualityMetrics(0.0, 0.0, 0, 0.0)
         }
@@ -533,7 +555,9 @@ class PeerLocationHistoryRepository @Inject constructor(
      * Generate model recommendation based on current data patterns
      */
     private fun generateModelRecommendation(): String {
-        val histories = peerHistories.values.toList()
+        val histories = synchronized(peerHistories) {
+            peerHistories.values.toList()
+        }
         if (histories.isEmpty()) return "No data available"
         
         val avgSpeed = histories.mapNotNull { history ->

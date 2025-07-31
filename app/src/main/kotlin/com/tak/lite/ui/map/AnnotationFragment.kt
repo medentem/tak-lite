@@ -16,6 +16,7 @@ import com.tak.lite.R
 import com.tak.lite.databinding.DialogRestoreAnnotationsBinding
 import com.tak.lite.databinding.FragmentAnnotationBinding
 import com.tak.lite.model.AnnotationColor
+import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PointShape
 import com.tak.lite.viewmodel.AnnotationUiState
 import com.tak.lite.viewmodel.AnnotationViewModel
@@ -23,6 +24,7 @@ import com.tak.lite.viewmodel.MeshNetworkViewModel
 import com.tak.lite.viewmodel.MessageViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
@@ -41,6 +43,11 @@ class AnnotationFragment : Fragment() {
     private var currentShape: PointShape = PointShape.CIRCLE
     private var isDrawing = false
     private lateinit var predictionOverlayView: PredictionOverlayView
+    
+    // POI tap detection state
+    private var poiTapDownTime: Long? = null
+    private var poiTapDownPos: PointF? = null
+    private var poiTapCandidate: String? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -83,7 +90,8 @@ class AnnotationFragment : Fragment() {
                 messageViewModel = messageViewModel,
                 fanMenuView = fanMenuView,
                 annotationOverlayView = annotationOverlayView,
-                onAnnotationChanged = { annotationController.renderAllAnnotations(mapLibreMap) }
+                onAnnotationChanged = { annotationController.renderAllAnnotations(mapLibreMap) },
+                mapLibreMap
             )
             annotationOverlayView.annotationController = annotationController
 
@@ -106,6 +114,7 @@ class AnnotationFragment : Fragment() {
                 annotationController.renderAllAnnotations(mapLibreMap)
             }
             annotationController.mapController = mapController
+            // Set up custom touch listener for POI tap detection
             mapLibreMap.addOnMapClickListener { latLng ->
                 if (annotationController.isLineDrawingMode) {
                     annotationController.tempLinePoints.add(latLng)
@@ -113,14 +122,41 @@ class AnnotationFragment : Fragment() {
                     annotationController.updateLineToolConfirmState()
                     true
                 } else {
-                    false
+                    // Native peer dot hit detection
+                    val projection = mapLibreMap.projection
+                    val screenPoint = projection.toScreenLocation(latLng)
+                    val peerFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, "peer-dots-layer")
+                    val peerFeature = peerFeatures.firstOrNull { it.getStringProperty("peerId") != null }
+                    if (peerFeature != null) {
+                        val peerId = peerFeature.getStringProperty("peerId")
+                        // Show peer popover (async, as before)
+                        viewLifecycleOwner.lifecycleScope.launch {
+                            val peerName: String? = meshNetworkViewModel.getPeerName(peerId)
+                            val peerLastHeard: Long? = meshNetworkViewModel.getPeerLastHeard(peerId)
+                            annotationOverlayView.showPeerPopover(peerId, peerName, peerLastHeard)
+                        }
+                        true
+                    } else {
+                        // Native POI hit detection
+                        val poiLayerId = if (annotationController.clusteringConfig.enablePoiClustering) {
+                            com.tak.lite.ui.map.ClusteredLayerManager.POI_DOTS_LAYER
+                        } else {
+                            "poi-layer"
+                        }
+                        val poiFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, poiLayerId)
+                        Log.d("AnnotationFragment", "POI features found: ${poiFeatures.size}")
+                        val poiFeature = poiFeatures.firstOrNull { it.getStringProperty("poiId") != null }
+                        if (poiFeature != null) {
+                            val poiId = poiFeature.getStringProperty("poiId")
+                            Log.d("AnnotationFragment", "POI tapped: $poiId")
+                            // For single taps, show POI label instead of edit menu
+                            annotationController.showPoiLabel(poiId, screenPoint)
+                            true
+                        } else {
+                            false
+                        }
+                    }
                 }
-            }
-            mapLibreMap.addOnCameraMoveListener {
-                annotationController.syncAnnotationOverlayView(mapLibreMap)
-                annotationOverlayView.setZoom(mapLibreMap.cameraPosition.zoom.toFloat())
-                predictionOverlayView.setZoom(mapLibreMap.cameraPosition.zoom.toFloat())
-                predictionOverlayView.setProjection(mapLibreMap.projection)
             }
             
             // Add viewport update listener for prediction optimization
@@ -131,17 +167,47 @@ class AnnotationFragment : Fragment() {
                 }
             }
             
+            // === PERFORMANCE OPTIMIZATION: Throttled Camera Move Handling ===
+            var lastCameraUpdate = 0L
+            val CAMERA_UPDATE_THROTTLE_MS = 50L // 20fps for heavy operations
+            
+            mapLibreMap.addOnCameraMoveListener {
+                val now = System.currentTimeMillis()
+                val shouldUpdateHeavy = now - lastCameraUpdate >= CAMERA_UPDATE_THROTTLE_MS
+                
+                // IMMEDIATE: Critical sync operations (no throttling)
+                annotationOverlayView.setZoom(mapLibreMap.cameraPosition.zoom.toFloat())
+                predictionOverlayView.setZoom(mapLibreMap.cameraPosition.zoom.toFloat())
+                predictionOverlayView.setProjection(mapLibreMap.projection)
+                
+                // THROTTLED: Heavy operations that can be delayed
+                if (shouldUpdateHeavy) {
+                    lastCameraUpdate = now
+                    annotationController.syncAnnotationOverlayView(mapLibreMap)
+                }
+            }
+            
+            // === NATIVE CLUSTERING SETUP ===
             annotationController.setupAnnotationOverlay(mapLibreMap)
             predictionOverlayView.setProjection(mapLibreMap.projection)
             annotationController.setupPoiLongPressListener()
-            annotationController.setupMapLongPress(mapLibreMap)
+
+            // Add long press listener for POI annotations and new POI creation
+            mapLibreMap.addOnMapLongClickListener { latLng ->
+                annotationController.handleMapLongPress(latLng, mapLibreMap)
+            }
 
             // Now safe to launch these:
+            // === ENHANCED: Single data flow for peer locations with native clustering ===
             viewLifecycleOwner.lifecycleScope.launch {
-                meshNetworkViewModel.peerLocations.collectLatest { locations ->
-                    Log.d("AnnotationFragment", "Updating peer locations in overlay: ${locations.size} peers, simulated=${locations.keys.count { it.startsWith("sim_peer_") }}")
-                    annotationOverlayView.updatePeerLocations(locations)
+                meshNetworkViewModel.peerLocations.debounce(500).collectLatest { locations ->
+                    Log.d("AnnotationFragment", "Updating peer locations with native clustering: ${locations.size} peers, simulated=${locations.keys.count { it.startsWith("sim_peer_") }}")
+                    // Update prediction overlay (still needed for predictions)
                     predictionOverlayView.updatePeerLocations(locations)
+                    // Update annotation overlay view (needed for getCurrentPeerLocations)
+                    annotationOverlayView.updatePeerLocations(locations)
+                    // Update native clustered peer dots (single source of truth)
+                    annotationController.updatePeerDotsOnMap(mapController?.mapLibreMap, locations)
                 }
             }
             viewLifecycleOwner.lifecycleScope.launch {
@@ -185,12 +251,23 @@ class AnnotationFragment : Fragment() {
 
             annotationOverlayView.lassoSelectionListener = object : AnnotationOverlayView.LassoSelectionListener {
                 override fun onLassoSelectionLongPress(selected: List<com.tak.lite.model.MapAnnotation>, screenPosition: android.graphics.PointF) {
-                    if (selected.isNotEmpty()) {
+                    // Get POIs that are also in the lasso area
+                    val lassoPoints = annotationOverlayView.getLassoPoints()
+                    val mapLibreMap = mapController?.mapLibreMap
+                    val poiAnnotations = if (mapLibreMap != null) {
+                        annotationController.findPoisInLassoArea(lassoPoints, mapLibreMap)
+                    } else {
+                        emptyList()
+                    }
+                    val allSelected = selected.toMutableList()
+                    allSelected.addAll(poiAnnotations)
+                    
+                    if (allSelected.isNotEmpty()) {
                         annotationOverlayView.showLassoMenu()
                         annotationController.showBulkFanMenu(screenPosition) { action ->
                             when (action) {
                                 is BulkEditAction.ChangeColor -> {
-                                    selected.forEach {
+                                    allSelected.forEach {
                                         when (it) {
                                             is com.tak.lite.model.MapAnnotation.PointOfInterest -> viewModel.updatePointOfInterest(it.id, newColor = action.color)
                                             is com.tak.lite.model.MapAnnotation.Line -> viewModel.updateLine(it.id, newColor = action.color)
@@ -199,10 +276,10 @@ class AnnotationFragment : Fragment() {
                                     }
                                 }
                                 is BulkEditAction.SetExpiration -> {
-                                    selected.forEach { viewModel.setAnnotationExpiration(it.id, System.currentTimeMillis() + action.millis) }
+                                    allSelected.forEach { viewModel.setAnnotationExpiration(it.id, System.currentTimeMillis() + action.millis) }
                                 }
                                 is BulkEditAction.Delete -> {
-                                    viewModel.removeAnnotationsBulk(selected.map { it.id })
+                                    viewModel.removeAnnotationsBulk(allSelected.map { it.id })
                                 }
                             }
                             annotationOverlayView.hideLassoMenu()
@@ -235,7 +312,8 @@ class AnnotationFragment : Fragment() {
     }
 
     private fun updateUI(state: AnnotationUiState) {
-        annotationOverlayView.updateAnnotations(state.annotations)
+        val nonPoiAnnotations = state.annotations.filterNot { it is MapAnnotation.PointOfInterest }
+        annotationOverlayView.updateAnnotations(nonPoiAnnotations)
         currentColor = state.selectedColor
         currentShape = state.selectedShape
         isDrawing = state.isDrawing

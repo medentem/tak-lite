@@ -4,12 +4,12 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import androidx.core.content.ContextCompat
 import android.graphics.PointF
 import android.util.AttributeSet
 import android.util.Log
 import android.view.MotionEvent
 import android.view.View
+import androidx.core.content.ContextCompat
 import com.tak.lite.R
 import com.tak.lite.model.AnnotationColor
 import com.tak.lite.model.PointShape
@@ -290,6 +290,7 @@ class FanMenuView @JvmOverloads constructor(
                 AnnotationColor.YELLOW -> Color.parseColor("#FBC02D")
                 AnnotationColor.RED -> Color.parseColor("#F44336")
                 AnnotationColor.BLACK -> Color.BLACK
+                AnnotationColor.WHITE -> Color.WHITE
             }
             style = Paint.Style.FILL
         }

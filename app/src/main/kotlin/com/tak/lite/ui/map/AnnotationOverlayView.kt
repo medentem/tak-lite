@@ -12,6 +12,7 @@ import android.graphics.Typeface
 import android.os.Handler
 import android.os.Looper
 import android.util.AttributeSet
+import android.util.Log
 import android.view.MotionEvent
 import android.view.View
 import androidx.core.content.ContextCompat
@@ -52,7 +53,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
 
     private var projection: Projection? = null
     private var annotations: List<MapAnnotation> = emptyList()
-    private var currentZoom: Float = 0f
+    var currentZoom: Float = 0f
     private var tempLinePoints: List<LatLng>? = null
     private var lastTimerUpdate: Long = 0
     private var timerAngle: Float = 0f
@@ -60,8 +61,8 @@ class AnnotationOverlayView @JvmOverloads constructor(
     private var peerClusters: List<PeerCluster> = emptyList()
     private val clusterThreshold = 100f // pixels
     private val minZoomForClustering = 14f // zoom level below which clustering occurs
-    private val minZoomForPeerClustering = 10f // zoom level below which peer clustering occurs (more zoomed out)
-    
+    private val minZoomForPeerClustering = ClusteringConfig.getDefault().peerClusterMaxZoom // zoom level below which peer clustering occurs (more zoomed out)
+
     // Dynamic clustering threshold that increases as you zoom out
     private fun getDynamicClusterThreshold(): Float {
         return when {
@@ -75,14 +76,10 @@ class AnnotationOverlayView @JvmOverloads constructor(
     // --- PERFORMANCE OPTIMIZATION 1: Viewport Culling ---
     private var visibleBounds: RectF? = null
     private var lastViewportUpdate: Long = 0
-    private val VIEWPORT_UPDATE_THROTTLE_MS = 100L // Update viewport max every 100ms
+    private val VIEWPORT_UPDATE_THROTTLE_MS = 200L // Update viewport max every 200ms (increased from 100ms)
 
     // --- PERFORMANCE OPTIMIZATION 2: Optimized Clustering ---
-    private val clusteringGrid = mutableMapOf<String, MutableList<Pair<MapAnnotation, PointF>>>()
-    private val peerClusteringGrid = mutableMapOf<String, MutableList<Pair<String, PointF>>>()
     private var lastClusteringUpdate: Long = 0
-    private var lastPeerClusteringUpdate: Long = 0
-    private val CLUSTERING_UPDATE_THROTTLE_MS = 200L // Update clustering max every 200ms
 
     // --- PERFORMANCE OPTIMIZATION 3: Timer Optimization ---
     private var hasVisibleTimerAnnotations: Boolean = false
@@ -103,7 +100,8 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     invalidate()
                 }
             }
-            timerHandler.postDelayed(this, 16) // ~60fps
+            // === PERFORMANCE OPTIMIZATION: Reduce timer frequency to 30fps ===
+            timerHandler.postDelayed(this, 33) // ~30fps instead of 60fps
         }
     }
 
@@ -116,8 +114,6 @@ class AnnotationOverlayView @JvmOverloads constructor(
     var annotationController: AnnotationController? = null
     private var longPressHandler: Handler? = null
     private var longPressRunnable: Runnable? = null
-    private var longPressCandidate: MapAnnotation.PointOfInterest? = null
-    private var longPressDownPos: PointF? = null
     private var longPressLineCandidate: MapAnnotation.Line? = null
     private var longPressLineDownPos: PointF? = null
     private var longPressPeerCandidate: String? = null
@@ -130,20 +126,17 @@ class AnnotationOverlayView @JvmOverloads constructor(
     private var peerLocations: Map<String, PeerLocationEntry> = emptyMap()
     private var lastPeerUpdateTime: Long = 0
     private val PEER_UPDATE_THROTTLE_MS = 1000L // 1 second minimum between updates
-    
+
     fun updatePeerLocations(locations: Map<String, PeerLocationEntry>) {
         val now = System.currentTimeMillis()
         if (now - lastPeerUpdateTime < PEER_UPDATE_THROTTLE_MS) return
-        
+
         // Only update if locations actually changed
         if (peerLocations != locations) {
             peerLocations = locations
             lastPeerUpdateTime = now
-            // Force peer clustering update when locations change
-            if (currentZoom < minZoomForPeerClustering) {
-                lastPeerClusteringUpdate = 0 // Force peer clustering update
-            }
-            invalidate()
+            // === NATIVE CLUSTERING: Peer clustering now handled by MapLibre GL layer ===
+            // No need to trigger clustering updates for peers anymore
         }
     }
 
@@ -152,6 +145,11 @@ class AnnotationOverlayView @JvmOverloads constructor(
     fun setConnectedNodeId(nodeId: String?) {
         this.connectedNodeId = nodeId
         invalidate()
+    }
+
+    // Getter for current peer locations
+    fun getCurrentPeerLocations(): Map<String, PeerLocationEntry> {
+        return peerLocations
     }
 
     // Helper method to check if a peer location is stale
@@ -221,8 +219,9 @@ class AnnotationOverlayView @JvmOverloads constructor(
 
     // --- Annotation label state for quick tap ---
     private var labelPoiIdToShow: String? = null
+    private var labelPoiPosition: PointF? = null
     private var labelDismissHandler: Handler? = null
-    private val LABEL_DISPLAY_DURATION = 8000L // 3 seconds
+    private val LABEL_DISPLAY_DURATION = 8000L // 8 seconds
     // --- Peer popover state ---
     private var peerPopoverPeerId: String? = null
     private var peerPopoverPeerName: String? = null
@@ -268,47 +267,25 @@ class AnnotationOverlayView @JvmOverloads constructor(
     }
 
     fun updateAnnotations(annotations: List<MapAnnotation>) {
-        android.util.Log.d("AnnotationOverlayView", "updateAnnotations called: ${annotations.map { it.id }}")
+        Log.d("PoiClusterDebug", "updateAnnotations: called with ${annotations.size} annotations (${annotations.count { it is MapAnnotation.PointOfInterest }} POIs)")
         this.annotations = annotations
-        // Force clustering update when annotations change
-        lastClusteringUpdate = 0
-        invalidate()
+        lastClusteringUpdate = 0 // Force annotation cluster update
     }
 
     fun setZoom(zoom: Float) {
-        this.currentZoom = zoom
-        if (zoom < minZoomForClustering) {
-            updateClusters()
-        } else {
-            clusters = emptyList()
-        }
-        if (zoom < minZoomForPeerClustering) {
-            updatePeerClusters()
-        } else {
-            peerClusters = emptyList()
-        }
-        // Force viewport update on zoom change
-        visibleBounds = null
-        invalidate()
+        currentZoom = zoom
+        lastClusteringUpdate = 0 // Force annotation cluster update
+
+        // === PERFORMANCE OPTIMIZATION: Use batched invalidate ===
+        scheduleInvalidate()
     }
 
     fun setTempLinePoints(points: List<LatLng>?) {
         tempLinePoints = points
         invalidate()
     }
-    
-    /**
-     * Force a viewport update (useful when map bounds change significantly)
-     */
-    fun forceViewportUpdate() {
-        visibleBounds = null
-        lastViewportUpdate = 0
-        lastClusteringUpdate = 0
-        invalidate()
-    }
 
     // --- PERFORMANCE OPTIMIZATION 1: Viewport Culling Methods ---
-    
     /**
      * Get the current visible map bounds with margin for annotations partially off-screen
      */
@@ -374,7 +351,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
         
         return visible
     }
-    
+
     /**
      * Get only peer locations that are visible in the current viewport
      */
@@ -387,7 +364,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
             val inBounds = lat >= bounds.bottom && lat <= bounds.top && lon >= bounds.left && lon <= bounds.right
             inBounds
         }
-        
+
         // Enhanced debug logging for peer visibility
         if (peerLocations.isNotEmpty()) {
             android.util.Log.d("AnnotationOverlayView", "=== PEER VIEWPORT CULLING DEBUG ===")
@@ -403,7 +380,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
             }
             android.util.Log.d("AnnotationOverlayView", "=== END PEER VIEWPORT CULLING DEBUG ===")
         }
-        
+
         return visible
     }
     
@@ -440,329 +417,17 @@ class AnnotationOverlayView @JvmOverloads constructor(
         return hasTimers
     }
 
-    // --- PERFORMANCE OPTIMIZATION 2: Optimized Clustering Algorithm ---
-    
-    private fun updateClusters() {
-        val now = System.currentTimeMillis()
-        
-        // Throttle clustering updates
-        if (now - lastClusteringUpdate < CLUSTERING_UPDATE_THROTTLE_MS) {
-            return
-        }
-        
-        if (projection == null) return
-        
-        // Use viewport culling for clustering
-        val visibleAnnotations = getVisibleAnnotations()
-        
-        // Clear previous grid
-        clusteringGrid.clear()
-        
-        // Single pass to assign annotations to grid cells
-        val screenPoints = visibleAnnotations.mapNotNull { annotation ->
-            val latLng = annotation.toMapLibreLatLng()
-            projection?.toScreenLocation(latLng)?.let { point ->
-                Pair(annotation, PointF(point.x, point.y))
-            }
-        }
-        
-        // Use dynamic threshold for grid assignment
-        val dynamicThreshold = getDynamicClusterThreshold()
-        
-        // Assign to grid cells
-        screenPoints.forEach { (annotation, point) ->
-            val gridX = (point.x / dynamicThreshold).toInt()
-            val gridY = (point.y / dynamicThreshold).toInt()
-            val cellKey = "$gridX,$gridY"
-            
-            clusteringGrid.getOrPut(cellKey) { mutableListOf() }.add(Pair(annotation, point))
-        }
-        
-        val newClusters = mutableListOf<AnnotationCluster>()
-        val processed = mutableSetOf<MapAnnotation>()
-        
-        // Process each grid cell
-        clusteringGrid.values.forEach { cellAnnotations ->
-            if (cellAnnotations.size > 1) {
-                // Create cluster from this cell
-                val annotations = cellAnnotations.map { it.first }
-                val points = cellAnnotations.map { it.second }
-                val center = calculateClusterCenter(points)
-                val bounds = calculateClusterBounds(points)
-                
-                center?.let {
-                    newClusters.add(AnnotationCluster(it, annotations, bounds))
-                }
-                processed.addAll(annotations)
-            }
-        }
-        
-        // Simplified clustering: only merge cells that are directly adjacent and have overlapping annotations
-        // This prevents unstable cluster configurations when panning
-        val processedCells = mutableSetOf<String>()
-        
-        clusteringGrid.keys.sorted().forEach { cellKey ->
-            if (cellKey in processedCells) return@forEach
-            
-            val (gridX, gridY) = cellKey.split(",").let { it[0].toInt() to it[1].toInt() }
-            val currentCell = clusteringGrid[cellKey] ?: return@forEach
-            
-            // Only check the 4 direct neighbors (not diagonal) for more stable clustering
-            val neighbors = listOf(
-                "${gridX-1},$gridY", // left
-                "${gridX+1},$gridY", // right  
-                "$gridX,${gridY-1}", // top
-                "$gridX,${gridY+1}"  // bottom
-            )
-            
-            val cellsToMerge = mutableListOf(currentCell)
-            val annotationsToMerge = mutableSetOf<MapAnnotation>()
-            annotationsToMerge.addAll(currentCell.map { it.first })
-            processedCells.add(cellKey)
-            
-            // Check each neighbor
-            neighbors.forEach { neighborKey ->
-                if (neighborKey in processedCells) return@forEach
-                
-                val neighborCell = clusteringGrid[neighborKey] ?: return@forEach
-                
-                // Only merge if there are annotations within dynamic threshold distance
-                var shouldMerge = false
-                for ((_, point1) in currentCell) {
-                    for ((_, point2) in neighborCell) {
-                        val distance = hypot((point1.x - point2.x).toDouble(), (point1.y - point2.y).toDouble())
-                        if (distance < dynamicThreshold) {
-                            shouldMerge = true
-                            break
-                        }
-                    }
-                    if (shouldMerge) break
-                }
-                
-                if (shouldMerge) {
-                    cellsToMerge.add(neighborCell)
-                    annotationsToMerge.addAll(neighborCell.map { it.first })
-                    processedCells.add(neighborKey)
-                }
-            }
-            
-            // Create cluster if we have multiple cells or multiple annotations in a single cell
-            if (cellsToMerge.size > 1 || annotationsToMerge.size > 1) {
-                val allPoints = cellsToMerge.flatMap { it.map { pair -> pair.second } }
-                val center = calculateClusterCenter(allPoints)
-                val bounds = calculateClusterBounds(allPoints)
-                
-                center?.let {
-                    newClusters.add(AnnotationCluster(it, annotationsToMerge.toList(), bounds))
-                }
-            }
-        }
-        
-        clusters = newClusters
-        lastClusteringUpdate = now
-        
-        // Log clustering performance metrics
-        if (visibleAnnotations.size > 50) {
-            android.util.Log.d("AnnotationOverlayView", "Clustering: ${visibleAnnotations.size} visible annotations, ${newClusters.size} clusters created")
-        }
-    }
-    
-    private fun calculateClusterCenter(points: List<PointF>): LatLng? {
-        if (points.isEmpty()) return null
-        
-        val centerX = points.map { it.x }.average().toFloat()
-        val centerY = points.map { it.y }.average().toFloat()
-        val centerPointF = PointF(centerX, centerY)
-        
-        return projection?.fromScreenLocation(centerPointF)
-    }
-    
-    private fun calculateClusterBounds(points: List<PointF>): RectF {
-        if (points.isEmpty()) return RectF()
-        
-        val minX = points.minOf { it.x }
-        val maxX = points.maxOf { it.x }
-        val minY = points.minOf { it.y }
-        val maxY = points.maxOf { it.y }
-        
-        return RectF(minX, minY, maxX, maxY)
-    }
-    
-
-
-    // --- PERFORMANCE OPTIMIZATION 2: Optimized Peer Clustering Algorithm ---
-    
-    private fun updatePeerClusters() {
-        val now = System.currentTimeMillis()
-        
-        // Throttle clustering updates
-        if (now - lastPeerClusteringUpdate < CLUSTERING_UPDATE_THROTTLE_MS) {
-            android.util.Log.d("AnnotationOverlayView", "Peer clustering throttled, skipping update")
-            return
-        }
-        
-        if (projection == null) {
-            android.util.Log.d("AnnotationOverlayView", "Projection is null, skipping peer clustering")
-            return
-        }
-        
-        // Use viewport culling for clustering
-        val visiblePeers = getVisiblePeerLocations()
-        android.util.Log.d("AnnotationOverlayView", "updatePeerClusters: ${visiblePeers.size} visible peers out of ${peerLocations.size} total")
-        
-        // Clear previous grid
-        peerClusteringGrid.clear()
-        
-        // Single pass to assign peers to grid cells
-        val screenPoints = visiblePeers.mapNotNull { (peerId, entry) ->
-            val latLng = LatLng(entry.latitude, entry.longitude)
-            projection?.toScreenLocation(latLng)?.let { point ->
-                Pair(peerId, PointF(point.x, point.y))
-            }
-        }
-        
-        android.util.Log.d("AnnotationOverlayView", "updatePeerClusters: ${screenPoints.size} peers converted to screen points")
-        
-        // Use dynamic threshold for grid assignment
-        val dynamicThreshold = getDynamicClusterThreshold()
-        android.util.Log.d("AnnotationOverlayView", "updatePeerClusters: using dynamic threshold ${dynamicThreshold}px at zoom level $currentZoom")
-        
-        // Assign to grid cells
-        screenPoints.forEach { (peerId, point) ->
-            val gridX = (point.x / dynamicThreshold).toInt()
-            val gridY = (point.y / dynamicThreshold).toInt()
-            val cellKey = "$gridX,$gridY"
-            
-            peerClusteringGrid.getOrPut(cellKey) { mutableListOf() }.add(Pair(peerId, point))
-        }
-        
-        android.util.Log.d("AnnotationOverlayView", "updatePeerClusters: ${peerClusteringGrid.size} grid cells created")
-        
-        val newPeerClusters = mutableListOf<PeerCluster>()
-        val processedPeers = mutableSetOf<String>() // Track which peers have been assigned to clusters
-        val processedCells = mutableSetOf<String>() // Track which cells have been processed
-        
-        // Single-phase clustering: process cells and merge neighbors in one pass
-        peerClusteringGrid.keys.sorted().forEach { cellKey ->
-            if (cellKey in processedCells) return@forEach
-            
-            val (gridX, gridY) = cellKey.split(",").let { it[0].toInt() to it[1].toInt() }
-            val currentCell = peerClusteringGrid[cellKey] ?: return@forEach
-            
-            // Skip cells that only have already-processed peers
-            val unprocessedPeers = currentCell.filter { (peerId, _) -> peerId !in processedPeers }
-            if (unprocessedPeers.isEmpty()) {
-                processedCells.add(cellKey)
-                return@forEach
-            }
-            
-            // Start building a cluster from this cell
-            val cellsToMerge = mutableListOf(currentCell)
-            val peersToMerge = mutableSetOf<String>()
-            val pointsToMerge = mutableListOf<PointF>()
-            
-            // Add unprocessed peers from current cell
-            unprocessedPeers.forEach { (peerId, point) ->
-                peersToMerge.add(peerId)
-                pointsToMerge.add(point)
-            }
-            
-            processedCells.add(cellKey)
-            
-            // Check neighbors for additional peers to merge
-            val neighbors = listOf(
-                "${gridX-1},$gridY", // left
-                "${gridX+1},$gridY", // right  
-                "$gridX,${gridY-1}", // top
-                "$gridX,${gridY+1}"  // bottom
-            )
-            
-            neighbors.forEach { neighborKey ->
-                if (neighborKey in processedCells) return@forEach
-                
-                val neighborCell = peerClusteringGrid[neighborKey] ?: return@forEach
-                
-                // Check if any unprocessed peers in neighbor cell are within threshold
-                val neighborUnprocessedPeers = neighborCell.filter { (peerId, _) -> peerId !in processedPeers }
-                if (neighborUnprocessedPeers.isEmpty()) return@forEach
-                
-                var shouldMerge = false
-                for ((_, point1) in unprocessedPeers) {
-                    for ((_, point2) in neighborUnprocessedPeers) {
-                        val distance = hypot((point1.x - point2.x).toDouble(), (point1.y - point2.y).toDouble())
-                        if (distance < dynamicThreshold) {
-                            shouldMerge = true
-                            break
-                        }
-                    }
-                    if (shouldMerge) break
-                }
-                
-                if (shouldMerge) {
-                    cellsToMerge.add(neighborCell)
-                    neighborUnprocessedPeers.forEach { (peerId, point) ->
-                        peersToMerge.add(peerId)
-                        pointsToMerge.add(point)
-                    }
-                    processedCells.add(neighborKey)
-                }
-            }
-            
-            // Create cluster if we have multiple peers
-            if (peersToMerge.size > 1) {
-                val peerEntries = peersToMerge.map { peerId -> 
-                    Pair(peerId, visiblePeers[peerId]!!) 
-                }
-                val center = calculateClusterCenter(pointsToMerge)
-                val bounds = calculateClusterBounds(pointsToMerge)
-                
-                center?.let {
-                    newPeerClusters.add(PeerCluster(it, peerEntries, bounds))
-                    // Mark all peers in this cluster as processed
-                    processedPeers.addAll(peersToMerge)
-                }
-            }
-        }
-        
-        peerClusters = newPeerClusters
-        lastPeerClusteringUpdate = now
-        
-        // Log clustering performance metrics
-        android.util.Log.d("AnnotationOverlayView", "Peer clustering final result: ${visiblePeers.size} visible peers, ${newPeerClusters.size} clusters created")
-        if (newPeerClusters.isNotEmpty()) {
-            newPeerClusters.forEachIndexed { index, cluster ->
-                android.util.Log.d("AnnotationOverlayView", "Cluster $index: ${cluster.peers.size} peers at ${cluster.center}")
-            }
-        }
-        
-        // Verify no duplicate peers across clusters
-        val allPeerIds = newPeerClusters.flatMap { it.peers.map { peer -> peer.first } }
-        val uniquePeerIds = allPeerIds.toSet()
-        if (allPeerIds.size != uniquePeerIds.size) {
-            android.util.Log.w("AnnotationOverlayView", "WARNING: Duplicate peers detected in clusters! Total: ${allPeerIds.size}, Unique: ${uniquePeerIds.size}")
-        } else {
-            android.util.Log.d("AnnotationOverlayView", "✓ No duplicate peers in clusters")
-        }
-    }
-    
-
-
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         if (projection == null) return
+        
+        // Debug logging for POI label drawing
+        if (labelPoiIdToShow != null) {
+            Log.d("AnnotationOverlayView", "onDraw: labelPoiIdToShow=$labelPoiIdToShow, labelPoiPosition=$labelPoiPosition")
+        }
 
-        // --- PERFORMANCE OPTIMIZATION 3: Check for timer annotations ---
+        // --- PERFORMANCE OPTIMIZATION: Check for timer annotations ---
         checkForVisibleTimerAnnotations()
-
-        // Update clusters if needed
-        if (currentZoom < minZoomForClustering) {
-            android.util.Log.d("AnnotationOverlayView", "Updating annotation clusters at zoom level $currentZoom")
-            updateClusters()
-        }
-        if (currentZoom < minZoomForPeerClustering) {
-            android.util.Log.d("AnnotationOverlayView", "Updating peer clusters at zoom level $currentZoom")
-            updatePeerClusters()
-        }
 
         android.util.Log.d("AnnotationOverlayView", "onDraw: deviceLocation=$deviceLocation, phoneLocation=$phoneLocation")
 
@@ -808,20 +473,10 @@ class AnnotationOverlayView @JvmOverloads constructor(
                         } else if (distance <= extremeDistance) {
                             // Draw direction indicator instead of full line
                             drawDeviceDirectionIndicator(canvas, devicePt, phonePt, distance)
-                        } else {
-                            android.util.Log.d("AnnotationOverlayView", "onDraw: line too long (${distance.toInt()}px > ${extremeDistance.toInt()}px), skipping")
                         }
-                    } else {
-                        android.util.Log.d("AnnotationOverlayView", "onDraw: phonePt is null, cannot draw line")
                     }
-                } else {
-                    android.util.Log.d("AnnotationOverlayView", "onDraw: phoneLocation is null, not drawing line")
                 }
-            } else {
-                android.util.Log.d("AnnotationOverlayView", "onDraw: devicePt is null, cannot draw dot or line")
             }
-        } else {
-            android.util.Log.d("AnnotationOverlayView", "onDraw: deviceLocation is null, not drawing dot or line")
         }
 
         // Draw temporary polyline for line drawing
@@ -847,51 +502,6 @@ class AnnotationOverlayView @JvmOverloads constructor(
                         style = Paint.Style.FILL
                     }
                     canvas.drawCircle(pointF.x, pointF.y, 18f, dotPaint)
-                }
-            }
-        }
-
-        // Draw peer location dots with clustering support
-        if (currentZoom < minZoomForPeerClustering) {
-            android.util.Log.d("AnnotationOverlayView", "Drawing peer clusters: ${peerClusters.size} clusters")
-            // Draw peer clusters
-            peerClusters.forEach { cluster ->
-                val point = projection?.toScreenLocation(cluster.center)
-                if (point != null) {
-                    val pointF = PointF(point.x, point.y)
-                    drawPeerCluster(canvas, pointF, cluster)
-                }
-            }
-
-            // Draw non-clustered peers
-            val clusteredPeerIds = peerClusters.flatMap { it.peers.map { peer -> peer.first } }.toSet()
-            val visiblePeers = getVisiblePeerLocations()
-            android.util.Log.d("AnnotationOverlayView", "Drawing ${visiblePeers.size}/${peerLocations.size} peers with clustering (${peerClusters.size} clusters)")
-            visiblePeers.filter { (peerId, _) -> peerId !in clusteredPeerIds }.forEach { (_, entry) ->
-                val latLng = LatLng(entry.latitude, entry.longitude)
-                val point = projection?.toScreenLocation(latLng)
-                if (point != null) {
-                    val pointF = PointF(point.x, point.y)
-                    drawPeerLocationDot(canvas, pointF, entry)
-                } else {
-                    android.util.Log.w("AnnotationOverlayView", "Peer at lat=${entry.latitude}, lon=${entry.longitude} could not be converted to screen coordinates")
-                }
-            }
-        } else {
-            // Draw all peers normally without clustering
-            val visiblePeers = getVisiblePeerLocations()
-            android.util.Log.d("AnnotationOverlayView", "Drawing ${visiblePeers.size}/${peerLocations.size} peers (no clustering)")
-            visiblePeers.values.forEach { entry ->
-                val latLng = LatLng(entry.latitude, entry.longitude)
-                val point = projection?.toScreenLocation(latLng)
-                if (point != null) {
-                    val pointF = PointF(point.x, point.y)
-                    // Debug: log screen coordinates and check if on-screen
-                    val onScreen = pointF.x >= -50 && pointF.x <= width + 50 && pointF.y >= -50 && pointF.y <= height + 50
-                    android.util.Log.d("AnnotationOverlayView", "Peer at lat=${entry.latitude}, lon=${entry.longitude} -> screen=(${pointF.x}, ${pointF.y}), onScreen=$onScreen")
-                    drawPeerLocationDot(canvas, pointF, entry)
-                } else {
-                    android.util.Log.w("AnnotationOverlayView", "Peer at lat=${entry.latitude}, lon=${entry.longitude} could not be converted to screen coordinates")
                 }
             }
         }
@@ -1034,6 +644,25 @@ class AnnotationOverlayView @JvmOverloads constructor(
                 drawPeerPopover(canvas, peerId, peerPopoverPeerName, peerPopoverPeerLastHeard, pos)
             }
         }
+
+        // Draw POI label if active
+        labelPoiIdToShow?.let { poiId ->
+            labelPoiPosition?.let { position ->
+                Log.d("AnnotationOverlayView", "Drawing POI label at position: $position")
+                // Get POI data from the annotation controller instead of overlay annotations
+                annotationController?.let { controller ->
+                    val poi = controller.getPoiById(poiId)
+                    if (poi != null) {
+                        Log.d("AnnotationOverlayView", "Found POI from controller, drawing label")
+                        drawPoiLabel(canvas, position, poi)
+                    } else {
+                        Log.e("AnnotationOverlayView", "POI not found from controller: $poiId")
+                    }
+                } ?: run {
+                    Log.e("AnnotationOverlayView", "Annotation controller is null")
+                }
+            }
+        }
     }
 
     private fun drawPoint(canvas: Canvas, point: PointF, annotation: MapAnnotation.PointOfInterest) {
@@ -1095,10 +724,6 @@ class AnnotationOverlayView @JvmOverloads constructor(
         // Draw timer indicator if annotation has expiration time
         annotation.expirationTime?.let {
             drawTimerIndicator(canvas, point, annotation.color.toColor(), annotation)
-        }
-        // Draw label if this is the tapped POI
-        if (annotation.id == labelPoiIdToShow) {
-            drawPoiLabel(canvas, point, annotation)
         }
     }
 
@@ -1371,6 +996,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
             AnnotationColor.YELLOW -> Color.parseColor("#FBC02D")
             AnnotationColor.RED -> Color.RED
             AnnotationColor.BLACK -> Color.BLACK
+            AnnotationColor.WHITE -> Color.WHITE
         }
     }
 
@@ -1438,32 +1064,6 @@ class AnnotationOverlayView @JvmOverloads constructor(
             // --- Annotation edit mode (POI/line long press) ---
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    val poi = findPoiAt(event.x, event.y)
-                    if (poi != null) {
-                        android.util.Log.d("AnnotationOverlayView", "ACTION_DOWN on POI: event.x=${event.x}, event.y=${event.y}")
-                        longPressCandidate = poi
-                        longPressDownPos = PointF(event.x, event.y)
-                        android.util.Log.d("AnnotationOverlayView", "Set longPressDownPos: $longPressDownPos for POI ${poi.id}")
-                        longPressHandler = Handler(Looper.getMainLooper())
-                        longPressRunnable = Runnable {
-                            android.util.Log.d("AnnotationOverlayView", "Long-press triggered for POI ${poi.id} at $longPressDownPos")
-                            poiLongPressListener?.onPoiLongPressed(poi.id, longPressDownPos!!)
-                            longPressCandidate = null
-                        }
-                        longPressHandler?.postDelayed(longPressRunnable!!, 500)
-                        // For quick tap: record down time/position
-                        quickTapCandidate = poi
-                        quickTapDownTime = System.currentTimeMillis()
-                        quickTapDownPos = PointF(event.x, event.y)
-                        // --- Clear LINE handler state ---
-                        longPressLineCandidate = null
-                        longPressLineDownPos = null
-                        // --- Clear PEER handler state ---
-                        longPressPeerCandidate = null
-                        longPressPeerDownPos = null
-                        isDeviceDotCandidate = false
-                        return true // Intercept only if touching a POI
-                    }
                     // Check for line long press
                     val lineHit = findLineAt(event.x, event.y)
                     if (lineHit != null) {
@@ -1478,12 +1078,6 @@ class AnnotationOverlayView @JvmOverloads constructor(
                             longPressLineCandidate = null
                         }
                         longPressHandler?.postDelayed(longPressRunnable!!, 500)
-                        // --- Clear POI handler state ---
-                        longPressCandidate = null
-                        longPressDownPos = null
-                        quickTapCandidate = null
-                        quickTapDownTime = null
-                        quickTapDownPos = null
                         // --- Clear PEER handler state ---
                         longPressPeerCandidate = null
                         longPressPeerDownPos = null
@@ -1505,12 +1099,6 @@ class AnnotationOverlayView @JvmOverloads constructor(
                             longPressPeerCandidate = null
                         }
                         longPressHandler?.postDelayed(longPressRunnable!!, 500)
-                        // --- Clear POI handler state ---
-                        longPressCandidate = null
-                        longPressDownPos = null
-                        quickTapCandidate = null
-                        quickTapDownTime = null
-                        quickTapDownPos = null
                         // --- Clear LINE handler state ---
                         longPressLineCandidate = null
                         longPressLineDownPos = null
@@ -1526,8 +1114,6 @@ class AnnotationOverlayView @JvmOverloads constructor(
                             if (hypot(dx.toDouble(), dy.toDouble()) < 40) {
                                 deviceDotTapDownTime = System.currentTimeMillis()
                                 isDeviceDotCandidate = true
-                                quickTapDownTime = System.currentTimeMillis()
-                                quickTapDownPos = PointF(event.x, event.y)
                                 return true // Intercept if touching device dot
                             }
                         }
@@ -1541,27 +1127,6 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     android.util.Log.d("AnnotationOverlayView", "ACTION_UP: event.x=${event.x}, event.y=${event.y}")
                     android.util.Log.d("AnnotationOverlayView", "Cancelling long-press handler (ACTION_UP)")
                     longPressHandler?.removeCallbacks(longPressRunnable!!)
-                    // Quick tap detection
-                    if (isDeviceDotCandidate) {
-                        val upTime = System.currentTimeMillis()
-                        val upPos = PointF(event.x, event.y)
-                        val duration = upTime - (deviceDotTapDownTime ?: 0L)
-                        val moved = quickTapDownPos?.let { hypot((upPos.x - it.x).toDouble(), (upPos.y - it.y).toDouble()) > 40 } ?: false
-                        if (duration < 300 && !moved) {
-                            // Quick tap detected
-                            // showDeviceDotPopover
-                        }
-                    }
-                    quickTapCandidate?.let { candidate ->
-                        val upTime = System.currentTimeMillis()
-                        val upPos = PointF(event.x, event.y)
-                        val duration = upTime - (quickTapDownTime ?: 0L)
-                        val moved = quickTapDownPos?.let { hypot((upPos.x - it.x).toDouble(), (upPos.y - it.y).toDouble()) > 40 } ?: false
-                        if (duration < 300 && !moved) {
-                            // Quick tap detected
-                            showPoiLabel(candidate.id)
-                        }
-                    }
                     // Handle peer dot tap
                     longPressPeerCandidate?.let { peerId ->
                         val upTime = System.currentTimeMillis()
@@ -1583,12 +1148,8 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     }
                     globalQuickTapDownTime = null
                     globalQuickTapDownPos = null
-                    longPressCandidate = null
                     longPressLineCandidate = null
                     longPressPeerCandidate = null
-                    quickTapCandidate = null
-                    quickTapDownTime = null
-                    quickTapDownPos = null
                     peerTapDownTime = null
                     deviceDotTapDownTime = null
                     isDeviceDotCandidate = false
@@ -1597,12 +1158,8 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     android.util.Log.d("AnnotationOverlayView", "ACTION_CANCEL: event.x=${event.x}, event.y=${event.y}")
                     android.util.Log.d("AnnotationOverlayView", "Cancelling long-press handler (ACTION_CANCEL)")
                     longPressHandler?.removeCallbacks(longPressRunnable!!)
-                    longPressCandidate = null
                     longPressLineCandidate = null
                     longPressPeerCandidate = null
-                    quickTapCandidate = null
-                    quickTapDownTime = null
-                    quickTapDownPos = null
                     globalQuickTapDownTime = null
                     globalQuickTapDownPos = null
                     deviceDotTapDownTime = null
@@ -1610,15 +1167,6 @@ class AnnotationOverlayView @JvmOverloads constructor(
                 }
                 MotionEvent.ACTION_MOVE -> {
                     android.util.Log.d("AnnotationOverlayView", "ACTION_MOVE: event.x=${event.x}, event.y=${event.y}")
-                    longPressDownPos?.let { down ->
-                        val dist = hypot((event.x - down.x).toDouble(), (event.y - down.y).toDouble())
-                        android.util.Log.d("AnnotationOverlayView", "POI move: dist=$dist, from=(${"%.2f".format(down.x)}, ${"%.2f".format(down.y)}) to=(${"%.2f".format(event.x)}, ${"%.2f".format(event.y)})")
-                        if (dist > 40) {
-                            android.util.Log.d("AnnotationOverlayView", "Cancelling long-press handler (moved too far for POI)")
-                            longPressHandler?.removeCallbacks(longPressRunnable!!)
-                            longPressCandidate = null
-                        }
-                    }
                     longPressLineDownPos?.let { down ->
                         val dist = hypot((event.x - down.x).toDouble(), (event.y - down.y).toDouble())
                         android.util.Log.d("AnnotationOverlayView", "LINE move: dist=$dist, from=(${"%.2f".format(down.x)}, ${"%.2f".format(down.y)}) to=(${"%.2f".format(event.x)}, ${"%.2f".format(event.y)})")
@@ -1639,8 +1187,8 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     }
                 }
             }
-            android.util.Log.d("AnnotationViewModel", "onTouchEvent: longPressCandidate=$longPressCandidate}, longPressLineCandidate=${longPressLineCandidate}")
-            return longPressCandidate != null || longPressLineCandidate != null // Only consume if interacting with a POI or line
+            android.util.Log.d("AnnotationViewModel", "onTouchEvent: longPressLineCandidate=${longPressLineCandidate}")
+            return longPressLineCandidate != null // Only consume if interacting with a line
         }
     }
 
@@ -1732,6 +1280,8 @@ class AnnotationOverlayView @JvmOverloads constructor(
     }
     fun getLassoSelectedAnnotations(): List<MapAnnotation> = lassoSelectedAnnotations
 
+    fun getLassoPoints(): List<PointF>? = lassoPoints
+
     // Haversine formula to calculate distance in meters between two lat/lon points
     private fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
         val R = 6371000.0 // Earth radius in meters
@@ -1744,30 +1294,8 @@ class AnnotationOverlayView @JvmOverloads constructor(
         return R * c
     }
 
-    // Draw a peer location dot with color based on status or staleness
-    private fun drawPeerLocationDot(canvas: Canvas, point: PointF, entry: PeerLocationEntry) {
-        val dotRadius = 13f
-        val borderRadius = 18f
-        val shadowRadius = 20f
-        // Draw shadow
-        val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#33000000")
-            style = Paint.Style.FILL
-        }
-        canvas.drawCircle(point.x, point.y + 4f, shadowRadius, shadowPaint)
-        // Draw border with color based on status or staleness
-        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = getPeerBorderColor(entry)
-            style = Paint.Style.FILL
-        }
-        canvas.drawCircle(point.x, point.y, borderRadius, borderPaint)
-        // Draw dot with color based on status or staleness
-        val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = getPeerDotColor(entry)
-            style = Paint.Style.FILL
-        }
-        canvas.drawCircle(point.x, point.y, dotRadius, fillPaint)
-    }
+    // === NATIVE CLUSTERING: Peer dot drawing now handled by MapLibre GL layer ===
+    // This method is no longer needed as peer dots are rendered by the native clustering system
 
     // Cohen–Sutherland line clipping algorithm for a segment and a rectangle
     private fun clipSegmentToRect(p1: PointF, p2: PointF, rect: RectF): Pair<PointF, PointF>? {
@@ -1825,26 +1353,26 @@ class AnnotationOverlayView @JvmOverloads constructor(
         invalidate()
     }
 
-    private fun showPoiLabel(poiId: String) {
+    fun showPoiLabel(poiId: String, position: PointF) {
+        Log.d("AnnotationOverlayView", "showPoiLabel: poiId=$poiId, position=$position")
         labelPoiIdToShow = poiId
+        labelPoiPosition = position
         labelDismissHandler?.removeCallbacksAndMessages(null)
         labelDismissHandler = Handler(Looper.getMainLooper())
         labelDismissHandler?.postDelayed({
             labelPoiIdToShow = null
+            labelPoiPosition = null
             invalidate()
         }, LABEL_DISPLAY_DURATION)
         invalidate()
+        Log.d("AnnotationOverlayView", "showPoiLabel: labelPoiIdToShow set to $labelPoiIdToShow, will invalidate")
     }
     private fun hidePoiLabel() {
         labelPoiIdToShow = null
+        labelPoiPosition = null
         labelDismissHandler?.removeCallbacksAndMessages(null)
         invalidate()
     }
-
-    // --- Quick tap state ---
-    private var quickTapCandidate: MapAnnotation.PointOfInterest? = null
-    private var quickTapDownTime: Long? = null
-    private var quickTapDownPos: PointF? = null
 
     // --- Global quick tap state for dismissing popovers ---
     private var globalQuickTapDownTime: Long? = null
@@ -1939,7 +1467,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
                 }
             }
         }
-        
+
         // Then check individual peer dots
         for ((peerId, entry) in peerLocations) {
             val point = projection?.toScreenLocation(entry.toLatLng()) ?: continue
@@ -2194,5 +1722,26 @@ class AnnotationOverlayView @JvmOverloads constructor(
         peerPopoverPeerName = null
         peerPopoverDismissHandler?.removeCallbacksAndMessages(null)
         invalidate()
+    }
+
+    // === PERFORMANCE OPTIMIZATION: Batch invalidate calls ===
+    private var pendingInvalidate = false
+    private val invalidateHandler = Handler(Looper.getMainLooper())
+    private val invalidateRunnable = Runnable {
+        pendingInvalidate = false
+        invalidate()
+    }
+    
+    private fun scheduleInvalidate() {
+        if (!pendingInvalidate) {
+            pendingInvalidate = true
+            invalidateHandler.post(invalidateRunnable)
+        }
+    }
+    
+    // Override invalidate to use batching
+    override fun invalidate() {
+        if (pendingInvalidate) return // Already scheduled
+        super.invalidate()
     }
 } 

@@ -48,6 +48,7 @@ object MeshAnnotationInterop {
                     AnnotationColor.YELLOW -> "y"
                     AnnotationColor.RED -> "r"
                     AnnotationColor.BLACK -> "b"
+                    AnnotationColor.WHITE -> "w"
                 }
                 val shapeShort = when (annotation.shape) {
                     PointShape.CIRCLE -> "c"
@@ -94,6 +95,7 @@ object MeshAnnotationInterop {
                     AnnotationColor.YELLOW -> "y"
                     AnnotationColor.RED -> "r"
                     AnnotationColor.BLACK -> "b"
+                    AnnotationColor.WHITE -> "w"
                 }
                 val styleShort = when (annotation.style) {
                     LineStyle.SOLID -> "s"

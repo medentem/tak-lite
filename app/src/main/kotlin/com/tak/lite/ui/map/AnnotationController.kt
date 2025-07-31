@@ -5,7 +5,6 @@ import android.graphics.Color
 import android.graphics.PointF
 import android.util.Log
 import android.view.View
-import android.view.inputmethod.EditorInfo
 import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
@@ -23,6 +22,13 @@ import org.maplibre.android.annotations.Marker
 import org.maplibre.android.annotations.Polygon
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.style.expressions.Expression
+import org.maplibre.android.style.layers.CircleLayer
+import org.maplibre.android.style.layers.PropertyFactory
+import org.maplibre.android.style.sources.GeoJsonSource
+import org.maplibre.geojson.Feature
+import org.maplibre.geojson.FeatureCollection
+import org.maplibre.geojson.Point
 
 class AnnotationController(
     private val fragment: Fragment,
@@ -32,7 +38,8 @@ class AnnotationController(
     private val messageViewModel: MessageViewModel,
     private val fanMenuView: FanMenuView,
     private val annotationOverlayView: AnnotationOverlayView,
-    private val onAnnotationChanged: (() -> Unit)? = null
+    private val onAnnotationChanged: (() -> Unit)? = null,
+    mapLibreMap: MapLibreMap
 ) {
     private var pendingPoiLatLng: LatLng? = null
     var editingPoiId: String? = null
@@ -46,21 +53,443 @@ class AnnotationController(
     private val areaPolygons = mutableMapOf<String, Polygon>()
     private var lastOverlayProjection: org.maplibre.android.maps.Projection? = null
     private var lastOverlayAnnotations: List<MapAnnotation> = emptyList()
+    private var lastPoiAnnotations: List<MapAnnotation.PointOfInterest> = emptyList()
     var mapController: MapController? = null
+    
+    // === NATIVE CLUSTERING SUPPORT ===
+    private var clusteredLayerManager: ClusteredLayerManager;
+    var clusteringConfig: ClusteringConfig
+    private var lastPeerUpdate = 0L
+    private val PEER_UPDATE_THROTTLE_MS = 100L
 
+    init {
+        clusteringConfig = ClusteringConfig.getDefault()
+        clusteredLayerManager = ClusteredLayerManager(mapLibreMap, clusteringConfig)
+        Log.d("PeerDotDebug", "AnnotationController initialized with clustering config: $clusteringConfig")
+    }
+
+    // Helper function to calculate distance between two points for debugging
+    private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        val r = 6371000.0 // Earth's radius in meters
+        val dLat = Math.toRadians(lat2 - lat1)
+        val dLon = Math.toRadians(lon2 - lon1)
+        val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2)
+        val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+        return r * c
+    }
+
+    // === ENHANCED: Convert peer locations to clustered GeoJSON FeatureCollection ===
+    private fun peerLocationsToClusteredFeatureCollection(peerLocations: Map<String, com.tak.lite.model.PeerLocationEntry>): FeatureCollection {
+        Log.d("PeerDotDebug", "Creating FeatureCollection from ${peerLocations.size} peer locations")
+
+        // Use user-configurable staleness threshold from SharedPreferences
+        val context = fragment.requireContext()
+        val prefs = context.getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
+        val stalenessThresholdMinutes = prefs.getInt("peer_staleness_threshold_minutes", 10)
+        val stalenessThresholdMs = stalenessThresholdMinutes * 60 * 1000L
+
+        val features = peerLocations.map { (peerId, entry) ->
+            val point = Point.fromLngLat(entry.longitude, entry.latitude)
+            val feature = Feature.fromGeometry(point, null, peerId)
+            val userStatus = entry.userStatus?.name ?: "GREEN"
+            val now = System.currentTimeMillis()
+            val isStale = (now - entry.timestamp) > stalenessThresholdMs
+            
+            // Calculate colors based on status and staleness
+            val fillColor = if (isStale) {
+                "#BDBDBD" // gray for stale
+            } else {
+                when (userStatus) {
+                    "GREEN" -> "#4CAF50"
+                    "YELLOW" -> "#FFC107"
+                    "RED" -> "#F44336"
+                    else -> "#4CAF50" // default green
+                }
+            }
+            
+            val borderColor = if (isStale) {
+                when (userStatus) {
+                    "GREEN" -> "#4CAF50"
+                    "YELLOW" -> "#FFC107"
+                    "RED" -> "#F44336"
+                    else -> "#4CAF50" // default green
+                }
+            } else {
+                "#FFFFFF" // white for fresh
+            }
+            
+            feature.addStringProperty("peerId", peerId)
+            feature.addStringProperty("userStatus", userStatus)
+            feature.addBooleanProperty("isStale", isStale)
+            feature.addStringProperty("fillColor", fillColor)
+            feature.addStringProperty("borderColor", borderColor)
+
+            Log.d("PeerDotDebug", "peerId=$peerId, userStatus=$userStatus, isStale=$isStale, fillColor=$fillColor, borderColor=$borderColor")
+            feature
+        }
+        
+        val featureCollection = FeatureCollection.fromFeatures(features)
+        Log.d("PeerDotDebug", "Created FeatureCollection with ${featureCollection.features()?.size} features")
+
+        return featureCollection
+    }
+
+    // === ENHANCED: Convert POI annotations to clustered GeoJSON FeatureCollection ===
+    private fun poiAnnotationsToClusteredFeatureCollection(pois: List<MapAnnotation.PointOfInterest>): FeatureCollection {
+        val features = pois.map { poi ->
+            val point = Point.fromLngLat(poi.position.lng, poi.position.lt)
+            val feature = Feature.fromGeometry(point)
+            
+            // Create icon name based on shape and color
+            val iconName = "poi-${poi.shape.name.lowercase()}-${poi.color.name.lowercase()}"
+            
+            feature.addStringProperty("poiId", poi.id)
+            feature.addStringProperty("icon", iconName)
+            feature.addStringProperty("label", poi.label ?: "")
+            feature.addStringProperty("color", poi.color.name.lowercase())
+            feature.addStringProperty("shape", poi.shape.name.lowercase())
+            feature.addNumberProperty("timestamp", poi.timestamp)
+            feature.addNumberProperty("expirationTime", poi.expirationTime ?: 0L)
+            
+            Log.d("PoiDebug", "Creating POI feature: poiId=${poi.id}, icon=$iconName, label=${poi.label}, color=${poi.color}, shape=${poi.shape}")
+            feature
+        }
+        return FeatureCollection.fromFeatures(features)
+    }
+
+    // Generate POI icons for MapLibre
+    private fun generatePoiIcons(style: org.maplibre.android.maps.Style) {
+        Log.d("PoiDebug", "generatePoiIcons called")
+        val shapes = listOf(PointShape.CIRCLE, PointShape.SQUARE, PointShape.TRIANGLE, PointShape.EXCLAMATION)
+        val colors = listOf(AnnotationColor.GREEN, AnnotationColor.YELLOW, AnnotationColor.RED, AnnotationColor.BLACK)
+        
+        shapes.forEach { shape ->
+            colors.forEach { color ->
+                val iconName = "poi-${shape.name.lowercase()}-${color.name.lowercase()}"
+                // Check if icon already exists
+                if (style.getImage(iconName) == null) {
+                    val bitmap = createPoiIconBitmap(shape, color)
+                    style.addImage(iconName, bitmap)
+                    Log.d("PoiDebug", "Generated icon: $iconName")
+                } else {
+                    Log.d("PoiDebug", "Icon already exists: $iconName")
+                }
+            }
+        }
+    }
+
+    // Create bitmap for POI icon
+    private fun createPoiIconBitmap(shape: PointShape, color: AnnotationColor): android.graphics.Bitmap {
+        val size = 80
+        val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bitmap)
+        
+        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = annotationColorToAndroidColor(color)
+            style = android.graphics.Paint.Style.FILL
+        }
+        
+        val centerX = size / 2f
+        val centerY = size / 2f
+        val radius = size / 3f
+        
+        when (shape) {
+            PointShape.CIRCLE -> {
+                canvas.drawCircle(centerX, centerY, radius, paint)
+            }
+            PointShape.SQUARE -> {
+                val rect = android.graphics.RectF(centerX - radius, centerY - radius, centerX + radius, centerY + radius)
+                canvas.drawRect(rect, paint)
+            }
+            PointShape.TRIANGLE -> {
+                val path = android.graphics.Path()
+                val height = radius * 2
+                path.moveTo(centerX, centerY - height / 2)
+                path.lineTo(centerX - radius, centerY + height / 2)
+                path.lineTo(centerX + radius, centerY + height / 2)
+                path.close()
+                canvas.drawPath(path, paint)
+            }
+            PointShape.EXCLAMATION -> {
+                // Draw triangle with exclamation mark
+                val path = android.graphics.Path()
+                val height = radius * 2
+                path.moveTo(centerX, centerY - height / 2)
+                path.lineTo(centerX - radius, centerY + height / 2)
+                path.lineTo(centerX + radius, centerY + height / 2)
+                path.close()
+                canvas.drawPath(path, paint)
+                
+                // Draw white exclamation mark
+                val exMarkPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                    this.color = android.graphics.Color.WHITE
+                    style = android.graphics.Paint.Style.STROKE
+                    strokeWidth = 4f
+                    strokeCap = android.graphics.Paint.Cap.ROUND
+                }
+                val exMarkTop = centerY - height / 6
+                val exMarkBottom = centerY + height / 6
+                canvas.drawLine(centerX, exMarkTop, centerX, exMarkBottom, exMarkPaint)
+                
+                // Draw dot
+                val dotRadius = 3f
+                val dotCenterY = exMarkBottom + dotRadius * 2f
+                val dotPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                    this.color = android.graphics.Color.WHITE
+                    style = android.graphics.Paint.Style.FILL
+                }
+                canvas.drawCircle(centerX, dotCenterY, dotRadius, dotPaint)
+            }
+        }
+        
+        return bitmap
+    }
+    
+    // === CLUSTER INTERACTION HANDLING ===
+    private fun setupClusterClickHandling(mapLibreMap: MapLibreMap) {
+        mapLibreMap.addOnMapClickListener { latLng ->
+            val screenPoint = mapLibreMap.projection.toScreenLocation(latLng)
+            
+            // Check for peer cluster clicks first
+            val peerClusterFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, ClusteredLayerManager.PEER_CLUSTERS_LAYER)
+            val peerClusterFeature = peerClusterFeatures.firstOrNull { it.getNumberProperty("point_count") != null }
+            
+            if (peerClusterFeature != null) {
+                // Handle peer cluster expansion
+                val source = mapLibreMap.style?.getSourceAs<GeoJsonSource>(ClusteredLayerManager.PEER_CLUSTERED_SOURCE)
+                val zoom = source?.getClusterExpansionZoom(peerClusterFeature)
+                if (zoom != null) {
+                    mapLibreMap.easeCamera(
+                        org.maplibre.android.camera.CameraUpdateFactory.zoomTo(
+                            zoom.toDouble()
+                        )
+                    )
+                }
+                Log.d("AnnotationController", "Peer cluster clicked, expanding to zoom $zoom")
+                return@addOnMapClickListener true
+            }
+            
+            // Check for POI cluster clicks
+            val poiClusterFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, ClusteredLayerManager.POI_CLUSTERS_LAYER)
+            val poiClusterFeature = poiClusterFeatures.firstOrNull { it.getNumberProperty("point_count") != null }
+            
+            if (poiClusterFeature != null) {
+                // Handle POI cluster expansion
+                val source = mapLibreMap.style?.getSourceAs<GeoJsonSource>(ClusteredLayerManager.POI_CLUSTERED_SOURCE)
+                val zoom = source?.getClusterExpansionZoom(poiClusterFeature)
+                if (zoom != null) {
+                    mapLibreMap.easeCamera(org.maplibre.android.camera.CameraUpdateFactory.zoomTo(zoom.toDouble()))
+                }
+                Log.d("AnnotationController", "POI cluster clicked, expanding to zoom $zoom")
+                return@addOnMapClickListener true
+            }
+            
+            // Check for individual peer clicks (including fallback layer)
+            val peerFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, ClusteredLayerManager.PEER_DOTS_LAYER)
+            val peerFallbackFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, "peer-dots-fallback")
+            val peerFeature = peerFeatures.firstOrNull { it.getStringProperty("peerId") != null } 
+                ?: peerFallbackFeatures.firstOrNull { it.getStringProperty("peerId") != null }
+            
+            if (peerFeature != null) {
+                val peerId = peerFeature.getStringProperty("peerId")
+                showPeerPopover(peerId)
+                Log.d("AnnotationController", "Individual peer clicked: $peerId")
+                return@addOnMapClickListener true
+            }
+            
+            // Check for individual POI clicks (including fallback layer)
+            val poiFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, ClusteredLayerManager.POI_DOTS_LAYER)
+            val poiFallbackFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, "poi-symbols-fallback")
+            val poiFeature = poiFeatures.firstOrNull { it.getStringProperty("poiId") != null }
+                ?: poiFallbackFeatures.firstOrNull { it.getStringProperty("poiId") != null }
+            
+            if (poiFeature != null) {
+                val poiId = poiFeature.getStringProperty("poiId")
+                showPoiLabel(poiId, screenPoint)
+                Log.d("AnnotationController", "Individual POI clicked: $poiId")
+                return@addOnMapClickListener true
+            }
+            
+            false
+        }
+    }
+    
     // Overlay and menu setup
     fun setupAnnotationOverlay(mapLibreMap: MapLibreMap?) {
         mapLibreMap?.addOnCameraMoveListener {
+            // IMMEDIATE: Only update projection for visual sync
             annotationOverlayView.setProjection(mapLibreMap.projection)
-            annotationOverlayView.invalidate()
+            // Remove invalidate() call - it's handled by the fragment's throttled sync
         }
         annotationOverlayView.setProjection(mapLibreMap?.projection)
         annotationOverlayView.invalidate()
+
+        // === BEGIN: Native Peer Dot Layer Setup ===
+        mapLibreMap?.getStyle { style ->
+            // Generate POI icons first
+            generatePoiIcons(style)
+            
+            // Only create non-clustered layers if clustering is disabled
+            if (!clusteringConfig.enablePeerClustering) {
+                // Add or update GeoJsonSource for peer dots
+                val sourceId = "peer-dots-source"
+                val layerId = "peer-dots-layer"
+                if (style.getSource(sourceId) == null) {
+                    val emptyCollection = FeatureCollection.fromFeatures(arrayOf())
+                    val source = GeoJsonSource(sourceId, emptyCollection)
+                    style.addSource(source)
+                }
+                if (style.getLayer(layerId) == null) {
+                    val layer = CircleLayer(layerId, sourceId)
+                    // Fill color: custom gray if stale, else status color
+                    layer.withProperties(
+                        PropertyFactory.circleColor(
+                            Expression.get("fillColor")
+                        ),
+                        PropertyFactory.circleRadius(5f),
+                        // Border color: status color if stale, else white
+                        PropertyFactory.circleStrokeColor(
+                            Expression.get("borderColor")
+                        ),
+                        PropertyFactory.circleStrokeWidth(3f)
+                    )
+                    style.addLayer(layer)
+                    Log.d("PeerDotDebug", "Non-clustered peer dots layer created with properties: circleColor=${layer.circleColor}, circleStrokeColor=${layer.circleStrokeColor}")
+                }
+            }
+            
+            // Only create non-clustered POI layers if clustering is disabled
+            if (!clusteringConfig.enablePoiClustering) {
+                // Add or update GeoJsonSource for POI annotations
+                val poiSourceId = "poi-source"
+                val poiLayerId = "poi-layer"
+                if (style.getSource(poiSourceId) == null) {
+                    val emptyCollection = FeatureCollection.fromFeatures(arrayOf())
+                    val source = GeoJsonSource(poiSourceId, emptyCollection)
+                    style.addSource(source)
+                    Log.d("PoiDebug", "Non-clustered POI source created")
+                } else {
+                    Log.d("PoiDebug", "Non-clustered POI source already exists")
+                }
+                if (style.getLayer(poiLayerId) == null) {
+                    val layer = org.maplibre.android.style.layers.SymbolLayer(poiLayerId, poiSourceId)
+                    layer.withProperties(
+                        PropertyFactory.iconImage(Expression.get("icon")),
+                        PropertyFactory.iconSize(1.0f),
+                        PropertyFactory.iconAllowOverlap(true),
+                        PropertyFactory.textField(Expression.get("label")),
+                        PropertyFactory.textColor(Expression.color(Color.WHITE)),
+                        PropertyFactory.textSize(12f),
+                        PropertyFactory.textOffset(arrayOf(0f, -2f)),
+                        PropertyFactory.textAllowOverlap(true),
+                        PropertyFactory.textIgnorePlacement(false)
+                    )
+                    style.addLayer(layer)
+                    Log.d("PoiDebug", "Non-clustered POI layer created")
+                } else {
+                    Log.d("PoiDebug", "Non-clustered POI layer already exists")
+                }
+            }
+        }
+        // === END: Native Peer Dot Layer Setup ===
 
         // Observe the connected node ID
         fragment.viewLifecycleOwner.lifecycleScope.launch {
             meshNetworkViewModel.selfId.collect { nodeId ->
                 annotationOverlayView.setConnectedNodeId(nodeId)
+            }
+        }
+    }
+
+    // === ENHANCED: Update peer dots with native clustering ===
+    fun updatePeerDotsOnMap(mapLibreMap: MapLibreMap?, peerLocations: Map<String, com.tak.lite.model.PeerLocationEntry>) {
+        // Throttle updates for performance
+        val now = System.currentTimeMillis()
+        if (now - lastPeerUpdate < PEER_UPDATE_THROTTLE_MS) return
+        lastPeerUpdate = now
+        
+        Log.d("PeerDotDebug", "updatePeerDotsOnMap: peerCount=${peerLocations.size}, peerIds=${peerLocations.keys}")
+        if (peerLocations.isNotEmpty()) {
+            val firstPeer = peerLocations.entries.first()
+            Log.d("PeerDotDebug", "First peer: ${firstPeer.key} at ${firstPeer.value.latitude}, ${firstPeer.value.longitude}")
+        }
+        
+        if (clusteringConfig.enablePeerClustering) {
+            Log.d("PeerDotDebug", "Using native clustering")
+            Log.d("PeerDotDebug", "Clustering config: radius=${clusteringConfig.clusterRadius}, maxZoom=${clusteringConfig.peerClusterMaxZoom}")
+            Log.d("PeerDotDebug", "Current zoom: ${mapLibreMap?.cameraPosition?.zoom}, should cluster: ${mapLibreMap?.cameraPosition?.zoom?.let { it <= clusteringConfig.peerClusterMaxZoom }}")
+            mapLibreMap?.getStyle { style ->
+                val featureCollection = peerLocationsToClusteredFeatureCollection(peerLocations)
+                Log.d("PeerDotDebug", "Created FeatureCollection with ${featureCollection.features()?.size} features")
+                
+                // Debug: Log the GeoJSON string
+                val geoJsonString = featureCollection.toJson()
+                Log.d("PeerDotDebug", "GeoJSON string length: ${geoJsonString.length}")
+                Log.d("PeerDotDebug", "GeoJSON string preview: ${geoJsonString.take(500)}...")
+                
+                // Check if source already exists
+                val existingSource = style.getSourceAs<GeoJsonSource>(ClusteredLayerManager.PEER_CLUSTERED_SOURCE)
+                if (existingSource != null) {
+                    // Update existing source
+                    Log.d("PeerDotDebug", "Updating existing clustered source")
+                    existingSource.setGeoJson(featureCollection)
+                    Log.d("PeerDotDebug", "Updated existing clustered source")
+                } else {
+                    // Create new source with data and clustering options
+                    Log.d("PeerDotDebug", "Creating new clustered source")
+                    try {
+                        clusteredLayerManager.setupPeerClusteredLayer(geoJsonString)
+                        Log.d("PeerDotDebug", "Created new clustered source with user config: radius=${clusteringConfig.clusterRadius}, maxZoom=${clusteringConfig.peerClusterMaxZoom}")
+                    } catch (e: Exception) {
+                        Log.e("PeerDotDebug", "Failed to create clustered source: ${e.message}", e)
+                    }
+                }
+                Log.d("PeerDotDebug", "Peer clustered GL layer updated - SUCCESS")
+            }
+        } else {
+            Log.d("PeerDotDebug", "Using regular peer dots layer")
+            mapLibreMap?.getStyle { style ->
+                val source = style.getSourceAs<GeoJsonSource>("peer-dots-source")
+                if (source != null) {
+                    val featureCollection = peerLocationsToClusteredFeatureCollection(peerLocations)
+                    Log.d("PeerDotDebug", "Setting regular GeoJSON with ${featureCollection.features()?.size} features")
+                    source.setGeoJson(featureCollection)
+                    Log.d("PeerDotDebug", "Regular peer dots layer updated - SUCCESS")
+                } else {
+                    Log.e("PeerDotDebug", "Regular peer dots source not found")
+                }
+            }
+        }
+    }
+
+    // === ENHANCED: Update POI annotations with native clustering ===
+    fun updatePoiAnnotationsOnMap(mapLibreMap: MapLibreMap?, pois: List<MapAnnotation.PointOfInterest>) {
+        Log.d("PoiDebug", "updatePoiAnnotationsOnMap called with ${pois.size} POIs, using native clustering")
+        
+        if (!clusteringConfig.enablePoiClustering) {
+            Log.d("PoiDebug", "Native POI clustering disabled")
+            return
+        }
+        
+        mapLibreMap?.getStyle { style ->
+            var featureCollection = FeatureCollection.fromFeatures(arrayOf())
+            if (pois.isNotEmpty()) {
+                featureCollection = poiAnnotationsToClusteredFeatureCollection(pois)
+            }
+            val source = style.getSourceAs<GeoJsonSource>(ClusteredLayerManager.POI_CLUSTERED_SOURCE)
+            if (source != null) {
+                source.setGeoJson(featureCollection.toJson())
+            } else {
+                // Create new source with data and clustering options
+                Log.d("PoiDebug", "Creating new POI clustered source")
+                try {
+                    clusteredLayerManager?.setupPoiClusteredLayer(featureCollection.toJson())
+                    Log.d("PeerDotDebug", "Created new clustered source with user config: radius=${clusteringConfig.clusterRadius}, maxZoom=${clusteringConfig.peerClusterMaxZoom}")
+                } catch (e: Exception) {
+                    Log.e("PeerDotDebug", "Failed to create clustered source: ${e.message}", e)
+                }
             }
         }
     }
@@ -82,19 +511,126 @@ class AnnotationController(
             }
         }
     }
-
-    fun setupMapLongPress(mapLibreMap: MapLibreMap) {
-        mapLibreMap.addOnMapLongClickListener { latLng ->
-            val projection = mapLibreMap.projection
-            val point = projection.toScreenLocation(latLng)
-            val center = PointF(point.x, point.y)
+    
+    fun handleMapLongPress(latLng: org.maplibre.android.geometry.LatLng, mapLibreMap: MapLibreMap): Boolean {
+        val projection = mapLibreMap.projection
+        val screenPoint = projection.toScreenLocation(latLng)
+        
+        // First check if we're long pressing on a POI (including fallback layer)
+        val poiLayerId = if (clusteringConfig.enablePoiClustering) {
+            ClusteredLayerManager.POI_DOTS_LAYER
+        } else {
+            "poi-layer"
+        }
+        val poiFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, poiLayerId)
+        val poiFallbackFeatures = if (clusteringConfig.enablePoiClustering) {
+            mapLibreMap.queryRenderedFeatures(screenPoint, "poi-symbols-fallback")
+        } else {
+            emptyList()
+        }
+        val poiFeature = poiFeatures.firstOrNull { it.getStringProperty("poiId") != null }
+            ?: poiFallbackFeatures.firstOrNull { it.getStringProperty("poiId") != null }
+        if (poiFeature != null) {
+            val poiId = poiFeature.getStringProperty("poiId")
+            showPoiEditMenu(screenPoint, poiId)
+            return true
+        } else {
+            // If not on a POI, create a new POI
+            val center = PointF(screenPoint.x, screenPoint.y)
             pendingPoiLatLng = latLng
             showFanMenu(center)
-            true
+            return true
         }
+    }
+    
+    fun findPoisInLassoArea(lassoPoints: List<PointF>?, mapLibreMap: MapLibreMap): List<MapAnnotation.PointOfInterest> {
+        if (lassoPoints == null || lassoPoints.size < 3) return emptyList()
+        
+        // Create a path from the lasso points
+        val path = android.graphics.Path()
+        path.moveTo(lassoPoints[0].x, lassoPoints[0].y)
+        for (pt in lassoPoints.drop(1)) path.lineTo(pt.x, pt.y)
+        path.close()
+        
+        // Get the bounds of the lasso path
+        val bounds = android.graphics.RectF()
+        path.computeBounds(bounds, true)
+        
+        // Query POIs within the lasso bounds using the correct layer IDs (including fallback)
+        val poiLayerId = if (clusteringConfig.enablePoiClustering) {
+            ClusteredLayerManager.POI_DOTS_LAYER
+        } else {
+            "poi-layer"
+        }
+        val poiFeatures = mapLibreMap.queryRenderedFeatures(bounds, poiLayerId)
+        val poiFallbackFeatures = if (clusteringConfig.enablePoiClustering) {
+            mapLibreMap.queryRenderedFeatures(bounds, "poi-symbols-fallback")
+        } else {
+            emptyList()
+        }
+        val allPoiFeatures = poiFeatures + poiFallbackFeatures
+        
+        val selectedPois = mutableListOf<MapAnnotation.PointOfInterest>()
+        
+        // Check each POI to see if it's inside the lasso path
+        for (feature in allPoiFeatures) {
+            val poiId = feature.getStringProperty("poiId") ?: continue
+            val lat = feature.geometry()?.let { 
+                if (it is org.maplibre.geojson.Point) it.coordinates()[1] else null 
+            } ?: continue
+            val lng = feature.geometry()?.let { 
+                if (it is org.maplibre.geojson.Point) it.coordinates()[0] else null 
+            } ?: continue
+            
+            val screenPt = mapLibreMap.projection.toScreenLocation(org.maplibre.android.geometry.LatLng(lat, lng))
+            val pointF = PointF(screenPt.x, screenPt.y)
+            val contains = android.graphics.Region().apply {
+                val pathBounds = android.graphics.RectF()
+                path.computeBounds(pathBounds, true)
+                setPath(path, android.graphics.Region(pathBounds.left.toInt(), pathBounds.top.toInt(), pathBounds.right.toInt(), pathBounds.bottom.toInt()))
+            }.contains(pointF.x.toInt(), pointF.y.toInt())
+            
+            if (contains) {
+                // Find the corresponding POI annotation from the ViewModel
+                val poiAnnotation = annotationViewModel.uiState.value.annotations.filterIsInstance<MapAnnotation.PointOfInterest>().find { it.id == poiId }
+                if (poiAnnotation != null) {
+                    selectedPois.add(poiAnnotation)
+                }
+            }
+        }
+        
+        return selectedPois
     }
 
     // POI/line/area editing
+    fun getPoiById(poiId: String): MapAnnotation.PointOfInterest? {
+        return annotationViewModel.uiState.value.annotations.filterIsInstance<MapAnnotation.PointOfInterest>().find { it.id == poiId }
+    }
+
+    fun showPoiLabel(poiId: String, screenPosition: PointF) {
+        Log.d("AnnotationController", "showPoiLabel: poiId=$poiId, screenPosition=$screenPosition")
+        // Find the POI annotation to get its details
+        val poi = getPoiById(poiId)
+        if (poi != null) {
+            Log.d("AnnotationController", "Found POI: ${poi.label}, position: ${poi.position}")
+            annotationOverlayView.showPoiLabel(poiId, screenPosition)
+            Log.d("AnnotationController", "showPoiLabel: called annotationOverlayView.showPoiLabel")
+        } else {
+            Log.e("AnnotationController", "POI not found: $poiId")
+        }
+    }
+    
+    fun showPeerPopover(peerId: String) {
+        Log.d("AnnotationController", "showPeerPopover: peerId=$peerId")
+        
+        // Get peer information from the mesh network
+        val peerName = meshNetworkViewModel.getPeerName(peerId)
+        val peerLastHeard = meshNetworkViewModel.getPeerLastHeard(peerId)
+        
+        annotationOverlayView.showPeerPopover(peerId, peerName, peerLastHeard)
+        Log.d("AnnotationController", "showPeerPopover: called annotationOverlayView.showPeerPopover with name=$peerName, lastHeard=$peerLastHeard")
+    }
+
     fun showPoiEditMenu(center: PointF, poiId: String) {
         Log.d("AnnotationController", "showPoiEditMenu: center=$center, poiId=$poiId")
         val poi = annotationViewModel.uiState.value.annotations.filterIsInstance<MapAnnotation.PointOfInterest>().find { it.id == poiId } ?: return
@@ -138,16 +674,23 @@ class AnnotationController(
 
     fun updatePoiShape(poi: MapAnnotation.PointOfInterest, shape: PointShape) {
         annotationViewModel.updatePointOfInterest(poi.id, newShape = shape)
+        // Force map redraw to update POI layer with new icon
+        onAnnotationChanged?.invoke()
     }
 
     fun updatePoiColor(poiId: String, color: AnnotationColor) {
         annotationViewModel.updatePointOfInterest(poiId, newColor = color)
+        // Force map redraw to update POI layer with new icon
+        onAnnotationChanged?.invoke()
     }
 
     fun deletePoi(poiId: String) {
+        Log.d("AnnotationController", "deletePoi: $poiId")
         val marker = poiMarkers[poiId]
         marker?.let { (annotationOverlayView.context as? MapLibreMap)?.removeAnnotation(it) }
         annotationViewModel.removeAnnotation(poiId)
+        // Force map redraw to update POI layer
+        onAnnotationChanged?.invoke()
     }
 
     fun showLineEditMenu(center: PointF, lineId: String) {
@@ -178,7 +721,8 @@ class AnnotationController(
                     is FanMenuView.Option.ElevationChart -> showElevationChartBottomSheet(lineId)
                     else -> {}
                 }
-                annotationOverlayView.updateAnnotations(annotationViewModel.uiState.value.annotations)
+                val nonPoiAnnotations = annotationViewModel.uiState.value.annotations.filterNot { it is MapAnnotation.PointOfInterest }
+                annotationOverlayView.updateAnnotations(nonPoiAnnotations)
                 annotationOverlayView.setTempLinePoints(null)
                 annotationOverlayView.invalidate()
                 return false
@@ -235,13 +779,25 @@ class AnnotationController(
         areaPolygons.values.forEach { mapLibreMap?.removeAnnotation(it) }
         areaPolygons.clear()
         
-        // Update the annotation overlay with current annotations
+        // Update the annotation overlay with current annotations (excluding POIs)
         val state = annotationViewModel.uiState.value
-        annotationOverlayView.updateAnnotations(state.annotations)
+        val allAnnotations = state.annotations
+        val nonPoiAnnotations = allAnnotations.filterNot { it is MapAnnotation.PointOfInterest }
+        val poiAnnotations = allAnnotations.filterIsInstance<MapAnnotation.PointOfInterest>()
+        
+        Log.d("PoiDebug", "renderAllAnnotations: total=${allAnnotations.size}, nonPoi=${nonPoiAnnotations.size}, poi=${poiAnnotations.size}")
+        Log.d("PoiDebug", "POI annotations: ${poiAnnotations.map { "${it.id}:${it.label}" }}")
+        
+        annotationOverlayView.updateAnnotations(nonPoiAnnotations)
         annotationOverlayView.invalidate()
+        
+        // Update native POI annotations
+        updatePoiAnnotationsOnMap(mapLibreMap, poiAnnotations)
     }
 
     fun syncAnnotationOverlayView(mapLibreMap: MapLibreMap?) {
+        Log.d("PeerDotDebug", "syncAnnotationOverlayView called")
+        
         val currentProjection = mapLibreMap?.projection
         val currentAnnotations = annotationViewModel.uiState.value.annotations
         var changed = false
@@ -250,13 +806,23 @@ class AnnotationController(
             lastOverlayProjection = currentProjection
             changed = true
         }
-        annotationOverlayView.updateAnnotations(currentAnnotations)
-        lastOverlayAnnotations = currentAnnotations
-        changed = true
-        if (changed) {
-            annotationOverlayView.visibility = View.VISIBLE
-            annotationOverlayView.invalidate()
+        
+        // Update overlay with non-POI annotations
+        val nonPoiAnnotations = currentAnnotations.filterNot { it is MapAnnotation.PointOfInterest }
+        val poiAnnotations = currentAnnotations.filterIsInstance<MapAnnotation.PointOfInterest>()
+        
+        // Only update POI annotations if they've actually changed
+        val poiAnnotationsChanged = poiAnnotations != lastPoiAnnotations
+        if (poiAnnotationsChanged) {
+            Log.d("PoiDebug", "syncAnnotationOverlayView: POI annotations changed, updating map")
+            lastPoiAnnotations = poiAnnotations
+            updatePoiAnnotationsOnMap(mapLibreMap, poiAnnotations)
         }
+        
+        Log.d("PoiDebug", "syncAnnotationOverlayView: total=${currentAnnotations.size}, nonPoi=${nonPoiAnnotations.size}, poi=${poiAnnotations.size}, changed=$poiAnnotationsChanged")
+        
+        annotationOverlayView.updateAnnotations(nonPoiAnnotations)
+        lastOverlayAnnotations = nonPoiAnnotations
     }
 
     // Utility
@@ -266,6 +832,7 @@ class AnnotationController(
             AnnotationColor.YELLOW -> Color.parseColor("#FBC02D")
             AnnotationColor.RED -> Color.parseColor("#F44336")
             AnnotationColor.BLACK -> Color.BLACK
+            AnnotationColor.WHITE -> Color.WHITE
         }
     }
 
@@ -330,7 +897,8 @@ class AnnotationController(
         fanMenuView.visibility = View.GONE
         pendingPoiLatLng = null
         onAnnotationChanged?.invoke()
-        annotationOverlayView.updateAnnotations(annotationViewModel.uiState.value.annotations)
+        val nonPoiAnnotations = annotationViewModel.uiState.value.annotations.filterNot { it is MapAnnotation.PointOfInterest }
+        annotationOverlayView.updateAnnotations(nonPoiAnnotations)
         annotationOverlayView.invalidate()
     }
 
@@ -439,11 +1007,11 @@ class AnnotationController(
 
     // Stub for showing the elevation chart bottom sheet
     private fun showElevationChartBottomSheet(lineId: String) {
-        android.util.Log.d("AnnotationController", "showElevationChartBottomSheet called for lineId=$lineId")
+        Log.d("AnnotationController", "showElevationChartBottomSheet called for lineId=$lineId")
         val line = annotationViewModel.uiState.value.annotations.filterIsInstance<com.tak.lite.model.MapAnnotation.Line>().find { it.id == lineId } ?: return
         val activity = fragment.requireActivity() as? androidx.fragment.app.FragmentActivity
         if (activity != null) {
-            android.util.Log.d("AnnotationController", "Showing ElevationChartBottomSheet for lineId=$lineId")
+            Log.d("AnnotationController", "Showing ElevationChartBottomSheet for lineId=$lineId")
             val sheet = ElevationChartBottomSheet(line)
             sheet.show(activity.supportFragmentManager, "ElevationChartBottomSheet")
         } else {
@@ -569,6 +1137,8 @@ class AnnotationController(
         fun submitLabel() {
             val newLabel = editText.text.toString().takeIf { it.isNotBlank() }
             annotationViewModel.updatePointOfInterest(poiId, newLabel = newLabel)
+            // Force map redraw to update POI layer with new label
+            onAnnotationChanged?.invoke()
         }
         
         // Add editor action listener to handle Enter key

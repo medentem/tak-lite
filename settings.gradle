@@ -16,6 +16,9 @@ dependencyResolutionManagement {
         maven { url 'https://maven.google.com' }
         maven { url 'https://maven.maplibre.org/' }
         maven { url 'https://google.maven.org/releases' }
+        maven {
+            url 'https://api.mapbox.com/downloads/v2/releases/maven'
+        }
     }
 }
 
