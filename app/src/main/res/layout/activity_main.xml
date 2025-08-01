@@ -221,7 +221,7 @@
                 android:layout_height="32dp"
                 android:layout_gravity="center"
                 android:contentDescription="@string/location_source"
-                android:tint="@android:color/white" />
+                app:tint="@android:color/white" />
         </FrameLayout>
 
         <TextView
@@ -278,4 +278,14 @@
             android:orientation="vertical" />
     </FrameLayout>
 
-</androidx.constraintlayout.widget.ConstraintLayout> 
+    <com.tak.lite.ui.map.TimerTextOverlayView
+        android:id="@+id/timerTextOverlayView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@android:color/transparent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

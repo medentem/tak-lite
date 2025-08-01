@@ -43,6 +43,7 @@ class AnnotationFragment : Fragment() {
     private var currentShape: PointShape = PointShape.CIRCLE
     private var isDrawing = false
     private lateinit var predictionOverlayView: PredictionOverlayView
+    private lateinit var timerTextOverlayView: TimerTextOverlayView
     
     // POI tap detection state
     private var poiTapDownTime: Long? = null
@@ -73,6 +74,10 @@ class AnnotationFragment : Fragment() {
 
         // Initialize prediction overlay
         predictionOverlayView = view.findViewById(R.id.predictionOverlayView)
+        
+        // Initialize timer text overlay
+        timerTextOverlayView = mainActivity?.findViewById(R.id.timerTextOverlayView) ?: 
+            view.findViewById(R.id.timerTextOverlayView)
         
         // Set initial prediction overlay visibility based on user preference
         val prefs = requireContext().getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
@@ -110,12 +115,41 @@ class AnnotationFragment : Fragment() {
                 lineToolButton
             )
             mapController?.setOnStyleChangedCallback {
-                annotationController.setupAnnotationOverlay(mapLibreMap)
-                annotationController.renderAllAnnotations(mapLibreMap)
+                Log.d("AnnotationFragment", "Style changed, restoring annotation layers")
+                // Add a small delay to ensure the style is fully loaded
+                viewLifecycleOwner.lifecycleScope.launch {
+                    kotlinx.coroutines.delay(100) // 100ms delay
+                    annotationController.setupAnnotationOverlay(mapLibreMap)
+                    annotationController.renderAllAnnotations(mapLibreMap)
+                    
+                    // Restore peer dots after style change
+                    val currentPeerLocations = annotationOverlayView.getCurrentPeerLocations()
+                    if (currentPeerLocations.isNotEmpty()) {
+                        Log.d("AnnotationFragment", "Restoring ${currentPeerLocations.size} peer dots after style change")
+                        annotationController.updatePeerDotsOnMap(mapLibreMap, currentPeerLocations)
+                    }
+                    
+                    // Restore POI annotations after style change
+                    val currentPoiAnnotations = viewModel.uiState.value.annotations.filterIsInstance<com.tak.lite.model.MapAnnotation.PointOfInterest>()
+                    if (currentPoiAnnotations.isNotEmpty()) {
+                        Log.d("AnnotationFragment", "Restoring ${currentPoiAnnotations.size} POI annotations after style change")
+                        annotationController.updatePoiAnnotationsOnMap(mapLibreMap, currentPoiAnnotations)
+                    }
+                    
+                    // Restore timer layers after style change
+                    annotationController.timerManager?.setupTimerLayers()
+                }
             }
             annotationController.mapController = mapController
             // Set up custom touch listener for POI tap detection
             mapLibreMap.addOnMapClickListener { latLng ->
+                // Check if popovers are visible and dismiss them on tap
+                if (annotationController.popoverManager.hasVisiblePopover()) {
+                    Log.d("AnnotationFragment", "Map clicked with visible popovers, dismissing them")
+                    annotationController.popoverManager.hideCurrentPopover()
+                    return@addOnMapClickListener true
+                }
+                
                 if (annotationController.isLineDrawingMode) {
                     annotationController.tempLinePoints.add(latLng)
                     annotationOverlayView.setTempLinePoints(annotationController.tempLinePoints)
@@ -125,16 +159,28 @@ class AnnotationFragment : Fragment() {
                     // Native peer dot hit detection
                     val projection = mapLibreMap.projection
                     val screenPoint = projection.toScreenLocation(latLng)
-                    val peerFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, "peer-dots-layer")
+                    
+                    // Debug: Check what layers are available
+                    Log.d("AnnotationFragment", "Checking peer tap at screen point: $screenPoint")
+                    
+                    // Use the constant PEER_DOTS_LAYER
+                    val peerLayerId = ClusteredLayerManager.PEER_DOTS_LAYER
+                    Log.d("AnnotationFragment", "Using peer layer: $peerLayerId")
+                    
+                    val peerFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, peerLayerId)
+                    val peerHitAreaFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, ClusteredLayerManager.PEER_HIT_AREA_LAYER)
+                    val peerNonClusteredHitAreaFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, "peer-dots-hit-area")
+                    
+                    Log.d("AnnotationFragment", "Peer features found: ${peerFeatures.size}, hit area: ${peerHitAreaFeatures.size}, non-clustered hit area: ${peerNonClusteredHitAreaFeatures.size}")
+                    
                     val peerFeature = peerFeatures.firstOrNull { it.getStringProperty("peerId") != null }
+                        ?: peerHitAreaFeatures.firstOrNull { it.getStringProperty("peerId") != null }
+                        ?: peerNonClusteredHitAreaFeatures.firstOrNull { it.getStringProperty("peerId") != null }
                     if (peerFeature != null) {
                         val peerId = peerFeature.getStringProperty("peerId")
-                        // Show peer popover (async, as before)
-                        viewLifecycleOwner.lifecycleScope.launch {
-                            val peerName: String? = meshNetworkViewModel.getPeerName(peerId)
-                            val peerLastHeard: Long? = meshNetworkViewModel.getPeerLastHeard(peerId)
-                            annotationOverlayView.showPeerPopover(peerId, peerName, peerLastHeard)
-                        }
+                        Log.d("AnnotationFragment", "Peer tapped: $peerId")
+                        // Show peer popover using hybrid manager
+                        annotationController.showPeerPopover(peerId)
                         true
                     } else {
                         // Native POI hit detection
@@ -149,7 +195,7 @@ class AnnotationFragment : Fragment() {
                         if (poiFeature != null) {
                             val poiId = poiFeature.getStringProperty("poiId")
                             Log.d("AnnotationFragment", "POI tapped: $poiId")
-                            // For single taps, show POI label instead of edit menu
+                            // For single taps, show POI popover instead of edit menu
                             annotationController.showPoiLabel(poiId, screenPoint)
                             true
                         } else {
@@ -179,6 +225,7 @@ class AnnotationFragment : Fragment() {
                 annotationOverlayView.setZoom(mapLibreMap.cameraPosition.zoom.toFloat())
                 predictionOverlayView.setZoom(mapLibreMap.cameraPosition.zoom.toFloat())
                 predictionOverlayView.setProjection(mapLibreMap.projection)
+                timerTextOverlayView.setProjection(mapLibreMap.projection)
                 
                 // THROTTLED: Heavy operations that can be delayed
                 if (shouldUpdateHeavy) {
@@ -198,6 +245,16 @@ class AnnotationFragment : Fragment() {
             }
 
             // Now safe to launch these:
+            // === INITIALIZE AND START POI TIMER UPDATES ===
+            annotationController.initializeTimerManager(mapLibreMap)
+            annotationController.timerManager?.let { timerManager ->
+                // Set up timer text overlay callback
+                timerManager.setTimerTextCallback(timerTextOverlayView)
+                timerTextOverlayView.setProjection(mapLibreMap.projection)
+                timerManager.startTimerUpdates()
+                Log.d("AnnotationFragment", "POI timer updates started")
+            }
+            
             // === ENHANCED: Single data flow for peer locations with native clustering ===
             viewLifecycleOwner.lifecycleScope.launch {
                 meshNetworkViewModel.peerLocations.debounce(500).collectLatest { locations ->
@@ -292,11 +349,7 @@ class AnnotationFragment : Fragment() {
 
             annotationOverlayView.peerDotTapListener = object : AnnotationOverlayView.OnPeerDotTapListener {
                 override fun onPeerDotTapped(peerId: String, screenPosition: PointF) {
-                    viewLifecycleOwner.lifecycleScope.launch {
-                        val peerName: String? = meshNetworkViewModel.getPeerName(peerId)
-                        val peerLastHeard: Long? = meshNetworkViewModel.getPeerLastHeard(peerId)
-                        annotationOverlayView.showPeerPopover(peerId, peerName, peerLastHeard)
-                    }
+                    annotationController.showPeerPopover(peerId)
                 }
             }
         }
@@ -352,6 +405,8 @@ class AnnotationFragment : Fragment() {
 
     override fun onDestroyView() {
         super.onDestroyView()
+        // Clean up POI timer manager
+        annotationController.timerManager?.cleanup()
         _binding = null
     }
 

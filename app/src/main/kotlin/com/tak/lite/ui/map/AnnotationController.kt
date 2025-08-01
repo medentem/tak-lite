@@ -61,25 +61,25 @@ class AnnotationController(
     var clusteringConfig: ClusteringConfig
     private var lastPeerUpdate = 0L
     private val PEER_UPDATE_THROTTLE_MS = 100L
+    
+    // === HYBRID POPOVER SUPPORT ===
+    lateinit var popoverManager: HybridPopoverManager
+    private var lastPopoverUpdate = 0L
+    private val POPOVER_UPDATE_THROTTLE_MS = 10L
+    
+    // === POI TIMER SUPPORT ===
+    private var poiTimerManager: PoiTimerManager? = null
+    
+    // Getter for timer manager
+    val timerManager: PoiTimerManager? get() = poiTimerManager
 
     init {
         clusteringConfig = ClusteringConfig.getDefault()
         clusteredLayerManager = ClusteredLayerManager(mapLibreMap, clusteringConfig)
+        popoverManager = HybridPopoverManager(mapLibreMap, binding.root, meshNetworkViewModel)
         Log.d("PeerDotDebug", "AnnotationController initialized with clustering config: $clusteringConfig")
     }
-
-    // Helper function to calculate distance between two points for debugging
-    private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-        val r = 6371000.0 // Earth's radius in meters
-        val dLat = Math.toRadians(lat2 - lat1)
-        val dLon = Math.toRadians(lon2 - lon1)
-        val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
-                Math.sin(dLon / 2) * Math.sin(dLon / 2)
-        val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-        return r * c
-    }
-
+    
     // === ENHANCED: Convert peer locations to clustered GeoJSON FeatureCollection ===
     private fun peerLocationsToClusteredFeatureCollection(peerLocations: Map<String, com.tak.lite.model.PeerLocationEntry>): FeatureCollection {
         Log.d("PeerDotDebug", "Creating FeatureCollection from ${peerLocations.size} peer locations")
@@ -153,7 +153,23 @@ class AnnotationController(
             feature.addNumberProperty("timestamp", poi.timestamp)
             feature.addNumberProperty("expirationTime", poi.expirationTime ?: 0L)
             
-            Log.d("PoiDebug", "Creating POI feature: poiId=${poi.id}, icon=$iconName, label=${poi.label}, color=${poi.color}, shape=${poi.shape}")
+            // Add timer-specific properties for POIs with expiration times
+            if (poi.expirationTime != null) {
+                val now = System.currentTimeMillis()
+                val secondsRemaining = (poi.expirationTime - now) / 1000
+                val isWarning = secondsRemaining <= 60 // 1 minute warning
+                val isCritical = secondsRemaining <= 10 // 10 seconds critical
+                
+                feature.addBooleanProperty("hasTimer", true)
+                feature.addNumberProperty("secondsRemaining", secondsRemaining)
+                feature.addBooleanProperty("isWarning", isWarning)
+                feature.addBooleanProperty("isCritical", isCritical)
+                feature.addStringProperty("timerColor", if (isCritical) "#FF0000" else if (isWarning) "#FFA500" else poi.color.name.lowercase())
+            } else {
+                feature.addBooleanProperty("hasTimer", false)
+            }
+            
+            Log.d("PoiDebug", "Creating POI feature: poiId=${poi.id}, icon=$iconName, label=${poi.label}, color=${poi.color}, shape=${poi.shape}, hasTimer=${poi.expirationTime != null}")
             feature
         }
         return FeatureCollection.fromFeatures(features)
@@ -246,81 +262,28 @@ class AnnotationController(
         
         return bitmap
     }
-    
-    // === CLUSTER INTERACTION HANDLING ===
-    private fun setupClusterClickHandling(mapLibreMap: MapLibreMap) {
-        mapLibreMap.addOnMapClickListener { latLng ->
-            val screenPoint = mapLibreMap.projection.toScreenLocation(latLng)
-            
-            // Check for peer cluster clicks first
-            val peerClusterFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, ClusteredLayerManager.PEER_CLUSTERS_LAYER)
-            val peerClusterFeature = peerClusterFeatures.firstOrNull { it.getNumberProperty("point_count") != null }
-            
-            if (peerClusterFeature != null) {
-                // Handle peer cluster expansion
-                val source = mapLibreMap.style?.getSourceAs<GeoJsonSource>(ClusteredLayerManager.PEER_CLUSTERED_SOURCE)
-                val zoom = source?.getClusterExpansionZoom(peerClusterFeature)
-                if (zoom != null) {
-                    mapLibreMap.easeCamera(
-                        org.maplibre.android.camera.CameraUpdateFactory.zoomTo(
-                            zoom.toDouble()
-                        )
-                    )
-                }
-                Log.d("AnnotationController", "Peer cluster clicked, expanding to zoom $zoom")
-                return@addOnMapClickListener true
-            }
-            
-            // Check for POI cluster clicks
-            val poiClusterFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, ClusteredLayerManager.POI_CLUSTERS_LAYER)
-            val poiClusterFeature = poiClusterFeatures.firstOrNull { it.getNumberProperty("point_count") != null }
-            
-            if (poiClusterFeature != null) {
-                // Handle POI cluster expansion
-                val source = mapLibreMap.style?.getSourceAs<GeoJsonSource>(ClusteredLayerManager.POI_CLUSTERED_SOURCE)
-                val zoom = source?.getClusterExpansionZoom(poiClusterFeature)
-                if (zoom != null) {
-                    mapLibreMap.easeCamera(org.maplibre.android.camera.CameraUpdateFactory.zoomTo(zoom.toDouble()))
-                }
-                Log.d("AnnotationController", "POI cluster clicked, expanding to zoom $zoom")
-                return@addOnMapClickListener true
-            }
-            
-            // Check for individual peer clicks (including fallback layer)
-            val peerFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, ClusteredLayerManager.PEER_DOTS_LAYER)
-            val peerFallbackFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, "peer-dots-fallback")
-            val peerFeature = peerFeatures.firstOrNull { it.getStringProperty("peerId") != null } 
-                ?: peerFallbackFeatures.firstOrNull { it.getStringProperty("peerId") != null }
-            
-            if (peerFeature != null) {
-                val peerId = peerFeature.getStringProperty("peerId")
-                showPeerPopover(peerId)
-                Log.d("AnnotationController", "Individual peer clicked: $peerId")
-                return@addOnMapClickListener true
-            }
-            
-            // Check for individual POI clicks (including fallback layer)
-            val poiFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, ClusteredLayerManager.POI_DOTS_LAYER)
-            val poiFallbackFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, "poi-symbols-fallback")
-            val poiFeature = poiFeatures.firstOrNull { it.getStringProperty("poiId") != null }
-                ?: poiFallbackFeatures.firstOrNull { it.getStringProperty("poiId") != null }
-            
-            if (poiFeature != null) {
-                val poiId = poiFeature.getStringProperty("poiId")
-                showPoiLabel(poiId, screenPoint)
-                Log.d("AnnotationController", "Individual POI clicked: $poiId")
-                return@addOnMapClickListener true
-            }
-            
-            false
+
+    // Initialize timer manager when map is ready
+    fun initializeTimerManager(mapLibreMap: MapLibreMap?) {
+        if (poiTimerManager == null && mapLibreMap != null) {
+            poiTimerManager = PoiTimerManager(mapLibreMap, annotationViewModel)
+            Log.d("AnnotationController", "Timer manager initialized")
         }
     }
-    
+
     // Overlay and menu setup
     fun setupAnnotationOverlay(mapLibreMap: MapLibreMap?) {
         mapLibreMap?.addOnCameraMoveListener {
             // IMMEDIATE: Only update projection for visual sync
             annotationOverlayView.setProjection(mapLibreMap.projection)
+            
+            // Throttled popover position updates for performance
+            val now = System.currentTimeMillis()
+            if (now - lastPopoverUpdate >= POPOVER_UPDATE_THROTTLE_MS) {
+                popoverManager.updatePopoverPosition()
+                lastPopoverUpdate = now
+            }
+            
             // Remove invalidate() call - it's handled by the fragment's throttled sync
         }
         annotationOverlayView.setProjection(mapLibreMap?.projection)
@@ -330,6 +293,10 @@ class AnnotationController(
         mapLibreMap?.getStyle { style ->
             // Generate POI icons first
             generatePoiIcons(style)
+            
+            // Initialize timer manager and setup POI timer layers
+            initializeTimerManager(mapLibreMap)
+            poiTimerManager?.setupTimerLayers()
             
             // Only create non-clustered layers if clustering is disabled
             if (!clusteringConfig.enablePeerClustering) {
@@ -357,6 +324,16 @@ class AnnotationController(
                     )
                     style.addLayer(layer)
                     Log.d("PeerDotDebug", "Non-clustered peer dots layer created with properties: circleColor=${layer.circleColor}, circleStrokeColor=${layer.circleStrokeColor}")
+
+                    // Add invisible hit area layer for easier tapping (non-clustered)
+                    val hitAreaLayer = CircleLayer("peer-dots-hit-area", sourceId)
+                        .withProperties(
+                            PropertyFactory.circleColor("#FFFFFF"), // Transparent
+                            PropertyFactory.circleOpacity(0f),
+                            PropertyFactory.circleRadius(20f), // Larger hit area
+                        )
+                    style.addLayer(hitAreaLayer)
+                    Log.d("PeerDotDebug", "Non-clustered peer hit area layer created")
                 }
             }
             
@@ -388,6 +365,9 @@ class AnnotationController(
                     )
                     style.addLayer(layer)
                     Log.d("PoiDebug", "Non-clustered POI layer created")
+                    
+                    // Retry timer layer setup now that POI layer exists
+                    poiTimerManager?.retrySetupTimerLayers()
                 } else {
                     Log.d("PoiDebug", "Non-clustered POI layer already exists")
                 }
@@ -490,6 +470,9 @@ class AnnotationController(
                 } catch (e: Exception) {
                     Log.e("PeerDotDebug", "Failed to create clustered source: ${e.message}", e)
                 }
+                
+                // Retry timer layer setup now that clustered POI layer exists
+                poiTimerManager?.retrySetupTimerLayers()
             }
         }
     }
@@ -613,8 +596,8 @@ class AnnotationController(
         val poi = getPoiById(poiId)
         if (poi != null) {
             Log.d("AnnotationController", "Found POI: ${poi.label}, position: ${poi.position}")
-            annotationOverlayView.showPoiLabel(poiId, screenPosition)
-            Log.d("AnnotationController", "showPoiLabel: called annotationOverlayView.showPoiLabel")
+            popoverManager.showPoiPopover(poiId, poi)
+            Log.d("AnnotationController", "showPoiLabel: called popoverManager.showPoiPopover")
         } else {
             Log.e("AnnotationController", "POI not found: $poiId")
         }
@@ -626,9 +609,17 @@ class AnnotationController(
         // Get peer information from the mesh network
         val peerName = meshNetworkViewModel.getPeerName(peerId)
         val peerLastHeard = meshNetworkViewModel.getPeerLastHeard(peerId)
+        val peerLocation = meshNetworkViewModel.peerLocations.value[peerId]
         
-        annotationOverlayView.showPeerPopover(peerId, peerName, peerLastHeard)
-        Log.d("AnnotationController", "showPeerPopover: called annotationOverlayView.showPeerPopover with name=$peerName, lastHeard=$peerLastHeard")
+        Log.d("AnnotationController", "showPeerPopover: peerName=$peerName, peerLastHeard=$peerLastHeard, peerLocation=$peerLocation")
+        
+        if (peerLocation != null) {
+            popoverManager.showPeerPopover(peerId, peerName, peerLastHeard, peerLocation.toLatLng())
+            Log.d("AnnotationController", "showPeerPopover: called popoverManager.showPeerPopover with name=$peerName, lastHeard=$peerLastHeard")
+        } else {
+            Log.e("AnnotationController", "showPeerPopover: peer location not found for $peerId")
+            Log.d("AnnotationController", "showPeerPopover: available peer locations: ${meshNetworkViewModel.peerLocations.value.keys}")
+        }
     }
 
     fun showPoiEditMenu(center: PointF, poiId: String) {
@@ -1088,12 +1079,8 @@ class AnnotationController(
     }
 
     private fun handleViewInfo(peerId: String) {
-        // Launch a coroutine to handle the suspend function call
-        (fragment as? androidx.fragment.app.Fragment)?.viewLifecycleOwner?.lifecycleScope?.launch {
-            val peerName = meshNetworkViewModel.getPeerName(peerId)
-            val peerLastHeard = meshNetworkViewModel.getPeerLastHeard(peerId)
-            annotationOverlayView.showPeerPopover(peerId, peerName, peerLastHeard)
-        }
+        // Use the new hybrid popover manager
+        showPeerPopover(peerId)
     }
 
     private fun handleDrawLineToPeer(peerId: String) {

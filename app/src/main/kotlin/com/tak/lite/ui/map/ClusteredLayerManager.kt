@@ -23,6 +23,7 @@ class ClusteredLayerManager(
         const val PEER_CLUSTERS_LAYER = "peer-clusters"
         const val PEER_CLUSTER_COUNT_LAYER = "peer-cluster-count"
         const val PEER_DOTS_LAYER = "peer-dots"
+        const val PEER_HIT_AREA_LAYER = "peer-hit-area"
         const val POI_CLUSTERS_LAYER = "poi-clusters"
         const val POI_CLUSTER_COUNT_LAYER = "poi-cluster-count"
         const val POI_DOTS_LAYER = "poi-dots"
@@ -77,13 +78,32 @@ class ClusteredLayerManager(
                 style.addLayer(peerLayer)
                 Log.d(TAG, "Added peer dots layer: ${peerLayer.id} with filter: $peerFilter")
 
+                // Add invisible hit area layer for easier tapping
+                val hitAreaLayer = CircleLayer(PEER_HIT_AREA_LAYER, PEER_CLUSTERED_SOURCE)
+                    .withProperties(
+                        PropertyFactory.circleColor("#FFFFFF"), // Transparent
+                        PropertyFactory.circleOpacity(.01f),
+                        PropertyFactory.circleRadius(20f), // Larger hit area
+                    )
+                    .withFilter(peerFilter)
+                style.addLayer(hitAreaLayer)
+                Log.d(TAG, "Added peer hit area layer: ${hitAreaLayer.id}")
+                
+                // Verify hit area layer was added
+                val finalHitAreaLayer = style.getLayer(PEER_HIT_AREA_LAYER)
+                Log.d(TAG, "  Hit area layer exists: ${finalHitAreaLayer != null}")
+                if (finalHitAreaLayer != null) {
+                    Log.d(TAG, "  Hit area layer visibility: ${finalHitAreaLayer.visibility.value}")
+                    Log.d(TAG, "  Hit area layer id: ${finalHitAreaLayer.id}")
+                }
+
                 Log.d(TAG, "setupPeerClusteredLayer: creating cluster circles layer")
                 // Add cluster circles layer (background for clusters)
                 val clusterFilter = Expression.has("point_count")
                 val clusterLayer = CircleLayer(PEER_CLUSTERS_LAYER, PEER_CLUSTERED_SOURCE)
                     .withProperties(
                         PropertyFactory.circleColor("#4CAF50"), // Material green
-                        PropertyFactory.circleRadius(Expression.literal(25f))
+                        PropertyFactory.circleRadius(Expression.literal(20f))
                     )
                     .withFilter(clusterFilter)
                 style.addLayer(clusterLayer)
@@ -183,7 +203,7 @@ class ClusteredLayerManager(
                 val clusterLayer = CircleLayer(POI_CLUSTERS_LAYER, POI_CLUSTERED_SOURCE)
                     .withProperties(
                         PropertyFactory.circleColor("#FCFCFC"),
-                        PropertyFactory.circleRadius(Expression.literal(25f))
+                        PropertyFactory.circleRadius(Expression.literal(20f))
                     )
                     .withFilter(Expression.has("point_count"))
                 style.addLayer(clusterLayer)

@@ -16,6 +16,7 @@ import android.util.Log
 import android.view.MotionEvent
 import android.view.View
 import androidx.core.content.ContextCompat
+import com.tak.lite.BuildConfig
 import com.tak.lite.R
 import com.tak.lite.data.model.AnnotationCluster
 import com.tak.lite.data.model.PeerCluster
@@ -218,16 +219,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
     private var lassoLongPressDownPos: PointF? = null
 
     // --- Annotation label state for quick tap ---
-    private var labelPoiIdToShow: String? = null
-    private var labelPoiPosition: PointF? = null
-    private var labelDismissHandler: Handler? = null
-    private val LABEL_DISPLAY_DURATION = 8000L // 8 seconds
-    // --- Peer popover state ---
-    private var peerPopoverPeerId: String? = null
-    private var peerPopoverPeerName: String? = null
-    private var peerPopoverPeerLastHeard: Long? = null
-    private var peerPopoverDismissHandler: Handler? = null
-    private val PEER_POPOVER_DISPLAY_DURATION = 5000L
+    // Note: Popover functionality moved to HybridPopoverManager
 
     private var userLocation: LatLng? = null
     private var deviceLocation: LatLng? = null
@@ -249,6 +241,9 @@ class AnnotationOverlayView @JvmOverloads constructor(
         isDeviceLocationStale = stale
         invalidate()
     }
+
+    // Store the current POI annotation for position updates
+    // Note: Popover functionality moved to HybridPopoverManager
 
     init {
         timerHandler.post(timerRunnable)
@@ -420,11 +415,6 @@ class AnnotationOverlayView @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         if (projection == null) return
-        
-        // Debug logging for POI label drawing
-        if (labelPoiIdToShow != null) {
-            Log.d("AnnotationOverlayView", "onDraw: labelPoiIdToShow=$labelPoiIdToShow, labelPoiPosition=$labelPoiPosition")
-        }
 
         // --- PERFORMANCE OPTIMIZATION: Check for timer annotations ---
         checkForVisibleTimerAnnotations()
@@ -636,33 +626,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
             }
         }
 
-        // Draw peer popover if active
-        peerPopoverPeerId?.let { peerId ->
-            val latLng = peerLocations[peerId]
-            val pos = latLng?.let { projection?.toScreenLocation(it.toLatLng()) }?.let { PointF(it.x, it.y) }
-            if (pos != null) {
-                drawPeerPopover(canvas, peerId, peerPopoverPeerName, peerPopoverPeerLastHeard, pos)
-            }
-        }
-
-        // Draw POI label if active
-        labelPoiIdToShow?.let { poiId ->
-            labelPoiPosition?.let { position ->
-                Log.d("AnnotationOverlayView", "Drawing POI label at position: $position")
-                // Get POI data from the annotation controller instead of overlay annotations
-                annotationController?.let { controller ->
-                    val poi = controller.getPoiById(poiId)
-                    if (poi != null) {
-                        Log.d("AnnotationOverlayView", "Found POI from controller, drawing label")
-                        drawPoiLabel(canvas, position, poi)
-                    } else {
-                        Log.e("AnnotationOverlayView", "POI not found from controller: $poiId")
-                    }
-                } ?: run {
-                    Log.e("AnnotationOverlayView", "Annotation controller is null")
-                }
-            }
-        }
+        // Note: Popover drawing moved to HybridPopoverManager
     }
 
     private fun drawPoint(canvas: Canvas, point: PointF, annotation: MapAnnotation.PointOfInterest) {
@@ -1010,7 +974,11 @@ class AnnotationOverlayView @JvmOverloads constructor(
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        android.util.Log.d("AnnotationOverlayView", "onTouchEvent: action=${event.action}, x=${event.x}, y=${event.y}, visible=$visibility, clickable=$isClickable")
+        // Only log in debug builds and reduce frequency
+        if (BuildConfig.DEBUG && event.action == MotionEvent.ACTION_DOWN) {
+            android.util.Log.d("AnnotationOverlayView", "onTouchEvent: action=${event.action}, x=${event.x}, y=${event.y}, visible=$visibility, clickable=$isClickable")
+        }
+        
         if (isLassoMode) {
             // --- Lasso mode handling (as currently implemented) ---
             val x = event.x
@@ -1032,6 +1000,35 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     return true
                 }
                 MotionEvent.ACTION_MOVE -> {
+                    if (BuildConfig.DEBUG) {
+                        android.util.Log.d("AnnotationOverlayView", "ACTION_MOVE: event.x=${event.x}, event.y=${event.y}")
+                    }
+                    longPressLineDownPos?.let { down ->
+                        val dist = hypot((event.x - down.x).toDouble(), (event.y - down.y).toDouble())
+                        if (BuildConfig.DEBUG) {
+                            android.util.Log.d("AnnotationOverlayView", "LINE move: dist=$dist, from=(${"%.2f".format(down.x)}, ${"%.2f".format(down.y)}) to=(${"%.2f".format(event.x)}, ${"%.2f".format(event.y)})")
+                        }
+                        if (dist > 40) {
+                            if (BuildConfig.DEBUG) {
+                                android.util.Log.d("AnnotationOverlayView", "Cancelling long-press handler (moved too far for LINE)")
+                            }
+                            longPressHandler?.removeCallbacks(longPressRunnable!!)
+                            longPressLineCandidate = null
+                        }
+                    }
+                    longPressPeerDownPos?.let { down ->
+                        val dist = hypot((event.x - down.x).toDouble(), (event.y - down.y).toDouble())
+                        if (BuildConfig.DEBUG) {
+                            android.util.Log.d("AnnotationOverlayView", "PEER move: dist=$dist, from=(${"%.2f".format(down.x)}, ${"%.2f".format(down.y)}) to=(${"%.2f".format(event.x)}, ${"%.2f".format(event.y)})")
+                        }
+                        if (dist > 40) {
+                            if (BuildConfig.DEBUG) {
+                                android.util.Log.d("AnnotationOverlayView", "Cancelling long-press handler (moved too far for PEER)")
+                            }
+                            longPressHandler?.removeCallbacks(longPressRunnable!!)
+                            longPressPeerCandidate = null
+                        }
+                    }
                     lassoPath?.lineTo(x, y)
                     lassoPoints?.add(PointF(x, y))
                     invalidate()
@@ -1064,16 +1061,23 @@ class AnnotationOverlayView @JvmOverloads constructor(
             // --- Annotation edit mode (POI/line long press) ---
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    // Check for line long press
+                    // Only log in debug builds
+                    if (BuildConfig.DEBUG) {
+                        android.util.Log.d("AnnotationOverlayView", "ACTION_DOWN: event.x=${event.x}, event.y=${event.y}")
+                    }
+                    // Check for line tap
                     val lineHit = findLineAt(event.x, event.y)
                     if (lineHit != null) {
-                        android.util.Log.d("AnnotationOverlayView", "ACTION_DOWN on LINE: event.x=${event.x}, event.y=${event.y}")
                         longPressLineCandidate = lineHit.first
                         longPressLineDownPos = PointF(event.x, event.y)
-                        android.util.Log.d("AnnotationOverlayView", "Set longPressLineDownPos: $longPressLineDownPos for LINE ${lineHit.first.id}")
+                        if (BuildConfig.DEBUG) {
+                            android.util.Log.d("AnnotationOverlayView", "Set longPressLineDownPos: $longPressLineDownPos for LINE ${lineHit.first.id}")
+                        }
                         longPressHandler = Handler(Looper.getMainLooper())
                         longPressRunnable = Runnable {
-                            android.util.Log.d("AnnotationOverlayView", "Long-press triggered for LINE ${lineHit.first.id} at $longPressLineDownPos")
+                            if (BuildConfig.DEBUG) {
+                                android.util.Log.d("AnnotationOverlayView", "Long-press triggered for LINE ${lineHit.first.id} at $longPressLineDownPos")
+                            }
                             poiLongPressListener?.onLineLongPressed(lineHit.first.id, longPressLineDownPos!!)
                             longPressLineCandidate = null
                         }
@@ -1081,30 +1085,11 @@ class AnnotationOverlayView @JvmOverloads constructor(
                         // --- Clear PEER handler state ---
                         longPressPeerCandidate = null
                         longPressPeerDownPos = null
+                        peerTapDownTime = null
                         isDeviceDotCandidate = false
                         return true // Intercept only if touching a line
                     }
-                    // Check for peer dot tap/long press
-                    val peerId = findPeerDotAt(event.x, event.y)
-                    if (peerId != null) {
-                        android.util.Log.d("AnnotationOverlayView", "ACTION_DOWN on PEER: event.x=${event.x}, event.y=${event.y}")
-                        longPressPeerCandidate = peerId
-                        longPressPeerDownPos = PointF(event.x, event.y)
-                        peerTapDownTime = System.currentTimeMillis()
-                        android.util.Log.d("AnnotationOverlayView", "Set longPressPeerDownPos: $longPressPeerDownPos for PEER $peerId")
-                        longPressHandler = Handler(Looper.getMainLooper())
-                        longPressRunnable = Runnable {
-                            android.util.Log.d("AnnotationOverlayView", "Long-press triggered for PEER $peerId at $longPressPeerDownPos")
-                            poiLongPressListener?.onPeerLongPressed(peerId, longPressPeerDownPos!!)
-                            longPressPeerCandidate = null
-                        }
-                        longPressHandler?.postDelayed(longPressRunnable!!, 500)
-                        // --- Clear LINE handler state ---
-                        longPressLineCandidate = null
-                        longPressLineDownPos = null
-                        isDeviceDotCandidate = false
-                        return true // Intercept only if touching a peer
-                    }
+
                     // Check for device location dot tap
                     if (deviceLocation != null) {
                         val devicePt = projection?.toScreenLocation(deviceLocation!!)
@@ -1118,14 +1103,13 @@ class AnnotationOverlayView @JvmOverloads constructor(
                             }
                         }
                     }
-                    // --- Global quick tap for popover dismiss ---
-                    globalQuickTapDownTime = System.currentTimeMillis()
-                    globalQuickTapDownPos = PointF(event.x, event.y)
                     return false // Let the map handle the event
                 }
                 MotionEvent.ACTION_UP -> {
-                    android.util.Log.d("AnnotationOverlayView", "ACTION_UP: event.x=${event.x}, event.y=${event.y}")
-                    android.util.Log.d("AnnotationOverlayView", "Cancelling long-press handler (ACTION_UP)")
+                    if (BuildConfig.DEBUG) {
+                        android.util.Log.d("AnnotationOverlayView", "ACTION_UP: event.x=${event.x}, event.y=${event.y}")
+                        android.util.Log.d("AnnotationOverlayView", "Cancelling long-press handler (ACTION_UP)")
+                    }
                     longPressHandler?.removeCallbacks(longPressRunnable!!)
                     // Handle peer dot tap
                     longPressPeerCandidate?.let { peerId ->
@@ -1138,16 +1122,6 @@ class AnnotationOverlayView @JvmOverloads constructor(
                             peerDotTapListener?.onPeerDotTapped(peerId, upPos)
                         }
                     }
-                    // --- Global quick tap for popover dismiss ---
-                    val upTime = System.currentTimeMillis()
-                    val upPos = PointF(event.x, event.y)
-                    val duration = upTime - (globalQuickTapDownTime ?: 0L)
-                    val moved = globalQuickTapDownPos?.let { hypot((upPos.x - it.x).toDouble(), (upPos.y - it.y).toDouble()) > 40 } ?: false
-                    if (duration < 300 && !moved && (labelPoiIdToShow != null || peerPopoverPeerId != null)) {
-                        hideAllPopovers()
-                    }
-                    globalQuickTapDownTime = null
-                    globalQuickTapDownPos = null
                     longPressLineCandidate = null
                     longPressPeerCandidate = null
                     peerTapDownTime = null
@@ -1155,55 +1129,53 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     isDeviceDotCandidate = false
                 }
                 MotionEvent.ACTION_CANCEL -> {
-                    android.util.Log.d("AnnotationOverlayView", "ACTION_CANCEL: event.x=${event.x}, event.y=${event.y}")
-                    android.util.Log.d("AnnotationOverlayView", "Cancelling long-press handler (ACTION_CANCEL)")
+                    if (BuildConfig.DEBUG) {
+                        android.util.Log.d("AnnotationOverlayView", "ACTION_CANCEL: event.x=${event.x}, event.y=${event.y}")
+                        android.util.Log.d("AnnotationOverlayView", "Cancelling long-press handler (ACTION_CANCEL)")
+                    }
                     longPressHandler?.removeCallbacks(longPressRunnable!!)
                     longPressLineCandidate = null
                     longPressPeerCandidate = null
-                    globalQuickTapDownTime = null
-                    globalQuickTapDownPos = null
                     deviceDotTapDownTime = null
                     isDeviceDotCandidate = false
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    android.util.Log.d("AnnotationOverlayView", "ACTION_MOVE: event.x=${event.x}, event.y=${event.y}")
+                    if (BuildConfig.DEBUG) {
+                        android.util.Log.d("AnnotationOverlayView", "ACTION_MOVE: event.x=${event.x}, event.y=${event.y}")
+                    }
                     longPressLineDownPos?.let { down ->
                         val dist = hypot((event.x - down.x).toDouble(), (event.y - down.y).toDouble())
-                        android.util.Log.d("AnnotationOverlayView", "LINE move: dist=$dist, from=(${"%.2f".format(down.x)}, ${"%.2f".format(down.y)}) to=(${"%.2f".format(event.x)}, ${"%.2f".format(event.y)})")
+                        if (BuildConfig.DEBUG) {
+                            android.util.Log.d("AnnotationOverlayView", "LINE move: dist=$dist, from=(${"%.2f".format(down.x)}, ${"%.2f".format(down.y)}) to=(${"%.2f".format(event.x)}, ${"%.2f".format(event.y)})")
+                        }
                         if (dist > 40) {
-                            android.util.Log.d("AnnotationOverlayView", "Cancelling long-press handler (moved too far for LINE)")
+                            if (BuildConfig.DEBUG) {
+                                android.util.Log.d("AnnotationOverlayView", "Cancelling long-press handler (moved too far for LINE)")
+                            }
                             longPressHandler?.removeCallbacks(longPressRunnable!!)
                             longPressLineCandidate = null
                         }
                     }
                     longPressPeerDownPos?.let { down ->
                         val dist = hypot((event.x - down.x).toDouble(), (event.y - down.y).toDouble())
-                        android.util.Log.d("AnnotationOverlayView", "PEER move: dist=$dist, from=(${"%.2f".format(down.x)}, ${"%.2f".format(down.y)}) to=(${"%.2f".format(event.x)}, ${"%.2f".format(event.y)})")
+                        if (BuildConfig.DEBUG) {
+                            android.util.Log.d("AnnotationOverlayView", "PEER move: dist=$dist, from=(${"%.2f".format(down.x)}, ${"%.2f".format(down.y)}) to=(${"%.2f".format(event.x)}, ${"%.2f".format(event.y)})")
+                        }
                         if (dist > 40) {
-                            android.util.Log.d("AnnotationOverlayView", "Cancelling long-press handler (moved too far for PEER)")
+                            if (BuildConfig.DEBUG) {
+                                android.util.Log.d("AnnotationOverlayView", "Cancelling long-press handler (moved too far for PEER)")
+                            }
                             longPressHandler?.removeCallbacks(longPressRunnable!!)
                             longPressPeerCandidate = null
                         }
                     }
                 }
             }
-            android.util.Log.d("AnnotationViewModel", "onTouchEvent: longPressLineCandidate=${longPressLineCandidate}")
-            return longPressLineCandidate != null // Only consume if interacting with a line
-        }
-    }
-
-    private fun findPoiAt(x: Float, y: Float): MapAnnotation.PointOfInterest? {
-        // Only check POIs
-        val pois = annotations.filterIsInstance<MapAnnotation.PointOfInterest>()
-        for (poi in pois) {
-            val point = projection?.toScreenLocation(poi.position.toMapLibreLatLng()) ?: continue
-            val dx = x - point.x
-            val dy = y - point.y
-            if (hypot(dx.toDouble(), dy.toDouble()) < 40) {
-                return poi
+            if (BuildConfig.DEBUG) {
+                android.util.Log.d("AnnotationViewModel", "onTouchEvent: longPressLineCandidate=${longPressLineCandidate}")
             }
+            return longPressLineCandidate != null || longPressPeerCandidate != null // Consume if interacting with a line or peer
         }
-        return null
     }
 
     // Helper to find a line near the touch point
@@ -1247,6 +1219,8 @@ class AnnotationOverlayView @JvmOverloads constructor(
         for (pt in points.drop(1)) path.lineTo(pt.x, pt.y)
         path.close()
         val selected = mutableListOf<MapAnnotation>()
+        
+        // Check overlay annotations (lines, areas, etc.)
         for (annotation in annotations) {
             val latLng = annotation.toMapLibreLatLng()
             val screenPt = projection?.toScreenLocation(latLng) ?: continue
@@ -1258,6 +1232,17 @@ class AnnotationOverlayView @JvmOverloads constructor(
             }.contains(pointF.x.toInt(), pointF.y.toInt())
             if (contains) selected.add(annotation)
         }
+        
+        // Check GL-rendered POIs if annotation controller is available
+        annotationController?.let { controller ->
+            val glPois = controller.mapController?.mapLibreMap?.let {
+                controller.findPoisInLassoArea(points,
+                    it
+                )
+            }
+            glPois?.let { selected.addAll(it) }
+        }
+        
         return selected
     }
 
@@ -1278,7 +1263,6 @@ class AnnotationOverlayView @JvmOverloads constructor(
         lassoMenuVisible = false // Reset menu state
         invalidate()
     }
-    fun getLassoSelectedAnnotations(): List<MapAnnotation> = lassoSelectedAnnotations
 
     fun getLassoPoints(): List<PointF>? = lassoPoints
 
@@ -1353,226 +1337,29 @@ class AnnotationOverlayView @JvmOverloads constructor(
         invalidate()
     }
 
-    fun showPoiLabel(poiId: String, position: PointF) {
-        Log.d("AnnotationOverlayView", "showPoiLabel: poiId=$poiId, position=$position")
-        labelPoiIdToShow = poiId
-        labelPoiPosition = position
-        labelDismissHandler?.removeCallbacksAndMessages(null)
-        labelDismissHandler = Handler(Looper.getMainLooper())
-        labelDismissHandler?.postDelayed({
-            labelPoiIdToShow = null
-            labelPoiPosition = null
-            invalidate()
-        }, LABEL_DISPLAY_DURATION)
-        invalidate()
-        Log.d("AnnotationOverlayView", "showPoiLabel: labelPoiIdToShow set to $labelPoiIdToShow, will invalidate")
-    }
-    private fun hidePoiLabel() {
-        labelPoiIdToShow = null
-        labelPoiPosition = null
-        labelDismissHandler?.removeCallbacksAndMessages(null)
+    // Note: Popover methods moved to HybridPopoverManager
+
+    // Note: Popover position updates moved to HybridPopoverManager
+
+    // === PERFORMANCE OPTIMIZATION: Batch invalidate calls ===
+    private var pendingInvalidate = false
+    private val invalidateHandler = Handler(Looper.getMainLooper())
+    private val invalidateRunnable = Runnable {
+        pendingInvalidate = false
         invalidate()
     }
-
-    // --- Global quick tap state for dismissing popovers ---
-    private var globalQuickTapDownTime: Long? = null
-    private var globalQuickTapDownPos: PointF? = null
-
-    private fun drawPoiLabel(canvas: Canvas, point: PointF, annotation: MapAnnotation.PointOfInterest) {
-        // --- Compose label text ---
-        val now = System.currentTimeMillis()
-        val ageMs = now - annotation.timestamp
-        val ageSec = ageMs / 1000
-        val min = ageSec / 60
-        val sec = ageSec % 60
-        val ageStr = if (min > 0) "${min}m ${sec}s old" else "${sec}s old"
-        val lat = annotation.position.lt
-        val lon = annotation.position.lng
-        val coordStr = String.format("%.5f, %.5f", lat, lon)
-        // --- Distance ---
-        val distStr = if (userLocation != null) {
-            val distMeters = haversine(lat, lon, userLocation!!.latitude, userLocation!!.longitude)
-            val distMiles = distMeters / 1609.344
-            String.format("%.1fmi away", distMiles)
-        } else {
-            ""
-        }
-        // Add custom label if it exists
-        val customLabel = annotation.label
-        val lines = mutableListOf<String>()
-        if (customLabel != null) {
-            lines.add(customLabel)
-        }
-        lines.addAll(listOf(ageStr, coordStr, distStr).filter { it.isNotBlank() })
-
-        // --- Draw pill background and text ---
-        val textSize = 36f
-        val padding = 24f
-        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.WHITE
-            this.textSize = textSize
-            textAlign = Paint.Align.CENTER
-            typeface = Typeface.DEFAULT_BOLD
-        }
-        // Measure max width
-        var maxWidth = 0
-        lines.forEach { line ->
-            val bounds = android.graphics.Rect()
-            textPaint.getTextBounds(line, 0, line.length, bounds)
-            if (bounds.width() > maxWidth) maxWidth = bounds.width()
-        }
-        val fontMetrics = textPaint.fontMetrics
-        val lineHeight = (fontMetrics.descent - fontMetrics.ascent).toInt()
-        val totalHeight = lineHeight * lines.size + (lines.size - 1) * 8 + (padding * 2)
-        val rectWidth = maxWidth + (padding * 2)
-        val rectHeight = totalHeight.toFloat()
-        val rectLeft = point.x - rectWidth / 2
-        val rectTop = point.y - 60f - rectHeight // 60px above shape
-        val rectRight = point.x + rectWidth / 2
-        val rectBottom = rectTop + rectHeight
-        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.argb(200, 0, 0, 0)
-            style = Paint.Style.FILL
-        }
-        canvas.drawRoundRect(
-            rectLeft,
-            rectTop,
-            rectRight,
-            rectBottom,
-            rectHeight / 2,
-            rectHeight / 2,
-            bgPaint
-        )
-        // Center the block of text vertically in the pill
-        val blockHeight = lineHeight * lines.size + (lines.size - 1) * 8
-        var textY = rectTop + (rectHeight - blockHeight) / 2 - fontMetrics.ascent
-        for (line in lines) {
-            canvas.drawText(line, point.x, textY, textPaint)
-            textY += lineHeight + 8 // 8px between lines
+    
+    private fun scheduleInvalidate() {
+        if (!pendingInvalidate) {
+            pendingInvalidate = true
+            invalidateHandler.post(invalidateRunnable)
         }
     }
-
-    // Helper to find a peer dot at a screen position
-    private fun findPeerDotAt(x: Float, y: Float): String? {
-        // First check if we're touching a peer cluster
-        if (currentZoom < minZoomForPeerClustering) {
-            for (cluster in peerClusters) {
-                val point = projection?.toScreenLocation(cluster.center) ?: continue
-                val dx = x - point.x
-                val dy = y - point.y
-                if (hypot(dx.toDouble(), dy.toDouble()) < 40) {
-                    // Return the first peer in the cluster for now
-                    // In the future, this could show a list of peers in the cluster
-                    return cluster.peers.firstOrNull()?.first
-                }
-            }
-        }
-
-        // Then check individual peer dots
-        for ((peerId, entry) in peerLocations) {
-            val point = projection?.toScreenLocation(entry.toLatLng()) ?: continue
-            val dx = x - point.x
-            val dy = y - point.y
-            if (hypot(dx.toDouble(), dy.toDouble()) < 40) {
-                return peerId
-            }
-        }
-
-        return null
-    }
-
-    fun showPeerPopover(peerId: String, peerName: String?, lastHeard: Long?) {
-        peerPopoverPeerId = peerId
-        peerPopoverPeerName = peerName
-        peerPopoverPeerLastHeard = lastHeard
-        peerPopoverDismissHandler?.removeCallbacksAndMessages(null)
-        peerPopoverDismissHandler = Handler(Looper.getMainLooper())
-        peerPopoverDismissHandler?.postDelayed({
-            peerPopoverPeerId = null
-            peerPopoverPeerName = null
-            peerPopoverPeerName = null
-            invalidate()
-        }, PEER_POPOVER_DISPLAY_DURATION.toLong())
-        invalidate()
-    }
-
-    private fun drawPeerPopover(canvas: Canvas, peerId: String, peerName: String?, lastHeard: Long?, pos: PointF) {
-        // Compose info lines
-        val lines = mutableListOf<String>()
-        if (!peerName.isNullOrEmpty()) {
-            // Add "(Your Device)" suffix if this is the connected node
-            val displayName = if (peerId == connectedNodeId) "$peerName (Your Device)" else peerName
-            lines.add(displayName)
-        }
-
-        val coords = peerLocations[peerId]
-        coords?.let { lines.add(String.format("%.5f, %.5f", it.latitude, it.longitude)) }
-
-        // Prefer phone location because it updates more frequently
-        val bestLocation = phoneLocation ?: userLocation
-
-        // Add distance from user location if available
-        if (coords != null && bestLocation != null) {
-            val distMeters = haversine(coords.latitude, coords.longitude, bestLocation.latitude, bestLocation.longitude)
-            val distMiles = distMeters / 1609.344
-            lines.add(String.format("%.1f mi away", distMiles))
-        }
-
-        val lastSeen = lastHeard ?: 0L
-        if (lastSeen > 0) {
-            val now = System.currentTimeMillis() / 1000
-            val ageSec = now - lastSeen
-            val min = ageSec / 60
-            val sec = ageSec % 60
-            val ageStr = if (min > 0) "Last seen ${min}m ${sec}s ago" else "Last seen ${sec}s ago"
-            lines.add(ageStr)
-        }
-        if (lines.isEmpty()) lines.add(peerId)
-        // Draw pill background and text (similar to drawPoiLabel)
-        val textSize = 24f
-        val padding = 24f
-        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.WHITE
-            this.textSize = textSize
-            textAlign = Paint.Align.CENTER
-            typeface = Typeface.DEFAULT_BOLD
-        }
-        // Measure max width
-        var maxWidth = 0
-        lines.forEach { line ->
-            val bounds = android.graphics.Rect()
-            textPaint.getTextBounds(line, 0, line.length, bounds)
-            if (bounds.width() > maxWidth) maxWidth = bounds.width()
-        }
-        val fontMetrics = textPaint.fontMetrics
-        val lineHeight = (fontMetrics.descent - fontMetrics.ascent).toInt()
-        val totalHeight = lineHeight * lines.size + (lines.size - 1) * 8 + (padding * 2)
-        val rectWidth = maxWidth + (padding * 2)
-        val rectHeight = totalHeight.toFloat()
-        val rectLeft = pos.x - rectWidth / 2
-        val rectTop = pos.y - 60f - rectHeight // 60px above dot
-        val rectRight = pos.x + rectWidth / 2
-        val rectBottom = rectTop + rectHeight
-        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.argb(200, 0, 0, 0)
-            style = Paint.Style.FILL
-        }
-        canvas.drawRoundRect(
-            rectLeft,
-            rectTop,
-            rectRight,
-            rectBottom,
-            rectHeight / 2,
-            rectHeight / 2,
-            bgPaint
-        )
-        // Center the block of text vertically in the pill
-        val blockHeight = lineHeight * lines.size + (lines.size - 1) * 8
-        var textY = rectTop + (rectHeight - blockHeight) / 2 - fontMetrics.ascent
-        for (line in lines) {
-            canvas.drawText(line, pos.x, textY, textPaint)
-            textY += lineHeight + 8 // 8px between lines
-        }
+    
+    // Override invalidate to use batching
+    override fun invalidate() {
+        if (pendingInvalidate) return // Already scheduled
+        super.invalidate()
     }
 
     private fun drawDeviceLocationDot(canvas: Canvas, point: PointF, isStale: Boolean) {
@@ -1714,34 +1501,5 @@ class AnnotationOverlayView @JvmOverloads constructor(
         canvas.drawText(distanceText, clampedArrowX, clampedArrowY + textBounds.height()/2, textPaint)
         
         android.util.Log.d("AnnotationOverlayView", "onDraw: drew direction indicator at ($clampedArrowX, $clampedArrowY) pointing toward device (distance: ${distance.toInt()}px)")
-    }
-
-    fun hideAllPopovers() {
-        hidePoiLabel()
-        peerPopoverPeerId = null
-        peerPopoverPeerName = null
-        peerPopoverDismissHandler?.removeCallbacksAndMessages(null)
-        invalidate()
-    }
-
-    // === PERFORMANCE OPTIMIZATION: Batch invalidate calls ===
-    private var pendingInvalidate = false
-    private val invalidateHandler = Handler(Looper.getMainLooper())
-    private val invalidateRunnable = Runnable {
-        pendingInvalidate = false
-        invalidate()
-    }
-    
-    private fun scheduleInvalidate() {
-        if (!pendingInvalidate) {
-            pendingInvalidate = true
-            invalidateHandler.post(invalidateRunnable)
-        }
-    }
-    
-    // Override invalidate to use batching
-    override fun invalidate() {
-        if (pendingInvalidate) return // Already scheduled
-        super.invalidate()
     }
 } 
