@@ -499,7 +499,24 @@ class AnnotationController(
         val projection = mapLibreMap.projection
         val screenPoint = projection.toScreenLocation(latLng)
         
-        // First check if we're long pressing on a POI (including fallback layer)
+        // First check if we're long pressing on a peer dot (including hit area layers)
+        val peerFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, ClusteredLayerManager.PEER_DOTS_LAYER)
+        val peerHitAreaFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, ClusteredLayerManager.PEER_HIT_AREA_LAYER)
+        val peerFallbackFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, "peer-dots-fallback")
+        val peerNonClusteredHitAreaFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, "peer-dots-hit-area")
+        
+        val peerFeature = peerFeatures.firstOrNull { it.getStringProperty("peerId") != null }
+            ?: peerHitAreaFeatures.firstOrNull { it.getStringProperty("peerId") != null }
+            ?: peerFallbackFeatures.firstOrNull { it.getStringProperty("peerId") != null }
+            ?: peerNonClusteredHitAreaFeatures.firstOrNull { it.getStringProperty("peerId") != null }
+        
+        if (peerFeature != null) {
+            val peerId = peerFeature.getStringProperty("peerId")
+            showPeerMenu(screenPoint, peerId)
+            return true
+        }
+        
+        // Then check if we're long pressing on a POI (including fallback layer)
         val poiLayerId = if (clusteringConfig.enablePoiClustering) {
             ClusteredLayerManager.POI_DOTS_LAYER
         } else {
