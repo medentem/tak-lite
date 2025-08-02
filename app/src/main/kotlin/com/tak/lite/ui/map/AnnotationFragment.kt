@@ -194,26 +194,35 @@ class AnnotationFragment : Fragment() {
                         // Show peer popover using hybrid manager
                         annotationController.showPeerPopover(peerId)
                         true
-                    } else {
-                        // Native POI hit detection
-                        val poiLayerId = if (annotationController.clusteringConfig.enablePoiClustering) {
-                            com.tak.lite.ui.map.ClusteredLayerManager.POI_DOTS_LAYER
-                        } else {
-                            "poi-layer"
-                        }
-                        val poiFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, poiLayerId)
-                        Log.d("AnnotationFragment", "POI features found: ${poiFeatures.size}")
-                        val poiFeature = poiFeatures.firstOrNull { it.getStringProperty("poiId") != null }
+                                            } else {
+                            // Native POI hit detection
+                            val poiLayerId = if (annotationController.clusteringConfig.enablePoiClustering) {
+                                com.tak.lite.ui.map.ClusteredLayerManager.POI_DOTS_LAYER
+                            } else {
+                                "poi-layer"
+                            }
+                            val poiFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, poiLayerId)
+                            Log.d("AnnotationFragment", "POI features found: ${poiFeatures.size}")
+                                                    val poiFeature = poiFeatures.firstOrNull { it.getStringProperty("poiId") != null }
+                        val lineEndpointFeature = poiFeatures.firstOrNull { it.getStringProperty("lineId") != null }
+                        
                         if (poiFeature != null) {
                             val poiId = poiFeature.getStringProperty("poiId")
                             Log.d("AnnotationFragment", "POI tapped: $poiId")
                             // For single taps, show POI popover instead of edit menu
                             annotationController.showPoiLabel(poiId, screenPoint)
                             true
-                        } else {
-                            false
+                        } else if (lineEndpointFeature != null) {
+                            val lineId = lineEndpointFeature.getStringProperty("lineId")
+                            Log.d("AnnotationFragment", "Line endpoint tapped: $lineId")
+                            // Show line edit menu
+                            annotationController.showLineEditMenu(screenPoint, lineId)
+                            true
+                            } else {
+                                // Line endpoints are now part of POI clusters, handled by POI tap detection
+                                false
+                            }
                         }
-                    }
                 }
             }
             

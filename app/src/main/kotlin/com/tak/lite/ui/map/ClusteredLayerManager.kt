@@ -25,7 +25,6 @@ class ClusteredLayerManager(
         const val PEER_DOTS_LAYER = "peer-dots"
         const val PEER_HIT_AREA_LAYER = "peer-hit-area"
         const val POI_CLUSTERS_LAYER = "poi-clusters"
-        const val POI_CLUSTER_COUNT_LAYER = "poi-cluster-count"
         const val POI_DOTS_LAYER = "poi-dots"
         
         // Source IDs
@@ -109,23 +108,6 @@ class ClusteredLayerManager(
                 style.addLayer(clusterLayer)
                 Log.d(TAG, "Added peer cluster circles layer: ${clusterLayer.id} with filter: $clusterFilter")
 
-                /*
-                Log.d(TAG, "setupPeerClusteredLayer: creating cluster count layer")
-                // Add cluster count text layer
-                val clusterCountFilter = Expression.has("point_count")
-                val clusterCountLayer = SymbolLayer(PEER_CLUSTER_COUNT_LAYER, PEER_CLUSTERED_SOURCE)
-                    .withProperties(
-                        PropertyFactory.textField(Expression.get("point_count")),
-                        PropertyFactory.textColor("#FFFFFF"),
-                        PropertyFactory.textSize(14f),
-                        PropertyFactory.textIgnorePlacement(true),
-                        PropertyFactory.textAllowOverlap(true)
-                    )
-                    .withFilter(clusterCountFilter)
-                style.addLayer(clusterCountLayer)
-                Log.d(TAG, "Added peer cluster count layer: ${clusterCountLayer.id} with filter: $clusterCountFilter")
-                */
-
                 // Verify layers were added
                 val finalPeerLayer = style.getLayer(PEER_DOTS_LAYER)
                 val finalClusterLayer = style.getLayer(PEER_CLUSTERS_LAYER)
@@ -195,7 +177,10 @@ class ClusteredLayerManager(
                         PropertyFactory.textAllowOverlap(true),
                         PropertyFactory.textIgnorePlacement(false)
                     )
-                    .withFilter(Expression.not(Expression.has("point_count")))
+                    .withFilter(Expression.all(
+                        Expression.not(Expression.has("point_count")),
+                        Expression.has("poiId") // Only show POIs, not line endpoints
+                    ))
                 style.addLayer(poiLayer)
                 Log.d(TAG, "Added POI symbols layer")
 
@@ -208,21 +193,6 @@ class ClusteredLayerManager(
                     .withFilter(Expression.has("point_count"))
                 style.addLayer(clusterLayer)
                 Log.d(TAG, "Added POI cluster circles layer")
-
-                /*
-                // Add cluster count text layer
-                val clusterCountLayer = SymbolLayer(POI_CLUSTER_COUNT_LAYER, POI_CLUSTERED_SOURCE)
-                    .withProperties(
-                        PropertyFactory.textField(Expression.get("point_count")),
-                        PropertyFactory.textColor("#FFFFFF"),
-                        PropertyFactory.textSize(14f),
-                        PropertyFactory.textIgnorePlacement(true),
-                        PropertyFactory.textAllowOverlap(true)
-                    )
-                    .withFilter(Expression.has("point_count"))
-                style.addLayer(clusterCountLayer)
-                Log.d(TAG, "Added POI cluster count layer")
-                */
                 
             } catch (e: Exception) {
                 Log.e(TAG, "Error setting up POI clustered layer", e)

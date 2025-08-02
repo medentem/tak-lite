@@ -9,8 +9,10 @@ data class ClusteringConfig(
     val clusterRadius: Int = 100,
     val enablePeerClustering: Boolean = true,
     val enablePoiClustering: Boolean = true,
-    val peerClusterMaxZoom: Int = 7,
-    val poiClusterMaxZoom: Int = 7
+    val enableLineClustering: Boolean = true,
+    val peerClusterMaxZoom: Int = 9,
+    val poiClusterMaxZoom: Int = 9,
+    val lineClusterMaxZoom: Int = 9
 ) {
     companion object {
         private const val TAG = "ClusteringConfig"
@@ -26,6 +28,6 @@ data class ClusteringConfig(
     }
     
     override fun toString(): String {
-        return "ClusteringConfig(clusterRadius=$clusterRadius, enablePeerClustering=$enablePeerClustering, enablePoiClustering=$enablePoiClustering, peerClusterMaxZoom=$peerClusterMaxZoom, poiClusterMaxZoom=$poiClusterMaxZoom)"
+        return "ClusteringConfig(clusterRadius=$clusterRadius, enablePeerClustering=$enablePeerClustering, enablePoiClustering=$enablePoiClustering, enableLineClustering=$enableLineClustering, peerClusterMaxZoom=$peerClusterMaxZoom, poiClusterMaxZoom=$poiClusterMaxZoom, lineClusterMaxZoom=$lineClusterMaxZoom)"
     }
 } 

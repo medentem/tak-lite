@@ -87,8 +87,9 @@ class LineLayerManager(private val mapLibreMap: MapLibreMap) {
                             )
                         )
                     )
+                    .withFilter(Expression.gte(Expression.zoom(), Expression.literal(8f))) // Only show hit area at zoom 8+
                 style.addLayer(hitAreaLayer)
-                Log.d(TAG, "Added line hit area layer: $LINE_HIT_AREA_LAYER")
+                Log.d(TAG, "Added line hit area layer: $LINE_HIT_AREA_LAYER with min zoom filter")
 
                 // Create single line layer with conditional dash array
                 val lineLayer = LineLayer(LINE_LAYER, LINE_SOURCE)
@@ -114,8 +115,9 @@ class LineLayerManager(private val mapLibreMap: MapLibreMap) {
                             )
                         )
                     )
+                    .withFilter(Expression.gte(Expression.zoom(), Expression.literal(8f))) // Only show lines at zoom 8+
                 style.addLayer(lineLayer)
-                Log.d(TAG, "Added line layer: $LINE_LAYER")
+                Log.d(TAG, "Added line layer: $LINE_LAYER with min zoom filter")
 
                 // Generate arrow icons
                 generateArrowIcons(style)
@@ -132,8 +134,9 @@ class LineLayerManager(private val mapLibreMap: MapLibreMap) {
                         PropertyFactory.iconRotationAlignment("map"), // Align to map rotation
                         PropertyFactory.iconTextFit("both") // Fit both icon and text
                     )
+                    .withFilter(Expression.gte(Expression.zoom(), Expression.literal(8f))) // Only show arrows at zoom 8+
                 style.addLayer(arrowLayer)
-                Log.d(TAG, "Added arrow layer: $LINE_ARROW_LAYER")
+                Log.d(TAG, "Added arrow layer: $LINE_ARROW_LAYER with min zoom filter")
 
                 // Create label layer using separate source
                 val labelLayer = SymbolLayer(LINE_LABEL_LAYER, LINE_LABEL_SOURCE)
@@ -154,8 +157,9 @@ class LineLayerManager(private val mapLibreMap: MapLibreMap) {
                         PropertyFactory.textAllowOverlap(false),
                         PropertyFactory.textIgnorePlacement(false)
                     )
+                    .withFilter(Expression.gte(Expression.zoom(), Expression.literal(8f))) // Only show labels at zoom 8+
                 style.addLayer(labelLayer)
-                Log.d(TAG, "Added label layer: $LINE_LABEL_LAYER")
+                Log.d(TAG, "Added label layer: $LINE_LABEL_LAYER with min zoom filter")
 
                 isInitialized = true
                 Log.d(TAG, "Line layers setup completed successfully with separate sources")

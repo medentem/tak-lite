@@ -165,7 +165,10 @@ class AnnotationController(
 
     // === ENHANCED: Convert POI annotations to clustered GeoJSON FeatureCollection ===
     private fun poiAnnotationsToClusteredFeatureCollection(pois: List<MapAnnotation.PointOfInterest>): FeatureCollection {
-        val features = pois.map { poi ->
+        val features = mutableListOf<Feature>()
+        
+        // Add POI features
+        pois.forEach { poi ->
             val point = Point.fromLngLat(poi.position.lng, poi.position.lt)
             val feature = Feature.fromGeometry(point)
             
@@ -197,9 +200,41 @@ class AnnotationController(
             }
             
             Log.d("PoiDebug", "Creating POI feature: poiId=${poi.id}, icon=$iconName, label=${poi.label}, color=${poi.color}, shape=${poi.shape}, hasTimer=${poi.expirationTime != null}")
-            feature
+            features.add(feature)
         }
-        return FeatureCollection.fromFeatures(features)
+        
+        // Add line endpoint features (invisible but participate in clustering)
+        if (clusteringConfig.enableLineClustering) {
+            val lineAnnotations = annotationViewModel.uiState.value.annotations.filterIsInstance<MapAnnotation.Line>()
+            lineAnnotations.forEach { line ->
+                if (line.points.isNotEmpty()) {
+                    // Add start point
+                    val startPoint = Point.fromLngLat(line.points.first().lng, line.points.first().lt)
+                    val startFeature = Feature.fromGeometry(startPoint)
+                    startFeature.addStringProperty("lineId", line.id)
+                    startFeature.addStringProperty("endpointType", "start")
+                    startFeature.addStringProperty("label", "Line Start")
+                    startFeature.addStringProperty("type", "line_endpoint")
+                    
+                    features.add(startFeature)
+                    
+                    // Add end point (if different from start)
+                    if (line.points.size > 1) {
+                        val endPoint = Point.fromLngLat(line.points.last().lng, line.points.last().lt)
+                        val endFeature = Feature.fromGeometry(endPoint)
+                        endFeature.addStringProperty("lineId", line.id)
+                        endFeature.addStringProperty("endpointType", "end")
+                        endFeature.addStringProperty("label", "Line End")
+                        endFeature.addStringProperty("type", "line_endpoint")
+                        
+                        features.add(endFeature)
+                    }
+                }
+            }
+            Log.d("PoiDebug", "Added ${lineAnnotations.size * 2} line endpoint features to POI clustering")
+        }
+        
+        return FeatureCollection.fromFeatures(features.toTypedArray())
     }
 
     // Generate POI icons for MapLibre
@@ -388,6 +423,7 @@ class AnnotationController(
                         ),
                         PropertyFactory.circleStrokeWidth(3f)
                     )
+                    .withFilter(Expression.gte(Expression.zoom(), Expression.literal(7f))) // Only show peers at zoom 7+
                     style.addLayer(layer)
                     Log.d("PeerDotDebug", "Non-clustered peer dots layer created with properties: circleColor=${layer.circleColor}, circleStrokeColor=${layer.circleStrokeColor}")
 
@@ -398,8 +434,9 @@ class AnnotationController(
                             PropertyFactory.circleOpacity(0f),
                             PropertyFactory.circleRadius(20f), // Larger hit area
                         )
+                        .withFilter(Expression.gte(Expression.zoom(), Expression.literal(7f))) // Only show hit area at zoom 7+
                     style.addLayer(hitAreaLayer)
-                    Log.d("PeerDotDebug", "Non-clustered peer hit area layer created")
+                    Log.d("PeerDotDebug", "Non-clustered peer hit area layer created with min zoom filter")
                 }
             }
             
@@ -429,8 +466,9 @@ class AnnotationController(
                         PropertyFactory.textAllowOverlap(true),
                         PropertyFactory.textIgnorePlacement(false)
                     )
+                    .withFilter(Expression.gte(Expression.zoom(), Expression.literal(7f))) // Only show POIs at zoom 7+
                     style.addLayer(layer)
-                    Log.d("PoiDebug", "Non-clustered POI layer created")
+                    Log.d("PoiDebug", "Non-clustered POI layer created with min zoom filter")
                     
                     // Retry timer layer setup now that POI layer exists
                     poiTimerManager?.retrySetupTimerLayers()
@@ -439,6 +477,8 @@ class AnnotationController(
                     Log.d("PoiDebug", "Non-clustered POI layer already exists")
                 }
             }
+            
+            // Line endpoints are now included in POI clustering, no separate setup needed
         }
         // === END: Native Peer Dot Layer Setup ===
 
@@ -618,9 +658,15 @@ class AnnotationController(
         }
         val poiFeature = poiFeatures.firstOrNull { it.getStringProperty("poiId") != null }
             ?: poiFallbackFeatures.firstOrNull { it.getStringProperty("poiId") != null }
+        val lineEndpointFeature = poiFeatures.firstOrNull { it.getStringProperty("lineId") != null }
+        
         if (poiFeature != null) {
             val poiId = poiFeature.getStringProperty("poiId")
             showPoiEditMenu(screenPoint, poiId)
+            return true
+        } else if (lineEndpointFeature != null) {
+            val lineId = lineEndpointFeature.getStringProperty("lineId")
+            showLineEditMenu(screenPoint, lineId)
             return true
         }
         
@@ -634,6 +680,8 @@ class AnnotationController(
             showLineEditMenu(screenPoint, lineId)
             return true
         }
+        
+        // Line endpoints are now part of POI clusters, handled by POI long press detection
         
         // Check if we're long pressing on an area
         val areaFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, AreaLayerManager.AREA_FILL_LAYER)
@@ -994,14 +1042,17 @@ class AnnotationController(
         val allAnnotations = state.annotations
         val nonPoiAnnotations = allAnnotations.filterNot { it is MapAnnotation.PointOfInterest }
         val poiAnnotations = allAnnotations.filterIsInstance<MapAnnotation.PointOfInterest>()
+        val lineAnnotations = allAnnotations.filterIsInstance<MapAnnotation.Line>()
         
-        Log.d("PoiDebug", "renderAllAnnotations: total=${allAnnotations.size}, nonPoi=${nonPoiAnnotations.size}, poi=${poiAnnotations.size}")
+        Log.d("PoiDebug", "renderAllAnnotations: total=${allAnnotations.size}, nonPoi=${nonPoiAnnotations.size}, poi=${poiAnnotations.size}, lines=${lineAnnotations.size}")
         Log.d("PoiDebug", "POI annotations: ${poiAnnotations.map { "${it.id}:${it.label}" }}")
         
         // Update unified annotation manager for lines and areas
         val linesAndAreas = nonPoiAnnotations.filter { it is MapAnnotation.Line || it is MapAnnotation.Area }
         unifiedAnnotationManager?.updateAnnotations(linesAndAreas)
         Log.d(TAG, "Updated unified annotation manager with ${linesAndAreas.size} lines/areas")
+        
+        // Line endpoints are now included in POI clustering, no separate update needed
         
         // Update overlay view for remaining annotations (temporary lines, device location, etc.)
         annotationOverlayView.updateAnnotations(nonPoiAnnotations)
@@ -1043,6 +1094,8 @@ class AnnotationController(
             Log.d("PoiDebug", "syncAnnotationOverlayView: lines/areas changed, updating unified manager")
             unifiedAnnotationManager?.updateAnnotations(linesAndAreas)
             lastOverlayAnnotations = nonPoiAnnotations
+            
+            // Line endpoints are now included in POI clustering, no separate update needed
         }
         
         Log.d("PoiDebug", "syncAnnotationOverlayView: total=${currentAnnotations.size}, nonPoi=${nonPoiAnnotations.size}, poi=${poiAnnotations.size}, poiChanged=$poiAnnotationsChanged, linesAndAreasChanged=$linesAndAreasChanged")
@@ -1058,6 +1111,19 @@ class AnnotationController(
             AnnotationColor.RED -> Color.parseColor("#F44336")
             AnnotationColor.BLACK -> Color.BLACK
             AnnotationColor.WHITE -> Color.WHITE
+        }
+    }
+    
+    /**
+     * Extension function to convert AnnotationColor to hex string
+     */
+    private fun AnnotationColor.toHexString(): String {
+        return when (this) {
+            AnnotationColor.GREEN -> "#4CAF50"
+            AnnotationColor.YELLOW -> "#FBC02D"
+            AnnotationColor.RED -> "#F44336"
+            AnnotationColor.BLACK -> "#000000"
+            AnnotationColor.WHITE -> "#FFFFFF"
         }
     }
 
