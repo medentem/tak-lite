@@ -241,6 +241,9 @@ class AnnotationFragment : Fragment() {
                 lineTimerTextOverlayView.setProjection(mapLibreMap.projection)
                 clusterTextOverlayView.setProjection(mapLibreMap.projection)
                 
+                // Notify cluster text manager about camera movement for performance optimization
+                annotationController.clusterTextManager?.onCameraMoving()
+                
                 // THROTTLED: Heavy operations that can be delayed
                 if (shouldUpdateHeavy) {
                     lastCameraUpdate = now

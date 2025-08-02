@@ -78,22 +78,21 @@ class AnnotationController(
     
     // Getter for line timer manager
     val lineTimerManager: LineTimerManager? get() = _lineTimerManager
-    
+
+    // === DEVICE LOCATION MANAGER ===
+    private var _deviceLocationManager: DeviceLocationLayerManager? = null
     // Getter for device location manager
-    val deviceLocationManager: DeviceLocationLayerManager? get() = deviceLocationManager
-    
+    val deviceLocationManager: DeviceLocationLayerManager? get() = _deviceLocationManager
+
+    // === CLUSTER TEXT MANAGER ===
+    private var _clusterTextManager: ClusterTextManager? = null
+
     // Getter for cluster text manager
-    val clusterTextManager: ClusterTextManager? get() = clusterTextManager
+    val clusterTextManager: ClusterTextManager? get() = _clusterTextManager
     
     // === UNIFIED ANNOTATION MANAGER ===
     private var unifiedAnnotationManager: UnifiedAnnotationManager? = null
-    
-    // === DEVICE LOCATION MANAGER ===
-    private var deviceLocationManager: DeviceLocationLayerManager? = null
-    
-    // === CLUSTER TEXT MANAGER ===
-    private var clusterTextManager: ClusterTextManager? = null
-    
+
     companion object {
         private const val TAG = "AnnotationController"
     }
@@ -103,8 +102,8 @@ class AnnotationController(
         clusteredLayerManager = ClusteredLayerManager(mapLibreMap, clusteringConfig)
         popoverManager = HybridPopoverManager(mapLibreMap, binding.root, meshNetworkViewModel)
         unifiedAnnotationManager = UnifiedAnnotationManager(mapLibreMap)
-        deviceLocationManager = DeviceLocationLayerManager(mapLibreMap)
-        clusterTextManager = ClusterTextManager(mapLibreMap)
+        _deviceLocationManager = DeviceLocationLayerManager(mapLibreMap)
+        _clusterTextManager = ClusterTextManager(mapLibreMap)
         Log.d("PeerDotDebug", "AnnotationController initialized with clustering config: $clusteringConfig")
     }
     
@@ -302,11 +301,11 @@ class AnnotationController(
             Log.d("AnnotationController", "Line timer manager initialized")
         }
         if (deviceLocationManager == null && mapLibreMap != null) {
-            deviceLocationManager = DeviceLocationLayerManager(mapLibreMap)
+            _deviceLocationManager = DeviceLocationLayerManager(mapLibreMap)
             Log.d("AnnotationController", "Device location manager initialized")
         }
         if (clusterTextManager == null && mapLibreMap != null) {
-            clusterTextManager = ClusterTextManager(mapLibreMap)
+            _clusterTextManager = ClusterTextManager(mapLibreMap)
             Log.d("AnnotationController", "Cluster text manager initialized")
         }
     }
@@ -326,6 +325,9 @@ class AnnotationController(
         mapLibreMap?.addOnCameraMoveListener {
             // IMMEDIATE: Only update projection for visual sync
             annotationOverlayView.setProjection(mapLibreMap.projection)
+            
+            // Notify cluster text manager about camera movement for performance optimization
+            clusterTextManager?.onCameraMoving()
             
             // Throttled popover position updates for performance
             val now = System.currentTimeMillis()

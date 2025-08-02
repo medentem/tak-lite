@@ -23,7 +23,6 @@ import com.tak.lite.data.model.PeerCluster
 import com.tak.lite.model.AnnotationColor
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PeerLocationEntry
-import com.tak.lite.model.toColor
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.Projection
 import kotlin.math.atan2
@@ -159,45 +158,11 @@ class AnnotationOverlayView @JvmOverloads constructor(
         return (now - entry.timestamp) > stalenessThresholdMs
     }
 
-    // Helper method to get peer dot color based on status or staleness
-    private fun getPeerDotColor(entry: PeerLocationEntry): Int {
-        return if (isPeerLocationStale(entry)) {
-            // Stale peers get a gray dot
-            Color.GRAY
-        } else {
-            // Fresh peers get their status color, or green if no status
-            when (entry.userStatus) {
-                com.tak.lite.model.UserStatus.GREEN -> com.tak.lite.model.UserStatus.GREEN.toColor()
-                com.tak.lite.model.UserStatus.YELLOW -> com.tak.lite.model.UserStatus.YELLOW.toColor()
-                com.tak.lite.model.UserStatus.RED -> com.tak.lite.model.UserStatus.RED.toColor()
-                null -> com.tak.lite.model.UserStatus.GREEN.toColor()
-            }
-        }
-    }
-
-    // Helper method to get peer border color based on status or staleness
-    private fun getPeerBorderColor(entry: PeerLocationEntry): Int {
-        return if (isPeerLocationStale(entry)) {
-            // Stale peers get a status-colored border, or green if no status
-            when (entry.userStatus) {
-                com.tak.lite.model.UserStatus.GREEN -> com.tak.lite.model.UserStatus.GREEN.toColor()
-                com.tak.lite.model.UserStatus.YELLOW -> com.tak.lite.model.UserStatus.YELLOW.toColor()
-                com.tak.lite.model.UserStatus.RED -> com.tak.lite.model.UserStatus.RED.toColor()
-                null -> com.tak.lite.model.UserStatus.GREEN.toColor()
-            }
-        } else {
-            // Fresh peers get a white border
-            Color.WHITE
-        }
-    }
-
     // Callback for peer dot taps
     interface OnPeerDotTapListener {
         fun onPeerDotTapped(peerId: String, screenPosition: PointF)
     }
     var peerDotTapListener: OnPeerDotTapListener? = null
-
-    var fanMenuView: FanMenuView? = null
 
     // --- Lasso Selection State ---
     private var isLassoMode = false
@@ -251,8 +216,8 @@ class AnnotationOverlayView @JvmOverloads constructor(
 
     fun updateAnnotations(annotations: List<MapAnnotation>) {
         // Filter out POIs, lines, and areas since they're now handled by GL layers
-        val filteredAnnotations = annotations.filterNot { 
-            it is MapAnnotation.PointOfInterest || it is MapAnnotation.Line || it is MapAnnotation.Area 
+        val filteredAnnotations = annotations.filterNot {
+            it is MapAnnotation.PointOfInterest || it is MapAnnotation.Line || it is MapAnnotation.Area
         }
         Log.d("PoiClusterDebug", "updateAnnotations: called with ${annotations.size} annotations, filtered to ${filteredAnnotations.size} (POIs, lines, and areas handled by GL layers)")
         this.annotations = filteredAnnotations
@@ -278,24 +243,24 @@ class AnnotationOverlayView @JvmOverloads constructor(
      */
     private fun getVisibleMapBounds(): RectF {
         val now = System.currentTimeMillis()
-        
+
         // Throttle viewport updates to avoid excessive calculations
         if (now - lastViewportUpdate < VIEWPORT_UPDATE_THROTTLE_MS && visibleBounds != null) {
             return visibleBounds!!
         }
-        
+
         if (projection == null || width == 0 || height == 0) {
             return RectF(-180f, -90f, 180f, 90f) // Default to full world
         }
-        
+
         // Get screen corners and convert to lat/lng
         val topLeft = projection?.fromScreenLocation(PointF(0f, 0f))
         val bottomRight = projection?.fromScreenLocation(PointF(width.toFloat(), height.toFloat()))
-        
+
         if (topLeft == null || bottomRight == null) {
             return RectF(-180f, -90f, 180f, 90f)
         }
-        
+
         // Add margin for annotations partially off-screen (0.1 degrees ≈ 10km at equator)
         val margin = 0.1f
         val bounds = RectF(
@@ -304,20 +269,20 @@ class AnnotationOverlayView @JvmOverloads constructor(
             (bottomRight.longitude + margin).toFloat(), // right (maximum longitude)
             (bottomRight.latitude - margin).toFloat()   // bottom (minimum latitude)
         )
-        
+
         // Debug: verify bounds are correct
         android.util.Log.d("AnnotationOverlayView", "Bounds verification: left=${bounds.left}, top=${bounds.top}, right=${bounds.right}, bottom=${bounds.bottom}")
         android.util.Log.d("AnnotationOverlayView", "Expected: left=${topLeft.longitude - margin}, top=${topLeft.latitude + margin}, right=${bottomRight.longitude + margin}, bottom=${bottomRight.latitude - margin}")
-        
+
         // Debug logging for viewport bounds
         android.util.Log.d("AnnotationOverlayView", "Viewport calculation: topLeft=$topLeft, bottomRight=$bottomRight")
         android.util.Log.d("AnnotationOverlayView", "Calculated bounds: $bounds")
-        
+
         visibleBounds = bounds
         lastViewportUpdate = now
         return bounds
     }
-    
+
     /**
      * Get only annotations that are visible in the current viewport
      */
@@ -330,12 +295,12 @@ class AnnotationOverlayView @JvmOverloads constructor(
             // Explicit bounds checking instead of RectF.contains()
             lat >= bounds.bottom && lat <= bounds.top && lon >= bounds.left && lon <= bounds.right
         }
-        
+
         // Log performance metrics occasionally
         if (annotations.size > 100 && visible.size < annotations.size / 2) {
             android.util.Log.d("AnnotationOverlayView", "Viewport culling: ${annotations.size} total, ${visible.size} visible (${(visible.size * 100 / annotations.size)}%)")
         }
-        
+
         return visible
     }
 
@@ -370,21 +335,21 @@ class AnnotationOverlayView @JvmOverloads constructor(
 
         return visible
     }
-    
+
     /**
      * Check if any timer annotations are visible in the current viewport
      */
     private fun checkForVisibleTimerAnnotations(): Boolean {
         val now = System.currentTimeMillis()
-        
+
         // Throttle timer annotation checks
         if (now - lastTimerAnnotationCheck < TIMER_CHECK_THROTTLE_MS) {
             return hasVisibleTimerAnnotations
         }
-        
+
         val bounds = getVisibleMapBounds()
         val hasTimers = annotations.any { annotation ->
-            annotation.expirationTime != null && 
+            annotation.expirationTime != null &&
             annotation.toMapLibreLatLng().let { latLng ->
                 val lat = latLng.latitude.toFloat()
                 val lon = latLng.longitude.toFloat()
@@ -392,15 +357,15 @@ class AnnotationOverlayView @JvmOverloads constructor(
                 lat >= bounds.bottom && lat <= bounds.top && lon >= bounds.left && lon <= bounds.right
             }
         }
-        
+
         hasVisibleTimerAnnotations = hasTimers
         lastTimerAnnotationCheck = now
-        
+
         // Log timer optimization metrics
         if (hasTimers != hasVisibleTimerAnnotations) {
             android.util.Log.d("AnnotationOverlayView", "Timer optimization: ${if (hasTimers) "enabled" else "disabled"} timer invalidates")
         }
-        
+
         return hasTimers
     }
 
@@ -421,38 +386,52 @@ class AnnotationOverlayView @JvmOverloads constructor(
             if (deviceLocation != null) {
                 val devicePt = projection?.toScreenLocation(deviceLocation)
                 val phonePt = projection?.toScreenLocation(phoneLocation!!)
-            android.util.Log.d("AnnotationOverlayView", "onDraw: devicePt=$devicePt, phonePt=$phonePt")
-            if (devicePt != null && phonePt != null) {
-                // --- PERFORMANCE OPTIMIZATION: Distance-based line drawing ---
-                val distance = hypot((devicePt.x - phonePt.x).toDouble(), (devicePt.y - phonePt.y).toDouble())
-                val maxLineDistance = width * 2f // Only draw if line is within 2x screen width
-                val extremeDistance = width * 4f // Use direction indicator beyond this
-                
-                if (distance <= maxLineDistance) {
-                    // Check if either endpoint is within reasonable screen bounds
-                    val deviceInBounds = devicePt.x >= -width && devicePt.x <= width * 2 && 
-                                       devicePt.y >= -height && devicePt.y <= height * 2
-                    val phoneInBounds = phonePt.x >= -width && phonePt.x <= width * 2 && 
-                                      phonePt.y >= -height && phonePt.y <= height * 2
-                    
-                    if (deviceInBounds || phoneInBounds) {
-                        val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                            color = ContextCompat.getColor(context, R.color.interactive_color_light)
-                            style = Paint.Style.STROKE;
-                            strokeWidth = 8f
-                            // Adjust dash pattern based on distance to prevent too many dashes
-                            val dashLength = if (distance > width) 48f else 24f
-                            val gapLength = if (distance > width) 32f else 16f
-                            pathEffect = DashPathEffect(floatArrayOf(dashLength, gapLength), 0f)
+                android.util.Log.d(
+                    "AnnotationOverlayView",
+                    "onDraw: devicePt=$devicePt, phonePt=$phonePt"
+                )
+                if (devicePt != null && phonePt != null) {
+                    // --- PERFORMANCE OPTIMIZATION: Distance-based line drawing ---
+                    val distance = hypot(
+                        (devicePt.x - phonePt.x).toDouble(),
+                        (devicePt.y - phonePt.y).toDouble()
+                    )
+                    val maxLineDistance = width * 2f // Only draw if line is within 2x screen width
+                    val extremeDistance = width * 4f // Use direction indicator beyond this
+
+                    if (distance <= maxLineDistance) {
+                        // Check if either endpoint is within reasonable screen bounds
+                        val deviceInBounds = devicePt.x >= -width && devicePt.x <= width * 2 &&
+                                devicePt.y >= -height && devicePt.y <= height * 2
+                        val phoneInBounds = phonePt.x >= -width && phonePt.x <= width * 2 &&
+                                phonePt.y >= -height && phonePt.y <= height * 2
+
+                        if (deviceInBounds || phoneInBounds) {
+                            val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                                color =
+                                    ContextCompat.getColor(context, R.color.interactive_color_light)
+                                style = Paint.Style.STROKE;
+                                strokeWidth = 8f
+                                // Adjust dash pattern based on distance to prevent too many dashes
+                                val dashLength = if (distance > width) 48f else 24f
+                                val gapLength = if (distance > width) 32f else 16f
+                                pathEffect = DashPathEffect(floatArrayOf(dashLength, gapLength), 0f)
+                            }
+                            canvas.drawLine(devicePt.x, devicePt.y, phonePt.x, phonePt.y, linePaint)
+                            android.util.Log.d(
+                                "AnnotationOverlayView",
+                                "onDraw: drew dotted line from $devicePt to $phonePt (distance: ${distance.toInt()}px)"
+                            )
+                        } else {
+                            android.util.Log.d(
+                                "AnnotationOverlayView",
+                                "onDraw: both endpoints too far off-screen, skipping line"
+                            )
                         }
-                        canvas.drawLine(devicePt.x, devicePt.y, phonePt.x, phonePt.y, linePaint)
-                        android.util.Log.d("AnnotationOverlayView", "onDraw: drew dotted line from $devicePt to $phonePt (distance: ${distance.toInt()}px)")
-                    } else {
-                        android.util.Log.d("AnnotationOverlayView", "onDraw: both endpoints too far off-screen, skipping line")
+                    } else if (distance <= extremeDistance) {
+                        // Draw direction indicator instead of full line
+                        drawDeviceDirectionIndicator(canvas, devicePt, phonePt, distance)
                     }
-                } else if (distance <= extremeDistance) {
-                    // Draw direction indicator instead of full line
-                    drawDeviceDirectionIndicator(canvas, devicePt, phonePt, distance)
                 }
             }
         }
@@ -514,156 +493,6 @@ class AnnotationOverlayView @JvmOverloads constructor(
         }
 
         // Note: Popover drawing moved to HybridPopoverManager
-    }
-
-    // POIs are now handled by GL layers - drawPoint method removed
-
-    // Lines are now handled by GL layers - drawLine method removed
-
-    // Helper for floating point comparison
-    private fun approximatelyEqual(p1: PointF, p2: PointF, epsilon: Float = 1.5f): Boolean {
-        return kotlin.math.abs(p1.x - p2.x) < epsilon && kotlin.math.abs(p1.y - p2.y) < epsilon
-    }
-
-    // Arrow heads are now handled by GL layers - drawArrowHead method removed
-
-    // Areas are now handled by GL layers - drawArea method removed
-
-    private fun drawTimerIndicator(canvas: Canvas, center: PointF, color: Int, annotation: MapAnnotation) {
-        val timerRadius = 45f // Slightly larger than the annotation
-        val handWidth = 2f
-        
-        // Draw timer circle
-        val timerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            this.color = color
-            style = Paint.Style.STROKE
-            strokeWidth = 2f
-        }
-        canvas.drawCircle(center.x, center.y, timerRadius, timerPaint)
-        
-        // Draw second hand
-        val handPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            this.color = color
-            style = Paint.Style.STROKE
-            strokeWidth = handWidth
-            strokeCap = Paint.Cap.ROUND
-        }
-        
-        val angle = Math.toRadians(timerAngle.toDouble())
-        val endX = center.x + (timerRadius * cos(angle)).toFloat()
-        val endY = center.y + (timerRadius * sin(angle)).toFloat()
-        canvas.drawLine(center.x, center.y, endX, endY, handPaint)
-
-        // Draw countdown text
-        val secondsRemaining = ((annotation.expirationTime ?: 0) - System.currentTimeMillis()) / 1000
-        if (secondsRemaining > 0) {
-            // Format time as Xm Ys or Xs
-            val minutes = secondsRemaining / 60
-            val seconds = secondsRemaining % 60
-            val label = if (minutes > 0) "${minutes}m ${seconds}s" else "${seconds}s"
-
-            // Prepare text paint
-            val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                this.color = Color.WHITE
-                textSize = 32f
-                textAlign = Paint.Align.CENTER
-                typeface = Typeface.DEFAULT_BOLD
-            }
-            // Measure text size
-            val textBounds = android.graphics.Rect()
-            textPaint.getTextBounds(label, 0, label.length, textBounds)
-            val paddingH = 32f
-            val paddingV = 16f
-            val rectWidth = textBounds.width() + paddingH * 2
-            val rectHeight = textBounds.height() + paddingV * 2
-            val rectLeft = center.x - rectWidth / 2
-            val rectTop = center.y + timerRadius + 20f
-            val rectRight = center.x + rectWidth / 2
-            val rectBottom = rectTop + rectHeight
-            // Draw pill background
-            val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                this.color = Color.argb(180, 0, 0, 0) // semi-transparent black
-                style = Paint.Style.FILL
-            }
-            canvas.drawRoundRect(
-                rectLeft,
-                rectTop,
-                rectRight,
-                rectBottom,
-                rectHeight / 2,
-                rectHeight / 2,
-                bgPaint
-            )
-            // Draw the text centered in the pill
-            val textY = rectTop + rectHeight / 2 - textBounds.exactCenterY()
-            canvas.drawText(label, center.x, textY, textPaint)
-        }
-    }
-
-    private fun drawCluster(canvas: Canvas, center: PointF, cluster: AnnotationCluster) {
-        // Draw cluster circle
-        val clusterPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.WHITE
-            style = Paint.Style.FILL
-        }
-        val radius = 40f // Increased from 30f
-        canvas.drawCircle(center.x, center.y, radius, clusterPaint)
-
-        // Draw cluster border
-        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.BLACK
-            style = Paint.Style.STROKE
-            strokeWidth = 3f // Increased from 2f
-        }
-        canvas.drawCircle(center.x, center.y, radius, borderPaint)
-
-        // Draw count
-        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.BLACK
-            textSize = 32f // Increased from 24f
-            textAlign = Paint.Align.CENTER
-            isFakeBoldText = true // Make text bold
-            typeface = Typeface.DEFAULT_BOLD // Use bold typeface
-        }
-        canvas.drawText(
-            cluster.annotations.size.toString(),
-            center.x,
-            center.y + textPaint.textSize/3,
-            textPaint
-        )
-    }
-
-    private fun drawPeerCluster(canvas: Canvas, center: PointF, cluster: PeerCluster) {
-        // Draw cluster circle with green fill
-        val clusterPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#4CAF50") // Material green 500 (same as peer dots)
-            style = Paint.Style.FILL
-        }
-        val radius = 40f
-        canvas.drawCircle(center.x, center.y, radius, clusterPaint)
-
-        // Draw cluster border
-        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.WHITE
-            style = Paint.Style.STROKE
-            strokeWidth = 3f
-        }
-        canvas.drawCircle(center.x, center.y, radius, borderPaint)
-
-        // Draw count
-        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.WHITE
-            textSize = 32f
-            textAlign = Paint.Align.CENTER
-            isFakeBoldText = true // Make text bold
-            typeface = Typeface.DEFAULT_BOLD // Use bold typeface
-        }
-        canvas.drawText(
-            cluster.peers.size.toString(),
-            center.x,
-            center.y + textPaint.textSize/3,
-            textPaint
-        )
     }
 
     private fun AnnotationColor.toColor(): Int {
@@ -977,68 +806,6 @@ class AnnotationOverlayView @JvmOverloads constructor(
 
     fun getLassoPoints(): List<PointF>? = lassoPoints
 
-    // Haversine formula to calculate distance in meters between two lat/lon points
-    private fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-        val R = 6371000.0 // Earth radius in meters
-        val dLat = Math.toRadians(lat2 - lat1)
-        val dLon = Math.toRadians(lon2 - lon1)
-        val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
-                Math.sin(dLon / 2) * Math.sin(dLon / 2)
-        val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-        return R * c
-    }
-
-    // === NATIVE CLUSTERING: Peer dot drawing now handled by MapLibre GL layer ===
-    // This method is no longer needed as peer dots are rendered by the native clustering system
-
-    // Cohen–Sutherland line clipping algorithm for a segment and a rectangle
-    private fun clipSegmentToRect(p1: PointF, p2: PointF, rect: RectF): Pair<PointF, PointF>? {
-        // Outcode constants
-        val INSIDE = 0; val LEFT = 1; val RIGHT = 2; val BOTTOM = 4; val TOP = 8
-        fun computeOutCode(x: Float, y: Float): Int {
-            var code = INSIDE
-            if (x < rect.left) code = code or LEFT
-            else if (x > rect.right) code = code or RIGHT
-            if (y < rect.top) code = code or TOP
-            else if (y > rect.bottom) code = code or BOTTOM
-            return code
-        }
-        var x0 = p1.x; var y0 = p1.y; var x1 = p2.x; var y1 = p2.y
-        var outcode0 = computeOutCode(x0, y0)
-        var outcode1 = computeOutCode(x1, y1)
-        var accept = false
-        while (true) {
-            if ((outcode0 or outcode1) == 0) {
-                accept = true; break
-            } else if ((outcode0 and outcode1) != 0) {
-                break
-            } else {
-                val outcodeOut = if (outcode0 != 0) outcode0 else outcode1
-                var x = 0f; var y = 0f
-                if ((outcodeOut and TOP) != 0) {
-                    x = x0 + (x1 - x0) * (rect.top - y0) / (y1 - y0)
-                    y = rect.top
-                } else if ((outcodeOut and BOTTOM) != 0) {
-                    x = x0 + (x1 - x0) * (rect.bottom - y0) / (y1 - y0)
-                    y = rect.bottom
-                } else if ((outcodeOut and RIGHT) != 0) {
-                    y = y0 + (y1 - y0) * (rect.right - x0) / (x1 - x0)
-                    x = rect.right
-                } else if ((outcodeOut and LEFT) != 0) {
-                    y = y0 + (y1 - y0) * (rect.left - x0) / (x1 - x0)
-                    x = rect.left
-                }
-                if (outcodeOut == outcode0) {
-                    x0 = x; y0 = y; outcode0 = computeOutCode(x0, y0)
-                } else {
-                    x1 = x; y1 = y; outcode1 = computeOutCode(x1, y1)
-                }
-            }
-        }
-        return if (accept) Pair(PointF(x0, y0), PointF(x1, y1)) else null
-    }
-
     fun showLassoMenu() {
         lassoMenuVisible = true
         invalidate() // Force redraw to keep lasso visible
@@ -1047,10 +814,6 @@ class AnnotationOverlayView @JvmOverloads constructor(
         lassoMenuVisible = false
         invalidate()
     }
-
-    // Note: Popover methods moved to HybridPopoverManager
-
-    // Note: Popover position updates moved to HybridPopoverManager
 
     // === PERFORMANCE OPTIMIZATION: Batch invalidate calls ===
     private var pendingInvalidate = false
@@ -1190,4 +953,4 @@ class AnnotationOverlayView @JvmOverloads constructor(
         
         android.util.Log.d("AnnotationOverlayView", "onDraw: drew direction indicator at ($clampedArrowX, $clampedArrowY) pointing toward device (distance: ${distance.toInt()}px)")
     }
-} 
+}

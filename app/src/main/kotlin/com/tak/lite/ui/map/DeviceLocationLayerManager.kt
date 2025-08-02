@@ -51,8 +51,8 @@ class DeviceLocationLayerManager(private val mapLibreMap: MapLibreMap) {
                 val shadowLayer = CircleLayer(DEVICE_LOCATION_SHADOW_LAYER, DEVICE_LOCATION_SOURCE)
                     .withProperties(
                         PropertyFactory.circleColor("#33000000"), // Semi-transparent black
-                        PropertyFactory.circleRadius(20f),
-                        PropertyFactory.circleTranslate(arrayOf(0f, 4f)) // Offset for shadow effect
+                        PropertyFactory.circleRadius(8f), // Reduced to match peer dots
+                        PropertyFactory.circleTranslate(arrayOf(0f, 2f)) // Reduced offset for smaller shadow
                     )
                 style.addLayer(shadowLayer)
                 Log.d(TAG, "Added device location shadow layer: $DEVICE_LOCATION_SHADOW_LAYER")
@@ -67,9 +67,9 @@ class DeviceLocationLayerManager(private val mapLibreMap: MapLibreMap) {
                                 Expression.literal("#4CAF50") // Green for fresh
                             )
                         ),
-                        PropertyFactory.circleRadius(18f),
+                        PropertyFactory.circleRadius(5f), // Match peer dot size
                         PropertyFactory.circleStrokeColor("#FFFFFF"),
-                        PropertyFactory.circleStrokeWidth(6f)
+                        PropertyFactory.circleStrokeWidth(3f) // Match peer dot stroke width
                     )
                 style.addLayer(borderLayer)
                 Log.d(TAG, "Added device location border layer: $DEVICE_LOCATION_BORDER_LAYER")
@@ -78,7 +78,7 @@ class DeviceLocationLayerManager(private val mapLibreMap: MapLibreMap) {
                 val fillLayer = CircleLayer(DEVICE_LOCATION_FILL_LAYER, DEVICE_LOCATION_SOURCE)
                     .withProperties(
                         PropertyFactory.circleColor("#2196F3"), // Blue fill
-                        PropertyFactory.circleRadius(13f)
+                        PropertyFactory.circleRadius(5f) // Match peer dot size
                     )
                 style.addLayer(fillLayer)
                 Log.d(TAG, "Added device location fill layer: $DEVICE_LOCATION_FILL_LAYER")
