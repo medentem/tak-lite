@@ -21,10 +21,8 @@ import com.tak.lite.R
 import com.tak.lite.data.model.AnnotationCluster
 import com.tak.lite.data.model.PeerCluster
 import com.tak.lite.model.AnnotationColor
-import com.tak.lite.model.LineStyle
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PeerLocationEntry
-import com.tak.lite.model.PointShape
 import com.tak.lite.model.toColor
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.Projection
@@ -32,7 +30,6 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
-import kotlin.math.sqrt
 import kotlin.math.tan
 
 class AnnotationOverlayView @JvmOverloads constructor(
@@ -262,8 +259,12 @@ class AnnotationOverlayView @JvmOverloads constructor(
     }
 
     fun updateAnnotations(annotations: List<MapAnnotation>) {
-        Log.d("PoiClusterDebug", "updateAnnotations: called with ${annotations.size} annotations (${annotations.count { it is MapAnnotation.PointOfInterest }} POIs)")
-        this.annotations = annotations
+        // Filter out POIs, lines, and areas since they're now handled by GL layers
+        val filteredAnnotations = annotations.filterNot { 
+            it is MapAnnotation.PointOfInterest || it is MapAnnotation.Line || it is MapAnnotation.Area 
+        }
+        Log.d("PoiClusterDebug", "updateAnnotations: called with ${annotations.size} annotations, filtered to ${filteredAnnotations.size} (POIs, lines, and areas handled by GL layers)")
+        this.annotations = filteredAnnotations
         lastClusteringUpdate = 0 // Force annotation cluster update
     }
 
@@ -500,107 +501,6 @@ class AnnotationOverlayView @JvmOverloads constructor(
         val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
         val minDistMiles = prefs.getFloat("min_line_segment_dist_miles", 1.0f)
 
-        if (currentZoom < minZoomForClustering) {
-            // Draw clusters
-            clusters.forEach { cluster ->
-                val point = projection?.toScreenLocation(cluster.center)
-                if (point != null) {
-                    val pointF = PointF(point.x, point.y)
-                    drawCluster(canvas, pointF, cluster)
-                }
-            }
-
-            // Draw non-clustered annotations - OPTIMIZED WITH VIEWPORT CULLING
-            val clusteredAnnotations = clusters.flatMap { it.annotations }.toSet()
-            getVisibleAnnotations().filter { it !in clusteredAnnotations }.forEach { annotation ->
-                val point = annotation.toMapLibreLatLng().let { latLng ->
-                    projection?.toScreenLocation(latLng)
-                }
-                if (point != null) {
-                    val pointF = PointF(point.x, point.y)
-                    when (annotation) {
-                        is MapAnnotation.PointOfInterest -> drawPoint(canvas, pointF, annotation)
-                        is MapAnnotation.Line -> {
-                            // Compute if any segment is long enough
-                            val latLngs = annotation.points.map { it.toMapLibreLatLng() }
-                            var anyLong = false
-                            for (i in 0 until latLngs.size - 1) {
-                                val distMeters = haversine(latLngs[i].latitude, latLngs[i].longitude, latLngs[i+1].latitude, latLngs[i+1].longitude)
-                                val distMiles = distMeters / 1609.344
-                                if (distMiles >= minDistMiles) {
-                                    anyLong = true
-                                    break
-                                }
-                            }
-                            if (latLngs.size >= 2) {
-                                val screenPoints = latLngs.mapNotNull { projection?.toScreenLocation(it) }
-                                for (i in 0 until screenPoints.size - 1) {
-                                    val p1 = PointF(screenPoints[i].x, screenPoints[i].y)
-                                    val p2 = PointF(screenPoints[i + 1].x, screenPoints[i + 1].y)
-                                    drawLine(canvas, p1, p2, annotation, showLabel = anyLong, segmentIndex = i)
-                                }
-                            }
-                        }
-                        is MapAnnotation.Area -> {
-                            val centerPoint = projection?.toScreenLocation(annotation.center.toMapLibreLatLng())
-                            if (centerPoint != null) {
-                                val centerPointF = PointF(centerPoint.x, centerPoint.y)
-                                drawArea(canvas, centerPointF, annotation)
-                            }
-                        }
-                        is MapAnnotation.Deletion -> {
-                            // Do nothing for deletions
-                        }
-                    }
-                }
-            }
-        } else {
-            // Draw all annotations normally - OPTIMIZED WITH VIEWPORT CULLING
-            getVisibleAnnotations().forEach { annotation ->
-                val point = annotation.toMapLibreLatLng().let { latLng ->
-                    projection?.toScreenLocation(latLng)
-                }
-                if (point == null) return@forEach
-                val pointF = PointF(point.x, point.y)
-                when (annotation) {
-                    is MapAnnotation.PointOfInterest -> {
-                        drawPoint(canvas, pointF, annotation)
-                    }
-                    is MapAnnotation.Line -> {
-                        // Compute if any segment is long enough
-                        val latLngs = annotation.points.map { it.toMapLibreLatLng() }
-                        var anyLong = false
-                        for (i in 0 until latLngs.size - 1) {
-                            val distMeters = haversine(latLngs[i].latitude, latLngs[i].longitude, latLngs[i+1].latitude, latLngs[i+1].longitude)
-                            val distMiles = distMeters / 1609.344
-                            if (distMiles >= minDistMiles) {
-                                anyLong = true
-                                break
-                            }
-                        }
-                        if (latLngs.size >= 2) {
-                            val screenPoints = latLngs.mapNotNull { projection?.toScreenLocation(it) }
-                            for (i in 0 until screenPoints.size - 1) {
-                                val p1 = PointF(screenPoints[i].x, screenPoints[i].y)
-                                val p2 = PointF(screenPoints[i + 1].x, screenPoints[i + 1].y)
-                                drawLine(canvas, p1, p2, annotation, showLabel = anyLong, segmentIndex = i)
-                            }
-                        }
-                    }
-                    is MapAnnotation.Area -> {
-                        val centerPoint = projection?.toScreenLocation(annotation.center.toMapLibreLatLng())
-                        if (centerPoint != null) {
-                            val centerPointF = PointF(centerPoint.x, centerPoint.y)
-                            drawArea(canvas, centerPointF, annotation)
-                        }
-                    }
-                    is MapAnnotation.Deletion -> {
-                        // Do nothing for deletions
-                    }
-                }
-            }
-        }
-
         // Draw lasso path if active or menu is visible
         if ((isLassoMode || lassoMenuVisible) && lassoPath != null) {
             val lassoPaint = Paint().apply {
@@ -629,193 +529,18 @@ class AnnotationOverlayView @JvmOverloads constructor(
         // Note: Popover drawing moved to HybridPopoverManager
     }
 
-    private fun drawPoint(canvas: Canvas, point: PointF, annotation: MapAnnotation.PointOfInterest) {
-        paint.color = annotation.color.toColor()
+    // POIs are now handled by GL layers - drawPoint method removed
 
-        when (annotation.shape) {
-            PointShape.CIRCLE -> {
-                canvas.drawCircle(point.x, point.y, 30f, paint)
-            }
-            PointShape.EXCLAMATION -> {
-                // Draw filled triangle with selected color
-                val half = 30f
-                val height = (half * sqrt(3.0)).toFloat()
-                val path = Path()
-                path.moveTo(point.x, point.y - height / 2) // Top
-                path.lineTo(point.x - half, point.y + height / 2) // Bottom left
-                path.lineTo(point.x + half, point.y + height / 2) // Bottom right
-                path.close()
-                val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = annotation.color.toColor()
-                    style = Paint.Style.FILL
-                }
-                canvas.drawPath(path, fillPaint)
-                // Draw thinner white exclamation mark inside triangle
-                val exMarkWidth = 6f
-                val exMarkTop = point.y - height / 6
-                val exMarkBottom = point.y + height / 6
-                val exMarkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = Color.WHITE
-                    style = Paint.Style.STROKE
-                    strokeWidth = exMarkWidth
-                    strokeCap = Paint.Cap.ROUND
-                }
-                canvas.drawLine(point.x, exMarkTop, point.x, exMarkBottom, exMarkPaint)
-                val dotRadius = exMarkWidth * 0.6f
-                val dotCenterY = exMarkBottom + dotRadius * 2.0f
-                val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = Color.WHITE
-                    style = Paint.Style.FILL
-                }
-                canvas.drawCircle(point.x, dotCenterY, dotRadius, dotPaint)
-            }
-            PointShape.SQUARE -> {
-                val half = 30f
-                canvas.drawRect(point.x - half, point.y - half, point.x + half, point.y + half, paint)
-            }
-            PointShape.TRIANGLE -> {
-                val half = 30f
-                val height = (half * sqrt(3.0)).toFloat()
-                val path = Path()
-                path.moveTo(point.x, point.y - height / 2) // Top
-                path.lineTo(point.x - half, point.y + height / 2) // Bottom left
-                path.lineTo(point.x + half, point.y + height / 2) // Bottom right
-                path.close()
-                canvas.drawPath(path, paint)
-            }
-        }
-
-        // Draw timer indicator if annotation has expiration time
-        annotation.expirationTime?.let {
-            drawTimerIndicator(canvas, point, annotation.color.toColor(), annotation)
-        }
-    }
-
-    private fun drawLine(canvas: Canvas, point1: PointF, point2: PointF, annotation: MapAnnotation.Line, showLabel: Boolean, segmentIndex: Int) {
-        paint.color = annotation.color.toColor()
-        // Set line style
-        paint.pathEffect = when (annotation.style) {
-            LineStyle.DASHED -> DashPathEffect(floatArrayOf(30f, 20f), 0f)
-            else -> null
-        }
-        val path = Path()
-        path.moveTo(point1.x, point1.y)
-        path.lineTo(point2.x, point2.y)
-        canvas.drawPath(path, paint)
-        // Draw arrow head if needed
-        if (annotation.arrowHead) {
-            drawArrowHead(canvas, point1, point2, annotation.color.toColor())
-        }
-        // Reset pathEffect
-        paint.pathEffect = null
-
-        // Show label if requested and segment is long enough
-        if (showLabel) {
-            // Compute the visible portion of the segment (clip to screen bounds)
-            val margin = 40f
-            val screenRect = RectF(-margin, -margin, width + margin, height + margin)
-            val clipped = clipSegmentToRect(point1, point2, screenRect)
-            if (clipped != null) {
-                val (visibleP1, visibleP2) = clipped
-                val latLngs = annotation.points.map { it.toMapLibreLatLng() }
-                if (segmentIndex >= 0 && segmentIndex + 1 < latLngs.size) {
-                    val latLng1 = latLngs[segmentIndex]
-                    val latLng2 = latLngs[segmentIndex + 1]
-                    val distMeters = haversine(latLng1.latitude, latLng1.longitude, latLng2.latitude, latLng2.longitude)
-                    val distMiles = distMeters / 1609.344
-                    val midX = (visibleP1.x + visibleP2.x) / 2
-                    val midY = (visibleP1.y + visibleP2.y) / 2
-                    val label = String.format("%.2f mi", distMiles)
-
-                    // --- Dynamic scaling based on zoom ---
-                    val minZoom = 10f
-                    val maxZoom = 18f
-                    val minTextSize = 24f
-                    val maxTextSize = 44f
-                    val minPadding = 8f
-                    val maxPadding = 18f
-                    val zoom = currentZoom.coerceIn(minZoom, maxZoom)
-                    val scale = (zoom - minZoom) / (maxZoom - minZoom)
-                    val textSize = minTextSize + (maxTextSize - minTextSize) * scale
-                    val padding = minPadding + (maxPadding - minPadding) * scale
-                    //--------------------------------------
-
-                    val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                        color = Color.WHITE
-                        this.textSize = textSize
-                        textAlign = Paint.Align.CENTER
-                        typeface = Typeface.DEFAULT_BOLD
-                    }
-                    // Measure text size
-                    val textBounds = android.graphics.Rect()
-                    textPaint.getTextBounds(label, 0, label.length, textBounds)
-                    val rectWidth = textBounds.width() + padding * 2
-                    val rectHeight = textBounds.height() + padding * 1.2f
-                    val rectLeft = midX - rectWidth / 2
-                    val rectTop = midY - 24f - rectHeight / 2
-                    val rectRight = midX + rectWidth / 2
-                    val rectBottom = rectTop + rectHeight
-                    val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                        color = Color.BLACK
-                        style = Paint.Style.FILL
-                    }
-                    canvas.drawRoundRect(
-                        rectLeft,
-                        rectTop,
-                        rectRight,
-                        rectBottom,
-                        padding,
-                        padding,
-                        bgPaint
-                    )
-                    // Draw the text centered in the rect
-                    val textY = rectTop + rectHeight / 2 - textBounds.exactCenterY()
-                    canvas.drawText(label, midX, textY, textPaint)
-                }
-            }
-        }
-
-        // Draw timer indicator if annotation has expiration time
-        annotation.expirationTime?.let {
-            // Draw timer at the midpoint of the line
-            val midX = (point1.x + point2.x) / 2
-            val midY = (point1.y + point2.y) / 2
-            drawTimerIndicator(canvas, PointF(midX, midY), annotation.color.toColor(), annotation)
-        }
-    }
+    // Lines are now handled by GL layers - drawLine method removed
 
     // Helper for floating point comparison
     private fun approximatelyEqual(p1: PointF, p2: PointF, epsilon: Float = 1.5f): Boolean {
         return kotlin.math.abs(p1.x - p2.x) < epsilon && kotlin.math.abs(p1.y - p2.y) < epsilon
     }
 
-    private fun drawArrowHead(canvas: Canvas, start: PointF, end: PointF, color: Int) {
-        val arrowSize = 30f
-        val angle = atan2((end.y - start.y).toDouble(), (end.x - start.x).toDouble())
-        val arrowAngle = Math.PI / 8 // 22.5 degrees
-        val x1 = (end.x - arrowSize * cos(angle - arrowAngle)).toFloat()
-        val y1 = (end.y - arrowSize * sin(angle - arrowAngle)).toFloat()
-        val x2 = (end.x - arrowSize * cos(angle + arrowAngle)).toFloat()
-        val y2 = (end.y - arrowSize * sin(angle + arrowAngle)).toFloat()
-        val arrowPaint = Paint(paint)
-        arrowPaint.color = color
-        arrowPaint.style = Paint.Style.FILL_AND_STROKE
-        val arrowPath = Path()
-        arrowPath.moveTo(end.x, end.y)
-        arrowPath.lineTo(x1, y1)
-        arrowPath.lineTo(x2, y2)
-        arrowPath.close()
-        canvas.drawPath(arrowPath, arrowPaint)
-    }
+    // Arrow heads are now handled by GL layers - drawArrowHead method removed
 
-    private fun drawArea(canvas: Canvas, center: PointF, annotation: MapAnnotation.Area) {
-        paint.color = annotation.color.toColor()
-        fillPaint.color = annotation.color.toColor()
-
-        val radius = annotation.radius * currentZoom
-        canvas.drawCircle(center.x, center.y, radius.toFloat(), fillPaint)
-        canvas.drawCircle(center.x, center.y, radius.toFloat(), paint)
-    }
+    // Areas are now handled by GL layers - drawArea method removed
 
     private fun drawTimerIndicator(canvas: Canvas, center: PointF, color: Int, annotation: MapAnnotation) {
         val timerRadius = 45f // Slightly larger than the annotation
@@ -1180,7 +905,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
 
     // Helper to find a line near the touch point
     private fun findLineAt(x: Float, y: Float): Pair<MapAnnotation.Line, Pair<PointF, PointF>>? {
-        val threshold = 30f // pixels
+        val threshold = 50f // pixels - increased for easier line tapping
         val lines = annotations.filterIsInstance<MapAnnotation.Line>()
         for (line in lines) {
             val latLngs = line.points.map { it.toMapLibreLatLng() }
@@ -1220,7 +945,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
         path.close()
         val selected = mutableListOf<MapAnnotation>()
         
-        // Check overlay annotations (lines, areas, etc.)
+        // Check overlay annotations (POIs, etc.)
         for (annotation in annotations) {
             val latLng = annotation.toMapLibreLatLng()
             val screenPt = projection?.toScreenLocation(latLng) ?: continue
@@ -1236,11 +961,20 @@ class AnnotationOverlayView @JvmOverloads constructor(
         // Check GL-rendered POIs if annotation controller is available
         annotationController?.let { controller ->
             val glPois = controller.mapController?.mapLibreMap?.let {
-                controller.findPoisInLassoArea(points,
-                    it
-                )
+                controller.findPoisInLassoArea(points, it)
             }
             glPois?.let { selected.addAll(it) }
+            
+            // Check GL-rendered lines and areas
+            val glLines = controller.mapController?.mapLibreMap?.let {
+                controller.findLinesInLassoArea(points, it)
+            }
+            glLines?.let { selected.addAll(it) }
+            
+            val glAreas = controller.mapController?.mapLibreMap?.let {
+                controller.findAreasInLassoArea(points, it)
+            }
+            glAreas?.let { selected.addAll(it) }
         }
         
         return selected

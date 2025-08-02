@@ -142,7 +142,7 @@ dependencies {
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
 
     // MapLibre GL Android SDK
-    implementation 'org.maplibre.gl:android-sdk:11.8.0'
+    implementation 'org.maplibre.gl:android-sdk:11.12.2'
 
     implementation 'com.google.protobuf:protobuf-java:3.25.3'
     implementation("com.google.protobuf:protobuf-kotlin:3.25.3")

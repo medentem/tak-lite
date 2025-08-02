@@ -44,6 +44,7 @@ class AnnotationFragment : Fragment() {
     private var isDrawing = false
     private lateinit var predictionOverlayView: PredictionOverlayView
     private lateinit var timerTextOverlayView: TimerTextOverlayView
+    private lateinit var lineTimerTextOverlayView: LineTimerTextOverlayView
     
     // POI tap detection state
     private var poiTapDownTime: Long? = null
@@ -75,9 +76,11 @@ class AnnotationFragment : Fragment() {
         // Initialize prediction overlay
         predictionOverlayView = view.findViewById(R.id.predictionOverlayView)
         
-        // Initialize timer text overlay
+        // Initialize timer text overlays
         timerTextOverlayView = mainActivity?.findViewById(R.id.timerTextOverlayView) ?: 
             view.findViewById(R.id.timerTextOverlayView)
+        lineTimerTextOverlayView = mainActivity?.findViewById(R.id.lineTimerTextOverlayView) ?: 
+            view.findViewById(R.id.lineTimerTextOverlayView)
         
         // Set initial prediction overlay visibility based on user preference
         val prefs = requireContext().getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
@@ -226,6 +229,7 @@ class AnnotationFragment : Fragment() {
                 predictionOverlayView.setZoom(mapLibreMap.cameraPosition.zoom.toFloat())
                 predictionOverlayView.setProjection(mapLibreMap.projection)
                 timerTextOverlayView.setProjection(mapLibreMap.projection)
+                lineTimerTextOverlayView.setProjection(mapLibreMap.projection)
                 
                 // THROTTLED: Heavy operations that can be delayed
                 if (shouldUpdateHeavy) {
@@ -245,14 +249,23 @@ class AnnotationFragment : Fragment() {
             }
 
             // Now safe to launch these:
-            // === INITIALIZE AND START POI TIMER UPDATES ===
+            // === INITIALIZE AND START TIMER UPDATES ===
             annotationController.initializeTimerManager(mapLibreMap)
+            
+            // Set up POI timer text overlay callback
             annotationController.timerManager?.let { timerManager ->
-                // Set up timer text overlay callback
                 timerManager.setTimerTextCallback(timerTextOverlayView)
                 timerTextOverlayView.setProjection(mapLibreMap.projection)
                 timerManager.startTimerUpdates()
                 Log.d("AnnotationFragment", "POI timer updates started")
+            }
+            
+            // Set up line timer text overlay callback
+            annotationController.lineTimerManager?.let { lineTimerManager ->
+                lineTimerManager.setTimerTextCallback(lineTimerTextOverlayView)
+                lineTimerTextOverlayView.setProjection(mapLibreMap.projection)
+                lineTimerManager.startTimerUpdates()
+                Log.d("AnnotationFragment", "Line timer updates started")
             }
             
             // === ENHANCED: Single data flow for peer locations with native clustering ===
@@ -308,6 +321,10 @@ class AnnotationFragment : Fragment() {
 
             annotationOverlayView.lassoSelectionListener = object : AnnotationOverlayView.LassoSelectionListener {
                 override fun onLassoSelectionLongPress(selected: List<com.tak.lite.model.MapAnnotation>, screenPosition: android.graphics.PointF) {
+                    if (!::annotationController.isInitialized) {
+                        return
+                    }
+                    
                     // Get POIs that are also in the lasso area
                     val lassoPoints = annotationOverlayView.getLassoPoints()
                     val mapLibreMap = mapController?.mapLibreMap
@@ -349,7 +366,9 @@ class AnnotationFragment : Fragment() {
 
             annotationOverlayView.peerDotTapListener = object : AnnotationOverlayView.OnPeerDotTapListener {
                 override fun onPeerDotTapped(peerId: String, screenPosition: PointF) {
-                    annotationController.showPeerPopover(peerId)
+                    if (::annotationController.isInitialized) {
+                        annotationController.showPeerPopover(peerId)
+                    }
                 }
             }
         }
@@ -405,8 +424,10 @@ class AnnotationFragment : Fragment() {
 
     override fun onDestroyView() {
         super.onDestroyView()
-        // Clean up POI timer manager
-        annotationController.timerManager?.cleanup()
+        // Clean up annotation controller if it has been initialized
+        if (::annotationController.isInitialized) {
+            annotationController.cleanup()
+        }
         _binding = null
     }
 

@@ -72,11 +72,25 @@ class AnnotationController(
     
     // Getter for timer manager
     val timerManager: PoiTimerManager? get() = poiTimerManager
+    
+    // === LINE TIMER SUPPORT ===
+    private var _lineTimerManager: LineTimerManager? = null
+    
+    // Getter for line timer manager
+    val lineTimerManager: LineTimerManager? get() = _lineTimerManager
+    
+    // === UNIFIED ANNOTATION MANAGER ===
+    private var unifiedAnnotationManager: UnifiedAnnotationManager? = null
+    
+    companion object {
+        private const val TAG = "AnnotationController"
+    }
 
     init {
         clusteringConfig = ClusteringConfig.getDefault()
         clusteredLayerManager = ClusteredLayerManager(mapLibreMap, clusteringConfig)
         popoverManager = HybridPopoverManager(mapLibreMap, binding.root, meshNetworkViewModel)
+        unifiedAnnotationManager = UnifiedAnnotationManager(mapLibreMap)
         Log.d("PeerDotDebug", "AnnotationController initialized with clustering config: $clusteringConfig")
     }
     
@@ -263,12 +277,24 @@ class AnnotationController(
         return bitmap
     }
 
-    // Initialize timer manager when map is ready
+    // Initialize timer managers when map is ready
     fun initializeTimerManager(mapLibreMap: MapLibreMap?) {
         if (poiTimerManager == null && mapLibreMap != null) {
             poiTimerManager = PoiTimerManager(mapLibreMap, annotationViewModel)
-            Log.d("AnnotationController", "Timer manager initialized")
+            Log.d("AnnotationController", "POI timer manager initialized")
         }
+        if (lineTimerManager == null && mapLibreMap != null) {
+            _lineTimerManager = LineTimerManager(mapLibreMap, annotationViewModel)
+            Log.d("AnnotationController", "Line timer manager initialized")
+        }
+    }
+    
+    // Clean up all resources
+    fun cleanup() {
+        poiTimerManager?.cleanup()
+        lineTimerManager?.cleanup()
+        unifiedAnnotationManager?.cleanup()
+        Log.d("AnnotationController", "Annotation controller cleaned up")
     }
 
     // Overlay and menu setup
@@ -294,9 +320,20 @@ class AnnotationController(
             // Generate POI icons first
             generatePoiIcons(style)
             
-            // Initialize timer manager and setup POI timer layers
+            // Initialize unified annotation manager
+            unifiedAnnotationManager?.setLineLayersReadyCallback(object : UnifiedAnnotationManager.LineLayersReadyCallback {
+                override fun onLineLayersReady() {
+                    Log.d(TAG, "Line layers ready, retrying line timer setup")
+                    lineTimerManager?.retrySetupTimerLayers()
+                }
+            })
+            unifiedAnnotationManager?.initialize()
+            Log.d(TAG, "Unified annotation manager initialization requested")
+            
+            // Initialize timer managers and setup timer layers
             initializeTimerManager(mapLibreMap)
             poiTimerManager?.setupTimerLayers()
+            lineTimerManager?.setupTimerLayers()
             
             // Only create non-clustered layers if clustering is disabled
             if (!clusteringConfig.enablePeerClustering) {
@@ -368,6 +405,7 @@ class AnnotationController(
                     
                     // Retry timer layer setup now that POI layer exists
                     poiTimerManager?.retrySetupTimerLayers()
+                    lineTimerManager?.retrySetupTimerLayers()
                 } else {
                     Log.d("PoiDebug", "Non-clustered POI layer already exists")
                 }
@@ -473,6 +511,7 @@ class AnnotationController(
                 
                 // Retry timer layer setup now that clustered POI layer exists
                 poiTimerManager?.retrySetupTimerLayers()
+                lineTimerManager?.retrySetupTimerLayers()
             }
         }
     }
@@ -534,13 +573,34 @@ class AnnotationController(
             val poiId = poiFeature.getStringProperty("poiId")
             showPoiEditMenu(screenPoint, poiId)
             return true
-        } else {
-            // If not on a POI, create a new POI
-            val center = PointF(screenPoint.x, screenPoint.y)
-            pendingPoiLatLng = latLng
-            showFanMenu(center)
+        }
+        
+        // Check if we're long pressing on a line (including hit area layer for easier detection)
+        val lineFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, LineLayerManager.LINE_LAYER)
+        val lineHitAreaFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, LineLayerManager.LINE_HIT_AREA_LAYER)
+        val lineFeature = lineFeatures.firstOrNull { it.getStringProperty("lineId") != null }
+            ?: lineHitAreaFeatures.firstOrNull { it.getStringProperty("lineId") != null }
+        if (lineFeature != null) {
+            val lineId = lineFeature.getStringProperty("lineId")
+            showLineEditMenu(screenPoint, lineId)
             return true
         }
+        
+        // Check if we're long pressing on an area
+        val areaFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, AreaLayerManager.AREA_FILL_LAYER)
+        val areaFeature = areaFeatures.firstOrNull { it.getStringProperty("areaId") != null }
+        if (areaFeature != null) {
+            val areaId = areaFeature.getStringProperty("areaId")
+            // TODO: Implement area edit menu
+            Log.d("AnnotationController", "Area long press detected: $areaId")
+            return true
+        }
+        
+        // If not on any annotation, create a new POI
+        val center = PointF(screenPoint.x, screenPoint.y)
+        pendingPoiLatLng = latLng
+        showFanMenu(center)
+        return true
     }
     
     fun findPoisInLassoArea(lassoPoints: List<PointF>?, mapLibreMap: MapLibreMap): List<MapAnnotation.PointOfInterest> {
@@ -600,6 +660,96 @@ class AnnotationController(
         }
         
         return selectedPois
+    }
+    
+    fun findLinesInLassoArea(lassoPoints: List<PointF>?, mapLibreMap: MapLibreMap): List<MapAnnotation.Line> {
+        if (lassoPoints == null || lassoPoints.size < 3) return emptyList()
+        
+        // Create a path from the lasso points
+        val path = android.graphics.Path()
+        path.moveTo(lassoPoints[0].x, lassoPoints[0].y)
+        for (pt in lassoPoints.drop(1)) path.lineTo(pt.x, pt.y)
+        path.close()
+        
+        // Get the bounds of the lasso path
+        val bounds = android.graphics.RectF()
+        path.computeBounds(bounds, true)
+        
+        // Query lines within the lasso bounds (including hit area layer for better detection)
+        val lineFeatures = mapLibreMap.queryRenderedFeatures(bounds, LineLayerManager.LINE_LAYER)
+        val lineHitAreaFeatures = mapLibreMap.queryRenderedFeatures(bounds, LineLayerManager.LINE_HIT_AREA_LAYER)
+        val allLineFeatures = lineFeatures + lineHitAreaFeatures
+        
+        val selectedLines = mutableListOf<MapAnnotation.Line>()
+        
+        // Check each line to see if any of its points are inside the lasso path
+        for (feature in allLineFeatures) {
+            val lineId = feature.getStringProperty("lineId") ?: continue
+            
+            // Find the corresponding line annotation from the ViewModel
+            val lineAnnotation = annotationViewModel.uiState.value.annotations.filterIsInstance<MapAnnotation.Line>().find { it.id == lineId }
+            if (lineAnnotation != null) {
+                // Check if any point of the line is inside the lasso path
+                val hasPointInLasso = lineAnnotation.points.any { point ->
+                    val screenPt = mapLibreMap.projection.toScreenLocation(point.toMapLibreLatLng())
+                    val pointF = PointF(screenPt.x, screenPt.y)
+                    android.graphics.Region().apply {
+                        val pathBounds = android.graphics.RectF()
+                        path.computeBounds(pathBounds, true)
+                        setPath(path, android.graphics.Region(pathBounds.left.toInt(), pathBounds.top.toInt(), pathBounds.right.toInt(), pathBounds.bottom.toInt()))
+                    }.contains(pointF.x.toInt(), pointF.y.toInt())
+                }
+                
+                if (hasPointInLasso) {
+                    selectedLines.add(lineAnnotation)
+                }
+            }
+        }
+        
+        return selectedLines
+    }
+    
+    fun findAreasInLassoArea(lassoPoints: List<PointF>?, mapLibreMap: MapLibreMap): List<MapAnnotation.Area> {
+        if (lassoPoints == null || lassoPoints.size < 3) return emptyList()
+        
+        // Create a path from the lasso points
+        val path = android.graphics.Path()
+        path.moveTo(lassoPoints[0].x, lassoPoints[0].y)
+        for (pt in lassoPoints.drop(1)) path.lineTo(pt.x, pt.y)
+        path.close()
+        
+        // Get the bounds of the lasso path
+        val bounds = android.graphics.RectF()
+        path.computeBounds(bounds, true)
+        
+        // Query areas within the lasso bounds
+        val areaFeatures = mapLibreMap.queryRenderedFeatures(bounds, AreaLayerManager.AREA_FILL_LAYER)
+        
+        val selectedAreas = mutableListOf<MapAnnotation.Area>()
+        
+        // Check each area to see if its center is inside the lasso path
+        for (feature in areaFeatures) {
+            val areaId = feature.getStringProperty("areaId") ?: continue
+            
+            // Find the corresponding area annotation from the ViewModel
+            val areaAnnotation = annotationViewModel.uiState.value.annotations.filterIsInstance<MapAnnotation.Area>().find { it.id == areaId }
+            if (areaAnnotation != null) {
+                // Check if the center of the area is inside the lasso path
+                val screenPt = mapLibreMap.projection.toScreenLocation(areaAnnotation.center.toMapLibreLatLng())
+                val pointF = PointF(screenPt.x, screenPt.y)
+                val contains = android.graphics.Region().apply {
+                    val pathBounds = android.graphics.RectF()
+                    path.computeBounds(pathBounds, true)
+                    setPath(path, android.graphics.Region(pathBounds.left.toInt(), pathBounds.top.toInt(), pathBounds.right.toInt(), pathBounds.bottom.toInt()))
+                }.contains(pointF.x.toInt(), pointF.y.toInt())
+                
+                if (contains) {
+                    selectedAreas.add(areaAnnotation)
+                }
+            }
+        }
+        
+        return selectedAreas
     }
 
     // POI/line/area editing
@@ -730,6 +880,9 @@ class AnnotationController(
                     else -> {}
                 }
                 val nonPoiAnnotations = annotationViewModel.uiState.value.annotations.filterNot { it is MapAnnotation.PointOfInterest }
+                val linesAndAreas = nonPoiAnnotations.filter { it is MapAnnotation.Line || it is MapAnnotation.Area }
+                Log.d("AnnotationController", "Updating unified annotation manager with ${linesAndAreas.size} lines/areas")
+                unifiedAnnotationManager?.updateAnnotations(linesAndAreas)
                 annotationOverlayView.updateAnnotations(nonPoiAnnotations)
                 annotationOverlayView.setTempLinePoints(null)
                 annotationOverlayView.invalidate()
@@ -796,6 +949,12 @@ class AnnotationController(
         Log.d("PoiDebug", "renderAllAnnotations: total=${allAnnotations.size}, nonPoi=${nonPoiAnnotations.size}, poi=${poiAnnotations.size}")
         Log.d("PoiDebug", "POI annotations: ${poiAnnotations.map { "${it.id}:${it.label}" }}")
         
+        // Update unified annotation manager for lines and areas
+        val linesAndAreas = nonPoiAnnotations.filter { it is MapAnnotation.Line || it is MapAnnotation.Area }
+        unifiedAnnotationManager?.updateAnnotations(linesAndAreas)
+        Log.d(TAG, "Updated unified annotation manager with ${linesAndAreas.size} lines/areas")
+        
+        // Update overlay view for remaining annotations (temporary lines, device location, etc.)
         annotationOverlayView.updateAnnotations(nonPoiAnnotations)
         annotationOverlayView.invalidate()
         
@@ -827,10 +986,19 @@ class AnnotationController(
             updatePoiAnnotationsOnMap(mapLibreMap, poiAnnotations)
         }
         
-        Log.d("PoiDebug", "syncAnnotationOverlayView: total=${currentAnnotations.size}, nonPoi=${nonPoiAnnotations.size}, poi=${poiAnnotations.size}, changed=$poiAnnotationsChanged")
+        // Only update unified annotations if they've actually changed
+        val linesAndAreas = nonPoiAnnotations.filter { it is MapAnnotation.Line || it is MapAnnotation.Area }
+        val lastLinesAndAreas = lastOverlayAnnotations.filter { it is MapAnnotation.Line || it is MapAnnotation.Area }
+        val linesAndAreasChanged = linesAndAreas != lastLinesAndAreas
+        if (linesAndAreasChanged) {
+            Log.d("PoiDebug", "syncAnnotationOverlayView: lines/areas changed, updating unified manager")
+            unifiedAnnotationManager?.updateAnnotations(linesAndAreas)
+            lastOverlayAnnotations = nonPoiAnnotations
+        }
+        
+        Log.d("PoiDebug", "syncAnnotationOverlayView: total=${currentAnnotations.size}, nonPoi=${nonPoiAnnotations.size}, poi=${poiAnnotations.size}, poiChanged=$poiAnnotationsChanged, linesAndAreasChanged=$linesAndAreasChanged")
         
         annotationOverlayView.updateAnnotations(nonPoiAnnotations)
-        lastOverlayAnnotations = nonPoiAnnotations
     }
 
     // Utility
