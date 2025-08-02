@@ -82,6 +82,10 @@ class AnnotationFragment : Fragment() {
         lineTimerTextOverlayView = mainActivity?.findViewById(R.id.lineTimerTextOverlayView) ?: 
             view.findViewById(R.id.lineTimerTextOverlayView)
         
+        // Initialize cluster text overlay
+        val clusterTextOverlayView = mainActivity?.findViewById<ClusterTextOverlayView>(R.id.clusterTextOverlayView) ?: 
+            view.findViewById(R.id.clusterTextOverlayView)
+        
         // Set initial prediction overlay visibility based on user preference
         val prefs = requireContext().getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
         val showPredictionOverlay = prefs.getBoolean("show_prediction_overlay", false)
@@ -144,6 +148,11 @@ class AnnotationFragment : Fragment() {
                 }
             }
             annotationController.mapController = mapController
+            
+            // Set up cluster text overlay
+            clusterTextOverlayView.setProjection(mapLibreMap.projection)
+            annotationController.setClusterTextOverlayView(clusterTextOverlayView)
+            
             // Set up custom touch listener for POI tap detection
             mapLibreMap.addOnMapClickListener { latLng ->
                 // Check if popovers are visible and dismiss them on tap
@@ -230,6 +239,7 @@ class AnnotationFragment : Fragment() {
                 predictionOverlayView.setProjection(mapLibreMap.projection)
                 timerTextOverlayView.setProjection(mapLibreMap.projection)
                 lineTimerTextOverlayView.setProjection(mapLibreMap.projection)
+                clusterTextOverlayView.setProjection(mapLibreMap.projection)
                 
                 // THROTTLED: Heavy operations that can be delayed
                 if (shouldUpdateHeavy) {
@@ -241,6 +251,7 @@ class AnnotationFragment : Fragment() {
             // === NATIVE CLUSTERING SETUP ===
             annotationController.setupAnnotationOverlay(mapLibreMap)
             predictionOverlayView.setProjection(mapLibreMap.projection)
+            clusterTextOverlayView.setProjection(mapLibreMap.projection)
             annotationController.setupPoiLongPressListener()
 
             // Add long press listener for POI annotations and new POI creation
@@ -289,7 +300,8 @@ class AnnotationFragment : Fragment() {
             viewLifecycleOwner.lifecycleScope.launch {
                 meshNetworkViewModel.userLocation.collectLatest { location ->
                     annotationOverlayView.setUserLocation(location)
-                    annotationOverlayView.setDeviceLocation(location)
+                    // Update device location using GL layers
+                    annotationController.updateDeviceLocation(location, meshNetworkViewModel.isDeviceLocationStale.value)
                 }
             }
             viewLifecycleOwner.lifecycleScope.launch {
@@ -299,7 +311,8 @@ class AnnotationFragment : Fragment() {
             }
             viewLifecycleOwner.lifecycleScope.launch {
                 meshNetworkViewModel.isDeviceLocationStale.collectLatest { isStale ->
-                    annotationOverlayView.setDeviceLocationStaleness(isStale)
+                    // Update device location staleness using GL layers
+                    annotationController.updateDeviceLocation(meshNetworkViewModel.userLocation.value, isStale)
                 }
             }
 

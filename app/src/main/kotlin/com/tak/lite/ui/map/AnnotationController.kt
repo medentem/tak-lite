@@ -79,8 +79,20 @@ class AnnotationController(
     // Getter for line timer manager
     val lineTimerManager: LineTimerManager? get() = _lineTimerManager
     
+    // Getter for device location manager
+    val deviceLocationManager: DeviceLocationLayerManager? get() = deviceLocationManager
+    
+    // Getter for cluster text manager
+    val clusterTextManager: ClusterTextManager? get() = clusterTextManager
+    
     // === UNIFIED ANNOTATION MANAGER ===
     private var unifiedAnnotationManager: UnifiedAnnotationManager? = null
+    
+    // === DEVICE LOCATION MANAGER ===
+    private var deviceLocationManager: DeviceLocationLayerManager? = null
+    
+    // === CLUSTER TEXT MANAGER ===
+    private var clusterTextManager: ClusterTextManager? = null
     
     companion object {
         private const val TAG = "AnnotationController"
@@ -91,6 +103,8 @@ class AnnotationController(
         clusteredLayerManager = ClusteredLayerManager(mapLibreMap, clusteringConfig)
         popoverManager = HybridPopoverManager(mapLibreMap, binding.root, meshNetworkViewModel)
         unifiedAnnotationManager = UnifiedAnnotationManager(mapLibreMap)
+        deviceLocationManager = DeviceLocationLayerManager(mapLibreMap)
+        clusterTextManager = ClusterTextManager(mapLibreMap)
         Log.d("PeerDotDebug", "AnnotationController initialized with clustering config: $clusteringConfig")
     }
     
@@ -287,6 +301,14 @@ class AnnotationController(
             _lineTimerManager = LineTimerManager(mapLibreMap, annotationViewModel)
             Log.d("AnnotationController", "Line timer manager initialized")
         }
+        if (deviceLocationManager == null && mapLibreMap != null) {
+            deviceLocationManager = DeviceLocationLayerManager(mapLibreMap)
+            Log.d("AnnotationController", "Device location manager initialized")
+        }
+        if (clusterTextManager == null && mapLibreMap != null) {
+            clusterTextManager = ClusterTextManager(mapLibreMap)
+            Log.d("AnnotationController", "Cluster text manager initialized")
+        }
     }
     
     // Clean up all resources
@@ -294,6 +316,8 @@ class AnnotationController(
         poiTimerManager?.cleanup()
         lineTimerManager?.cleanup()
         unifiedAnnotationManager?.cleanup()
+        deviceLocationManager?.cleanup()
+        clusterTextManager?.cleanup()
         Log.d("AnnotationController", "Annotation controller cleaned up")
     }
 
@@ -334,6 +358,9 @@ class AnnotationController(
             initializeTimerManager(mapLibreMap)
             poiTimerManager?.setupTimerLayers()
             lineTimerManager?.setupTimerLayers()
+            
+            // Setup device location layers
+            deviceLocationManager?.setupDeviceLocationLayers()
             
             // Only create non-clustered layers if clustering is disabled
             if (!clusteringConfig.enablePeerClustering) {
@@ -482,6 +509,16 @@ class AnnotationController(
         }
     }
 
+    // === DEVICE LOCATION UPDATE ===
+    fun updateDeviceLocation(location: org.maplibre.android.geometry.LatLng?, stale: Boolean) {
+        deviceLocationManager?.updateDeviceLocation(location, stale)
+    }
+    
+    // === CLUSTER TEXT OVERLAY SETUP ===
+    fun setClusterTextOverlayView(overlayView: ClusterTextOverlayView?) {
+        clusterTextManager?.setClusterTextOverlayView(overlayView)
+    }
+    
     // === ENHANCED: Update POI annotations with native clustering ===
     fun updatePoiAnnotationsOnMap(mapLibreMap: MapLibreMap?, pois: List<MapAnnotation.PointOfInterest>) {
         Log.d("PoiDebug", "updatePoiAnnotationsOnMap called with ${pois.size} POIs, using native clustering")
@@ -538,7 +575,17 @@ class AnnotationController(
         val projection = mapLibreMap.projection
         val screenPoint = projection.toScreenLocation(latLng)
         
-        // First check if we're long pressing on a peer dot (including hit area layers)
+        // First check if we're long pressing on the device location dot
+        val deviceLocationFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, DeviceLocationLayerManager.DEVICE_LOCATION_FILL_LAYER)
+        val deviceLocationFeature = deviceLocationFeatures.firstOrNull { it.getStringProperty("type") == "device_location" }
+        if (deviceLocationFeature != null) {
+            // Handle device location dot tap
+            Log.d("AnnotationController", "Device location dot tapped")
+            // TODO: Add device location specific actions if needed
+            return true
+        }
+        
+        // Then check if we're long pressing on a peer dot (including hit area layers)
         val peerFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, ClusteredLayerManager.PEER_DOTS_LAYER)
         val peerHitAreaFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, ClusteredLayerManager.PEER_HIT_AREA_LAYER)
         val peerFallbackFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, "peer-dots-fallback")

@@ -31,7 +31,7 @@ class LineTimerTextOverlayView @JvmOverloads constructor(
     // Paint for text rendering
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
-        textSize = 28f // Slightly smaller than POI timers
+        textSize = 32f
         textAlign = Paint.Align.CENTER
         isFakeBoldText = true
     }

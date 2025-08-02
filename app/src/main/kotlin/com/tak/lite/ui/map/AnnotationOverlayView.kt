@@ -219,23 +219,14 @@ class AnnotationOverlayView @JvmOverloads constructor(
     // Note: Popover functionality moved to HybridPopoverManager
 
     private var userLocation: LatLng? = null
-    private var deviceLocation: LatLng? = null
     private var phoneLocation: LatLng? = null
-    private var isDeviceLocationStale: Boolean = false
+    // Device location now handled by GL layers via DeviceLocationLayerManager
     fun setUserLocation(location: LatLng?) {
         userLocation = location
         invalidate()
     }
-    fun setDeviceLocation(location: LatLng?) {
-        deviceLocation = location
-        invalidate()
-    }
     fun setPhoneLocation(location: LatLng?) {
         phoneLocation = location
-        invalidate()
-    }
-    fun setDeviceLocationStaleness(stale: Boolean) {
-        isDeviceLocationStale = stale
         invalidate()
     }
 
@@ -420,52 +411,48 @@ class AnnotationOverlayView @JvmOverloads constructor(
         // --- PERFORMANCE OPTIMIZATION: Check for timer annotations ---
         checkForVisibleTimerAnnotations()
 
-        android.util.Log.d("AnnotationOverlayView", "onDraw: deviceLocation=$deviceLocation, phoneLocation=$phoneLocation")
+        android.util.Log.d("AnnotationOverlayView", "onDraw: phoneLocation=$phoneLocation")
 
-        // Always draw device location if present
-        if (deviceLocation != null) {
-            val devicePt = projection?.toScreenLocation(deviceLocation!!)
-            android.util.Log.d("AnnotationOverlayView", "onDraw: devicePt=$devicePt")
-            if (devicePt != null) {
-                // Draw device location as blue dot with green or gray outline based on staleness
-                drawDeviceLocationDot(canvas, PointF(devicePt.x, devicePt.y), isDeviceLocationStale)
-                // Draw dotted line to phone location if present
-                if (phoneLocation != null) {
-                    val phonePt = projection?.toScreenLocation(phoneLocation!!)
-                    android.util.Log.d("AnnotationOverlayView", "onDraw: phonePt=$phonePt")
-                    if (phonePt != null) {
-                        // --- PERFORMANCE OPTIMIZATION: Distance-based line drawing ---
-                        val distance = hypot((devicePt.x - phonePt.x).toDouble(), (devicePt.y - phonePt.y).toDouble())
-                        val maxLineDistance = width * 2f // Only draw if line is within 2x screen width
-                        val extremeDistance = width * 4f // Use direction indicator beyond this
-                        
-                        if (distance <= maxLineDistance) {
-                            // Check if either endpoint is within reasonable screen bounds
-                            val deviceInBounds = devicePt.x >= -width && devicePt.x <= width * 2 && 
-                                               devicePt.y >= -height && devicePt.y <= height * 2
-                            val phoneInBounds = phonePt.x >= -width && phonePt.x <= width * 2 && 
-                                              phonePt.y >= -height && phonePt.y <= height * 2
-                            
-                            if (deviceInBounds || phoneInBounds) {
-                                val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                                    color = ContextCompat.getColor(context, R.color.interactive_color_light)
-                                    style = Paint.Style.STROKE;
-                                    strokeWidth = 8f
-                                    // Adjust dash pattern based on distance to prevent too many dashes
-                                    val dashLength = if (distance > width) 48f else 24f
-                                    val gapLength = if (distance > width) 32f else 16f
-                                    pathEffect = DashPathEffect(floatArrayOf(dashLength, gapLength), 0f)
-                                }
-                                canvas.drawLine(devicePt.x, devicePt.y, phonePt.x, phonePt.y, linePaint)
-                                android.util.Log.d("AnnotationOverlayView", "onDraw: drew dotted line from $devicePt to $phonePt (distance: ${distance.toInt()}px)")
-                            } else {
-                                android.util.Log.d("AnnotationOverlayView", "onDraw: both endpoints too far off-screen, skipping line")
-                            }
-                        } else if (distance <= extremeDistance) {
-                            // Draw direction indicator instead of full line
-                            drawDeviceDirectionIndicator(canvas, devicePt, phonePt, distance)
+        // Device location is now handled by GL layers - only draw connection line if needed
+        // Note: Device location is now managed by DeviceLocationLayerManager
+        if (phoneLocation != null) {
+            // Get device location from annotation controller if available
+            val deviceLocation = annotationController?.deviceLocationManager?.getCurrentLocation()
+            if (deviceLocation != null) {
+                val devicePt = projection?.toScreenLocation(deviceLocation)
+                val phonePt = projection?.toScreenLocation(phoneLocation!!)
+            android.util.Log.d("AnnotationOverlayView", "onDraw: devicePt=$devicePt, phonePt=$phonePt")
+            if (devicePt != null && phonePt != null) {
+                // --- PERFORMANCE OPTIMIZATION: Distance-based line drawing ---
+                val distance = hypot((devicePt.x - phonePt.x).toDouble(), (devicePt.y - phonePt.y).toDouble())
+                val maxLineDistance = width * 2f // Only draw if line is within 2x screen width
+                val extremeDistance = width * 4f // Use direction indicator beyond this
+                
+                if (distance <= maxLineDistance) {
+                    // Check if either endpoint is within reasonable screen bounds
+                    val deviceInBounds = devicePt.x >= -width && devicePt.x <= width * 2 && 
+                                       devicePt.y >= -height && devicePt.y <= height * 2
+                    val phoneInBounds = phonePt.x >= -width && phonePt.x <= width * 2 && 
+                                      phonePt.y >= -height && phonePt.y <= height * 2
+                    
+                    if (deviceInBounds || phoneInBounds) {
+                        val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                            color = ContextCompat.getColor(context, R.color.interactive_color_light)
+                            style = Paint.Style.STROKE;
+                            strokeWidth = 8f
+                            // Adjust dash pattern based on distance to prevent too many dashes
+                            val dashLength = if (distance > width) 48f else 24f
+                            val gapLength = if (distance > width) 32f else 16f
+                            pathEffect = DashPathEffect(floatArrayOf(dashLength, gapLength), 0f)
                         }
+                        canvas.drawLine(devicePt.x, devicePt.y, phonePt.x, phonePt.y, linePaint)
+                        android.util.Log.d("AnnotationOverlayView", "onDraw: drew dotted line from $devicePt to $phonePt (distance: ${distance.toInt()}px)")
+                    } else {
+                        android.util.Log.d("AnnotationOverlayView", "onDraw: both endpoints too far off-screen, skipping line")
                     }
+                } else if (distance <= extremeDistance) {
+                    // Draw direction indicator instead of full line
+                    drawDeviceDirectionIndicator(canvas, devicePt, phonePt, distance)
                 }
             }
         }
@@ -815,19 +802,9 @@ class AnnotationOverlayView @JvmOverloads constructor(
                         return true // Intercept only if touching a line
                     }
 
-                    // Check for device location dot tap
-                    if (deviceLocation != null) {
-                        val devicePt = projection?.toScreenLocation(deviceLocation!!)
-                        if (devicePt != null) {
-                            val dx = event.x - devicePt.x
-                            val dy = event.y - devicePt.y
-                            if (hypot(dx.toDouble(), dy.toDouble()) < 40) {
-                                deviceDotTapDownTime = System.currentTimeMillis()
-                                isDeviceDotCandidate = true
-                                return true // Intercept if touching device dot
-                            }
-                        }
-                    }
+                    // Check for device location dot tap (now handled by GL layers)
+                    // Note: Device location tap detection is now handled by MapLibre GL layers
+                    // The device dot is rendered as GL layers and can be queried using queryRenderedFeatures
                     return false // Let the map handle the event
                 }
                 MotionEvent.ACTION_UP -> {
@@ -1096,30 +1073,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
         super.invalidate()
     }
 
-    private fun drawDeviceLocationDot(canvas: Canvas, point: PointF, isStale: Boolean) {
-        val dotRadius = 13f
-        val borderRadius = 18f
-        val shadowRadius = 20f
-        // Draw shadow
-        val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#33000000")
-            style = Paint.Style.FILL
-        }
-        canvas.drawCircle(point.x, point.y + 4f, shadowRadius, shadowPaint)
-        // Draw outline: green if fresh, gray if stale
-        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = if (isStale) Color.GRAY else Color.parseColor("#4CAF50")
-            style = Paint.Style.STROKE
-            strokeWidth = 6f
-        }
-        canvas.drawCircle(point.x, point.y, borderRadius, borderPaint)
-        // Draw blue fill
-        val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = ContextCompat.getColor(context, R.color.interactive_color_light)
-            style = Paint.Style.FILL
-        }
-        canvas.drawCircle(point.x, point.y, dotRadius, fillPaint)
-    }
+    // Device location dot drawing moved to GL layers via DeviceLocationLayerManager
 
     /**
      * Draw a direction indicator when the device is far away but still within reasonable distance
