@@ -8,11 +8,8 @@ import com.tak.lite.model.PeerLocationEntry
 import com.tak.lite.repository.MeshNetworkRepository
 import com.tak.lite.util.haversine
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
 import javax.inject.Inject
@@ -25,14 +22,13 @@ import kotlin.math.pow
 
 /**
  * Main coverage analysis engine that orchestrates terrain, Fresnel zone, and peer network analysis
- * Optimized with parallel processing, progressive refinement, and batch operations
+ * Optimized with progressive refinement, and batch operations
  * 
  * Performance Improvements Applied:
- * - Distance caching in PeerNetworkAnalyzer (30-40% speedup)
- * - Parallel processing for peer calculations (20-30% speedup on multi-core devices)
- * - Spatial indexing for faster peer queries (15-25% speedup for large peer sets)
- * - Early exit optimizations when coverage is already high (10-20% speedup)
- * - Batch elevation fetching for peer locations (10-15% speedup)
+ * - Distance caching in PeerNetworkAnalyzer
+ * - Spatial indexing for faster peer queries
+ * - Early exit optimizations when coverage is already high
+ * - Batch elevation fetching for peer locations
  * - Memory management with cache clearing
  */
 @Singleton
@@ -46,7 +42,7 @@ class CoverageCalculator @Inject constructor(
     
     companion object {
         private const val MIN_RESOLUTION = 20.0
-        private const val MAX_GRID_SIZE = 100
+        private const val MAX_GRID_SIZE = 200
         
         // Progressive refinement constants
         private const val MIN_COVERAGE_THRESHOLD = 0.2f
@@ -55,40 +51,14 @@ class CoverageCalculator @Inject constructor(
         // Conservative processing constants for older devices
         private const val MAX_CALCULATION_TIME = 480000L
         
-        // Smart parallelism - enable conditionally based on device capabilities
-        private val USE_PARALLEL_PROCESSING = shouldUseParallelProcessing()
-        
         // Incremental rendering constants
-        private const val INCREMENTAL_UPDATE_FREQUENCY = 50 // Update every 10 points
+        private const val INCREMENTAL_UPDATE_FREQUENCY = 50
         
         // Adaptive resolution constants
-        private const val BASE_RESOLUTION = 200.0 // Base resolution at zoom 14
+        private const val BASE_RESOLUTION = 150.0 // Base resolution at zoom 14
         
         // Progressive refinement statistics
         private var refinementStats = RefinementStatistics()
-        
-        /**
-         * Determines if parallel processing should be enabled based on device capabilities
-         * Enables 1.5-2x speedup on multi-core devices with sufficient memory
-         */
-        private fun shouldUseParallelProcessing(): Boolean {
-            return try {
-                val runtime = Runtime.getRuntime()
-                val processors = runtime.availableProcessors()
-                val maxMemory = runtime.maxMemory()
-
-                // Enable if device has >=2 cores and >=1GB available memory
-                val useParallelProcessing = (processors >= 2 && maxMemory >= 1L * 1024 * 1024 * 1024)
-
-                android.util.Log.d("CoverageCalculator", "PARALLEL PROCESSING ANALYSIS: Runtime: ${runtime}; Processors: ${processors}; Memory: ${maxMemory}")
-                android.util.Log.d("CoverageCalculator", "PARALLEL PROCESSING ANALYSIS: Use Parallel Processing: ${useParallelProcessing}")
-
-                useParallelProcessing
-            } catch (e: Exception) {
-                android.util.Log.w("CoverageCalculator", "Failed to check device capabilities: ${e.message}")
-                false // Default to sequential for safety
-            }
-        }
         
         /**
          * Calculates adaptive resolution based on zoom level using logarithmic scaling
@@ -134,14 +104,221 @@ class CoverageCalculator @Inject constructor(
     }
     
     /**
-     * Calculates coverage for a geographic area with progressive refinement
+     * Calculates coverage for a single point from a source location
+     * This method extracts the duplicated coverage calculation logic used across
+     * sequential, and refinement processing paths
      */
-    suspend fun calculateCoverage(
+    private suspend fun computePointCoverage(
+        sourceLocation: LatLng,
+        sourceElevation: Double,
+        targetPoint: CoveragePoint,
         params: CoverageAnalysisParams,
-        viewportBounds: LatLngBounds? = null,
-        onProgress: (Float, String) -> Unit
-    ): CoverageGrid = withContext(Dispatchers.Default) {
-        return@withContext calculateCoverageIncremental(params, viewportBounds, onProgress) { }
+        terrainAvailable: Boolean,
+        precomputedTerrain: Array<Array<com.tak.lite.model.TerrainCellData>>? = null,
+        precomputedRow: Int? = null,
+        precomputedCol: Int? = null,
+        enableDetailedLogging: Boolean = false
+    ): CoveragePoint {
+        val distance = haversine(
+            sourceLocation.latitude, sourceLocation.longitude,
+            targetPoint.latitude, targetPoint.longitude
+        )
+        
+        // Early exit if point is beyond maximum distance
+        if (distance > params.maxPeerDistance) {
+            return targetPoint.copy(
+                coverageProbability = 0f,
+                signalStrength = -140f,
+                contributingPeers = emptyList(),
+                distanceFromNearestPeer = distance
+            )
+        }
+        
+        // Calculate signal shadow using adaptive terrain analysis (if terrain data available)
+        val signalShadow = if (terrainAvailable) {
+            try {
+                // Get target elevation - use precomputed data if available
+                val targetTerrainData = if (precomputedTerrain != null && precomputedRow != null && precomputedCol != null) {
+                    precomputedTerrain[precomputedRow][precomputedCol]
+                } else {
+                    terrainAnalyzer.getAdaptiveElevationForPoint(
+                        LatLng(targetPoint.latitude, targetPoint.longitude), 
+                        params.resolution, 
+                        params.zoomLevel
+                    )
+                }
+                val targetElevation = targetTerrainData.averageElevation
+                
+                // Log terrain sampling method for debugging (occasionally)
+                if (enableDetailedLogging && System.currentTimeMillis() % 10000 < 1000) {
+                    android.util.Log.d("CoverageCalculator", "Terrain sampling at (${targetPoint.latitude}, ${targetPoint.longitude}): " +
+                        "method=${targetTerrainData.samplingMethod}, variation=${targetTerrainData.elevationVariation}m, " +
+                        "elevation=${targetElevation}m")
+                }
+                
+                // Convert feet to meters (1 foot = 0.3048 meters)
+                val userAntennaHeightMeters = params.userAntennaHeightFeet * 0.3048
+                val receivingAntennaHeightMeters = params.receivingAntennaHeightFeet * 0.3048
+                terrainAnalyzer.fastSignalShadowCheck(
+                    sourceLocation, LatLng(targetPoint.latitude, targetPoint.longitude),
+                    sourceElevation, targetElevation, 
+                    userAntennaHeight = userAntennaHeightMeters,
+                    targetAntennaHeight = receivingAntennaHeightMeters,
+                    zoomLevel = params.zoomLevel
+                )
+            } catch (e: Exception) {
+                android.util.Log.w("CoverageCalculator", "Failed to calculate signal shadow: ${e.message}")
+                null
+            }
+        } else {
+            // Mark as unknown coverage when terrain data is not available
+            null
+        }
+        
+        // Calculate signal strength and coverage probability
+        val (finalCoverageProbability, signalStrength, baseCoverageProbability) = if (signalShadow != null) {
+            try {
+                val calculatedSignalStrength = fresnelZoneAnalyzer.calculateSignalStrength(
+                    distance, signalShadow.fresnelBlockage
+                )
+                
+                // Calculate base coverage probability from signal strength
+                val calculatedBaseCoverageProbability = fresnelZoneAnalyzer.calculateCoverageProbability(calculatedSignalStrength)
+                
+                // Apply signal shadow to coverage probability
+                // Note: Fresnel blockage is already applied in signal strength calculation
+                // Here we only apply additional penalties for complete shadowing
+                val calculatedFinalCoverageProbability = if (signalShadow.isInShadow) {
+                    // If in shadow, apply additional penalty beyond what's already in signal strength
+                    val shadowAdjustedCoverage = calculatedBaseCoverageProbability * (1.0f - signalShadow.shadowDepth * 0.5f)
+                    
+                    // Debug logging for shadow detection (reduced frequency)
+                    if (enableDetailedLogging && System.currentTimeMillis() % 10000 < 1000) {
+                        android.util.Log.d("CoverageCalculator", "Shadow detected at (${targetPoint.latitude}, ${targetPoint.longitude}): " +
+                            "baseCoverage=$calculatedBaseCoverageProbability, shadowDepth=${signalShadow.shadowDepth}, " +
+                            "finalCoverage=$shadowAdjustedCoverage")
+                    }
+                    
+                    shadowAdjustedCoverage
+                } else {
+                    // No additional penalty - Fresnel blockage already applied in signal strength
+                    calculatedBaseCoverageProbability
+                }
+                
+                Triple(calculatedFinalCoverageProbability, calculatedSignalStrength, calculatedBaseCoverageProbability)
+            } catch (e: Exception) {
+                android.util.Log.w("CoverageCalculator", "Failed to calculate coverage probability: ${e.message}")
+                Triple(0f, -140f, 0f)
+            }
+        } else {
+            // Mark as unknown coverage when terrain data is not available
+            Triple(-1f, -140f, 0f)
+        }
+        
+        // Debug logging for coverage calculation (reduced frequency)
+        if (enableDetailedLogging && System.currentTimeMillis() % 5000 < 500) {
+            android.util.Log.d("CoverageCalculator", "Coverage calculation at (${targetPoint.latitude}, ${targetPoint.longitude}): " +
+                "distance=${distance}m, signalStrength=${signalStrength}dBm, " +
+                "baseCoverage=$baseCoverageProbability, finalCoverage=$finalCoverageProbability, " +
+                "fresnelBlockage=${signalShadow?.fresnelBlockage ?: 0f}, " +
+                "shadowDepth=${signalShadow?.shadowDepth ?: 0f}, " +
+                "isInShadow=${signalShadow?.isInShadow ?: false}")
+        }
+        
+        return targetPoint.copy(
+            coverageProbability = finalCoverageProbability,
+            signalStrength = signalStrength,
+            fresnelZoneBlockage = signalShadow?.fresnelBlockage ?: 0f,
+            terrainOcclusion = signalShadow?.shadowDepth ?: 0f,
+            contributingPeers = listOf("user"),
+            distanceFromNearestPeer = distance
+        )
+    }
+    
+    /**
+     * Generic grid processing method that consolidates common patterns:
+     * - Spiral ordering for center-outward processing
+     * - Progress updates and logging
+     * - Error handling with safe defaults
+     * - Incremental result emission
+     */
+    private suspend fun processGridWithSpiralOrder(
+        grid: Array<Array<CoveragePoint>>,
+        processor: suspend (row: Int, col: Int, point: CoveragePoint, index: Int, totalPoints: Int) -> CoveragePoint,
+        onProgress: (Float, String) -> Unit,
+        onPartialResult: ((CoverageGrid) -> Unit)? = null,
+        bounds: LatLngBounds? = null,
+        resolution: Double = 0.0,
+        zoomLevel: Int = 0,
+        progressStart: Float = 0.0f,
+        progressRange: Float = 1.0f,
+        progressMessage: String = "Processing grid...",
+        updateFrequency: Int = INCREMENTAL_UPDATE_FREQUENCY,
+        enableIncrementalUpdates: Boolean = false
+    ): Array<Array<CoveragePoint>> {
+        val totalPoints = grid.size * grid[0].size
+        
+        // Generate center-outward processing order for better UX
+        val processingOrder = generateSpiralProcessingOrder(grid)
+        
+        // Initialize result grid
+        val resultGrid = Array(grid.size) { row ->
+            Array(grid[row].size) { col ->
+                // Initialize with existing coverage
+                grid[row][col]
+            }
+        }
+        
+        // Process grid points in center-outward order
+        for ((index, position) in processingOrder.withIndex()) {
+            val (row, col) = position
+            try {
+                val point = grid[row][col]
+                
+                // Process the point using the provided processor function
+                val processedPoint = processor(row, col, point, index, totalPoints)
+                
+                // Update the result grid
+                resultGrid[row][col] = processedPoint
+                
+                // Emit incremental result if enabled
+                if (enableIncrementalUpdates && onPartialResult != null && bounds != null && 
+                    (index % updateFrequency == 0 || index == totalPoints - 1)) {
+                    val partialGrid = CoverageGrid(
+                        bounds = bounds,
+                        resolution = resolution,
+                        coverageData = resultGrid,
+                        timestamp = System.currentTimeMillis(),
+                        zoomLevel = zoomLevel
+                    )
+                    onPartialResult(partialGrid)
+                    
+                    // Log incremental rendering progress (occasionally)
+                    if (index % 50 == 0 || index == totalPoints - 1) {
+                        android.util.Log.d("CoverageCalculator", "Incremental rendering: " +
+                            "processedPoints=${index + 1}/${totalPoints} (${String.format("%.1f", (index + 1).toDouble() / totalPoints * 100)}%), " +
+                            "gridSize=${resultGrid.size}x${resultGrid[0].size}")
+                    }
+                }
+                
+                // Update progress
+                if (index % 10 == 0 || index == totalPoints - 1) {
+                    val progress = progressStart + (progressRange * (index + 1) / totalPoints)
+                    onProgress(progress, "$progressMessage (${index + 1}/${totalPoints} points)")
+                }
+                
+            } catch (e: Exception) {
+                android.util.Log.e("CoverageCalculator", "Error processing grid point: ${e.message}", e)
+                // Set a safe default point
+                resultGrid[row][col] = grid[row][col].copy(
+                    coverageProbability = 0f,
+                    signalStrength = -140f,
+                    contributingPeers = emptyList()
+                )
+            }
+        }
+        
+        return resultGrid
     }
     
     /**
@@ -154,7 +331,7 @@ class CoverageCalculator @Inject constructor(
         onPartialResult: (CoverageGrid) -> Unit
     ): CoverageGrid = withContext(Dispatchers.Default) {
         // Declare terrain variables outside try block so they're accessible in catch block
-        var terrainAvailable = false
+        var terrainAvailable: Boolean
         var effectiveTerrainAvailable = false
         val bounds = calculateBounds(params.center, params.radius, viewportBounds)
         
@@ -261,7 +438,7 @@ class CoverageCalculator @Inject constructor(
                 "base=${baseResolution}m, adaptive=${resolution}m, zoomLevel=${params.zoomLevel}")
             
             // Create initial coarse coverage grid
-            val initialGrid = createCoverageGrid(bounds, resolution * 2, params.zoomLevel) // Start with coarser grid
+            val initialGrid = createCoverageGrid(bounds, resolution * 2) // Start with coarser grid
             
             // NEW: Pre-compute terrain data for the entire grid in batches
             var precomputedTerrain: Array<Array<com.tak.lite.model.TerrainCellData>>? = null
@@ -295,36 +472,18 @@ class CoverageCalculator @Inject constructor(
             
             onProgress(0.3f, "Calculating coverage from center outward...")
             
-            // Calculate initial coverage with smart parallelism and incremental rendering
-            android.util.Log.d("CoverageCalculator", "Starting center-outward coverage calculation with USE_PARALLEL_PROCESSING = $USE_PARALLEL_PROCESSING")
+            // Calculate initial coverage with incremental rendering
             android.util.Log.d("CoverageCalculator", "Using ${if (precomputedTerrain != null) "batched" else "per-point"} terrain data")
             
             val initialCoverage = try {
-                if (USE_PARALLEL_PROCESSING) {
-                    android.util.Log.d("CoverageCalculator", "Using PARALLEL processing path")
-                    try {
-                        withTimeout(60000L) { // 60 second timeout for entire parallel processing
-                            calculateDirectCoverageParallel(
-                                userLocation, initialGrid, params, effectiveTerrainAvailable, onProgress, onPartialResult, bounds, resolution, precomputedTerrain
-                            )
-                        }
-                    } catch (e: Exception) {
-                        android.util.Log.w("CoverageCalculator", "Parallel processing failed or timed out: ${e.message}, falling back to sequential")
-                        onProgress(0.3f, "Parallel processing failed, using sequential fallback...")
-                        calculateDirectCoverageSequential(
-                            userLocation, initialGrid, params, effectiveTerrainAvailable, onProgress, onPartialResult, bounds, resolution, precomputedTerrain
-                        )
-                    }
-                } else {
-                    android.util.Log.d("CoverageCalculator", "Using SEQUENTIAL processing path")
-                    calculateDirectCoverageSequential(
-                        userLocation, initialGrid, params, effectiveTerrainAvailable, onProgress, onPartialResult, bounds, resolution, precomputedTerrain
-                    )
-                }
+                android.util.Log.d("CoverageCalculator", "Using SEQUENTIAL processing path")
+                calculateDirectCoverageSequential(
+                    userLocation, initialGrid, params, effectiveTerrainAvailable, onProgress, onPartialResult, bounds, resolution, precomputedTerrain
+                )
             } catch (e: Exception) {
                 android.util.Log.e("CoverageCalculator", "Failed to calculate direct coverage: ${e.message}", e)
                 // Return empty coverage grid on error, mark as unknown if terrain data is not available
-                createEmptyCoverageGrid(bounds, resolution, params.zoomLevel, markAsUnknown = !effectiveTerrainAvailable)
+                createEmptyCoverageGrid(bounds, resolution, markAsUnknown = !effectiveTerrainAvailable)
             }
             
             // Check timeout and memory pressure
@@ -351,7 +510,7 @@ class CoverageCalculator @Inject constructor(
             val extendedCoverage = if (params.includePeerExtension && peerLocations.isNotEmpty() && highCoveragePercentage < 0.8f) {
                 android.util.Log.d("CoverageCalculator", "Starting peer network analysis with ${peerLocations.size} peers")
                 try {
-                    calculateExtendedCoverageParallel(
+                    calculateExtendedCoverage(
                         userLocation, peerLocations, initialCoverage, params, effectiveTerrainAvailable, onProgress
                     )
                 } catch (e: Exception) {
@@ -477,12 +636,12 @@ class CoverageCalculator @Inject constructor(
             // If terrain data is not available, return a grid with unknown coverage areas
             if (!effectiveTerrainAvailable) {
                 android.util.Log.w("CoverageCalculator", "Returning coverage grid with unknown areas due to terrain data unavailability")
-                val bounds = calculateBounds(params.center, params.radius, viewportBounds)
+                val innerBounds = calculateBounds(params.center, params.radius, viewportBounds)
                 val resolution = params.resolution
                 return@withContext CoverageGrid(
-                    bounds = bounds,
+                    bounds = innerBounds,
                     resolution = resolution,
-                    coverageData = createEmptyCoverageGrid(bounds, resolution, params.zoomLevel, markAsUnknown = true),
+                    coverageData = createEmptyCoverageGrid(innerBounds, resolution, markAsUnknown = true),
                     timestamp = System.currentTimeMillis(),
                     zoomLevel = params.zoomLevel
                 )
@@ -498,10 +657,9 @@ class CoverageCalculator @Inject constructor(
     private fun createEmptyCoverageGrid(
         bounds: LatLngBounds,
         resolution: Double,
-        zoomLevel: Int,
         markAsUnknown: Boolean = false
     ): Array<Array<CoveragePoint>> {
-        val grid = createCoverageGrid(bounds, resolution, zoomLevel)
+        val grid = createCoverageGrid(bounds, resolution)
         // Set all points to no coverage or unknown coverage
         for (row in grid.indices) {
             for (col in grid[row].indices) {
@@ -517,7 +675,6 @@ class CoverageCalculator @Inject constructor(
     
     /**
      * Calculates direct coverage from user location with adaptive terrain sampling and incremental rendering
-     * Sequential version for older devices or when parallel processing is disabled
      */
     private suspend fun calculateDirectCoverageSequential(
         userLocation: LatLng,
@@ -547,335 +704,38 @@ class CoverageCalculator @Inject constructor(
         }
         val userElevation = userTerrainData.averageElevation
         
-        // Process grid sequentially to reduce memory pressure on older devices
-        val totalPoints = grid.size * grid[0].size
-        var processedPoints = 0
-        
-        // Calculate coverage with true incremental rendering - process row by row
-        val resultGrid = Array(grid.size) { row ->
-            Array(grid[row].size) { col ->
-                // Initialize with empty coverage
-                grid[row][col].copy(
-                    coverageProbability = 0f,
-                    signalStrength = -140f,
-                    contributingPeers = emptyList()
+        // Use generic grid processing with spiral ordering
+        val resultGrid = processGridWithSpiralOrder(
+            grid = grid,
+            processor = { row, col, point, index, totalPoints ->
+                computePointCoverage(
+                    sourceLocation = userLocation,
+                    sourceElevation = userElevation,
+                    targetPoint = point,
+                    params = params,
+                    terrainAvailable = terrainAvailable,
+                    precomputedTerrain = precomputedTerrain,
+                    precomputedRow = row,
+                    precomputedCol = col,
+                    enableDetailedLogging = true
                 )
-            }
-        }
-        
-        // Generate center-outward processing order for better UX
-        val processingOrder = generateSpiralProcessingOrder(grid)
-        
-        // Process grid points in center-outward order
-        for ((index, position) in processingOrder.withIndex()) {
-            val (row, col) = position
-            try {
-                val point = grid[row][col]
-                val distance = haversine(
-                    userLocation.latitude, userLocation.longitude,
-                    point.latitude, point.longitude
-                )
-                
-                // Calculate coverage for this point
-                val calculatedPoint = if (distance > params.maxPeerDistance) {
-                    point.copy(
-                        coverageProbability = 0f,
-                        signalStrength = -140f,
-                        contributingPeers = emptyList()
-                    )
-                } else {
-                    // Calculate signal shadow using adaptive terrain analysis (if terrain data available)
-                    val signalShadow = if (terrainAvailable) {
-                        try {
-                            // Get target elevation - use precomputed data if available
-                            val targetTerrainData = if (precomputedTerrain != null) {
-                                precomputedTerrain[row][col]
-                            } else {
-                                terrainAnalyzer.getAdaptiveElevationForPoint(
-                                    LatLng(point.latitude, point.longitude), 
-                                    params.resolution, 
-                                    params.zoomLevel
-                                )
-                            }
-                            val targetElevation = targetTerrainData.averageElevation
-                            
-                            // Log terrain sampling method for debugging (occasionally)
-                            if (System.currentTimeMillis() % 10000 < 1000) {
-                                android.util.Log.d("CoverageCalculator", "Terrain sampling at (${point.latitude}, ${point.longitude}): " +
-                                    "method=${targetTerrainData.samplingMethod}, variation=${targetTerrainData.elevationVariation}m, " +
-                                    "elevation=${targetElevation}m")
-                            }
-                            
-                            // Convert feet to meters (1 foot = 0.3048 meters)
-                            val userAntennaHeightMeters = params.userAntennaHeightFeet * 0.3048
-                            val receivingAntennaHeightMeters = params.receivingAntennaHeightFeet * 0.3048
-                            terrainAnalyzer.fastSignalShadowCheck(
-                                userLocation, LatLng(point.latitude, point.longitude),
-                                userElevation, targetElevation, 
-                                userAntennaHeight = userAntennaHeightMeters,
-                                targetAntennaHeight = receivingAntennaHeightMeters,
-                                zoomLevel = params.zoomLevel
-                            )
-                        } catch (e: Exception) {
-                            android.util.Log.w("CoverageCalculator", "Failed to calculate signal shadow: ${e.message}")
-                            null
-                        }
-                    } else {
-                        // Mark as unknown coverage when terrain data is not available
-                        null
-                    }
-                    
-                    // Calculate signal strength and coverage probability
-                    val (finalCoverageProbability, signalStrength, baseCoverageProbability) = if (signalShadow != null) {
-                        try {
-                            val calculatedSignalStrength = fresnelZoneAnalyzer.calculateSignalStrength(
-                                distance, signalShadow.fresnelBlockage
-                            )
-                            
-                            // Calculate base coverage probability from signal strength
-                            val calculatedBaseCoverageProbability = fresnelZoneAnalyzer.calculateCoverageProbability(calculatedSignalStrength)
-                            
-                            // Apply signal shadow to coverage probability
-                            val calculatedFinalCoverageProbability = if (signalShadow.isInShadow) {
-                                // If in shadow, significantly reduce coverage probability
-                                val shadowAdjustedCoverage = calculatedBaseCoverageProbability * (1.0f - signalShadow.shadowDepth * 0.9f)
-                                
-                                // Debug logging for shadow detection (reduced frequency)
-                                if (System.currentTimeMillis() % 10000 < 1000) { // Log ~10% of shadow detections
-                                    android.util.Log.d("CoverageCalculator", "Shadow detected at (${point.latitude}, ${point.longitude}): " +
-                                        "baseCoverage=$calculatedBaseCoverageProbability, shadowDepth=${signalShadow.shadowDepth}, " +
-                                        "finalCoverage=$shadowAdjustedCoverage")
-                                }
-                                
-                                shadowAdjustedCoverage
-                            } else {
-                                // Apply Fresnel zone blockage as minor penalty
-                                calculatedBaseCoverageProbability * (1.0f - signalShadow.fresnelBlockage * 0.3f)
-                            }
-                            
-                            Triple(calculatedFinalCoverageProbability, calculatedSignalStrength, calculatedBaseCoverageProbability)
-                        } catch (e: Exception) {
-                            android.util.Log.w("CoverageCalculator", "Failed to calculate coverage probability: ${e.message}")
-                            Triple(0f, -140f, 0f)
-                        }
-                    } else {
-                        // Mark as unknown coverage when terrain data is not available
-                        Triple(-1f, -140f, 0f)
-                    }
-                    
-                    // Debug logging for coverage calculation (reduced frequency)
-                    if (System.currentTimeMillis() % 5000 < 500) { // Log ~10% of calculations
-                        android.util.Log.d("CoverageCalculator", "Coverage calculation at (${point.latitude}, ${point.longitude}): " +
-                            "distance=${distance}m, signalStrength=${signalStrength}dBm, " +
-                            "baseCoverage=$baseCoverageProbability, finalCoverage=$finalCoverageProbability")
-                    }
-                    
-                    point.copy(
-                        coverageProbability = finalCoverageProbability,
-                        signalStrength = signalStrength,
-                        fresnelZoneBlockage = signalShadow?.fresnelBlockage ?: 0f,
-                        terrainOcclusion = signalShadow?.shadowDepth ?: 0f,
-                        contributingPeers = listOf("user"),
-                        distanceFromNearestPeer = distance
-                    )
-                }
-                
-                // Update the result grid with calculated point
-                resultGrid[row][col] = calculatedPoint
-                processedPoints++
-                
-                // Emit incremental result every few points
-                if (index % INCREMENTAL_UPDATE_FREQUENCY == 0 || index == totalPoints - 1) {
-                    val progress = 0.3f + (0.25f * (index + 1) / totalPoints)
-                    onProgress(progress, "Calculating coverage... (${index + 1}/${totalPoints} points)")
-                    
-                    // Emit current state of the grid for incremental rendering
-                    val partialGrid = CoverageGrid(
-                        bounds = bounds,
-                        resolution = resolution,
-                        coverageData = resultGrid,
-                        timestamp = System.currentTimeMillis(),
-                        zoomLevel = params.zoomLevel
-                    )
-                    onPartialResult(partialGrid)
-                    
-                    // Log incremental rendering progress (occasionally)
-                    if (index % 50 == 0 || index == totalPoints - 1) {
-                        android.util.Log.d("CoverageCalculator", "Incremental rendering: " +
-                            "processedPoints=${index + 1}/${totalPoints} (${String.format("%.1f", (index + 1).toDouble() / totalPoints * 100)}%), " +
-                            "gridSize=${resultGrid.size}x${resultGrid[0].size}")
-                    }
-                    
-                    // Debug: Log first few incremental updates to verify they're happening
-                    if (index < 50) {
-                        android.util.Log.d("CoverageCalculator", "DEBUG: Emitting incremental result #${(index + 1) / INCREMENTAL_UPDATE_FREQUENCY} " +
-                            "at point (${row},${col}) with coverage=${calculatedPoint.coverageProbability}")
-                    }
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("CoverageCalculator", "Error processing grid point: ${e.message}", e)
-                // Set a safe default point
-                resultGrid[row][col] = grid[row][col].copy(
-                    coverageProbability = 0f,
-                    signalStrength = -140f,
-                    contributingPeers = emptyList()
-                )
-                processedPoints++
-            }
-        }
+            },
+            onProgress = onProgress,
+            onPartialResult = onPartialResult,
+            bounds = bounds,
+            resolution = resolution,
+            zoomLevel = params.zoomLevel,
+            progressStart = 0.3f,
+            progressRange = 0.25f,
+            progressMessage = "Calculating coverage",
+            updateFrequency = INCREMENTAL_UPDATE_FREQUENCY,
+            enableIncrementalUpdates = true
+        )
         
         // Clear elevation cache periodically to prevent memory buildup
         if (System.currentTimeMillis() % 15000 < 1000) { // Every ~15 seconds for older devices
             terrainAnalyzer.clearElevationCache()
         }
-        
-        resultGrid
-    }
-    
-    /**
-     * Calculates direct coverage from user location with parallel processing
-     * Uses limited parallelism (2 threads) for 1.5-2x speedup on multi-core devices
-     */
-    private suspend fun calculateDirectCoverageParallel(
-        userLocation: LatLng,
-        grid: Array<Array<CoveragePoint>>,
-        params: CoverageAnalysisParams,
-        terrainAvailable: Boolean,
-        onProgress: (Float, String) -> Unit,
-        onPartialResult: (CoverageGrid) -> Unit,
-        bounds: LatLngBounds,
-        resolution: Double,
-        precomputedTerrain: Array<Array<com.tak.lite.model.TerrainCellData>>? = null
-    ): Array<Array<CoveragePoint>> = withContext(Dispatchers.Default.limitedParallelism(2)) {
-        android.util.Log.d("CoverageCalculator", "calculateDirectCoverageParallel: Starting parallel processing")
-        // Get user elevation with adaptive sampling
-        val userTerrainData = try {
-            val cellSize = params.resolution
-            if (precomputedTerrain != null) {
-                // Use precomputed terrain data if available
-                val centerRow = grid.size / 2
-                val centerCol = grid[0].size / 2
-                precomputedTerrain[centerRow][centerCol]
-            } else {
-                terrainAnalyzer.getAdaptiveElevationForPoint(userLocation, cellSize, params.zoomLevel)
-            }
-        } catch (e: Exception) {
-            android.util.Log.w("CoverageCalculator", "Failed to get user elevation: ${e.message}")
-            com.tak.lite.model.TerrainCellData(0.0, 0.0, 0.0, 0.0, "fallback")
-        }
-        val userElevation = userTerrainData.averageElevation
-        
-        // Split grid into quadrants for parallel processing
-        val midRow = grid.size / 2
-        val midCol = grid[0].size / 2
-        
-        // Reorder quadrants to prioritize center areas first
-        // Start with quadrants closest to center, then work outward
-        val quadrants = listOf(
-            // Center area (smaller quadrants around center)
-            Pair(max(0, midRow - 1), min(grid.size, midRow + 1)) to Pair(max(0, midCol - 1), min(grid[0].size, midCol + 1)),
-            // Top-left quadrant
-            Pair(0, midRow) to Pair(0, midCol),
-            // Top-right quadrant  
-            Pair(0, midRow) to Pair(midCol, grid[0].size),
-            // Bottom-left quadrant
-            Pair(midRow, grid.size) to Pair(0, midCol),
-            // Bottom-right quadrant
-            Pair(midRow, grid.size) to Pair(midCol, grid[0].size)
-        )
-        
-        val totalPoints = grid.size * grid[0].size
-        var completedQuadrants = 0
-        
-        // Initial progress update for parallel processing
-        android.util.Log.d("CoverageCalculator", "Starting center-outward parallel coverage calculation with ${quadrants.size} quadrants")
-        android.util.Log.d("CoverageCalculator", "USE_PARALLEL_PROCESSING = $USE_PARALLEL_PROCESSING")
-        onProgress(0.3f, "Starting center-outward parallel coverage calculation (${quadrants.size} quadrants)...")
-        
-        // Process quadrants in parallel with progress updates and timeout protection
-        onProgress(0.32f, "Processing ${quadrants.size} quadrants in parallel...")
-        val startTime = System.currentTimeMillis()
-        val quadrantResults = quadrants.mapIndexed { quadrantIndex, (rowRange, colRange) ->
-            async {
-                android.util.Log.d("CoverageCalculator", "Starting quadrant ${quadrantIndex + 1}/${quadrants.size}")
-                
-                // Add timeout protection for each quadrant
-                val quadrantStartTime = System.currentTimeMillis()
-                val result = try {
-                    withTimeout(30000L) { // 30 second timeout per quadrant
-                        processGridQuadrant(
-                            userLocation, userElevation, grid, rowRange, colRange,
-                            params, terrainAvailable, bounds, resolution, precomputedTerrain
-                        )
-                    }
-                } catch (e: Exception) {
-                    android.util.Log.e("CoverageCalculator", "Quadrant ${quadrantIndex + 1} timed out or failed: ${e.message}")
-                    // Return empty quadrant on timeout
-                    val (startRow, endRow) = rowRange
-                    val (startCol, endCol) = colRange
-                    Array(endRow - startRow) { row ->
-                        Array(endCol - startCol) { col ->
-                            val originalRow = startRow + row
-                            val originalCol = startCol + col
-                            val point = grid[originalRow][originalCol]
-                            point.copy(
-                                coverageProbability = 0f,
-                                signalStrength = -140f,
-                                contributingPeers = emptyList()
-                            )
-                        }
-                    }
-                }
-                
-                val quadrantTime = System.currentTimeMillis() - quadrantStartTime
-                android.util.Log.d("CoverageCalculator", "Quadrant ${quadrantIndex + 1} completed in ${quadrantTime}ms")
-                
-                // Update progress when this quadrant completes
-                completedQuadrants++
-                val progress = 0.3f + (0.25f * completedQuadrants / quadrants.size)
-                android.util.Log.d("CoverageCalculator", "Completed quadrant ${completedQuadrants}/${quadrants.size}")
-                onProgress(progress, "Completed quadrant ${completedQuadrants}/${quadrants.size}")
-                
-                result
-            }
-        }.awaitAll()
-        
-        val totalTime = System.currentTimeMillis() - startTime
-        android.util.Log.d("CoverageCalculator", "Parallel processing completed in ${totalTime}ms")
-        
-        // Combine quadrant results and emit incremental updates
-        val resultGrid = Array(grid.size) { row ->
-            Array(grid[row].size) { col ->
-                // Find which quadrant this point belongs to
-                val quadrantIndex = when {
-                    row < midRow && col < midCol -> 0 // Top-left
-                    row < midRow && col >= midCol -> 1 // Top-right
-                    row >= midRow && col < midCol -> 2 // Bottom-left
-                    else -> 3 // Bottom-right
-                }
-                
-                val quadrantRow = if (row >= midRow) row - midRow else row
-                val quadrantCol = if (col >= midCol) col - midCol else col
-                
-                quadrantResults[quadrantIndex][quadrantRow][quadrantCol]
-            }
-        }
-        
-        // Emit incremental result after combining all quadrants
-        android.util.Log.d("CoverageCalculator", "Emitting incremental result for parallel processing")
-        val partialGrid = CoverageGrid(
-            bounds = bounds,
-            resolution = resolution,
-            coverageData = resultGrid,
-            timestamp = System.currentTimeMillis(),
-            zoomLevel = params.zoomLevel
-        )
-        onPartialResult(partialGrid)
-        
-        // Emit final result
-        android.util.Log.d("CoverageCalculator", "Parallel coverage calculation complete")
-        val progress = 0.55f
-        onProgress(progress, "Coverage calculation complete (${totalPoints} points)")
         
         resultGrid
     }
@@ -891,8 +751,6 @@ class CoverageCalculator @Inject constructor(
         colRange: Pair<Int, Int>,
         params: CoverageAnalysisParams,
         terrainAvailable: Boolean,
-        bounds: LatLngBounds,
-        resolution: Double,
         precomputedTerrain: Array<Array<com.tak.lite.model.TerrainCellData>>? = null
     ): Array<Array<CoveragePoint>> {
         val (startRow, endRow) = rowRange
@@ -932,91 +790,19 @@ class CoverageCalculator @Inject constructor(
             }
                 
                 try {
-                    val distance = haversine(
-                        userLocation.latitude, userLocation.longitude,
-                        point.latitude, point.longitude
+                    // Calculate coverage for this point using extracted method
+                    val calculatedPoint = computePointCoverage(
+                        sourceLocation = userLocation,
+                        sourceElevation = userElevation,
+                        targetPoint = point,
+                        params = params,
+                        terrainAvailable = terrainAvailable,
+                        precomputedTerrain = precomputedTerrain,
+                        precomputedRow = originalRow,
+                        precomputedCol = originalCol,
+                        enableDetailedLogging = false
                     )
-                    
-                    // Calculate coverage for this point (same logic as sequential version)
-                    if (distance > params.maxPeerDistance) {
-                        point.copy(
-                            coverageProbability = 0f,
-                            signalStrength = -140f,
-                            contributingPeers = emptyList()
-                        )
-                    } else {
-                        val signalShadow = if (terrainAvailable) {
-                            try {
-                                // Log terrain analysis start for debugging
-                                if (pointIndex % 100 == 0) {
-                                    android.util.Log.d("CoverageCalculator", "processGridQuadrant: Getting elevation for point (${point.latitude}, ${point.longitude})")
-                                }
-                                
-                                // Get target elevation - use precomputed data if available
-                                val targetTerrainData = if (precomputedTerrain != null) {
-                                    precomputedTerrain[originalRow][originalCol]
-                                } else {
-                                    terrainAnalyzer.getAdaptiveElevationForPoint(
-                                        LatLng(point.latitude, point.longitude), 
-                                        params.resolution, 
-                                        params.zoomLevel
-                                    )
-                                }
-                                val targetElevation = targetTerrainData.averageElevation
-                                
-                                if (pointIndex % 100 == 0) {
-                                    android.util.Log.d("CoverageCalculator", "processGridQuadrant: Calculating signal shadow for point (${point.latitude}, ${point.longitude})")
-                                }
-                                
-                                // Convert feet to meters (1 foot = 0.3048 meters)
-                                val userAntennaHeightMeters = params.userAntennaHeightFeet * 0.3048
-                                val receivingAntennaHeightMeters = params.receivingAntennaHeightFeet * 0.3048
-                                terrainAnalyzer.fastSignalShadowCheck(
-                                    userLocation, LatLng(point.latitude, point.longitude),
-                                    userElevation, targetElevation, 
-                                    userAntennaHeight = userAntennaHeightMeters,
-                                    targetAntennaHeight = receivingAntennaHeightMeters,
-                                    zoomLevel = params.zoomLevel
-                                )
-                            } catch (e: Exception) {
-                                android.util.Log.e("CoverageCalculator", "processGridQuadrant: Error in terrain analysis: ${e.message}")
-                                null
-                            }
-                        } else {
-                            null
-                        }
-
-                        val (finalCoverageProbability, signalStrength) = if (signalShadow != null) {
-                            try {
-                                val calculatedSignalStrength = fresnelZoneAnalyzer.calculateSignalStrength(
-                                    distance, signalShadow.fresnelBlockage
-                                )
-                                val calculatedBaseCoverageProbability = fresnelZoneAnalyzer.calculateCoverageProbability(calculatedSignalStrength)
-                                
-                                val calculatedFinalCoverageProbability = if (signalShadow.isInShadow) {
-                                    calculatedBaseCoverageProbability * (1.0f - signalShadow.shadowDepth * 0.9f)
-                                } else {
-                                    calculatedBaseCoverageProbability * (1.0f - signalShadow.fresnelBlockage * 0.3f)
-                                }
-                                
-                                Pair(calculatedFinalCoverageProbability, calculatedSignalStrength)
-                            } catch (e: Exception) {
-                                Pair(0f, -140f)
-                            }
-                        } else {
-                            Pair(-1f, -140f)
-                        }
-                        
-                        val calculatedPoint = point.copy(
-                            coverageProbability = finalCoverageProbability,
-                            signalStrength = signalStrength,
-                            fresnelZoneBlockage = signalShadow?.fresnelBlockage ?: 0f,
-                            terrainOcclusion = signalShadow?.shadowDepth ?: 0f,
-                            contributingPeers = listOf("user"),
-                            distanceFromNearestPeer = distance
-                        )
-                        quadrantGrid[row][col] = calculatedPoint
-                    }
+                    quadrantGrid[row][col] = calculatedPoint
                 } catch (e: Exception) {
                     val errorPoint = point.copy(
                         coverageProbability = 0f,
@@ -1034,7 +820,7 @@ class CoverageCalculator @Inject constructor(
     /**
      * Calculates extended coverage through peer network with sequential processing for older devices
      */
-    private suspend fun calculateExtendedCoverageParallel(
+    private suspend fun calculateExtendedCoverage(
         userLocation: LatLng,
         peerLocations: Map<String, PeerLocationEntry>,
         grid: Array<Array<CoveragePoint>>,
@@ -1068,11 +854,11 @@ class CoverageCalculator @Inject constructor(
         val peersWithElevation = try {
             if (networkPeers.isNotEmpty()) {
                 // Collect all peer locations for batch processing
-                val peerLocations = networkPeers.map { it.location }
+                val peerWithElevationLocations = networkPeers.map { it.location }
 
                 // Batch precompute terrain data for all peers
                 val peerTerrainData = terrainAnalyzer.precomputeTerrainForPoints(
-                    peerLocations, params.resolution, params.zoomLevel
+                    peerWithElevationLocations, params.resolution, params.zoomLevel
                 )
 
                 // Map terrain data back to peers
@@ -1099,37 +885,24 @@ class CoverageCalculator @Inject constructor(
             }
         }
         
-        // Process grid sequentially to reduce memory pressure on older devices
-        val totalPoints = grid.size * grid[0].size
-        var processedPoints = 0
-        var skippedPoints = 0 // Track points skipped due to good direct coverage
+        // Track skipped points for performance monitoring
+        var skippedPoints = 0
         
-        // Generate center-outward processing order for extended coverage
-        val processingOrder = generateSpiralProcessingOrder(grid)
-        
-        val resultGrid = Array(grid.size) { row ->
-            Array(grid[row].size) { col ->
-                // Initialize with existing coverage
-                grid[row][col]
-            }
-        }
-        
-        // Process grid points in center-outward order for extended coverage
-        for ((index, position) in processingOrder.withIndex()) {
-            val (row, col) = position
-            try {
-                val point = grid[row][col]
+        // Use generic grid processing with spiral ordering
+        val resultGrid = processGridWithSpiralOrder(
+            grid = grid,
+            processor = { row, col, point, index, totalPoints ->
                 val existingCoverage = point.coverageProbability
                 
                 // Skip peer coverage calculation if direct coverage is already good (>= 0.5)
                 // This optimization reduces computation for areas we already cover well
-                val baseNetworkCoverage = if (existingCoverage >= 0.5f) {
-                    skippedPoints++ // Track skipped points for performance monitoring
-                    0f // Skip peer calculation for areas with good direct coverage
-                } else if (existingCoverage >= 0.8f) {
+                val baseNetworkCoverage = if (existingCoverage >= 0.8f) {
                     // Early exit for very high coverage areas
                     skippedPoints++
                     0f // Skip peer calculation for areas with very good direct coverage
+                } else if (existingCoverage >= 0.5f) {
+                    skippedPoints++ // Track skipped points for performance monitoring
+                    0f // Skip peer calculation for areas with good direct coverage
                 } else {
                     try {
                         peerNetworkAnalyzer.calculateNetworkCoverageProbability(
@@ -1194,7 +967,7 @@ class CoverageCalculator @Inject constructor(
                         android.util.Log.w("CoverageCalculator", "Failed to calculate network coverage probability: ${e.message}")
                         -1f
                     }
-                } else if (baseNetworkCoverage > 0f && !terrainAvailable) {
+                } else if (baseNetworkCoverage > 0f) {
                     // Mark as unknown coverage when terrain data is not available
                     -1f
                 } else {
@@ -1239,7 +1012,7 @@ class CoverageCalculator @Inject constructor(
                     existingCoverage
                 }
                 
-                val updatedPoint = point.copy(
+                point.copy(
                     coverageProbability = combinedCoverage,
                     contributingPeers = if (networkCoverage > existingCoverage) {
                         contributingPeers
@@ -1253,29 +1026,22 @@ class CoverageCalculator @Inject constructor(
                         point.distanceFromNearestPeer
                     }
                 )
-                resultGrid[row][col] = updatedPoint
-            } catch (e: Exception) {
-                android.util.Log.e("CoverageCalculator", "Error processing grid point for extended coverage: ${e.message}", e)
-                // Return a safe default point
-                val errorPoint = grid[row][col].copy(
-                    coverageProbability = 0f,
-                    signalStrength = -140f,
-                    contributingPeers = emptyList()
-                )
-                resultGrid[row][col] = errorPoint
-            }
-            
-            // Update progress every few points
-            processedPoints++
-            if (index % 5 == 0 || index == totalPoints - 1) {
-                val progress = 0.6f + (0.15f * (index + 1) / totalPoints)
-                onProgress(progress, "Analyzing peer network... (${index + 1}/${totalPoints} points)")
-            }
-        }
+            },
+            onProgress = onProgress,
+            onPartialResult = null, // No incremental updates for extended coverage
+            bounds = null,
+            resolution = 0.0,
+            zoomLevel = 0,
+            progressStart = 0.6f,
+            progressRange = 0.15f,
+            progressMessage = "Analyzing peer network",
+            updateFrequency = 5,
+            enableIncrementalUpdates = false
+        )
         
         android.util.Log.d("CoverageCalculator", "Extended coverage calculation complete: " +
-            "processedPoints=$processedPoints, skippedPoints=$skippedPoints " +
-            "(${String.format("%.1f", skippedPoints.toDouble() / totalPoints * 100)}% skipped due to good direct coverage)")
+            "skippedPoints=$skippedPoints " +
+            "(${String.format("%.1f", skippedPoints.toDouble() / (grid.size * grid[0].size) * 100)}% skipped due to good direct coverage)")
         
         resultGrid
     }
@@ -1292,6 +1058,8 @@ class CoverageCalculator @Inject constructor(
         terrainAvailable: Boolean,
         onProgress: (Float, String) -> Unit
     ): Array<Array<CoveragePoint>> = withContext(Dispatchers.Default) {
+        onProgress(0.8f, "Identifying areas for refinement...")
+        
         // Identify areas with good coverage for refinement, prioritizing center areas
         val areasToRefineWithDistance = mutableListOf<Triple<Int, Int, Double>>()
         val centerRow = initialGrid.size / 2
@@ -1338,35 +1106,24 @@ class CoverageCalculator @Inject constructor(
         // Update refinement statistics
         updateRefinementStats(areasToRefine.size, limitedAreasToRefine.size)
         
-        // Process refinement with smart parallelism if enabled
-        val refinementResults = if (USE_PARALLEL_PROCESSING) {
-            limitedAreasToRefine.map { (row, col) ->
-                async {
-                    try {
-                        // Refine this area with higher resolution
-                        val refinedArea = refineCoverageArea(
-                            initialGrid[row][col], bounds, targetResolution, params, terrainAvailable
-                        )
-                        Pair(row, col) to refinedArea
-                    } catch (e: Exception) {
-                        android.util.Log.e("CoverageCalculator", "Error refining area at ($row, $col): ${e.message}", e)
-                        null
-                    }
+        // Process refinement
+        val refinementResults = mutableListOf<Pair<Pair<Int, Int>, Array<Array<CoveragePoint>>>>()
+        limitedAreasToRefine.forEachIndexed { index, (row, col) ->
+            try {
+                // Update progress every few areas
+                if (index % 3 == 0 || index == limitedAreasToRefine.size - 1) {
+                    val progress = 0.8f + (0.05f * (index + 1) / limitedAreasToRefine.size)
+                    onProgress(progress, "Refining coverage areas... (${index + 1}/${limitedAreasToRefine.size})")
                 }
-            }.awaitAll().filterNotNull()
-        } else {
-            limitedAreasToRefine.map { (row, col) ->
-                try {
-                    // Refine this area with higher resolution
-                    val refinedArea = refineCoverageArea(
-                        initialGrid[row][col], bounds, targetResolution, params, terrainAvailable
-                    )
-                    Pair(row, col) to refinedArea
-                } catch (e: Exception) {
-                    android.util.Log.e("CoverageCalculator", "Error refining area at ($row, $col): ${e.message}", e)
-                    null
-                }
-            }.filterNotNull()
+
+                // Refine this area with higher resolution
+                val refinedArea = refineCoverageArea(
+                    initialGrid[row][col], bounds, targetResolution, params, terrainAvailable
+                )
+                refinementResults.add(Pair(row, col) to refinedArea)
+            } catch (e: Exception) {
+                android.util.Log.e("CoverageCalculator", "Error refining area at ($row, $col): ${e.message}", e)
+            }
         }
         
         if (refinementResults.isEmpty()) {
@@ -1442,78 +1199,26 @@ class CoverageCalculator @Inject constructor(
                 val refinedLat = centerPoint.latitude + (dr - 0.5) * latStep
                 val refinedLon = centerPoint.longitude + (dc - 0.5) * lonStep
                 
-                val distance = haversine(
-                    userLocation.latitude, userLocation.longitude,
-                    refinedLat, refinedLon
+                // Create a temporary point for the refined coordinates
+                val refinedPoint = centerPoint.copy(
+                    latitude = refinedLat,
+                    longitude = refinedLon
                 )
                 
-                if (distance <= params.maxPeerDistance) {
-                    val signalShadow = if (terrainAvailable) {
-                        try {
-                            val targetTerrainData = terrainAnalyzer.getAdaptiveElevationForPoint(
-                                LatLng(refinedLat, refinedLon), 
-                                targetResolution, 
-                                params.zoomLevel
-                            )
-                            val targetElevation = targetTerrainData.averageElevation
-                            // Convert feet to meters (1 foot = 0.3048 meters)
-                            val userAntennaHeightMeters = params.userAntennaHeightFeet * 0.3048
-                            val receivingAntennaHeightMeters = params.receivingAntennaHeightFeet * 0.3048
-                            terrainAnalyzer.fastSignalShadowCheck(
-                                userLocation, LatLng(refinedLat, refinedLon),
-                                userElevation, targetElevation, 
-                                userAntennaHeight = userAntennaHeightMeters,
-                                targetAntennaHeight = receivingAntennaHeightMeters,
-                                zoomLevel = params.zoomLevel
-                            )
-                        } catch (e: Exception) {
-                            android.util.Log.w("CoverageCalculator", "Failed to calculate signal shadow for refinement: ${e.message}")
-                            null
-                        }
-                    } else {
-                        // Mark as unknown coverage when terrain data is not available
-                        null
-                    }
-                    
-                    val (finalCoverageProbability, signalStrength) = if (signalShadow != null) {
-                        try {
-                            val calculatedSignalStrength = fresnelZoneAnalyzer.calculateSignalStrength(
-                                distance, signalShadow.fresnelBlockage
-                            )
-                            val baseCoverageProbability = fresnelZoneAnalyzer.calculateCoverageProbability(calculatedSignalStrength)
-                            val calculatedFinalCoverageProbability = if (signalShadow.isInShadow) {
-                                baseCoverageProbability * (1.0f - signalShadow.shadowDepth * 0.9f)
-                            } else {
-                                baseCoverageProbability * (1.0f - signalShadow.fresnelBlockage * 0.3f)
-                            }
-                            Pair(calculatedFinalCoverageProbability, calculatedSignalStrength)
-                        } catch (e: Exception) {
-                            android.util.Log.w("CoverageCalculator", "Failed to calculate coverage probability for refinement: ${e.message}")
-                            Pair(0f, -140f)
-                        }
-                    } else {
-                        // Mark as unknown coverage when terrain data is not available
-                        Pair(-1f, -140f)
-                    }
-                    
-                    refinedGrid[dr][dc] = centerPoint.copy(
-                        latitude = refinedLat,
-                        longitude = refinedLon,
-                        coverageProbability = finalCoverageProbability,
-                        signalStrength = signalStrength,
-                        fresnelZoneBlockage = signalShadow?.fresnelBlockage ?: 0f,
-                        terrainOcclusion = signalShadow?.shadowDepth ?: 0f,
-                        distanceFromNearestPeer = distance
-                    )
-                } else {
-                    refinedGrid[dr][dc] = centerPoint.copy(
-                        latitude = refinedLat,
-                        longitude = refinedLon,
-                        coverageProbability = 0f,
-                        signalStrength = -140f,
-                        distanceFromNearestPeer = distance
-                    )
-                }
+                // Calculate coverage for this refined point using extracted method
+                val calculatedPoint = computePointCoverage(
+                    sourceLocation = userLocation,
+                    sourceElevation = userElevation,
+                    targetPoint = refinedPoint,
+                    params = params,
+                    terrainAvailable = terrainAvailable,
+                    precomputedTerrain = null, // No precomputed terrain for refinement
+                    precomputedRow = null,
+                    precomputedCol = null,
+                    enableDetailedLogging = false
+                )
+                
+                refinedGrid[dr][dc] = calculatedPoint
             }
         }
         
@@ -1523,7 +1228,7 @@ class CoverageCalculator @Inject constructor(
     /**
      * Filters coverage areas to only show good or medium coverage
      */
-    private fun filterCoverageAreas(
+    private suspend fun filterCoverageAreas(
         grid: Array<Array<CoveragePoint>>,
         onProgress: (Float, String) -> Unit
     ): Array<Array<CoveragePoint>> {
@@ -1532,27 +1237,10 @@ class CoverageCalculator @Inject constructor(
         var maxCoverage = 0f
         var minCoverage = 1f
         
-        totalPoints = grid.size * grid[0].size
-        var processedPoints = 0
-        
-        // Generate center-outward processing order for filtering
-        val processingOrder = generateSpiralProcessingOrder(grid)
-        
-        val filteredGrid = Array(grid.size) { row ->
-            Array(grid[row].size) { col ->
-                // Initialize with existing coverage
-                grid[row][col]
-            }
-        }
-        
-        // Process grid points in center-outward order for filtering
-        for ((index, position) in processingOrder.withIndex()) {
-            val (row, col) = position
-            try {
-                val point = grid[row][col]
-                totalPoints++
-                processedPoints++
-                
+        // Use generic grid processing with spiral ordering
+        val filteredGrid = processGridWithSpiralOrder(
+            grid = grid,
+            processor = { row, col, point, index, totalPoints ->
                 if (point.coverageProbability > maxCoverage) {
                     maxCoverage = point.coverageProbability
                 }
@@ -1560,7 +1248,7 @@ class CoverageCalculator @Inject constructor(
                     minCoverage = point.coverageProbability
                 }
                 
-                val filteredPoint = if (point.coverageProbability == -1f) {
+                if (point.coverageProbability == -1f) {
                     // Preserve unknown coverage areas (gray tiles)
                     point
                 } else if (point.coverageProbability >= MIN_COVERAGE_THRESHOLD) {
@@ -1574,31 +1262,24 @@ class CoverageCalculator @Inject constructor(
                         contributingPeers = emptyList()
                     )
                 }
-                
-                filteredGrid[row][col] = filteredPoint
-            } catch (e: Exception) {
-                android.util.Log.e("CoverageCalculator", "Error filtering grid point: ${e.message}", e)
-                // Return a safe default point
-                val errorPoint = grid[row][col].copy(
-                    coverageProbability = 0f,
-                    signalStrength = -140f,
-                    contributingPeers = emptyList()
-                )
-                filteredGrid[row][col] = errorPoint
-            }
-            
-            // Update progress every few points
-            if (index % 10 == 0 || index == totalPoints - 1) {
-                val progress = 0.8f + (0.15f * (index + 1) / totalPoints)
-                onProgress(progress, "Filtering coverage areas... (${index + 1}/${totalPoints} points)")
-            }
-        }
+            },
+            onProgress = onProgress,
+            onPartialResult = null, // No incremental updates for filtering
+            bounds = null,
+            resolution = 0.0,
+            zoomLevel = 0,
+            progressStart = 0.8f,
+            progressRange = 0.15f,
+            progressMessage = "Filtering coverage areas",
+            updateFrequency = 10,
+            enableIncrementalUpdates = false
+        )
         
         // Debug logging for coverage filtering
         android.util.Log.d("CoverageCalculator", "Coverage filtering results: " +
-            "totalPoints=$totalPoints, coveredPoints=$coveredPoints, " +
+            "totalPoints=${grid.size * grid[0].size}, coveredPoints=$coveredPoints, " +
             "maxCoverage=$maxCoverage, minCoverage=$minCoverage, " +
-            "threshold=${MIN_COVERAGE_THRESHOLD}, coveragePercentage=${(coveredPoints.toFloat() / totalPoints * 100)}%")
+            "threshold=${MIN_COVERAGE_THRESHOLD}, coveragePercentage=${(coveredPoints.toFloat() / (grid.size * grid[0].size) * 100)}%")
         
         return filteredGrid
     }
@@ -1638,18 +1319,6 @@ class CoverageCalculator @Inject constructor(
             )
             distance <= maxDistance
         }.map { it.id }
-    }
-    
-    /**
-     * Combines direct and extended coverage data
-     */
-    private fun combineCoverageData(
-        directCoverage: Array<Array<CoveragePoint>>,
-        extendedCoverage: Array<Array<CoveragePoint>>
-    ): Array<Array<CoveragePoint>> {
-        // For now, extended coverage already includes direct coverage
-        // This function can be extended for more sophisticated combination logic
-        return extendedCoverage
     }
     
     /**
@@ -1867,8 +1536,7 @@ class CoverageCalculator @Inject constructor(
      */
     private fun createCoverageGrid(
         bounds: LatLngBounds,
-        resolution: Double,
-        zoomLevel: Int
+        resolution: Double
     ): Array<Array<CoveragePoint>> {
         val latSpan = bounds.latitudeSpan
         val lonSpan = bounds.longitudeSpan
@@ -1925,16 +1593,15 @@ class CoverageCalculator @Inject constructor(
      */
     private fun calculateBounds(center: LatLng, radius: Double, viewportBounds: LatLngBounds? = null): LatLngBounds {
         return if (viewportBounds != null) {
-            // Use the actual viewport bounds and extend by radius
-            val latDelta = radius / 111320.0 // Approximate meters per degree latitude
-            val lonDelta = radius / (111320.0 * cos(Math.toRadians(center.latitude)))
-            
+            // Use viewport bounds directly with minimal buffer for seamless coverage
+            // This ensures the analysis area closely matches what the user sees on screen
+            val buffer = 0.005 // ~500m buffer for seamless edge coverage
             LatLngBounds.Builder()
-                .include(LatLng(viewportBounds.southWest.latitude - latDelta, viewportBounds.southWest.longitude - lonDelta))
-                .include(LatLng(viewportBounds.northEast.latitude + latDelta, viewportBounds.northEast.longitude + lonDelta))
+                .include(LatLng(viewportBounds.southWest.latitude - buffer, viewportBounds.southWest.longitude - buffer))
+                .include(LatLng(viewportBounds.northEast.latitude + buffer, viewportBounds.northEast.longitude + buffer))
                 .build()
         } else {
-            // Fallback to square bounds around center
+            // Fallback to radius-based bounds around center when viewport is not available
             val latDelta = radius / 111320.0
             val lonDelta = radius / (111320.0 * cos(Math.toRadians(center.latitude)))
             
@@ -1944,19 +1611,6 @@ class CoverageCalculator @Inject constructor(
                 .build()
         }
     }
-    
-    /**
-     * Data class for performance statistics
-     */
-    data class PerformanceStatistics(
-        val terrainCacheStats: TerrainAnalyzer.CacheStatistics,
-        val adaptiveSamplingStats: TerrainAnalyzer.AdaptiveSamplingStats,
-        val maxGridSize: Int,
-        val minCoverageThreshold: Float,
-        val progressiveRefinementThreshold: Float,
-        val parallelChunkSize: Int,
-        val refinementStats: RefinementStatistics
-    )
 
     /**
      * Generates a spiral processing order starting from the center of the grid

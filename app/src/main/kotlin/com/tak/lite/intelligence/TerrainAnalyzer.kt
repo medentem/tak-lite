@@ -1159,6 +1159,15 @@ class TerrainAnalyzer @Inject constructor(
         // Step 1: Ensure tile is available
         if (!tileFile.exists()) {
             android.util.Log.d("TerrainAnalyzer", "Tile $tileKey not found for points, starting download...")
+            
+            // Check if we can download this tile (zoom level limitation)
+            if (zoom > 14) {
+                android.util.Log.d("TerrainAnalyzer", "Skipping download for tile $tileKey for points (zoom $zoom > 14, MapTiler terrain service limited)")
+                // For zoom > 14, we can't download terrain data, so we'll use fallback data
+                // Don't throw an exception, just continue with fallback data
+                return
+            }
+            
             registerActiveDownload(zoom, x, y)
             
             // ACTUALLY TRIGGER THE DOWNLOAD
@@ -1224,6 +1233,15 @@ class TerrainAnalyzer @Inject constructor(
         // Step 1: Ensure tile is available
         if (!tileFile.exists()) {
             android.util.Log.d("TerrainAnalyzer", "Tile $tileKey not found, starting download...")
+            
+            // Check if we can download this tile (zoom level limitation)
+            if (zoom > 14) {
+                android.util.Log.d("TerrainAnalyzer", "Skipping download for tile $tileKey (zoom $zoom > 14, MapTiler terrain service limited)")
+                // For zoom > 14, we can't download terrain data, so we'll use fallback data
+                // Don't throw an exception, just continue with fallback data
+                return
+            }
+            
             registerActiveDownload(zoom, x, y)
             
             // ACTUALLY TRIGGER THE DOWNLOAD

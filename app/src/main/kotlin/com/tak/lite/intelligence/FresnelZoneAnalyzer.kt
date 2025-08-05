@@ -25,13 +25,6 @@ class FresnelZoneAnalyzer @Inject constructor() {
         // Precomputed Fresnel radius lookup table for distances 0-50km in 100m steps
         // This eliminates repeated sqrt calculations and provides 3-5x speedup
         private val FRESNEL_RADIUS_LOOKUP = generateFresnelRadiusLookup()
-        
-        // Polynomial coefficients for path loss approximation: pathLoss ≈ a*d^2 + b*d + c
-        // Fitted to 20*log10(d) + 20*log10(f) - 147.55 for distances 0-50km
-        // Error <2dB compared to exact calculation
-        private const val PATH_LOSS_A = 0.0000001 // d^2 coefficient
-        private const val PATH_LOSS_B = 0.0001    // d coefficient  
-        private const val PATH_LOSS_C = -147.55   // constant term
 
         /**
          * Generates precomputed Fresnel radius lookup table
@@ -196,25 +189,15 @@ class FresnelZoneAnalyzer @Inject constructor() {
     /**
      * Calculates signal strength based on Fresnel zone blockage
      * Returns signal strength in dBm
-     * Optimized with polynomial approximation for path loss
+     * Uses correct free space path loss calculation
      */
     fun calculateSignalStrength(
         distance: Double,
         fresnelZoneBlockage: Float,
         basePower: Float = 14.0f // Typical LoRa power in dBm
     ): Float {
-        // Polynomial approximation for free space path loss: pathLoss ≈ a*d^2 + b*d + c
-        // Error <2dB compared to exact 20*log10(d) + 20*log10(f) - 147.55
-        val pathLoss = when {
-            distance <= 50000 -> {
-                // Use polynomial approximation for distances up to 50km
-                PATH_LOSS_A * distance * distance + PATH_LOSS_B * distance + PATH_LOSS_C
-            }
-            else -> {
-                // Fallback to exact calculation for longer distances
-                20 * log10(distance) + 20 * log10(FREQUENCY) - 147.55
-            }
-        }
+        // Correct free space path loss calculation: 20*log10(d) + 20*log10(f) - 147.55
+        val pathLoss = 20 * log10(distance) + 20 * log10(FREQUENCY) - 147.55
         
         // More granular loss due to Fresnel zone blockage
         val blockageLoss = when {
@@ -238,15 +221,16 @@ class FresnelZoneAnalyzer @Inject constructor() {
      */
     fun calculateCoverageProbability(signalStrength: Float): Float {
         // LoRa sensitivity is typically around -120 to -140 dBm
-        val sensitivity = -120f
+        // Using -130 dBm as a reasonable sensitivity for good LoRa modules
+        val sensitivity = -130f
         
         // Calculate signal margin
         val signalMargin = signalStrength - sensitivity
         
         // Sigmoid function: p = 1 / (1 + exp(-k*(margin - m0)))
-        // k=0.5, m0=5dB provides smooth transition with good coverage characteristics
-        val k = 0.5f
-        val m0 = 5f
+        // k=0.3, m0=10dB provides smooth transition with good coverage characteristics
+        val k = 0.3f
+        val m0 = 10f
         
         val probability = 1f / (1f + kotlin.math.exp(-k * (signalMargin - m0)))
         

@@ -136,12 +136,13 @@ class CoverageViewModel @Inject constructor(
         // Calculate diagonal distance (Pythagorean theorem)
         val diagonalDistance = kotlin.math.sqrt(latDistance * latDistance + lonDistance * lonDistance)
         
-        // Add buffer to ensure coverage extends slightly beyond viewport
-        val radiusWithBuffer = diagonalDistance * 0.1 // 10% of diagonal = radius with buffer
+        // Use half the diagonal as radius to cover the viewport area
+        // Add small buffer (5%) for seamless edge coverage
+        val radius = diagonalDistance * 0.5 * 1.05
         
         // Cap at 150 miles (241,402 meters)
         val maxRadius = 241402.0
-        val finalRadius = radiusWithBuffer.coerceAtMost(maxRadius)
+        val finalRadius = radius.coerceAtMost(maxRadius)
         
         android.util.Log.d("CoverageViewModel", "Calculated radius: ${finalRadius}m (${finalRadius/1000}km) from viewport diagonal: ${diagonalDistance}m")
         
