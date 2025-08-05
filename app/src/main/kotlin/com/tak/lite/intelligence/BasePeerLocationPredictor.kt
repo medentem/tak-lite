@@ -4,6 +4,7 @@ import android.util.Log
 import com.tak.lite.data.model.Quadruple
 import com.tak.lite.di.IPeerLocationPredictor
 import com.tak.lite.model.PeerLocationEntry
+import com.tak.lite.util.haversine
 import kotlin.math.PI
 import kotlin.math.asin
 import kotlin.math.atan2
@@ -37,19 +38,6 @@ abstract class BasePeerLocationPredictor : IPeerLocationPredictor {
     }
 
     /**
-     * Calculate distance between two points using Haversine formula
-     */
-    internal fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-        val dLat = (lat2 - lat1) * DEG_TO_RAD
-        val dLon = (lon2 - lon1) * DEG_TO_RAD
-        val a = sin(dLat / 2) * sin(dLat / 2) +
-                cos(lat1 * DEG_TO_RAD) * cos(lat2 * DEG_TO_RAD) *
-                sin(dLon / 2) * sin(dLon / 2)
-        val c = 2 * atan2(sqrt(a), sqrt(1 - a))
-        return EARTH_RADIUS_METERS * c
-    }
-
-    /**
      * Calculate uncertainty values from location history data with enhanced timestamp handling
      */
     internal fun calculateUncertainties(entries: List<PeerLocationEntry>): Pair<Double, Double> {
@@ -61,7 +49,7 @@ abstract class BasePeerLocationPredictor : IPeerLocationPredictor {
         val headings = mutableListOf<Double>()
 
         for (i in 1 until entries.size) {
-            val distance = calculateDistance(
+            val distance = haversine(
                 entries[i-1].latitude, entries[i-1].longitude,
                 entries[i].latitude, entries[i].longitude
             )
@@ -159,7 +147,7 @@ abstract class BasePeerLocationPredictor : IPeerLocationPredictor {
                 continue
             }
 
-            val distance = calculateDistance(previous.latitude, previous.longitude, current.latitude, current.longitude)
+            val distance = haversine(previous.latitude, previous.longitude, current.latitude, current.longitude)
             val speed = distance / dt
 
             if (speed > maxReasonableSpeed) {
@@ -238,7 +226,7 @@ abstract class BasePeerLocationPredictor : IPeerLocationPredictor {
 
             if (timeDiff <= 0) continue
 
-            val distance = calculateDistance(
+            val distance = haversine(
                 previous.latitude, previous.longitude,
                 current.latitude, current.longitude
             )
@@ -300,7 +288,7 @@ abstract class BasePeerLocationPredictor : IPeerLocationPredictor {
                 continue
             }
 
-            val distance = calculateDistance(
+            val distance = haversine(
                 previous.latitude, previous.longitude,
                 current.latitude, current.longitude
             )

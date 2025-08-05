@@ -12,6 +12,7 @@ import com.tak.lite.data.model.VelocityVector
 import com.tak.lite.model.LatLngSerializable
 import com.tak.lite.model.PeerLocationEntry
 import com.tak.lite.model.PeerLocationHistory
+import com.tak.lite.util.haversine
 import javax.inject.Inject
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -298,7 +299,7 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
 
                 // DEBUG: Log the historical movement direction
                 if (i == 1) { // Only log for the first iteration
-                    val historicalDistance = calculateDistance(previous.latitude, previous.longitude, current.latitude, current.longitude)
+                    val historicalDistance = haversine(previous.latitude, previous.longitude, current.latitude, current.longitude)
                     val historicalHeading = calculateBearing(previous.latitude, previous.longitude, current.latitude, current.longitude)
                     Log.d(TAG, "Particle filter: HISTORICAL_MOVEMENT - from=(${previous.latitude}, ${previous.longitude}) to=(${current.latitude}, ${current.longitude})")
                     Log.d(TAG, "Particle filter: HISTORICAL_MOVEMENT - distance=${historicalDistance.toInt()}m, heading=${historicalHeading.toInt()}°, dt=${dt.toInt()}s")
@@ -330,7 +331,7 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
                     
                     // DEBUG: Log particle movement for first few particles
                     if (i == 1 && particles.indexOf(particle) < 3) {
-                        val particleDistance = calculateDistance(particleStartLat, particleStartLon, particle.lat, particle.lon)
+                        val particleDistance = haversine(particleStartLat, particleStartLon, particle.lat, particle.lon)
                         val particleHeading = calculateBearing(particleStartLat, particleStartLon, particle.lat, particle.lon)
                         val recoveredHeading = atan2(vLonMps, vLatMps) * RAD_TO_DEG
                         val geographicHeading = (recoveredHeading + 360.0) % 360.0
@@ -372,7 +373,7 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
                     }
 
                     // ROBUST WEIGHT CALCULATION: Use log-weights to prevent numerical underflow
-                    val distance = calculateDistance(particle.lat, particle.lon, current.latitude, current.longitude)
+                    val distance = haversine(particle.lat, particle.lon, current.latitude, current.longitude)
                     
                     // Convert to log-weights to prevent numerical underflow
                     val logWeight = -distance * distance / (2 * measurementNoise * measurementNoise)
@@ -447,7 +448,7 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
             Log.d(TAG, "Particle filter: FINAL_PARTICLES - current position=(${latest.latitude}, ${latest.longitude})")
             for (i in 0 until minOf(3, particles.size)) {
                 val particle = particles[i]
-                val distanceFromCurrent = calculateDistance(latest.latitude, latest.longitude, particle.lat, particle.lon)
+                val distanceFromCurrent = haversine(latest.latitude, latest.longitude, particle.lat, particle.lon)
                 val headingFromCurrent = calculateBearing(latest.latitude, latest.longitude, particle.lat, particle.lon)
                 val vLatMps = particle.vLat * EARTH_RADIUS_METERS * DEG_TO_RAD
                 val vLonMps = particle.vLon * EARTH_RADIUS_METERS * cos(particle.lat * DEG_TO_RAD) * DEG_TO_RAD
@@ -505,7 +506,7 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
                 
                 // DEBUG: Log future movement for first few particles
                 if (currentPositionParticles.indexOf(particle) < 3) {
-                    val futureDistance = calculateDistance(startLat, startLon, futureParticle.lat, futureParticle.lon)
+                    val futureDistance = haversine(startLat, startLon, futureParticle.lat, futureParticle.lon)
                     val futureHeading = calculateBearing(startLat, startLon, futureParticle.lat, futureParticle.lon)
                     val vLatMps = particle.vLat * EARTH_RADIUS_METERS * DEG_TO_RAD
                     val vLonMps = particle.vLon * EARTH_RADIUS_METERS * cos(particle.lat * DEG_TO_RAD) * DEG_TO_RAD
@@ -538,7 +539,7 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
             Log.d(TAG, "COORDINATE_ANALYSIS: Final prediction results:")
             Log.d(TAG, "COORDINATE_ANALYSIS: Predicted position=(${predLat}°, ${predLon}°)")
             Log.d(TAG, "COORDINATE_ANALYSIS: Predicted velocity=${predSpeed}m/s at ${predHeading}°")
-            Log.d(TAG, "COORDINATE_ANALYSIS: Distance from current=${calculateDistance(latest.latitude, latest.longitude, predLat, predLon).toInt()}m")
+            Log.d(TAG, "COORDINATE_ANALYSIS: Distance from current=${haversine(latest.latitude, latest.longitude, predLat, predLon).toInt()}m")
             Log.d(TAG, "COORDINATE_ANALYSIS: Expected distance=${(predSpeed * predictionTimeSeconds).toInt()}m")
 
             Log.d(TAG, "Particle filter: enhanced prediction = ($predLat, $predLon), speed=$predSpeed, heading=$predHeading")
@@ -596,7 +597,7 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
         
         // Calculate weighted variance (spread) around the mean
         val weightedVariance = particles.sumOf { particle ->
-            val distance = calculateDistance(particle.lat, particle.lon, avgLat, avgLon)
+            val distance = haversine(particle.lat, particle.lon, avgLat, avgLon)
             particle.weight * distance * distance
         }
         
@@ -622,7 +623,7 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
         val avgLon = particles.sumOf { it.lon * it.weight }
 
         val spread = particles.sumOf { particle ->
-            val distance = calculateDistance(particle.lat, particle.lon, avgLat, avgLon)
+            val distance = haversine(particle.lat, particle.lon, avgLat, avgLon)
             particle.weight * distance * distance
         }
 
@@ -863,7 +864,7 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
         }
 
         // Log detailed information for debugging
-        val distanceFromCurrent = calculateDistance(latest.latitude, latest.longitude, predLat, predLon)
+        val distanceFromCurrent = haversine(latest.latitude, latest.longitude, predLat, predLon)
         val expectedDistance = finalValidatedSpeed * predictionTimeSeconds
         Log.d(TAG, "Particle filter: Final prediction analysis:")
         Log.d(TAG, "  - Distance from current position: ${distanceFromCurrent.toInt()}m")
@@ -1100,7 +1101,7 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
             val particleWeights = mutableListOf<Double>()
 
             positions.forEachIndexed { index, position ->
-                val d = calculateDistance(avgLat, avgLon, position.lt, position.lng)
+                val d = haversine(avgLat, avgLon, position.lt, position.lng)
                 val bearing = calculateBearing(avgLat, avgLon, position.lt, position.lng)
 
                 // Cross-track projection (perpendicular to movement direction)
@@ -1206,7 +1207,7 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
         val weightedAvgLon = predictedParticles.sumOf { it.lon * it.weight }
 
         val spread = predictedParticles.sumOf { particle ->
-            val distance = calculateDistance(particle.lat, particle.lon, weightedAvgLat, weightedAvgLon)
+            val distance = haversine(particle.lat, particle.lon, weightedAvgLat, weightedAvgLon)
             particle.weight * distance * distance
         }
 
@@ -1253,7 +1254,7 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
 
         // Calculate speeds and headings from position changes
         for (i in 1 until entries.size) {
-            val distance = calculateDistance(
+            val distance = haversine(
                 entries[i-1].latitude, entries[i-1].longitude,
                 entries[i].latitude, entries[i].longitude
             )

@@ -11,18 +11,15 @@ import com.tak.lite.di.PredictionFactory
 import com.tak.lite.model.LatLngSerializable
 import com.tak.lite.model.PeerLocationEntry
 import com.tak.lite.model.PeerLocationHistory
+import com.tak.lite.util.haversine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.json.Json
 import org.maplibre.android.geometry.LatLng
+import java.util.Collections
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.math.atan2
-import kotlin.math.cos
-import kotlin.math.sin
-import kotlin.math.sqrt
-import java.util.Collections
 
 @Singleton
 class PeerLocationHistoryRepository @Inject constructor(
@@ -87,7 +84,7 @@ class PeerLocationHistoryRepository @Inject constructor(
         val currentPrediction = _predictions.value[peerId]
         if (currentPrediction != null) {
             val actualLocation = LatLngSerializable.fromMapLibreLatLng(entry.toLatLng())
-            val distance = calculateDistance(
+            val distance = haversine(
                 currentPrediction.predictedLocation.lt, currentPrediction.predictedLocation.lng,
                 actualLocation.lt, actualLocation.lng
             )
@@ -207,7 +204,7 @@ class PeerLocationHistoryRepository @Inject constructor(
         
         // Check if predicted location is significantly different from current location
         val currentLocation = LatLngSerializable(latestEntry.latitude, latestEntry.longitude)
-        val distance = calculateDistance(
+        val distance = haversine(
             currentLocation.lt, currentLocation.lng,
             prediction.predictedLocation.lt, prediction.predictedLocation.lng
         )
@@ -564,7 +561,7 @@ class PeerLocationHistoryRepository @Inject constructor(
             if (history.entries.size >= 2) {
                 val latest = history.entries.last()
                 val previous = history.entries[history.entries.size - 2]
-                val distance = calculateDistance(
+                val distance = haversine(
                     previous.latitude, previous.longitude,
                     latest.latitude, latest.longitude
                 )
@@ -581,20 +578,6 @@ class PeerLocationHistoryRepository @Inject constructor(
             avgSpeedMph < 50 -> "PARTICLE_FILTER - High speed, complex movement patterns"
             else -> "PARTICLE_FILTER - High speed, complex movement patterns"
         }
-    }
-    
-    /**
-     * Calculate distance between two points in meters
-     */
-    private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-        val earthRadius = 6371000.0 // Earth's radius in meters
-        val dLat = Math.toRadians(lat2 - lat1)
-        val dLon = Math.toRadians(lon2 - lon1)
-        val a = sin(dLat / 2) * sin(dLat / 2) +
-                cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) *
-                sin(dLon / 2) * sin(dLon / 2)
-        val c = 2 * atan2(sqrt(a), sqrt(1 - a))
-        return earthRadius * c
     }
     
     private fun saveConfiguration() {

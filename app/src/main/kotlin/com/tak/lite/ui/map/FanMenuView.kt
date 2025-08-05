@@ -13,6 +13,7 @@ import androidx.core.content.ContextCompat
 import com.tak.lite.R
 import com.tak.lite.model.AnnotationColor
 import com.tak.lite.model.PointShape
+import com.tak.lite.util.haversine
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
@@ -968,16 +969,5 @@ class FanMenuView @JvmOverloads constructor(
             )
             canvas.drawTextOnPath(it, topArc, 0f, 12f, textPaint)
         }
-    }
-
-    private fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-        val R = 6371000.0 // meters
-        val dLat = Math.toRadians(lat2 - lat1)
-        val dLon = Math.toRadians(lon2 - lon1)
-        val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
-                Math.sin(dLon / 2) * Math.sin(dLon / 2)
-        val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-        return R * c
     }
 }

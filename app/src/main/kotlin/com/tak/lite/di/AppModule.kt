@@ -1,6 +1,10 @@
 package com.tak.lite.di
 
 import android.content.Context
+import com.tak.lite.intelligence.CoverageCalculator
+import com.tak.lite.intelligence.FresnelZoneAnalyzer
+import com.tak.lite.intelligence.PeerNetworkAnalyzer
+import com.tak.lite.intelligence.TerrainAnalyzer
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -15,5 +19,41 @@ object AppModule {
     @Singleton
     fun provideContext(@ApplicationContext context: Context): Context {
         return context
+    }
+    
+    @Provides
+    @Singleton
+    fun provideFresnelZoneAnalyzer(): FresnelZoneAnalyzer {
+        return FresnelZoneAnalyzer()
+    }
+    
+    @Provides
+    @Singleton
+    fun provideTerrainAnalyzer(@ApplicationContext context: Context): TerrainAnalyzer {
+        return TerrainAnalyzer(context)
+    }
+    
+    @Provides
+    @Singleton
+    fun providePeerNetworkAnalyzer(): PeerNetworkAnalyzer {
+        return PeerNetworkAnalyzer()
+    }
+    
+    @Provides
+    @Singleton
+    fun provideCoverageCalculator(
+        fresnelZoneAnalyzer: FresnelZoneAnalyzer,
+        terrainAnalyzer: TerrainAnalyzer,
+        peerNetworkAnalyzer: PeerNetworkAnalyzer,
+        meshNetworkRepository: com.tak.lite.repository.MeshNetworkRepository,
+        @ApplicationContext context: Context
+    ): CoverageCalculator {
+        return CoverageCalculator(
+            fresnelZoneAnalyzer,
+            terrainAnalyzer,
+            peerNetworkAnalyzer,
+            meshNetworkRepository,
+            context
+        )
     }
 } 

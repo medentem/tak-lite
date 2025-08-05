@@ -8,6 +8,7 @@ import com.tak.lite.di.MeshProtocol
 import com.tak.lite.model.PacketSummary
 import com.tak.lite.model.PeerLocationEntry
 import com.tak.lite.repository.PeerLocationHistoryRepository
+import com.tak.lite.util.haversine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -391,17 +392,6 @@ class MeshNetworkService @Inject constructor(
             latitude = newLat,
             longitude = newLon
         )
-    }
-
-    private fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-        val R = 6371000.0 // meters
-        val dLat = Math.toRadians(lat2 - lat1)
-        val dLon = Math.toRadians(lon2 - lon1)
-        val a = sin(dLat / 2) * sin(dLat / 2) +
-                cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) *
-                sin(dLon / 2) * sin(dLon / 2)
-        val c = 2 * atan2(sqrt(a), sqrt(1 - a))
-        return R * c
     }
 
     fun sendLocationUpdate(latitude: Double, longitude: Double) {

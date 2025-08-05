@@ -8,6 +8,7 @@ import android.graphics.Path
 import android.util.Log
 import com.tak.lite.model.AnnotationColor
 import com.tak.lite.model.MapAnnotation
+import com.tak.lite.util.haversine
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.LineLayer
@@ -463,20 +464,6 @@ class LineFeatureConverter {
         val bearing = Math.toDegrees(kotlin.math.atan2(y, x))
 
         return (bearing + 360) % 360
-    }
-
-    /**
-     * Haversine formula to calculate distance between two points
-     */
-    private fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-        val R = 6371000.0 // Earth radius in meters
-        val dLat = Math.toRadians(lat2 - lat1)
-        val dLon = Math.toRadians(lon2 - lon1)
-        val a = sin(dLat / 2) * sin(dLat / 2) +
-                cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) *
-                sin(dLon / 2) * sin(dLon / 2)
-        val c = 2 * kotlin.math.atan2(kotlin.math.sqrt(a), kotlin.math.sqrt(1 - a))
-        return R * c
     }
 }
 

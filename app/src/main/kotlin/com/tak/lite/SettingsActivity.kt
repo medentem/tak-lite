@@ -22,6 +22,8 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.switchmaterial.SwitchMaterial
+import android.widget.RadioGroup
+import android.widget.RadioButton
 import com.tak.lite.di.ConfigDownloadStep
 import com.tak.lite.di.MeshConnectionState
 import com.tak.lite.di.MeshProtocol
@@ -87,6 +89,13 @@ class SettingsActivity : BaseActivity() {
     private lateinit var showPredictionOverlaySwitch: SwitchMaterial
     private lateinit var predictionAdvancedLink: TextView
     private lateinit var peerStalenessThresholdEditText: com.google.android.material.textfield.TextInputEditText
+    private lateinit var includePeersInCoverageSwitch: SwitchMaterial
+    private lateinit var coverageDetailLevelGroup: RadioGroup
+    private lateinit var coverageDetailLow: RadioButton
+    private lateinit var coverageDetailMedium: RadioButton
+    private lateinit var coverageDetailHigh: RadioButton
+    private lateinit var userAntennaHeightEditText: com.google.android.material.textfield.TextInputEditText
+    private lateinit var receivingAntennaHeightEditText: com.google.android.material.textfield.TextInputEditText
     private val REQUEST_CODE_FOREGROUND_SERVICE_CONNECTED_DEVICE = 2003
     private val REQUEST_CODE_NOTIFICATION_PERMISSION = 3001
     private val REQUEST_CODE_ALL_PERMISSIONS = 4001
@@ -147,6 +156,13 @@ class SettingsActivity : BaseActivity() {
         showPredictionOverlaySwitch = findViewById(R.id.showPredictionOverlaySwitch)
         predictionAdvancedLink = findViewById(R.id.predictionAdvancedLink)
         peerStalenessThresholdEditText = findViewById(R.id.peerStalenessThresholdEditText)
+        includePeersInCoverageSwitch = findViewById(R.id.includePeersInCoverageSwitch)
+        coverageDetailLevelGroup = findViewById(R.id.coverageDetailLevelGroup)
+        coverageDetailLow = findViewById(R.id.coverageDetailLow)
+        coverageDetailMedium = findViewById(R.id.coverageDetailMedium)
+        coverageDetailHigh = findViewById(R.id.coverageDetailHigh)
+        userAntennaHeightEditText = findViewById(R.id.userAntennaHeightEditText)
+        receivingAntennaHeightEditText = findViewById(R.id.receivingAntennaHeightEditText)
 
         // Check premium status and update UI accordingly
         lifecycleScope.launch {
@@ -457,6 +473,68 @@ class SettingsActivity : BaseActivity() {
                 val value = peerStalenessThresholdEditText.text.toString().toIntOrNull()?.coerceIn(1, 60) ?: 10
                 peerStalenessThresholdEditText.setText(value.toString())
                 prefs.edit().putInt("peer_staleness_threshold_minutes", value).apply()
+            }
+        }
+
+        // Setup coverage analysis settings
+        val includePeersInCoverage = prefs.getBoolean("include_peers_in_coverage", true)
+        includePeersInCoverageSwitch.isChecked = includePeersInCoverage
+        includePeersInCoverageSwitch.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean("include_peers_in_coverage", isChecked).apply()
+        }
+
+        // Setup coverage detail level
+        val coverageDetailLevel = prefs.getString("coverage_detail_level", "medium") ?: "medium"
+        when (coverageDetailLevel) {
+            "low" -> coverageDetailLow.isChecked = true
+            "medium" -> coverageDetailMedium.isChecked = true
+            "high" -> coverageDetailHigh.isChecked = true
+        }
+
+        coverageDetailLevelGroup.setOnCheckedChangeListener { _, checkedId ->
+            val level = when (checkedId) {
+                R.id.coverageDetailLow -> "low"
+                R.id.coverageDetailMedium -> "medium"
+                R.id.coverageDetailHigh -> "high"
+                else -> "medium"
+            }
+            prefs.edit().putString("coverage_detail_level", level).apply()
+            
+            // Show warning for medium and high detail levels
+            if (level == "medium" || level == "high") {
+                val warningMessage = if (level == "high") {
+                    "High detail level uses full resolution for your current zoom level, which may consume more battery and take longer to complete."
+                } else {
+                    "Medium detail level uses 1.5x coarser resolution than high detail, providing balanced performance."
+                }
+                
+                android.app.AlertDialog.Builder(this)
+                    .setTitle("Detail Level Warning")
+                    .setMessage(warningMessage)
+                    .setPositiveButton("OK", null)
+                    .show()
+            }
+        }
+
+        // Setup antenna heights
+        val userAntennaHeightFeet = prefs.getInt("user_antenna_height_feet", 6) // Default 6 feet (2 meters)
+        val receivingAntennaHeightFeet = prefs.getInt("receiving_antenna_height_feet", 6) // Default 6 feet (2 meters)
+        
+        userAntennaHeightEditText.setText(userAntennaHeightFeet.toString())
+        userAntennaHeightEditText.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) {
+                val value = userAntennaHeightEditText.text.toString().toIntOrNull()?.coerceIn(1, 100) ?: 6
+                userAntennaHeightEditText.setText(value.toString())
+                prefs.edit().putInt("user_antenna_height_feet", value).apply()
+            }
+        }
+        
+        receivingAntennaHeightEditText.setText(receivingAntennaHeightFeet.toString())
+        receivingAntennaHeightEditText.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) {
+                val value = receivingAntennaHeightEditText.text.toString().toIntOrNull()?.coerceIn(1, 100) ?: 6
+                receivingAntennaHeightEditText.setText(value.toString())
+                prefs.edit().putInt("receiving_antenna_height_feet", value).apply()
             }
         }
 

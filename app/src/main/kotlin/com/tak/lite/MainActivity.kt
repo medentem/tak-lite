@@ -4,8 +4,10 @@ import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Color
+import android.graphics.PointF
 import android.hardware.SensorManager
 import android.os.Build
 import android.os.Bundle
@@ -15,32 +17,32 @@ import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.tak.lite.databinding.ActivityMainBinding
+import com.tak.lite.model.toColor
+import com.tak.lite.model.toDisplayName
 import com.tak.lite.network.MeshtasticBluetoothProtocol
 import com.tak.lite.service.MeshForegroundService
 import com.tak.lite.ui.audio.AudioController
 import com.tak.lite.ui.channel.ChannelController
-import com.tak.lite.model.toColor
-import com.tak.lite.model.toDisplayName
 import com.tak.lite.ui.location.CalibrationStatus
 import com.tak.lite.ui.location.LocationController
 import com.tak.lite.ui.location.LocationSource
 import com.tak.lite.ui.map.AnnotationFragment
+import com.tak.lite.ui.map.CoverageOverlayView
 import com.tak.lite.ui.map.FanMenuView
 import com.tak.lite.viewmodel.ChannelViewModel
+import com.tak.lite.viewmodel.CoverageViewModel
 import com.tak.lite.viewmodel.MeshNetworkUiState
 import com.tak.lite.viewmodel.MeshNetworkViewModel
 import com.tak.lite.viewmodel.MessageViewModel
@@ -49,9 +51,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import javax.inject.Inject
+import kotlin.math.roundToInt
 
 val DEFAULT_US_CENTER = LatLng(39.8283, -98.5795)
 const val DEFAULT_US_ZOOM = 4.0
@@ -118,6 +122,15 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
     private lateinit var packetSummaryOverlay: FrameLayout
     private lateinit var packetSummaryList: LinearLayout
     private var packetSummaryHideJob: kotlinx.coroutines.Job? = null
+    
+    // Coverage analysis
+    private val coverageViewModel: CoverageViewModel by viewModels()
+    private lateinit var coverageOverlayView: CoverageOverlayView
+    private lateinit var coverageAnalysisButton: com.google.android.material.floatingactionbutton.FloatingActionButton
+    private lateinit var coverageProgressContainer: LinearLayout
+    private lateinit var coverageProgressBar: ProgressBar
+    private lateinit var coverageProgressText: TextView
+    private lateinit var coverageStatusText: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -257,6 +270,14 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
         // Initialize status button
         statusButton = findViewById(R.id.statusButton)
         statusLabel = findViewById(R.id.statusLabel)
+        
+        // Initialize coverage analysis
+        coverageAnalysisButton = findViewById(R.id.coverageAnalysisButton)
+        coverageOverlayView = findViewById(R.id.coverageOverlayView)
+        coverageProgressContainer = findViewById(R.id.coverageProgressContainer)
+        coverageProgressBar = findViewById(R.id.coverageProgressBar)
+        coverageProgressText = findViewById(R.id.coverageProgressText)
+        coverageStatusText = findViewById(R.id.coverageStatusText)
 
         // Set to unknown by default
         locationSourceOverlay.visibility = View.VISIBLE
@@ -398,6 +419,9 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
 
         // Setup status button
         setupStatusButton()
+        
+        // Setup coverage analysis
+        setupCoverageAnalysis()
 
         toggle3dFab.setOnClickListener {
             is3DBuildingsEnabled = !is3DBuildingsEnabled
@@ -1211,5 +1235,193 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
             }
         )
         dialog.show(statusButton)
+    }
+    
+    private fun setupCoverageAnalysis() {
+        // Set up coverage analysis button with toggle behavior
+        coverageAnalysisButton.setOnClickListener {
+            Log.d("MainActivity", "Coverage analysis button clicked")
+            
+            // If coverage is active, clear it
+            if (!coverageViewModel.isAnalysisIdle()) {
+                Log.d("MainActivity", "Clearing coverage analysis")
+                // Clear overlay immediately for instant feedback
+                coverageOverlayView.clearCoverage()
+                updateCoverageButtonState(false)
+                // Then clear the analysis
+                coverageViewModel.clearCoverageAnalysis()
+                return@setOnClickListener
+            }
+            
+            // Otherwise, start new coverage analysis
+            val map = mapController.mapLibreMap
+            if (map == null) {
+                Log.d("MainActivity", "Map not ready yet")
+                Toast.makeText(this, "Map not ready yet", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            
+            val center = map.cameraPosition.target
+            val zoomLevel = map.cameraPosition.zoom.roundToInt()
+            
+            if (center == null) {
+                Log.d("MainActivity", "Map center is null")
+                Toast.makeText(this, "Map center not available", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            
+            Log.d("MainActivity", "Starting coverage analysis at center: $center, zoom: $zoomLevel")
+            
+            // Get current viewport bounds
+            val viewportBounds = getCurrentViewportBounds(map)
+            
+            // Start coverage analysis
+            coverageViewModel.startCoverageAnalysis(center, zoomLevel, viewportBounds)
+        }
+        
+        // Observe coverage analysis state
+        lifecycleScope.launch {
+            repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                coverageViewModel.uiState.collectLatest { state ->
+                    when (state) {
+                        is com.tak.lite.model.CoverageAnalysisState.Idle -> {
+                            hideCoverageProgressBar()
+                            // Clear coverage overlay when idle (either no data or calculation was canceled)
+                            updateCoverageButtonState(false)
+                            coverageOverlayView.clearCoverage()
+                            Log.d("MainActivity", "Coverage analysis state changed to Idle - overlay cleared")
+                        }
+                        is com.tak.lite.model.CoverageAnalysisState.Calculating -> {
+                            showCoverageProgressBar()
+                            updateCoverageButtonState(true)
+                        }
+                        is com.tak.lite.model.CoverageAnalysisState.Progress -> {
+                            updateCoverageProgressBar(state.progress, state.message)
+                            updateCoverageButtonState(true)
+                        }
+                        is com.tak.lite.model.CoverageAnalysisState.Success -> {
+                            hideCoverageProgressBar()
+                            updateCoverageButtonState(true)
+                            Toast.makeText(this@MainActivity, "Coverage analysis complete!", Toast.LENGTH_SHORT).show()
+                        }
+                        is com.tak.lite.model.CoverageAnalysisState.Error -> {
+                            hideCoverageProgressBar()
+                            updateCoverageButtonState(false)
+                            Toast.makeText(this@MainActivity, "Coverage analysis failed: ${state.message}", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Observe coverage grid and update overlay with incremental rendering
+        lifecycleScope.launch {
+            repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                // Use partial coverage grid for incremental rendering during calculation
+                coverageViewModel.partialCoverageGrid.collectLatest { partialGrid ->
+                    if (partialGrid != null) {
+                        coverageOverlayView.updateCoverage(partialGrid)
+                    } else {
+                        // Clear overlay when partial grid is null (e.g., during cancellation)
+                        coverageOverlayView.clearCoverage()
+                        Log.d("MainActivity", "Partial coverage grid became null - overlay cleared")
+                    }
+                }
+            }
+        }
+        
+        // Observe final coverage grid for completion
+        lifecycleScope.launch {
+            repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                coverageViewModel.coverageGrid.collectLatest { grid ->
+                    if (grid != null) {
+                        coverageOverlayView.updateCoverage(grid)
+                    } else {
+                        // Clear overlay when final grid is null (e.g., during cancellation)
+                        coverageOverlayView.clearCoverage()
+                        Log.d("MainActivity", "Final coverage grid became null - overlay cleared")
+                    }
+                }
+            }
+        }
+        
+        // Set up map projection for coverage overlay
+        mapController.setOnMapReadyCallback { map ->
+            coverageOverlayView.setProjection(map.projection)
+        }
+        
+        // Update coverage overlay when map changes
+        mapController.setOnCameraMoveListener { map ->
+            coverageOverlayView.setProjection(map.projection)
+            coverageOverlayView.setZoom(map.cameraPosition.zoom.toFloat())
+        }
+    }
+    
+    /**
+     * Updates the coverage analysis button appearance based on state
+     */
+    private fun updateCoverageButtonState(isActive: Boolean) {
+        if (isActive) {
+            // Show red X when coverage is active
+            coverageAnalysisButton.setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
+            coverageAnalysisButton.backgroundTintList = ColorStateList.valueOf(Color.RED)
+        } else {
+            // Show normal coverage icon when inactive
+            coverageAnalysisButton.setImageResource(android.R.drawable.ic_menu_view)
+            coverageAnalysisButton.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#0099CC"))
+        }
+    }
+    
+    private fun showCoverageProgressBar() {
+        coverageProgressContainer.visibility = View.VISIBLE
+        coverageProgressBar.isIndeterminate = true
+        coverageProgressText.text = "Coverage Analysis"
+        coverageStatusText.text = "Initializing analysis..."
+    }
+    
+    private fun hideCoverageProgressBar() {
+        coverageProgressContainer.visibility = View.GONE
+    }
+    
+    private fun updateCoverageProgressBar(progress: Float, message: String) {
+        coverageProgressBar.isIndeterminate = false
+        coverageProgressBar.progress = (progress * 100).toInt()
+        coverageProgressText.text = "Coverage Analysis"
+        coverageStatusText.text = message
+    }
+    
+    /**
+     * Gets the current viewport bounds from the map
+     */
+    private fun getCurrentViewportBounds(map: MapLibreMap): LatLngBounds? {
+        return try {
+            val projection = map.projection
+            val width = map.width
+            val height = map.height
+            
+            if (width <= 0 || height <= 0) return null
+            
+            // Get screen corners and convert to lat/lng
+            val topLeft = projection.fromScreenLocation(PointF(0f, 0f))
+            val bottomRight = projection.fromScreenLocation(PointF(width.toFloat(), height.toFloat()))
+            
+            // Add margin for coverage partially off-screen
+            val margin = 0.05f // 5% margin
+            val bounds = LatLngBounds.Builder()
+                .include(LatLng(
+                    topLeft.latitude + margin,
+                    topLeft.longitude - margin
+                ))
+                .include(LatLng(
+                    bottomRight.latitude - margin,
+                    bottomRight.longitude + margin
+                ))
+                .build()
+            
+            bounds
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error getting viewport bounds: ${e.message}", e)
+            null
+        }
     }
 }

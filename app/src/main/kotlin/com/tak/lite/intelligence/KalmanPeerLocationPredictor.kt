@@ -10,12 +10,13 @@ import com.tak.lite.data.model.VelocityVector
 import com.tak.lite.model.LatLngSerializable
 import com.tak.lite.model.PeerLocationEntry
 import com.tak.lite.model.PeerLocationHistory
+import com.tak.lite.util.haversine
+import javax.inject.Inject
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
-import javax.inject.Inject
 
 class KalmanPeerLocationPredictor @Inject constructor() : BasePeerLocationPredictor() {
     companion object {
@@ -47,7 +48,7 @@ class KalmanPeerLocationPredictor @Inject constructor() : BasePeerLocationPredic
             if (index > 0) {
                 val prevEntry = recentEntries[index - 1]
                 val dt = (entry.timestamp - prevEntry.timestamp) / 1000.0
-                val distance = calculateDistance(prevEntry.latitude, prevEntry.longitude, entry.latitude, entry.longitude)
+                val distance = haversine(prevEntry.latitude, prevEntry.longitude, entry.latitude, entry.longitude)
                 val speed = distance / dt
                 val heading = calculateBearing(prevEntry.latitude, prevEntry.longitude, entry.latitude, entry.longitude)
                 Log.d(TAG, "KALMAN:   -> dt=${dt}s, distance=${distance.toInt()}m, speed=${speed.toInt()}m/s, heading=${heading.toInt()}°")

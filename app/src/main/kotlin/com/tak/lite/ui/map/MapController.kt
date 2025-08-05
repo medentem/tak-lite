@@ -37,6 +37,8 @@ class MapController(
 
     private var onStyleChanged: (() -> Unit)? = null
     private var onMapTypeChanged: ((MapType) -> Unit)? = null
+    private var onMapReadyCallback: ((MapLibreMap) -> Unit)? = null
+    private var onCameraMove: ((MapLibreMap) -> Unit)? = null
 
     private var isLocationComponentActivated = false
     private var pendingLocation: android.location.Location? = null
@@ -47,6 +49,14 @@ class MapController(
 
     fun setOnMapTypeChangedCallback(callback: ((MapType) -> Unit)?) {
         this.onMapTypeChanged = callback
+    }
+    
+    fun setOnMapReadyCallback(callback: ((MapLibreMap) -> Unit)?) {
+        this.onMapReadyCallback = callback
+    }
+    
+    fun setOnCameraMoveListener(callback: ((MapLibreMap) -> Unit)?) {
+        this.onCameraMove = callback
     }
 
     enum class MapType {
@@ -86,6 +96,7 @@ class MapController(
                 }
             }
             onMapReady(map)
+            this.onMapReadyCallback?.invoke(map)
         }
     }
 
@@ -713,6 +724,7 @@ class MapController(
             // Force a redraw of the annotation overlay
             map.addOnCameraMoveListener {
                 onStyleChanged?.invoke()
+                onCameraMove?.invoke(map)
             }
         }
     }
@@ -1033,6 +1045,10 @@ class MapController(
             android.util.Log.d("OfflineTiles", "Skipping terrain-dem tile download for zoom $zoom (MapTiler terrain service limited to zoom <= 14)")
             return false
         }
+        
+        // Note: This method is called from UI components that don't have access to TerrainAnalyzer
+        // The coordination with TerrainAnalyzer should be handled by the calling code (CoverageCalculator)
+        // This method remains focused on the actual download operation
         
         val hillshadingTileUrl = getHillshadingTileUrl()
         val terrainUrl = hillshadingTileUrl
