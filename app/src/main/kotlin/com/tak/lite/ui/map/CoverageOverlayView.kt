@@ -83,6 +83,7 @@ class CoverageOverlayView @JvmOverloads constructor(
      * Updates the coverage grid data
      */
     fun updateCoverage(coverageGrid: CoverageGrid?) {
+        android.util.Log.d("CoverageOverlayView", "updateCoverage called: grid=${coverageGrid != null}, size=${coverageGrid?.coverageData?.size}")
         this.coverageGrid = coverageGrid
         invalidate()
     }
@@ -119,6 +120,7 @@ class CoverageOverlayView @JvmOverloads constructor(
         
         if (projection == null || !showCoverageOverlay || coverageGrid == null) {
             // Ensure we don't draw anything when coverage is cleared
+            android.util.Log.d("CoverageOverlayView", "onDraw: Skipping draw - projection=${projection != null}, showOverlay=$showCoverageOverlay, grid=${coverageGrid != null}")
             return
         }
         

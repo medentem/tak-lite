@@ -1042,60 +1042,62 @@ class CoverageCalculator @Inject constructor(
         terrainAvailable: Boolean,
         onProgress: (Float, String) -> Unit
     ): Array<Array<CoveragePoint>> = withContext(Dispatchers.Default) {
-        if (peerLocations.isEmpty()) return@withContext grid
+        if (peerLocations.isEmpty()) {
+            return@withContext grid
+        }
         
-                    // Calculate peer network with adaptive terrain sampling
-            val userTerrainData = try {
-                val cellSize = params.resolution
-                terrainAnalyzer.getAdaptiveElevationForPoint(userLocation, cellSize, params.zoomLevel)
-            } catch (e: Exception) {
-                android.util.Log.w("CoverageCalculator", "Failed to get user elevation for extended coverage: ${e.message}")
-                com.tak.lite.model.TerrainCellData(0.0, 0.0, 0.0, 0.0, "fallback")
-            }
-            val userElevation = userTerrainData.averageElevation
-            val networkPeers = try {
-                peerNetworkAnalyzer.calculateExtendedCoverage(
-                    userLocation, userElevation, peerLocations, params.maxPeerDistance
+        // Calculate peer network with adaptive terrain sampling
+        val userTerrainData = try {
+            val cellSize = params.resolution
+            terrainAnalyzer.getAdaptiveElevationForPoint(userLocation, cellSize, params.zoomLevel)
+        } catch (e: Exception) {
+            android.util.Log.w("CoverageCalculator", "Failed to get user elevation for extended coverage: ${e.message}")
+            com.tak.lite.model.TerrainCellData(0.0, 0.0, 0.0, 0.0, "fallback")
+        }
+        val userElevation = userTerrainData.averageElevation
+        val networkPeers = try {
+            peerNetworkAnalyzer.calculateExtendedCoverage(
+                userLocation, userElevation, peerLocations, params.maxPeerDistance
+            )
+        } catch (e: Exception) {
+            android.util.Log.w("CoverageCalculator", "Failed to calculate extended coverage peers: ${e.message}")
+            emptyList()
+        }
+
+        // Batch update peer elevations for better performance
+        val peersWithElevation = try {
+            if (networkPeers.isNotEmpty()) {
+                // Collect all peer locations for batch processing
+                val peerLocations = networkPeers.map { it.location }
+
+                // Batch precompute terrain data for all peers
+                val peerTerrainData = terrainAnalyzer.precomputeTerrainForPoints(
+                    peerLocations, params.resolution, params.zoomLevel
                 )
-            } catch (e: Exception) {
-                android.util.Log.w("CoverageCalculator", "Failed to calculate extended coverage peers: ${e.message}")
-                emptyList()
-            }
-            
-            // Batch update peer elevations for better performance
-            val peersWithElevation = try {
-                if (networkPeers.isNotEmpty()) {
-                    // Collect all peer locations for batch processing
-                    val peerLocations = networkPeers.map { it.location }
-                    
-                    // Batch precompute terrain data for all peers
-                    val peerTerrainData = terrainAnalyzer.precomputeTerrainForPoints(
-                        peerLocations, params.resolution, params.zoomLevel
-                    )
-                    
-                    // Map terrain data back to peers
-                    networkPeers.mapIndexed { index, peer ->
-                        val terrainData = peerTerrainData.getOrNull(index) 
-                            ?: com.tak.lite.model.TerrainCellData(0.0, 0.0, 0.0, 0.0, "fallback")
-                        peer.copy(elevation = terrainData.averageElevation)
-                    }
-                } else {
-                    networkPeers
+
+                // Map terrain data back to peers
+                networkPeers.mapIndexed { index, peer ->
+                    val terrainData = peerTerrainData.getOrNull(index)
+                        ?: com.tak.lite.model.TerrainCellData(0.0, 0.0, 0.0, 0.0, "fallback")
+                    peer.copy(elevation = terrainData.averageElevation)
                 }
-            } catch (e: Exception) {
-                android.util.Log.w("CoverageCalculator", "Failed to batch update peer elevations: ${e.message}, falling back to individual updates")
-                // Fallback to individual updates
-                networkPeers.map { peer ->
-                    try {
-                        val cellSize = params.resolution
-                        val terrainData = terrainAnalyzer.getAdaptiveElevationForPoint(peer.location, cellSize, params.zoomLevel)
-                        peer.copy(elevation = terrainData.averageElevation)
-                    } catch (e: Exception) {
-                        android.util.Log.w("CoverageCalculator", "Failed to get elevation for peer ${peer.id}: ${e.message}")
-                        peer.copy(elevation = 0.0)
-                    }
+            } else {
+                networkPeers
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("CoverageCalculator", "Failed to batch update peer elevations: ${e.message}, falling back to individual updates")
+            // Fallback to individual updates
+            networkPeers.map { peer ->
+                try {
+                    val cellSize = params.resolution
+                    val terrainData = terrainAnalyzer.getAdaptiveElevationForPoint(peer.location, cellSize, params.zoomLevel)
+                    peer.copy(elevation = terrainData.averageElevation)
+                } catch (e: Exception) {
+                    android.util.Log.w("CoverageCalculator", "Failed to get elevation for peer ${peer.id}: ${e.message}")
+                    peer.copy(elevation = 0.0)
                 }
             }
+        }
         
         // Process grid sequentially to reduce memory pressure on older devices
         val totalPoints = grid.size * grid[0].size

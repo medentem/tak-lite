@@ -1286,10 +1286,15 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
                     when (state) {
                         is com.tak.lite.model.CoverageAnalysisState.Idle -> {
                             hideCoverageProgressBar()
-                            // Clear coverage overlay when idle (either no data or calculation was canceled)
                             updateCoverageButtonState(false)
-                            coverageOverlayView.clearCoverage()
-                            Log.d("MainActivity", "Coverage analysis state changed to Idle - overlay cleared")
+                            // Only clear overlay if there's no coverage data available
+                            val hasCoverageData = coverageViewModel.coverageGrid.value != null
+                            if (!hasCoverageData) {
+                                coverageOverlayView.clearCoverage()
+                                Log.d("MainActivity", "Coverage analysis state changed to Idle - overlay cleared (no data)")
+                            } else {
+                                Log.d("MainActivity", "Coverage analysis state changed to Idle - keeping overlay (data available)")
+                            }
                         }
                         is com.tak.lite.model.CoverageAnalysisState.Calculating -> {
                             showCoverageProgressBar()
@@ -1319,12 +1324,22 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
             repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
                 // Use partial coverage grid for incremental rendering during calculation
                 coverageViewModel.partialCoverageGrid.collectLatest { partialGrid ->
+                    Log.d("MainActivity", "Partial coverage grid changed: grid=${partialGrid != null}, size=${partialGrid?.coverageData?.size}")
                     if (partialGrid != null) {
                         coverageOverlayView.updateCoverage(partialGrid)
                     } else {
-                        // Clear overlay when partial grid is null (e.g., during cancellation)
-                        coverageOverlayView.clearCoverage()
-                        Log.d("MainActivity", "Partial coverage grid became null - overlay cleared")
+                        // When partial grid becomes null, check if we have a final grid
+                        val finalGrid = coverageViewModel.coverageGrid.value
+                        Log.d("MainActivity", "Partial grid became null, checking final grid: finalGrid=${finalGrid != null}")
+                        if (finalGrid != null) {
+                            // Use the final grid instead of clearing
+                            coverageOverlayView.updateCoverage(finalGrid)
+                            Log.d("MainActivity", "Partial grid became null, using final grid")
+                        } else {
+                            // Only clear if there's no final grid available
+                            coverageOverlayView.clearCoverage()
+                            Log.d("MainActivity", "Partial coverage grid became null - overlay cleared")
+                        }
                     }
                 }
             }
@@ -1334,6 +1349,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
         lifecycleScope.launch {
             repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
                 coverageViewModel.coverageGrid.collectLatest { grid ->
+                    Log.d("MainActivity", "Final coverage grid changed: grid=${grid != null}, size=${grid?.coverageData?.size}")
                     if (grid != null) {
                         coverageOverlayView.updateCoverage(grid)
                     } else {

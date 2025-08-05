@@ -137,9 +137,18 @@ class CoverageRepository @Inject constructor(
                 // Cache the result
                 cacheCoverageGrid(cacheKey, coverageGrid)
                 
+                android.util.Log.d("CoverageRepository", "Coverage calculation completed successfully, updating state")
+                
+                // Update final coverage grid first
                 _currentCoverageGrid.value = coverageGrid
-                _partialCoverageGrid.value = null // Clear partial results when complete
+                android.util.Log.d("CoverageRepository", "Final coverage grid set: size=${coverageGrid.coverageData.size}")
+                
                 _analysisState.value = CoverageAnalysisState.Success(coverageGrid)
+                android.util.Log.d("CoverageRepository", "Analysis state set to Success")
+                
+                // Clear partial results immediately - the final grid should already be available
+                _partialCoverageGrid.value = null
+                android.util.Log.d("CoverageRepository", "Partial coverage grid cleared")
                 
             } catch (e: CoverageAnalysisException) {
                 _analysisState.value = CoverageAnalysisState.Error(e.message ?: "Unknown error")
@@ -273,14 +282,14 @@ class CoverageRepository @Inject constructor(
      */
     private fun calculateResolution(zoomLevel: Int, detailLevel: String): Double {
         val baseResolution = when {
-            zoomLevel >= 20 -> 20.0
-            zoomLevel >= 18 -> 50.0
-            zoomLevel >= 16 -> 100.0
-            zoomLevel >= 14 -> 200.0
-            zoomLevel >= 12 -> 300.0
-            zoomLevel >= 10 -> 600.0
-            zoomLevel >= 8 -> 1000.0
-            else -> 1500.0
+            zoomLevel >= 20 -> 5.0
+            zoomLevel >= 18 -> 20.0
+            zoomLevel >= 16 -> 50.0
+            zoomLevel >= 14 -> 100.0
+            zoomLevel >= 12 -> 200.0
+            zoomLevel >= 10 -> 400.0
+            zoomLevel >= 8 -> 600.0
+            else -> 1100.0
         }
         
         // Apply detail level multiplier

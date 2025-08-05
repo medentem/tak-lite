@@ -51,6 +51,7 @@ class CoverageViewModel @Inject constructor(
         // Observe repository state changes
         viewModelScope.launch {
             coverageRepository.analysisState.collectLatest { state ->
+                android.util.Log.d("CoverageViewModel", "Repository state changed: $state")
                 _uiState.value = state
                 
                 // Update statistics when analysis completes
@@ -63,6 +64,7 @@ class CoverageViewModel @Inject constructor(
         // Observe coverage grid changes
         viewModelScope.launch {
             coverageRepository.currentCoverageGrid.collectLatest { grid ->
+                android.util.Log.d("CoverageViewModel", "Repository final grid changed: grid=${grid != null}, size=${grid?.coverageData?.size}")
                 _coverageGrid.value = grid
             }
         }
@@ -70,6 +72,7 @@ class CoverageViewModel @Inject constructor(
         // Observe partial coverage grid changes for incremental rendering
         viewModelScope.launch {
             coverageRepository.partialCoverageGrid.collectLatest { partialGrid ->
+                android.util.Log.d("CoverageViewModel", "Repository partial grid changed: grid=${partialGrid != null}, size=${partialGrid?.coverageData?.size}")
                 _partialCoverageGrid.value = partialGrid
             }
         }
@@ -134,7 +137,7 @@ class CoverageViewModel @Inject constructor(
         val diagonalDistance = kotlin.math.sqrt(latDistance * latDistance + lonDistance * lonDistance)
         
         // Add buffer to ensure coverage extends slightly beyond viewport
-        val radiusWithBuffer = diagonalDistance * 0.25 // 25% of diagonal = radius with buffer
+        val radiusWithBuffer = diagonalDistance * 0.1 // 10% of diagonal = radius with buffer
         
         // Cap at 150 miles (241,402 meters)
         val maxRadius = 241402.0
@@ -149,14 +152,10 @@ class CoverageViewModel @Inject constructor(
      * Clears the current coverage analysis
      */
     fun clearCoverageAnalysis() {
-        // Clear local state immediately to prevent race conditions
-        _coverageGrid.value = null
-        _partialCoverageGrid.value = null
-        _statistics.value = null
-        
-        // Then clear the repository
+        // Clear the repository first, which will update the state properly
         coverageRepository.clearCoverageAnalysis()
         
+        // Local state will be updated by the repository observers in init block
         android.util.Log.d("CoverageViewModel", "Coverage analysis cleared")
     }
     
