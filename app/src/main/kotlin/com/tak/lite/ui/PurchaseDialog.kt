@@ -111,9 +111,9 @@ class PurchaseDialog : DialogFragment() {
         val tier3Button = view.findViewById<Button>(R.id.tier3Button)
 
         val baseMessage = if (billingManager.isInTrialPeriod()) {
-            "You are currently in your 7-day free trial period. Your support is critical to ensuring the ongoing development of the app. Pick any paid option - we hope you'll support this app with the highest paid level you can afford. Thank you in advance."
+            "Map APIs cost money to keep running! You are currently in your 7-day free trial period. Your support is critical to ensuring the ongoing development of the app. Pick any paid option - we hope you'll support this app with the highest paid level you can afford. Thank you in advance."
         } else {
-            "Your trial period has ended. Your support is critical to ensuring the ongoing development of the app. Pick any paid option to continue - we hope you'll support this app with the highest paid level you can afford. Thank you in advance."
+            "Map APIs cost money to keep running! Your trial period has ended. Your support is critical to ensuring the ongoing development of the app. Pick any paid option to continue - we hope you'll support this app with the highest paid level you can afford. Thank you in advance."
         }
 
         trialStatusText.text = if (isEmulator()) {

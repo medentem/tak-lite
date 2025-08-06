@@ -141,7 +141,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
         // Show the connection status bar immediately
         findViewById<View>(R.id.connectionStatusBar).visibility = View.VISIBLE
 
-        // Check trial status and show purchase dialog if needed
+        // Check trial status and show appropriate dialog if needed
         lifecycleScope.launch {
             repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
                 billingManager.isPremium.collectLatest { isPremium ->
@@ -149,7 +149,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
                     if (!isPremium && billingManager.shouldShowPurchaseDialog()) {
                         // Delay showing the dialog to let the app load
                         delay(2000)
-                        showPurchaseDialog()
+                        showAppropriateDialog()
                         billingManager.markPurchaseDialogShown()
                     }
                 }
@@ -1000,10 +1000,27 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
 
     override fun getMapController(): com.tak.lite.ui.map.MapController? = mapController
 
+    private fun showAppropriateDialog() {
+        // Check if Google Play Services are available
+        val isGooglePlayAvailable = billingManager.isGooglePlayAvailable.value
+        
+        if (isGooglePlayAvailable) {
+            // Show regular purchase dialog for Google Play users
+            val dialog = com.tak.lite.ui.PurchaseDialog()
+            dialog.show(supportFragmentManager, "purchase_dialog")
+        } else {
+            // Show donation dialog for de-googled users
+            val dialog = com.tak.lite.ui.DonationDialog()
+            dialog.show(supportFragmentManager, "donation_dialog")
+        }
+    }
+
     private fun showPurchaseDialog() {
         val dialog = com.tak.lite.ui.PurchaseDialog()
         dialog.show(supportFragmentManager, "purchase_dialog")
     }
+
+
 
     private fun updateCompassQualityIndicator(quality: com.tak.lite.ui.location.CompassQuality) {
         // Only show compass quality indicator when status is degraded

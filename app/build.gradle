@@ -154,4 +154,7 @@ dependencies {
 
     // Smart replies with local model
     implementation 'com.google.mlkit:smart-reply:17.0.4'
+    
+    // QR Code generation
+    implementation 'com.google.zxing:core:3.5.2'
 }

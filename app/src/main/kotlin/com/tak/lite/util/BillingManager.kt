@@ -7,17 +7,29 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
 import android.util.Log
-import com.android.billingclient.api.*
+import com.android.billingclient.api.AcknowledgePurchaseParams
+import com.android.billingclient.api.BillingClient
+import com.android.billingclient.api.BillingClientStateListener
+import com.android.billingclient.api.BillingFlowParams
+import com.android.billingclient.api.BillingResult
+import com.android.billingclient.api.ProductDetails
+import com.android.billingclient.api.Purchase
+import com.android.billingclient.api.PurchasesUpdatedListener
+import com.android.billingclient.api.QueryProductDetailsParams
+import com.android.billingclient.api.QueryPurchasesParams
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class BillingManager @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val donationManager: DonationManager
 ) {
     private val TAG = "BillingManager"
 
@@ -29,6 +41,9 @@ class BillingManager @Inject constructor(
 
     private val _productDetails = MutableStateFlow<Map<String, ProductDetails>>(emptyMap())
     val productDetails: StateFlow<Map<String, ProductDetails>> = _productDetails
+
+    private val _isGooglePlayAvailable = MutableStateFlow(false)
+    val isGooglePlayAvailable: StateFlow<Boolean> = _isGooglePlayAvailable
 
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
@@ -67,21 +82,42 @@ class BillingManager @Inject constructor(
     init {
         Log.d(TAG, "Initializing BillingManager")
         checkConnectivity()
-        billingClient.startConnection(object : BillingClientStateListener {
-            override fun onBillingSetupFinished(billingResult: BillingResult) {
-                Log.d(TAG, "Billing setup finished with response code: ${billingResult.responseCode}")
-                if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
-                    queryPurchases()
-                    queryProductDetails()
-                } else {
-                    Log.e(TAG, "Billing setup failed: ${billingResult.debugMessage}")
+        checkGooglePlayAvailability()
+        
+        if (_isGooglePlayAvailable.value) {
+            billingClient.startConnection(object : BillingClientStateListener {
+                override fun onBillingSetupFinished(billingResult: BillingResult) {
+                    Log.d(TAG, "Billing setup finished with response code: ${billingResult.responseCode}")
+                    if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
+                        queryPurchases()
+                        queryProductDetails()
+                    } else {
+                        Log.e(TAG, "Billing setup failed: ${billingResult.debugMessage}")
+                    }
+                }
+
+                override fun onBillingServiceDisconnected() {
+                    Log.w(TAG, "Billing service disconnected")
+                }
+            })
+        } else {
+            Log.d(TAG, "Google Play Services not available, using donation-based system")
+            // Check if user has manually activated premium through donations
+            val manualPremium = donationManager.isPremium()
+            if (manualPremium) {
+                setPremiumStatus(true)
+            }
+        }
+        
+        // Observe donation manager premium status changes
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+            donationManager.isPremium.collectLatest { donationPremium ->
+                Log.d(TAG, "Donation premium status changed: $donationPremium")
+                if (donationPremium) {
+                    setPremiumStatus(true)
                 }
             }
-
-            override fun onBillingServiceDisconnected() {
-                Log.w(TAG, "Billing service disconnected")
-            }
-        })
+        }
     }
 
     private fun isEmulator(): Boolean {
@@ -109,6 +145,28 @@ class BillingManager @Inject constructor(
         val capabilities = connectivityManager.getNetworkCapabilities(network)
         _isOffline.value = capabilities == null || !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
         Log.d(TAG, "Connectivity check: isOffline = ${_isOffline.value}")
+    }
+
+    private fun checkGooglePlayAvailability() {
+        // DEBUG: Set to true to simulate de-googled device
+        val simulateDeGoogledDevice = false
+        
+        if (simulateDeGoogledDevice) {
+            _isGooglePlayAvailable.value = false
+            Log.d(TAG, "DEBUG: Simulating de-googled device")
+            return
+        }
+        
+        try {
+            val packageManager = context.packageManager
+            val playStoreInstalled = packageManager.getPackageInfo("com.android.vending", 0)
+            val playServicesInstalled = packageManager.getPackageInfo("com.google.android.gms", 0)
+            _isGooglePlayAvailable.value = true
+            Log.d(TAG, "Google Play Services available")
+        } catch (e: Exception) {
+            _isGooglePlayAvailable.value = false
+            Log.d(TAG, "Google Play Services not available: ${e.message}")
+        }
     }
 
     private fun handlePurchase(purchase: Purchase) {
@@ -216,9 +274,19 @@ class BillingManager @Inject constructor(
     }
 
     fun isPremium(): Boolean {
-        val premium = prefs.getBoolean(KEY_IS_PREMIUM, false)
-        Log.d(TAG, "Checking premium status: $premium")
-        return premium
+        // Check both Google Play purchases and manual donations
+        val googlePlayPremium = prefs.getBoolean(KEY_IS_PREMIUM, false)
+        val donationPremium = donationManager.isPremium()
+        val isPremium = googlePlayPremium || donationPremium
+        Log.d(TAG, "Checking premium status: googlePlay=$googlePlayPremium, donation=$donationPremium, total=$isPremium")
+        
+        // Update the StateFlow to reflect current status
+        if (_isPremium.value != isPremium) {
+            _isPremium.value = isPremium
+            Log.d(TAG, "Updated premium StateFlow to: $isPremium")
+        }
+        
+        return isPremium
     }
 
     private fun setPremiumStatus(isPremium: Boolean) {
@@ -247,6 +315,13 @@ class BillingManager @Inject constructor(
     fun markPurchaseDialogShown() {
         Log.d(TAG, "Marking purchase dialog as shown")
         prefs.edit().putLong(KEY_LAST_DIALOG_SHOWN, System.currentTimeMillis()).apply()
+    }
+
+    // DEBUG: Force refresh premium status
+    fun refreshPremiumStatus() {
+        val currentStatus = isPremium()
+        Log.d(TAG, "Forced refresh of premium status: $currentStatus")
+        _isPremium.value = currentStatus
     }
 
     fun launchBillingFlow(activity: Activity, productId: String) {

@@ -176,8 +176,10 @@ class SettingsActivity : BaseActivity() {
 
         // Setup unlock button
         unlockAppButton.setOnClickListener {
-            showPurchaseDialog()
+            showAppropriateDialog()
         }
+
+
 
         // Setup map mode spinner
         val adapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, mapModeOptions)
@@ -1024,10 +1026,27 @@ class SettingsActivity : BaseActivity() {
         }
     }
 
+    private fun showAppropriateDialog() {
+        // Check if Google Play Services are available
+        val isGooglePlayAvailable = billingManager.isGooglePlayAvailable.value
+        
+        if (isGooglePlayAvailable) {
+            // Show regular purchase dialog for Google Play users
+            val dialog = com.tak.lite.ui.PurchaseDialog()
+            dialog.show(supportFragmentManager, "purchase_dialog")
+        } else {
+            // Show donation dialog for de-googled users
+            val dialog = com.tak.lite.ui.DonationDialog()
+            dialog.show(supportFragmentManager, "donation_dialog")
+        }
+    }
+
     private fun showPurchaseDialog() {
         val dialog = com.tak.lite.ui.PurchaseDialog()
         dialog.show(supportFragmentManager, "purchase_dialog")
     }
+
+
 
     private fun showPredictionAdvancedSettings() {
         val dialog = PredictionAdvancedSettingsDialog()

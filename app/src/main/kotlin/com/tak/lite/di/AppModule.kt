@@ -5,6 +5,8 @@ import com.tak.lite.intelligence.CoverageCalculator
 import com.tak.lite.intelligence.FresnelZoneAnalyzer
 import com.tak.lite.intelligence.PeerNetworkAnalyzer
 import com.tak.lite.intelligence.TerrainAnalyzer
+import com.tak.lite.util.CryptoQRCodeGenerator
+import com.tak.lite.util.DonationManager
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -55,5 +57,17 @@ object AppModule {
             meshNetworkRepository,
             context
         )
+    }
+
+    @Provides
+    @Singleton
+    fun provideDonationManager(@ApplicationContext context: Context): DonationManager {
+        return DonationManager(context)
+    }
+
+    @Provides
+    @Singleton
+    fun provideCryptoQRCodeGenerator(): CryptoQRCodeGenerator {
+        return CryptoQRCodeGenerator()
     }
 } 

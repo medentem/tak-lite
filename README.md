@@ -58,6 +58,20 @@ Settings to Configure Experience
 - MapTiler API key (for satellite imagery)
 - Doodle Labs mesh network device or Meshtastic (no audio support w/ mtastic)
 
+## De-Googled Device Support
+
+TAK Lite is designed to work on devices without Google Play Services (LineageOS, GrapheneOS, etc.):
+
+- **Alternative Location Services**: Uses Android's built-in location APIs instead of Google Play Services
+- **Privacy-Friendly Donations**: Multiple donation options including cryptocurrency, PayPal, and GitHub Sponsors
+- **No Google Dependencies**: Core functionality works without Google Play Services
+- **Manual Premium Activation**: Users can activate premium features after donating through alternative methods
+
+### Donation Methods for De-Googled Users:
+- GitHub Sponsors
+- Bitcoin (BTC)
+- Ethereum (ETH)
+
 ## Setup
 
 1. Clone the repository
