@@ -68,7 +68,7 @@ Settings to Configure Experience
 TAK Lite is designed to work on devices without Google Play Services (LineageOS, GrapheneOS, etc.):
 
 - **COMING SOON** - alternatives for other google dependencies
-- **Privacy-Friendly Donations**: Multiple donation options including cryptocurrency, PayPal, and GitHub Sponsors
+- **Privacy-Friendly Donations**: Multiple donation options including cryptocurrency and GitHub Sponsors
 - **Manual Premium Activation**: Users can activate premium features after donating through alternative methods
 
 ## Setup
