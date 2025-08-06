@@ -51,6 +51,11 @@ Settings to Configure Experience
 <img src="https://github.com/user-attachments/assets/6fc716c3-7bbd-401b-a900-d7f0808183f5" width=200 />
 <br />
 
+## Please Support the Project - Mapping API's are not free, sadly
+- [GitHub Sponsors](https://github.com/sponsors/medentem)
+- Bitcoin (BTC): 1BimJFWZA6LXhgiTcrj7rFBB3hbENrCLRc
+- Ethereum (ETH): 0x035d513B41c91c61c4C4E8382a675FaeF53AD953
+
 ## Requirements
 
 - Android Studio Arctic Fox or later
@@ -62,15 +67,9 @@ Settings to Configure Experience
 
 TAK Lite is designed to work on devices without Google Play Services (LineageOS, GrapheneOS, etc.):
 
-- **Alternative Location Services**: Uses Android's built-in location APIs instead of Google Play Services
+- **COMING SOON** - alternatives for other google dependencies
 - **Privacy-Friendly Donations**: Multiple donation options including cryptocurrency, PayPal, and GitHub Sponsors
-- **No Google Dependencies**: Core functionality works without Google Play Services
 - **Manual Premium Activation**: Users can activate premium features after donating through alternative methods
-
-### Donation Methods for De-Googled Users:
-- GitHub Sponsors
-- Bitcoin (BTC)
-- Ethereum (ETH)
 
 ## Setup
 
