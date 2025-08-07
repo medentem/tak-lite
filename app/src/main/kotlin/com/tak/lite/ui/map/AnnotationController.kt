@@ -47,6 +47,12 @@ class AnnotationController(
     var tempLinePoints: MutableList<LatLng> = mutableListOf()
     private var shouldCreatePolygon: Boolean = false
     private var pendingPolygonTouchLatLng: LatLng? = null // Store touch location for polygon POI creation
+    
+    // Area drawing state
+    var isAreaDrawingMode: Boolean = false
+    private var tempAreaCenter: LatLng? = null
+    private var tempAreaRadius: Double = 0.0
+    private var tempAreaRadiusPixels: Float = 300f // Default 300 pixels
     private lateinit var lineToolConfirmButton: View
     private lateinit var lineToolCancelButton: View
     private lateinit var lineToolButtonFrame: View
@@ -79,11 +85,14 @@ class AnnotationController(
     val timerManager: PoiTimerManager? get() = poiTimerManager
     
     // === LINE TIMER SUPPORT ===
-    private var _lineTimerManager: LineTimerManager? = null
+    var lineTimerManager: LineTimerManager? = null
     
-    // Getter for line timer manager
-    val lineTimerManager: LineTimerManager? get() = _lineTimerManager
-
+    // === AREA TIMER SUPPORT ===
+    private var _areaTimerManager: AreaTimerManager? = null
+    
+    // Getter for area timer manager
+    val areaTimerManager: AreaTimerManager? get() = _areaTimerManager
+    
     // === POLYGON TIMER SUPPORT ===
     private var _polygonTimerManager: PolygonTimerManager? = null
     
@@ -343,7 +352,7 @@ class AnnotationController(
             Log.d("AnnotationController", "POI timer manager initialized")
         }
         if (lineTimerManager == null && mapLibreMap != null) {
-            _lineTimerManager = LineTimerManager(mapLibreMap, annotationViewModel)
+            lineTimerManager = LineTimerManager(mapLibreMap, annotationViewModel)
             Log.d("AnnotationController", "Line timer manager initialized")
         }
         if (polygonTimerManager == null && mapLibreMap != null) {
@@ -358,6 +367,16 @@ class AnnotationController(
             _clusterTextManager = ClusterTextManager(mapLibreMap)
             Log.d("AnnotationController", "Cluster text manager initialized")
         }
+        if (_areaTimerManager == null && mapLibreMap != null) {
+            _areaTimerManager = AreaTimerManager(mapLibreMap, annotationViewModel)
+            Log.d("AnnotationController", "Area timer manager initialized")
+        }
+        
+        // Initialize timer managers if needed
+        poiTimerManager?.setupTimerLayers()
+        lineTimerManager?.setupTimerLayers()
+        _areaTimerManager?.setupTimerLayers()
+        _polygonTimerManager?.setupTimerLayers()
     }
     
     // Clean up all resources
@@ -368,6 +387,7 @@ class AnnotationController(
         unifiedAnnotationManager?.cleanup()
         deviceLocationManager?.cleanup()
         clusterTextManager?.cleanup()
+        _areaTimerManager?.cleanup()
         Log.d("AnnotationController", "Annotation controller cleaned up")
     }
 
@@ -704,11 +724,16 @@ class AnnotationController(
         
         // Check if we're long pressing on an area
         val areaFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, AreaLayerManager.AREA_FILL_LAYER)
+        val areaStrokeFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, AreaLayerManager.AREA_STROKE_LAYER)
+        val areaHitAreaFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, AreaLayerManager.AREA_HIT_AREA_LAYER)
         val areaFeature = areaFeatures.firstOrNull { it.getStringProperty("areaId") != null }
+            ?: areaStrokeFeatures.firstOrNull { it.getStringProperty("areaId") != null }
+            ?: areaHitAreaFeatures.firstOrNull { it.getStringProperty("areaId") != null }
         if (areaFeature != null) {
             val areaId = areaFeature.getStringProperty("areaId")
-            // TODO: Implement area edit menu
-            Log.d("AnnotationController", "Area long press detected: $areaId")
+            pendingPoiLatLng = latLng // Store the touch location for POI creation within area
+            Log.d("AnnotationController", "Area long press detected: areaId=$areaId, touchLatLng=$latLng")
+            showAreaMenu(screenPoint, areaId)
             return true
         }
         
@@ -1179,16 +1204,24 @@ class AnnotationController(
             FanMenuView.Option.Shape(PointShape.CIRCLE),
             FanMenuView.Option.Shape(PointShape.EXCLAMATION),
             FanMenuView.Option.Shape(PointShape.SQUARE),
-            FanMenuView.Option.Shape(PointShape.TRIANGLE)
+            FanMenuView.Option.Shape(PointShape.TRIANGLE),
+            FanMenuView.Option.Area() // Add area option
         )
         val screenSize = PointF(binding.root.width.toFloat(), binding.root.height.toFloat())
         val menuLatLng = pendingPoiLatLng?.let { LatLng(it.latitude, it.longitude) }
         fanMenuView.showAt(center, shapeOptions, object : FanMenuView.OnOptionSelectedListener {
             override fun onOptionSelected(option: FanMenuView.Option): Boolean {
-                if (option is FanMenuView.Option.Shape) {
-                    annotationViewModel.setCurrentShape(option.shape)
-                    showColorMenu(center, option.shape)
-                    return true
+                when (option) {
+                    is FanMenuView.Option.Shape -> {
+                        annotationViewModel.setCurrentShape(option.shape)
+                        showColorMenu(center, option.shape)
+                        return true
+                    }
+                    is FanMenuView.Option.Area -> {
+                        startAreaDrawing(center)
+                        return false
+                    }
+                    else -> {}
                 }
                 return false
             }
@@ -1724,6 +1757,337 @@ class AnnotationController(
             Log.d("AnnotationController", "showPolygonLabel: called popoverManager.showPolygonPopover")
         } else {
             Log.e("AnnotationController", "Polygon not found: $polygonId")
+        }
+    }
+    
+    fun showAreaMenu(center: PointF, areaId: String) {
+        Log.d("AnnotationController", "showAreaMenu: center=$center, areaId=$areaId")
+        val area = annotationViewModel.uiState.value.annotations.filterIsInstance<MapAnnotation.Area>().find { it.id == areaId } ?: return
+        val options = listOf(
+            // Shape options for adding POIs within area
+            FanMenuView.Option.Shape(PointShape.CIRCLE),
+            FanMenuView.Option.Shape(PointShape.EXCLAMATION),
+            FanMenuView.Option.Shape(PointShape.SQUARE),
+            FanMenuView.Option.Shape(PointShape.TRIANGLE),
+            // Edit option for the area itself
+            FanMenuView.Option.EditArea(areaId)
+        )
+        val screenSize = PointF(binding.root.width.toFloat(), binding.root.height.toFloat())
+        val areaLatLng = LatLng(area.center.lt, area.center.lng)
+        fanMenuView.showAt(center, options, object : FanMenuView.OnOptionSelectedListener {
+            override fun onOptionSelected(option: FanMenuView.Option): Boolean {
+                when (option) {
+                    is FanMenuView.Option.Shape -> {
+                        // Set current shape and show color menu for POI creation within area
+                        annotationViewModel.setCurrentShape(option.shape)
+                        showAreaColorMenu(center, option.shape, areaId)
+                        return true // Keep menu open for transition
+                    }
+                    is FanMenuView.Option.EditArea -> {
+                        // Show area edit menu
+                        showAreaEditMenu(center, option.areaId)
+                        return true // Keep menu open for transition
+                    }
+                    else -> {}
+                }
+                return false
+            }
+            override fun onMenuDismissed() {
+                Log.d("AnnotationController", "fanMenuView.onMenuDismissed for AREA")
+                fanMenuView.visibility = View.GONE
+            }
+        }, screenSize, areaLatLng)
+        fanMenuView.bringToFront()
+        fanMenuView.visibility = View.VISIBLE
+        Log.d("AnnotationController", "fanMenuView.visibility set to VISIBLE for AREA")
+    }
+    
+    fun updateAreaColor(areaId: String, color: AnnotationColor) {
+        annotationViewModel.updateArea(areaId, newColor = color)
+    }
+    
+    fun showAreaEditMenu(center: PointF, areaId: String) {
+        Log.d("AnnotationController", "showAreaEditMenu: center=$center, areaId=$areaId")
+        val area = annotationViewModel.uiState.value.annotations.filterIsInstance<MapAnnotation.Area>().find { it.id == areaId } ?: return
+        val options = listOf(
+            FanMenuView.Option.Color(AnnotationColor.GREEN),
+            FanMenuView.Option.Color(AnnotationColor.YELLOW),
+            FanMenuView.Option.Color(AnnotationColor.RED),
+            FanMenuView.Option.Color(AnnotationColor.BLACK),
+            FanMenuView.Option.Timer(areaId),
+            FanMenuView.Option.Label(areaId),
+            FanMenuView.Option.Delete(areaId)
+        )
+        val screenSize = PointF(binding.root.width.toFloat(), binding.root.height.toFloat())
+        val areaLatLng = LatLng(area.center.lt, area.center.lng)
+        fanMenuView.showAt(center, options, object : FanMenuView.OnOptionSelectedListener {
+            override fun onOptionSelected(option: FanMenuView.Option): Boolean {
+                when (option) {
+                    is FanMenuView.Option.Color -> {
+                        Log.d("AnnotationController", "Updating area color to: ${option.color}")
+                        updateAreaColor(areaId, option.color)
+                    }
+                    is FanMenuView.Option.Timer -> {
+                        Log.d("AnnotationController", "Setting area expiration")
+                        setAnnotationExpiration(areaId)
+                    }
+                    is FanMenuView.Option.Label -> {
+                        Log.d("AnnotationController", "Showing area label dialog")
+                        showAreaLabelEditDialog(areaId, area.label)
+                    }
+                    is FanMenuView.Option.Delete -> {
+                        Log.d("AnnotationController", "Deleting area: ${option.id}")
+                        deletePoi(option.id)
+                    }
+                    else -> {}
+                }
+                // Force map redraw to update area layer
+                onAnnotationChanged?.invoke()
+                return false
+            }
+            override fun onMenuDismissed() {
+                Log.d("AnnotationController", "fanMenuView.onMenuDismissed for AREA EDIT")
+                fanMenuView.visibility = View.GONE
+            }
+        }, screenSize, areaLatLng)
+        fanMenuView.bringToFront()
+        fanMenuView.visibility = View.VISIBLE
+        Log.d("AnnotationController", "fanMenuView.visibility set to VISIBLE for AREA EDIT")
+    }
+    
+    private fun showAreaColorMenu(center: PointF, shape: PointShape, areaId: String) {
+        val colorOptions = listOf(
+            FanMenuView.Option.Color(AnnotationColor.GREEN),
+            FanMenuView.Option.Color(AnnotationColor.YELLOW),
+            FanMenuView.Option.Color(AnnotationColor.RED),
+            FanMenuView.Option.Color(AnnotationColor.BLACK)
+        )
+        val screenSize = PointF(binding.root.width.toFloat(), binding.root.height.toFloat())
+        
+        // Use the stored touch location for POI placement
+        val touchLatLng = pendingPoiLatLng
+        
+        fanMenuView.showAt(center, colorOptions, object : FanMenuView.OnOptionSelectedListener {
+            override fun onOptionSelected(option: FanMenuView.Option): Boolean {
+                if (option is FanMenuView.Option.Color) {
+                    annotationViewModel.setCurrentColor(option.color)
+                    addPoiFromAreaFanMenu(shape, option.color, areaId)
+                    return false // Dismiss menu after POI creation
+                }
+                return false
+            }
+            override fun onMenuDismissed() {
+                fanMenuView.visibility = View.GONE
+            }
+        }, screenSize, touchLatLng?.let { LatLng(it.latitude, it.longitude) })
+        fanMenuView.bringToFront()
+        fanMenuView.visibility = View.VISIBLE
+    }
+    
+    fun addPoiFromAreaFanMenu(shape: PointShape, color: AnnotationColor, areaId: String) {
+        // Use the actual touch location for POI placement
+        val latLng = pendingPoiLatLng
+        if (latLng != null) {
+            Log.d("AnnotationController", "Creating POI within area: shape=$shape, color=$color, areaId=$areaId, latLng=$latLng")
+            annotationViewModel.setCurrentShape(shape)
+            annotationViewModel.setCurrentColor(color)
+            annotationViewModel.addPointOfInterest(latLng)
+            fanMenuView.visibility = View.GONE
+            pendingPoiLatLng = null // Clear the stored location
+            onAnnotationChanged?.invoke()
+            val nonPoiAnnotations = annotationViewModel.uiState.value.annotations.filterNot { it is MapAnnotation.PointOfInterest }
+            annotationOverlayView.updateAnnotations(nonPoiAnnotations)
+            annotationOverlayView.invalidate()
+            
+            Toast.makeText(fragment.requireContext(), "POI added to area!", Toast.LENGTH_SHORT).show()
+        } else {
+            Log.e("AnnotationController", "No touch location stored for area POI creation")
+            Toast.makeText(fragment.requireContext(), "Error: Could not place POI", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun showAreaLabelEditDialog(areaId: String, currentLabel: String?) {
+        val context = fragment.requireContext()
+        val editText = android.widget.EditText(context).apply {
+            setText(currentLabel)
+            filters = arrayOf(android.text.InputFilter.LengthFilter(50)) // Limit label length
+            // Set input type to prevent newlines
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        }
+        
+        // Helper function to handle label submission
+        fun submitLabel() {
+            val newLabel = editText.text.toString().takeIf { it.isNotBlank() }
+            annotationViewModel.updateArea(areaId, newLabel = newLabel)
+            // Force map redraw to update area layer with new label
+            onAnnotationChanged?.invoke()
+        }
+        
+        // Add editor action listener to handle Enter key
+        editText.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
+                submitLabel()
+                true // Consume the event
+            } else {
+                false // Don't consume other events
+            }
+        }
+        
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(context)
+            .setTitle("Edit Area Label")
+            .setView(editText)
+            .setPositiveButton("OK") { _, _ ->
+                submitLabel()
+            }
+            .setNegativeButton("Cancel", null)
+            .create()
+        
+        // Show the dialog and request focus for the EditText
+        dialog.show()
+        editText.requestFocus()
+    }
+
+    // Start timer updates
+    fun startTimerUpdates() {
+        poiTimerManager?.startTimerUpdates()
+        lineTimerManager?.startTimerUpdates()
+        _areaTimerManager?.startTimerUpdates()
+        _polygonTimerManager?.startTimerUpdates()
+    }
+    
+    private fun startAreaDrawing(center: PointF) {
+        Log.d("AnnotationController", "startAreaDrawing: center=$center")
+        val latLng = pendingPoiLatLng ?: return
+        
+        isAreaDrawingMode = true
+        tempAreaCenter = latLng
+        tempAreaRadiusPixels = 300f // Default 300 pixels
+        
+        // Convert pixels to meters (approximate)
+        val projection = mapController?.mapLibreMap?.projection
+        if (projection != null) {
+            val centerScreen = projection.toScreenLocation(latLng)
+            val edgeScreen = PointF(centerScreen.x + tempAreaRadiusPixels, centerScreen.y)
+            val edgeLatLng = projection.fromScreenLocation(edgeScreen)
+            tempAreaRadius = calculateDistance(latLng, edgeLatLng)
+        } else {
+            // Fallback: rough conversion (1 pixel ≈ 1 meter at zoom level 15)
+            tempAreaRadius = tempAreaRadiusPixels.toDouble()
+        }
+        
+        // Show color menu for area
+        showAreaColorMenu(center)
+        
+        // Update overlay to show temporary area
+        annotationOverlayView.setTempArea(tempAreaCenter, tempAreaRadius)
+        annotationOverlayView.invalidate()
+        
+        // Set up area radius change listener
+        annotationOverlayView.areaRadiusChangeListener = object : AnnotationOverlayView.OnAreaRadiusChangeListener {
+            override fun onAreaRadiusChanged(newRadius: Double) {
+                Log.d("AnnotationController", "Area radius changed from $tempAreaRadius to $newRadius")
+                tempAreaRadius = newRadius
+                annotationOverlayView.setTempArea(tempAreaCenter, tempAreaRadius)
+                annotationOverlayView.invalidate()
+            }
+            
+            override fun onAreaDrawingFinished() {
+                // Area drawing is finished, but we'll keep the temporary area visible
+                // until the user selects a color from the menu
+                Log.d("AnnotationController", "Area drawing finished with radius: $tempAreaRadius")
+                
+                // If we're still in area drawing mode and have a valid area, show the color menu
+                if (isAreaDrawingMode && tempAreaCenter != null && tempAreaRadius > 0) {
+                    Log.d("AnnotationController", "Showing color menu for area creation")
+                    val center = PointF(binding.root.width / 2f, binding.root.height / 2f)
+                    showAreaColorMenu(center)
+                } else {
+                    Log.d("AnnotationController", "Not showing color menu: isAreaDrawingMode=$isAreaDrawingMode, tempAreaCenter=$tempAreaCenter, tempAreaRadius=$tempAreaRadius")
+                }
+            }
+        }
+    }
+    
+    private fun showAreaColorMenu(center: PointF) {
+        val colorOptions = listOf(
+            FanMenuView.Option.Color(AnnotationColor.GREEN),
+            FanMenuView.Option.Color(AnnotationColor.YELLOW),
+            FanMenuView.Option.Color(AnnotationColor.RED),
+            FanMenuView.Option.Color(AnnotationColor.BLACK)
+        )
+        val screenSize = PointF(binding.root.width.toFloat(), binding.root.height.toFloat())
+        val menuLatLng = tempAreaCenter?.let { LatLng(it.latitude, it.longitude) }
+        fanMenuView.showAt(center, colorOptions, object : FanMenuView.OnOptionSelectedListener {
+            override fun onOptionSelected(option: FanMenuView.Option): Boolean {
+                if (option is FanMenuView.Option.Color) {
+                    annotationViewModel.setCurrentColor(option.color)
+                    createAreaFromFanMenu(option.color)
+                }
+                return false
+            }
+            override fun onMenuDismissed() {
+                fanMenuView.visibility = View.GONE
+            }
+        }, screenSize, menuLatLng)
+        fanMenuView.bringToFront()
+        fanMenuView.visibility = View.VISIBLE
+    }
+    
+    private fun createAreaFromFanMenu(color: AnnotationColor) {
+        val center = tempAreaCenter ?: return
+        Log.d("AnnotationController", "createAreaFromFanMenu: center=$center, radius=$tempAreaRadius, color=$color")
+        annotationViewModel.setCurrentColor(color)
+        annotationViewModel.addArea(center, tempAreaRadius)
+        fanMenuView.visibility = View.GONE
+        finishAreaDrawing()
+        onAnnotationChanged?.invoke()
+        
+        // Force map redraw to update area layer
+        val nonPoiAnnotations = annotationViewModel.uiState.value.annotations.filterNot { it is MapAnnotation.PointOfInterest }
+        annotationOverlayView.updateAnnotations(nonPoiAnnotations)
+        annotationOverlayView.invalidate()
+        
+        Log.d("AnnotationController", "Area created successfully with radius: $tempAreaRadius meters")
+        Toast.makeText(fragment.requireContext(), "Area created!", Toast.LENGTH_SHORT).show()
+    }
+    
+    private fun finishAreaDrawing() {
+        isAreaDrawingMode = false
+        tempAreaCenter = null
+        tempAreaRadius = 0.0
+        tempAreaRadiusPixels = 300f
+        annotationOverlayView.setTempArea(null, 0.0)
+        annotationOverlayView.areaRadiusChangeListener = null
+        pendingPoiLatLng = null
+    }
+    
+    private fun calculateDistance(point1: LatLng, point2: LatLng): Double {
+        val lat1 = Math.toRadians(point1.latitude)
+        val lon1 = Math.toRadians(point1.longitude)
+        val lat2 = Math.toRadians(point2.latitude)
+        val lon2 = Math.toRadians(point2.longitude)
+        
+        val dLat = lat2 - lat1
+        val dLon = lon2 - lon1
+        
+        val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1) * Math.cos(lat2) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2)
+        val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+        
+        return 6371000 * c // Earth radius in meters
+    }
+
+    fun showAreaLabel(areaId: String, screenPosition: PointF) {
+        Log.d("AnnotationController", "showAreaLabel: areaId=$areaId, screenPosition=$screenPosition")
+        // Find the area annotation to get its details
+        val area = annotationViewModel.uiState.value.annotations.filterIsInstance<MapAnnotation.Area>().find { it.id == areaId }
+        if (area != null) {
+            Log.d("AnnotationController", "Found area: ${area.label}, radius: ${area.radius}")
+            popoverManager.showAreaPopover(areaId, area)
+            Log.d("AnnotationController", "showAreaLabel: called popoverManager.showAreaPopover")
+        } else {
+            Log.e("AnnotationController", "Area not found: $areaId")
         }
     }
 }

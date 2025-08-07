@@ -100,6 +100,19 @@ class AnnotationViewModel @Inject constructor(
         }
     }
     
+    fun addArea(center: LatLng, radius: Double, nickname: String? = null) {
+        viewModelScope.launch {
+            val annotation = MapAnnotation.Area(
+                creatorId = nickname ?: "local", // Use nickname if available
+                color = currentColor,
+                center = LatLngSerializable.fromMapLibreLatLng(center),
+                radius = radius, // in meters
+                expirationTime = null
+            )
+            annotationRepository.addAnnotation(annotation)
+        }
+    }
+    
     fun removeAnnotation(annotationId: String) {
         viewModelScope.launch {
             annotationRepository.removeAnnotation(annotationId)
@@ -147,7 +160,7 @@ class AnnotationViewModel @Inject constructor(
 
     fun updatePolygon(polygonId: String, newColor: AnnotationColor? = null, newLabel: String? = null) {
         viewModelScope.launch {
-            val current = annotationRepository.annotations.value.find { it.id == polygonId } ?: return@launch
+            val current = annotationRepository.annotations.value.find { it.id == polygonId }
             if (current is MapAnnotation.Polygon) {
                 val updated = current.copy(
                     color = newColor ?: current.color,
@@ -156,6 +169,18 @@ class AnnotationViewModel @Inject constructor(
                 )
                 annotationRepository.addAnnotation(updated)
             }
+        }
+    }
+    
+    fun updateArea(areaId: String, newColor: AnnotationColor? = null, newLabel: String? = null) {
+        viewModelScope.launch {
+            val current = annotationRepository.annotations.value.filterIsInstance<MapAnnotation.Area>().find { it.id == areaId } ?: return@launch
+            val updated = current.copy(
+                color = newColor ?: current.color,
+                label = newLabel,
+                timestamp = System.currentTimeMillis()
+            )
+            annotationRepository.addAnnotation(updated)
         }
     }
     

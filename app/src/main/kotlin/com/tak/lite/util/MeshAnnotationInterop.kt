@@ -177,6 +177,7 @@ object MeshAnnotationInterop {
                     "r" to annotation.radius
                 )
                 annotation.expirationTime?.let { map["e"] = it }
+                annotation.label?.let { map["l"] = it }
                 kotlinx.serialization.json.Json.encodeToString(kotlinx.serialization.json.JsonObject(map.mapValues { (k, v) ->
                     when (v) {
                         is String -> kotlinx.serialization.json.JsonPrimitive(v)
@@ -450,6 +451,7 @@ object MeshAnnotationInterop {
                         val lon = centerObj?.get("o")?.jsonPrimitive?.longOrNull?.toDouble()?.div(1e5) ?: 0.0
                         val radius = json["r"]?.jsonPrimitive?.doubleOrNull ?: 0.0
                         val expirationTime = json["e"]?.jsonPrimitive?.longOrNull
+                        val label = json["l"]?.jsonPrimitive?.content
                         MapAnnotation.Area(
                             id = id,
                             creatorId = creatorId,
@@ -457,7 +459,8 @@ object MeshAnnotationInterop {
                             color = color,
                             center = com.tak.lite.model.LatLngSerializable(lat, lon),
                             radius = radius,
-                            expirationTime = expirationTime
+                            expirationTime = expirationTime,
+                            label = label
                         )
                     }
                     "polygon" -> {

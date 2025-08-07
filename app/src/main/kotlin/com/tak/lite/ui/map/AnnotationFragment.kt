@@ -53,6 +53,7 @@ class AnnotationFragment : Fragment() {
     private lateinit var timerTextOverlayView: TimerTextOverlayView
     private lateinit var lineTimerTextOverlayView: LineTimerTextOverlayView
     private lateinit var polygonTimerTextOverlayView: PolygonTimerTextOverlayView
+    private lateinit var areaTimerTextOverlayView: AreaTimerTextOverlayView
     
     // POI tap detection state
     private var poiTapDownTime: Long? = null
@@ -91,6 +92,8 @@ class AnnotationFragment : Fragment() {
             view.findViewById(R.id.lineTimerTextOverlayView)
         polygonTimerTextOverlayView = mainActivity?.findViewById(R.id.polygonTimerTextOverlayView) ?:
             view.findViewById(R.id.polygonTimerTextOverlayView)
+        areaTimerTextOverlayView = mainActivity?.findViewById(R.id.areaTimerTextOverlayView) ?:
+            view.findViewById(R.id.areaTimerTextOverlayView)
         
         // Initialize cluster text overlay
         val clusterTextOverlayView = mainActivity?.findViewById<ClusterTextOverlayView>(R.id.clusterTextOverlayView) ?: 
@@ -261,8 +264,19 @@ class AnnotationFragment : Fragment() {
                                 annotationController.showPolygonLabel(polygonId, screenPoint)
                                 true
                             } else {
-                                // Line endpoints are now part of POI clusters, handled by POI tap detection
-                                false
+                                // Check for area tap detection
+                                val areaFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, AreaLayerManager.AREA_HIT_AREA_LAYER)
+                                val areaFeature = areaFeatures.firstOrNull { it.getStringProperty("areaId") != null }
+                                if (areaFeature != null) {
+                                    val areaId = areaFeature.getStringProperty("areaId")
+                                    Log.d("AnnotationFragment", "Area tapped: $areaId")
+                                    // For single taps, show area popover
+                                    annotationController.showAreaLabel(areaId, screenPoint)
+                                    true
+                                } else {
+                                    // Line endpoints are now part of POI clusters, handled by POI tap detection
+                                    false
+                                }
                             }
                         }
                         }
@@ -292,6 +306,7 @@ class AnnotationFragment : Fragment() {
                 timerTextOverlayView.setProjection(mapLibreMap.projection)
                 lineTimerTextOverlayView.setProjection(mapLibreMap.projection)
                 polygonTimerTextOverlayView.setProjection(mapLibreMap.projection)
+                areaTimerTextOverlayView.setProjection(mapLibreMap.projection)
                 clusterTextOverlayView.setProjection(mapLibreMap.projection)
                 
                 // Notify cluster text manager about camera movement for performance optimization
@@ -341,6 +356,14 @@ class AnnotationFragment : Fragment() {
                 polygonTimerTextOverlayView.setProjection(mapLibreMap.projection)
                 polygonTimerManager.startTimerUpdates()
                 Log.d("AnnotationFragment", "Polygon timer updates started")
+            }
+            
+            // Set up area timer text overlay callback
+            annotationController.areaTimerManager?.let { areaTimerManager ->
+                areaTimerManager.setTimerTextCallback(areaTimerTextOverlayView)
+                areaTimerTextOverlayView.setProjection(mapLibreMap.projection)
+                areaTimerManager.startTimerUpdates()
+                Log.d("AnnotationFragment", "Area timer updates started")
             }
             
             // === ENHANCED: Single data flow for peer locations with native clustering ===

@@ -129,11 +129,15 @@
         android:id="@+id/polygonTimerTextOverlayView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@android:color/transparent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        android:clickable="false"
+        android:focusable="false" />
+        
+    <com.tak.lite.ui.map.AreaTimerTextOverlayView
+        android:id="@+id/areaTimerTextOverlayView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clickable="false"
+        android:focusable="false" />
 
     <com.tak.lite.ui.map.ClusterTextOverlayView
         android:id="@+id/clusterTextOverlayView"

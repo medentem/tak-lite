@@ -104,6 +104,21 @@ class HybridPopoverManager(
             autoDismissTime = System.currentTimeMillis() + 8000L
         ))
     }
+    
+    fun showAreaPopover(areaId: String, area: MapAnnotation.Area) {
+        val content = buildAreaPopoverContent(area)
+        // Use area center for positioning
+        val centerPosition = org.maplibre.android.geometry.LatLng(area.center.lt, area.center.lng)
+        
+        showPopover(PopoverData(
+            id = "area_$areaId",
+            type = PopoverType.AREA,
+            position = centerPosition,
+            content = content,
+            timestamp = System.currentTimeMillis(),
+            autoDismissTime = System.currentTimeMillis() + 8000L
+        ))
+    }
 
     private fun showPopover(popoverData: PopoverData) {
         Log.d(TAG, "Showing popover: ${popoverData.id}")
@@ -167,6 +182,7 @@ class HybridPopoverManager(
             PopoverType.PEER -> setupPeerPopoverContent(popoverView!!, popoverData)
             PopoverType.POI -> setupPoiPopoverContent(popoverView!!, popoverData)
             PopoverType.POLYGON -> setupPolygonPopoverContent(popoverView!!, popoverData)
+            PopoverType.AREA -> setupAreaPopoverContent(popoverView!!, popoverData)
         }
 
         // Position the view
@@ -228,6 +244,20 @@ class HybridPopoverManager(
     }
 
     private fun setupPolygonPopoverContent(view: View, data: PopoverData) {
+        val titleView = view.findViewById<TextView>(R.id.popoverTitle)
+        val contentView = view.findViewById<TextView>(R.id.popoverContent)
+
+        // Parse content
+        val lines = data.content.split("|")
+        if (lines.isNotEmpty()) {
+            titleView.text = lines[0]
+            if (lines.size > 1) {
+                contentView.text = lines.drop(1).joinToString("\n")
+            }
+        }
+    }
+
+    private fun setupAreaPopoverContent(view: View, data: PopoverData) {
         val titleView = view.findViewById<TextView>(R.id.popoverTitle)
         val contentView = view.findViewById<TextView>(R.id.popoverContent)
 
@@ -429,6 +459,32 @@ class HybridPopoverManager(
         val userLocation = meshNetworkViewModel.bestLocation.value
         if (userLocation != null) {
             val distMeters = haversine(polygon.points.map { it.lt }.average(), polygon.points.map { it.lng }.average(), userLocation.latitude, userLocation.longitude)
+            val distMiles = distMeters / 1609.344
+            lines.add("${String.format("%.1f", distMiles)} mi away")
+        }
+        
+        return lines.joinToString("|")
+    }
+
+    private fun buildAreaPopoverContent(area: MapAnnotation.Area): String {
+        val lines = mutableListOf<String>()
+        
+        // Title line - area label or default name
+        val title = area.label ?: "Area"
+        lines.add(title)
+        
+        // Content lines
+        val ageSec = (System.currentTimeMillis() - area.timestamp) / 1000
+        val ageStr = if (ageSec > 60) "${ageSec / 60}m old" else "${ageSec}s old"
+        lines.add(ageStr)
+        
+        val coords = String.format("%.5f, %.5f", area.center.lt, area.center.lng)
+        lines.add(coords)
+        
+        // Add distance if user location available
+        val userLocation = meshNetworkViewModel.bestLocation.value
+        if (userLocation != null) {
+            val distMeters = haversine(area.center.lt, area.center.lng, userLocation.latitude, userLocation.longitude)
             val distMiles = distMeters / 1609.344
             lines.add("${String.format("%.1f", distMiles)} mi away")
         }

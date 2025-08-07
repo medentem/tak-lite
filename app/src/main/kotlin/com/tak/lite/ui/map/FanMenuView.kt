@@ -39,6 +39,8 @@ class FanMenuView @JvmOverloads constructor(
         data class DrawLine(val id: String) : Option()
         data class Label(val id: String) : Option()
         data class EditPolygon(val polygonId: String) : Option()
+        data class Area(val id: String = "") : Option() // New area option
+        data class EditArea(val areaId: String) : Option() // Edit area option
     }
 
     interface OnOptionSelectedListener {
@@ -218,6 +220,8 @@ class FanMenuView @JvmOverloads constructor(
                     is Option.DrawLine -> drawDrawLineIcon(canvas, x, y, isSelected, usedIconRadius)
                     is Option.Label -> drawLabelIcon(canvas, x, y, isSelected, usedIconRadius)
                     is Option.EditPolygon -> drawEditPolygonIcon(canvas, x, y, isSelected, usedIconRadius)
+                    is Option.Area -> drawAreaIcon(canvas, x, y, isSelected, usedIconRadius)
+                    is Option.EditArea -> drawEditAreaIcon(canvas, x, y, isSelected, usedIconRadius)
                 }
             }
         }
@@ -641,6 +645,86 @@ class FanMenuView @JvmOverloads constructor(
         // Draw the edit polygon icon from vector drawable
         val iconSize = iconRadius * 1.6f
         val icon = context.getDrawable(R.drawable.ic_edit_polygon)
+        icon?.setBounds(
+            (x - iconSize/2).toInt(),
+            (y - iconSize/2).toInt(),
+            (x + iconSize/2).toInt(),
+            (y + iconSize/2).toInt()
+        )
+        icon?.setTint(if (highlight) Color.BLACK else Color.DKGRAY)
+        icon?.draw(canvas)
+    }
+
+    private fun drawAreaIcon(canvas: Canvas, x: Float, y: Float, highlight: Boolean, iconRadius: Float) {
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (highlight) Color.YELLOW else Color.WHITE
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(x, y, iconRadius, bgPaint)
+        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (highlight) Color.WHITE else Color.DKGRAY
+            style = Paint.Style.STROKE
+            strokeWidth = 2.5f
+        }
+        canvas.drawCircle(x, y, iconRadius, borderPaint)
+
+        // Draw concentric circles with arrows
+        val nCircles = 3
+        val innerRadius = iconRadius * 0.4f
+        val outerRadius = iconRadius * 0.8f
+        val arrowRadius = iconRadius * 0.2f
+        val arrowAngle = Math.PI / 6 // 30 degrees
+        val arrowLength = arrowRadius * 1.5f
+
+        for (i in 0 until nCircles) {
+            val currentRadius = innerRadius + i * (outerRadius - innerRadius) / (nCircles - 1)
+            val currentCirclePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = if (highlight) Color.BLACK else Color.DKGRAY
+                style = Paint.Style.STROKE
+                strokeWidth = 2f
+            }
+            canvas.drawCircle(x, y, currentRadius, currentCirclePaint)
+
+            // Draw arrows
+            val arrowX = x + currentRadius * cos(arrowAngle).toFloat()
+            val arrowY = y + currentRadius * sin(arrowAngle).toFloat()
+            val arrowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = if (highlight) Color.BLACK else Color.DKGRAY
+                style = Paint.Style.STROKE
+                strokeWidth = 2f
+                strokeCap = Paint.Cap.ROUND
+            }
+            canvas.drawLine(
+                arrowX, arrowY,
+                arrowX + arrowLength * cos(arrowAngle).toFloat(),
+                arrowY + arrowLength * sin(arrowAngle).toFloat(),
+                arrowPaint
+            )
+            canvas.drawLine(
+                arrowX, arrowY,
+                arrowX + arrowLength * cos(arrowAngle + Math.PI).toFloat(),
+                arrowY + arrowLength * sin(arrowAngle + Math.PI).toFloat(),
+                arrowPaint
+            )
+        }
+    }
+
+    private fun drawEditAreaIcon(canvas: Canvas, x: Float, y: Float, highlight: Boolean, iconRadius: Float) {
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (highlight) Color.YELLOW else Color.WHITE
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(x, y, iconRadius, bgPaint)
+        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (highlight) Color.WHITE else Color.DKGRAY
+            style = Paint.Style.STROKE
+            strokeWidth = 2.5f
+        }
+        canvas.drawCircle(x, y, iconRadius, borderPaint)
+        
+        // Draw the edit area icon from vector drawable
+        val iconSize = iconRadius * 1.6f
+        val icon = context.getDrawable(R.drawable.ic_edit_area)
         icon?.setBounds(
             (x - iconSize/2).toInt(),
             (y - iconSize/2).toInt(),

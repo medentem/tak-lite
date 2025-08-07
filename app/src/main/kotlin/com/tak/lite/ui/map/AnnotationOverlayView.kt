@@ -30,6 +30,7 @@ import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
 import kotlin.math.tan
+import kotlin.math.pow
 
 class AnnotationOverlayView @JvmOverloads constructor(
     context: Context,
@@ -52,6 +53,9 @@ class AnnotationOverlayView @JvmOverloads constructor(
     private var annotations: List<MapAnnotation> = emptyList()
     var currentZoom: Float = 0f
     private var tempLinePoints: List<LatLng>? = null
+    private var tempAreaCenter: LatLng? = null
+    private var tempAreaRadius: Double = 0.0
+    private var isAreaRadiusAdjustmentActive: Boolean = false
     private var lastTimerUpdate: Long = 0
     private var timerAngle: Float = 0f
     private var clusters: List<AnnotationCluster> = emptyList()
@@ -234,6 +238,15 @@ class AnnotationOverlayView @JvmOverloads constructor(
 
     fun setTempLinePoints(points: List<LatLng>?) {
         tempLinePoints = points
+        invalidate()
+    }
+
+    fun setTempArea(center: LatLng?, radius: Double) {
+        tempAreaCenter = center
+        tempAreaRadius = radius
+        if (center == null) {
+            isAreaRadiusAdjustmentActive = false
+        }
         invalidate()
     }
 
@@ -481,6 +494,68 @@ class AnnotationOverlayView @JvmOverloads constructor(
             }
         }
 
+        // Draw temporary area circle if tempAreaCenter is set
+        tempAreaCenter?.let { center ->
+            val screenCenter = projection?.toScreenLocation(center) ?: return@let
+            
+            // Convert radius from meters to screen pixels (approximate)
+            val radiusInDegrees = tempAreaRadius / 111320.0 // Approximate conversion to degrees
+            val edgePoint = LatLng(center.latitude + radiusInDegrees, center.longitude)
+            val screenEdge = projection?.toScreenLocation(edgePoint) ?: return@let
+            val screenRadius = PointF(screenCenter.x, screenCenter.y).distanceTo(PointF(screenEdge.x, screenEdge.y))
+            
+            // Draw the circle outline with thicker line
+            val areaPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.argb(180, 255, 0, 0) // More opaque red
+                style = Paint.Style.STROKE
+                strokeWidth = 8f // Thicker line
+                pathEffect = DashPathEffect(floatArrayOf(20f, 10f), 0f)
+            }
+            canvas.drawCircle(screenCenter.x, screenCenter.y, screenRadius, areaPaint)
+            
+            // Draw arrows pointing inward and outward at the same point on the circle edge
+            val arrowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.RED
+                style = Paint.Style.STROKE
+                strokeWidth = 8f // Much thicker arrows
+                strokeCap = Paint.Cap.ROUND
+            }
+            
+            // Draw both arrows at the same point (right side of circle)
+            val arrowAngle = 0.0 // 0 degrees (right side)
+            val arrowLength = 50f // Much longer arrows
+            val arrowStartX = screenCenter.x + screenRadius * cos(arrowAngle).toFloat()
+            val arrowStartY = screenCenter.y + screenRadius * sin(arrowAngle).toFloat()
+            
+            // Arrow pointing inward (toward center)
+            val arrowInEndX = arrowStartX - arrowLength * cos(arrowAngle).toFloat()
+            val arrowInEndY = arrowStartY - arrowLength * sin(arrowAngle).toFloat()
+            canvas.drawLine(arrowStartX, arrowStartY, arrowInEndX, arrowInEndY, arrowPaint)
+            
+            // Draw arrowhead for inward arrow
+            val arrowheadLength = 15f
+            val arrowheadAngle = Math.PI / 6 // 30 degrees
+            val arrowhead1X = arrowInEndX + arrowheadLength * cos(arrowAngle + arrowheadAngle).toFloat()
+            val arrowhead1Y = arrowInEndY + arrowheadLength * sin(arrowAngle + arrowheadAngle).toFloat()
+            val arrowhead2X = arrowInEndX + arrowheadLength * cos(arrowAngle - arrowheadAngle).toFloat()
+            val arrowhead2Y = arrowInEndY + arrowheadLength * sin(arrowAngle - arrowheadAngle).toFloat()
+            canvas.drawLine(arrowInEndX, arrowInEndY, arrowhead1X, arrowhead1Y, arrowPaint)
+            canvas.drawLine(arrowInEndX, arrowInEndY, arrowhead2X, arrowhead2Y, arrowPaint)
+            
+            // Arrow pointing outward (away from center)
+            val arrowOutEndX = arrowStartX + arrowLength * cos(arrowAngle).toFloat()
+            val arrowOutEndY = arrowStartY + arrowLength * sin(arrowAngle).toFloat()
+            canvas.drawLine(arrowStartX, arrowStartY, arrowOutEndX, arrowOutEndY, arrowPaint)
+            
+            // Draw arrowhead for outward arrow
+            val arrowhead3X = arrowOutEndX - arrowheadLength * cos(arrowAngle + arrowheadAngle).toFloat()
+            val arrowhead3Y = arrowOutEndY - arrowheadLength * sin(arrowAngle + arrowheadAngle).toFloat()
+            val arrowhead4X = arrowOutEndX - arrowheadLength * cos(arrowAngle - arrowheadAngle).toFloat()
+            val arrowhead4Y = arrowOutEndY - arrowheadLength * sin(arrowAngle - arrowheadAngle).toFloat()
+            canvas.drawLine(arrowOutEndX, arrowOutEndY, arrowhead3X, arrowhead3Y, arrowPaint)
+            canvas.drawLine(arrowOutEndX, arrowOutEndY, arrowhead4X, arrowhead4Y, arrowPaint)
+        }
+
         val context = context
         val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
         val minDistMiles = prefs.getFloat("min_line_segment_dist_miles", 1.0f)
@@ -641,6 +716,34 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     if (BuildConfig.DEBUG) {
                         android.util.Log.d("AnnotationOverlayView", "ACTION_DOWN: event.x=${event.x}, event.y=${event.y}")
                     }
+                    
+                    // Check for area radius adjustment if in area drawing mode
+                    if (tempAreaCenter != null) {
+                        val screenCenter = projection?.toScreenLocation(tempAreaCenter!!) ?: return false
+                        val touchPoint = PointF(event.x, event.y)
+                        val centerPoint = PointF(screenCenter.x, screenCenter.y)
+                        val distance = centerPoint.distanceTo(touchPoint)
+                        
+                        // If touch is near the circle edge, allow radius adjustment
+                        val currentRadiusInDegrees = tempAreaRadius / 111320.0
+                        val currentEdgePoint = LatLng(tempAreaCenter!!.latitude + currentRadiusInDegrees, tempAreaCenter!!.longitude)
+                        val currentScreenEdge = projection?.toScreenLocation(currentEdgePoint)
+                        val currentScreenRadius = if (currentScreenEdge != null) {
+                            centerPoint.distanceTo(PointF(currentScreenEdge.x, currentScreenEdge.y))
+                        } else {
+                            distance
+                        }
+                        
+                        val edgeThreshold = 50f // Increased threshold for easier interaction
+                        if (kotlin.math.abs(distance - currentScreenRadius) <= edgeThreshold) {
+                            // Start radius adjustment - don't change radius immediately, just mark as active
+                            isAreaRadiusAdjustmentActive = true
+                            Log.d("AnnotationOverlayView", "Area radius adjustment started: distance=$distance, currentScreenRadius=$currentScreenRadius, threshold=$edgeThreshold")
+                            // Don't call onAreaRadiusChanged here - wait for first move
+                            return true
+                        }
+                    }
+                    
                     // Check for line tap
                     val lineHit = findLineAt(event.x, event.y)
                     if (lineHit != null) {
@@ -671,70 +774,101 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     // The device dot is rendered as GL layers and can be queried using queryRenderedFeatures
                     return false // Let the map handle the event
                 }
-                MotionEvent.ACTION_UP -> {
-                    if (BuildConfig.DEBUG) {
-                        android.util.Log.d("AnnotationOverlayView", "ACTION_UP: event.x=${event.x}, event.y=${event.y}")
-                        android.util.Log.d("AnnotationOverlayView", "Cancelling long-press handler (ACTION_UP)")
-                    }
-                    longPressHandler?.removeCallbacks(longPressRunnable!!)
-                    // Handle peer dot tap
-                    longPressPeerCandidate?.let { peerId ->
-                        val upTime = System.currentTimeMillis()
-                        val upPos = PointF(event.x, event.y)
-                        val duration = upTime - (peerTapDownTime ?: 0L)
-                        val moved = longPressPeerDownPos?.let { hypot((upPos.x - it.x).toDouble(), (upPos.y - it.y).toDouble()) > 40 } ?: false
-                        if (duration < 300 && !moved) {
-                            // Quick tap detected on peer dot
-                            peerDotTapListener?.onPeerDotTapped(peerId, upPos)
-                        }
-                    }
-                    longPressLineCandidate = null
-                    longPressPeerCandidate = null
-                    peerTapDownTime = null
-                    deviceDotTapDownTime = null
-                    isDeviceDotCandidate = false
-                }
-                MotionEvent.ACTION_CANCEL -> {
-                    if (BuildConfig.DEBUG) {
-                        android.util.Log.d("AnnotationOverlayView", "ACTION_CANCEL: event.x=${event.x}, event.y=${event.y}")
-                        android.util.Log.d("AnnotationOverlayView", "Cancelling long-press handler (ACTION_CANCEL)")
-                    }
-                    longPressHandler?.removeCallbacks(longPressRunnable!!)
-                    longPressLineCandidate = null
-                    longPressPeerCandidate = null
-                    deviceDotTapDownTime = null
-                    isDeviceDotCandidate = false
-                }
                 MotionEvent.ACTION_MOVE -> {
-                    if (BuildConfig.DEBUG) {
-                        android.util.Log.d("AnnotationOverlayView", "ACTION_MOVE: event.x=${event.x}, event.y=${event.y}")
-                    }
-                    longPressLineDownPos?.let { down ->
-                        val dist = hypot((event.x - down.x).toDouble(), (event.y - down.y).toDouble())
-                        if (BuildConfig.DEBUG) {
-                            android.util.Log.d("AnnotationOverlayView", "LINE move: dist=$dist, from=(${"%.2f".format(down.x)}, ${"%.2f".format(down.y)}) to=(${"%.2f".format(event.x)}, ${"%.2f".format(event.y)})")
-                        }
-                        if (dist > 40) {
-                            if (BuildConfig.DEBUG) {
-                                android.util.Log.d("AnnotationOverlayView", "Cancelling long-press handler (moved too far for LINE)")
+                    // Handle area radius adjustment
+                    if (tempAreaCenter != null && isAreaRadiusAdjustmentActive) {
+                        val screenCenter = projection?.toScreenLocation(tempAreaCenter!!) ?: return false
+                        val touchPoint = PointF(event.x, event.y)
+                        val centerPoint = PointF(screenCenter.x, screenCenter.y)
+                        val distance = centerPoint.distanceTo(touchPoint)
+                        
+                        // Update radius based on touch distance (minimum radius of 50 pixels)
+                        val minRadiusPixels = 50f
+                        val adjustedDistance = distance.coerceAtLeast(minRadiusPixels)
+                        
+                        // Convert screen pixels to meters using a simple ratio
+                        // Use the current tempAreaRadius as a reference to maintain consistency
+                        val currentScreenRadius = if (tempAreaRadius > 0) {
+                            val radiusInDegrees = tempAreaRadius / 111320.0
+                            val currentEdgePoint = LatLng(tempAreaCenter!!.latitude + radiusInDegrees, tempAreaCenter!!.longitude)
+                            val currentScreenEdge = projection?.toScreenLocation(currentEdgePoint)
+                            if (currentScreenEdge != null) {
+                                centerPoint.distanceTo(PointF(currentScreenEdge.x, currentScreenEdge.y))
+                            } else {
+                                adjustedDistance
                             }
-                            longPressHandler?.removeCallbacks(longPressRunnable!!)
-                            longPressLineCandidate = null
+                        } else {
+                            adjustedDistance
                         }
+                        
+                        // Calculate new radius based on the ratio of screen distances
+                        val newRadius = if (currentScreenRadius > 0) {
+                            tempAreaRadius * (adjustedDistance / currentScreenRadius)
+                        } else {
+                            // Fallback: use simple conversion
+                            adjustedDistance * 2.0 // Rough approximation
+                        }
+                        
+                        // Only update if the change is significant (more than 5% change)
+                        val changeThreshold = tempAreaRadius * 0.05
+                        if (kotlin.math.abs(newRadius - tempAreaRadius) > changeThreshold) {
+                            Log.d("AnnotationOverlayView", "Radius adjustment: distance=$adjustedDistance, currentScreenRadius=$currentScreenRadius, oldRadius=$tempAreaRadius, newRadius=$newRadius")
+                            areaRadiusChangeListener?.onAreaRadiusChanged(newRadius)
+                        }
+                        return true
                     }
-                    longPressPeerDownPos?.let { down ->
-                        val dist = hypot((event.x - down.x).toDouble(), (event.y - down.y).toDouble())
-                        if (BuildConfig.DEBUG) {
-                            android.util.Log.d("AnnotationOverlayView", "PEER move: dist=$dist, from=(${"%.2f".format(down.x)}, ${"%.2f".format(down.y)}) to=(${"%.2f".format(event.x)}, ${"%.2f".format(event.y)})")
-                        }
-                        if (dist > 40) {
-                            if (BuildConfig.DEBUG) {
-                                android.util.Log.d("AnnotationOverlayView", "Cancelling long-press handler (moved too far for PEER)")
+                    
+                    // Handle line long press
+                    longPressLineCandidate?.let { line ->
+                        longPressLineDownPos?.let { downPos ->
+                            val distance = PointF(event.x, event.y).distanceTo(downPos)
+                            if (distance > 20f) {
+                                // Moved too far, cancel long press
+                                longPressHandler?.removeCallbacks(longPressRunnable!!)
+                                longPressLineCandidate = null
+                                longPressLineDownPos = null
                             }
-                            longPressHandler?.removeCallbacks(longPressRunnable!!)
-                            longPressPeerCandidate = null
                         }
                     }
+                    
+                    // Handle peer long press
+                    longPressPeerCandidate?.let { peer ->
+                        longPressPeerDownPos?.let { downPos ->
+                            val distance = PointF(event.x, event.y).distanceTo(downPos)
+                            if (distance > 20f) {
+                                // Moved too far, cancel long press
+                                longPressHandler?.removeCallbacks(longPressRunnable!!)
+                                longPressPeerCandidate = null
+                                longPressPeerDownPos = null
+                            }
+                        }
+                    }
+                    
+                    return true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    // Finish area drawing on release
+                    if (tempAreaCenter != null && isAreaRadiusAdjustmentActive) {
+                        isAreaRadiusAdjustmentActive = false
+                        areaRadiusChangeListener?.onAreaDrawingFinished()
+                        return true
+                    }
+                    
+                    // Handle line long press completion
+                    longPressLineCandidate?.let { line ->
+                        longPressHandler?.removeCallbacks(longPressRunnable!!)
+                        longPressLineCandidate = null
+                        longPressLineDownPos = null
+                    }
+                    
+                    // Handle peer long press completion
+                    longPressPeerCandidate?.let { peer ->
+                        longPressHandler?.removeCallbacks(longPressRunnable!!)
+                        longPressPeerCandidate = null
+                        longPressPeerDownPos = null
+                    }
+                    
+                    return true
                 }
             }
             if (BuildConfig.DEBUG) {
@@ -988,4 +1122,12 @@ class AnnotationOverlayView @JvmOverloads constructor(
         
         android.util.Log.d("AnnotationOverlayView", "onDraw: drew direction indicator at ($clampedArrowX, $clampedArrowY) pointing toward device (distance: ${distance.toInt()}px)")
     }
+
+    // Interface for area drawing callbacks
+    interface OnAreaRadiusChangeListener {
+        fun onAreaRadiusChanged(newRadius: Double)
+        fun onAreaDrawingFinished()
+    }
+    
+    var areaRadiusChangeListener: OnAreaRadiusChangeListener? = null
 }

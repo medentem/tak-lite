@@ -47,6 +47,7 @@ sealed class MapAnnotation {
         override val color: AnnotationColor,
         val center: LatLngSerializable,
         val radius: Double, // in meters
+        val label: String? = null, // Optional label for the area
         override val expirationTime: Long? = null
     ) : MapAnnotation()
     
