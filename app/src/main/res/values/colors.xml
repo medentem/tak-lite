@@ -14,12 +14,19 @@
     
     <!-- Better color scheme for light mode -->
     <color name="primary_light">#1976D2</color>  <!-- Material Blue 700 -->
+    <color name="primary_dark">#1976D2</color>  <!-- Material Blue 700 - default for light mode -->
     <color name="primary_variant_light">#1565C0</color>  <!-- Material Blue 800 -->
+    <color name="primary_variant_dark">#1565C0</color>  <!-- Material Blue 800 - default for light mode -->
     <color name="link_color_light">#1976D2</color>  <!-- Material Blue 700 -->
+    <color name="link_color_dark">#1976D2</color>  <!-- Material Blue 700 - default for light mode -->
     <color name="interactive_color_light">#2196F3</color>  <!-- Material Blue 500 -->
+    <color name="interactive_color_dark">#2196F3</color>  <!-- Material Blue 500 - default for light mode -->
     
     <!-- Message background colors for light mode -->
     <color name="message_sent_bg_light">#1565C0</color>  <!-- Darker blue for sent messages -->
+    <color name="message_sent_bg_dark">#1565C0</color>  <!-- Darker blue for sent messages - default for light mode -->
     <color name="message_received_bg_light">#F5F5F5</color>  <!-- Light gray with good contrast -->
+    <color name="message_received_bg_dark">#F5F5F5</color>  <!-- Light gray with good contrast - default for light mode -->
     <color name="message_received_text_light">#212121</color>  <!-- Dark text for light background -->
+    <color name="message_received_text_dark">#212121</color>  <!-- Dark text for light background - default for light mode -->
 </resources> 
