@@ -51,6 +51,20 @@ sealed class MapAnnotation {
     ) : MapAnnotation()
     
     @Serializable
+    @SerialName("polygon")
+    data class Polygon(
+        override val id: String = UUID.randomUUID().toString(),
+        override val creatorId: String,
+        override val timestamp: Long = System.currentTimeMillis(),
+        override val color: AnnotationColor,
+        val points: List<LatLngSerializable>, // Polygon vertices
+        val fillOpacity: Float = 0.3f, // Fill transparency
+        val strokeWidth: Float = 3f, // Border width
+        val label: String? = null, // Optional label for the polygon
+        override val expirationTime: Long? = null
+    ) : MapAnnotation()
+    
+    @Serializable
     @SerialName("deletion")
     data class Deletion(
         override val id: String,

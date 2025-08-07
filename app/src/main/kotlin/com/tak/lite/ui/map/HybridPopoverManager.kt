@@ -88,6 +88,23 @@ class HybridPopoverManager(
         ))
     }
 
+    fun showPolygonPopover(polygonId: String, polygon: MapAnnotation.Polygon) {
+        val content = buildPolygonPopoverContent(polygon)
+        // Use polygon center for positioning
+        val centerLat = polygon.points.map { it.lt }.average()
+        val centerLng = polygon.points.map { it.lng }.average()
+        val centerPosition = org.maplibre.android.geometry.LatLng(centerLat, centerLng)
+        
+        showPopover(PopoverData(
+            id = "polygon_$polygonId",
+            type = PopoverType.POLYGON,
+            position = centerPosition,
+            content = content,
+            timestamp = System.currentTimeMillis(),
+            autoDismissTime = System.currentTimeMillis() + 8000L
+        ))
+    }
+
     private fun showPopover(popoverData: PopoverData) {
         Log.d(TAG, "Showing popover: ${popoverData.id}")
         Log.d(TAG, "Current popover state: $currentPopover")
@@ -149,6 +166,7 @@ class HybridPopoverManager(
         when (popoverData.type) {
             PopoverType.PEER -> setupPeerPopoverContent(popoverView!!, popoverData)
             PopoverType.POI -> setupPoiPopoverContent(popoverView!!, popoverData)
+            PopoverType.POLYGON -> setupPolygonPopoverContent(popoverView!!, popoverData)
         }
 
         // Position the view
@@ -196,6 +214,20 @@ class HybridPopoverManager(
     }
 
     private fun setupPoiPopoverContent(view: View, data: PopoverData) {
+        val titleView = view.findViewById<TextView>(R.id.popoverTitle)
+        val contentView = view.findViewById<TextView>(R.id.popoverContent)
+
+        // Parse content
+        val lines = data.content.split("|")
+        if (lines.isNotEmpty()) {
+            titleView.text = lines[0]
+            if (lines.size > 1) {
+                contentView.text = lines.drop(1).joinToString("\n")
+            }
+        }
+    }
+
+    private fun setupPolygonPopoverContent(view: View, data: PopoverData) {
         val titleView = view.findViewById<TextView>(R.id.popoverTitle)
         val contentView = view.findViewById<TextView>(R.id.popoverContent)
 
@@ -372,5 +404,58 @@ class HybridPopoverManager(
         }
         
         return lines.joinToString("|")
+    }
+
+    private fun buildPolygonPopoverContent(polygon: MapAnnotation.Polygon): String {
+        val lines = mutableListOf<String>()
+        
+        // Title line - polygon label or default name
+        val title = polygon.label ?: "Polygon"
+        lines.add(title)
+        
+        // Calculate area in square miles
+        val areaSqMiles = calculatePolygonArea(polygon.points)
+        lines.add("${String.format("%.2f", areaSqMiles)} sq mi")
+        
+        // Content lines
+        val ageSec = (System.currentTimeMillis() - polygon.timestamp) / 1000
+        val ageStr = if (ageSec > 60) "${ageSec / 60}m old" else "${ageSec}s old"
+        lines.add(ageStr)
+        
+        val coords = String.format("%.5f, %.5f", polygon.points.map { it.lt }.average(), polygon.points.map { it.lng }.average())
+        lines.add(coords)
+        
+        // Add distance if user location available
+        val userLocation = meshNetworkViewModel.bestLocation.value
+        if (userLocation != null) {
+            val distMeters = haversine(polygon.points.map { it.lt }.average(), polygon.points.map { it.lng }.average(), userLocation.latitude, userLocation.longitude)
+            val distMiles = distMeters / 1609.344
+            lines.add("${String.format("%.1f", distMiles)} mi away")
+        }
+        
+        return lines.joinToString("|")
+    }
+
+    private fun calculatePolygonArea(points: List<com.tak.lite.model.LatLngSerializable>): Double {
+        if (points.size < 3) return 0.0
+        
+        // Use the Shoelace formula to calculate area
+        var area = 0.0
+        for (i in points.indices) {
+            val j = (i + 1) % points.size
+            area += points[i].lng * points[j].lt
+            area -= points[j].lng * points[i].lt
+        }
+        area = Math.abs(area) / 2.0
+        
+        // Convert to square miles (approximate)
+        // 1 degree latitude ≈ 69 miles
+        // 1 degree longitude ≈ 69 * cos(latitude) miles
+        val avgLat = points.map { it.lt }.average()
+        val latMilesPerDegree = 69.0
+        val lngMilesPerDegree = 69.0 * Math.cos(Math.toRadians(avgLat))
+        
+        val areaSqMiles = area * latMilesPerDegree * lngMilesPerDegree
+        return areaSqMiles
     }
 } 

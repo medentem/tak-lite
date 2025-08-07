@@ -17,6 +17,7 @@ class UnifiedAnnotationManager(
 
     private val lineLayerManager = LineLayerManager(mapLibreMap)
     private val areaLayerManager = AreaLayerManager(mapLibreMap)
+    private val polygonLayerManager = PolygonLayerManager(mapLibreMap)
     private var isInitialized = false
     
     // Callback for when line layers are ready
@@ -42,6 +43,7 @@ class UnifiedAnnotationManager(
         try {
             lineLayerManager.setupLineLayers()
             areaLayerManager.setupAreaLayers()
+            polygonLayerManager.setupPolygonLayers()
             isInitialized = true
             Log.d(TAG, "Unified annotation manager initialized successfully")
             
@@ -61,7 +63,7 @@ class UnifiedAnnotationManager(
     }
 
     /**
-     * Update all annotations (lines and areas)
+     * Update all annotations (lines, areas, and polygons)
      */
     fun updateAnnotations(annotations: List<MapAnnotation>) {
         if (!isInitialized) {
@@ -72,14 +74,18 @@ class UnifiedAnnotationManager(
         try {
             val lines = annotations.filterIsInstance<MapAnnotation.Line>()
             val areas = annotations.filterIsInstance<MapAnnotation.Area>()
+            val polygons = annotations.filterIsInstance<MapAnnotation.Polygon>()
 
-            Log.d(TAG, "Updating annotations: ${lines.size} lines, ${areas.size} areas")
+            Log.d(TAG, "Updating annotations: ${lines.size} lines, ${areas.size} areas, ${polygons.size} polygons")
 
             // Update line features
             lineLayerManager.updateFeatures(lines)
 
             // Update area features
             areaLayerManager.updateFeatures(areas)
+            
+            // Update polygon features
+            polygonLayerManager.updateFeatures(polygons)
 
             Log.d(TAG, "Annotation update completed successfully")
         } catch (e: Exception) {
@@ -133,6 +139,7 @@ class UnifiedAnnotationManager(
         try {
             lineLayerManager.cleanup()
             areaLayerManager.cleanup()
+            polygonLayerManager.cleanup() // Added cleanup for polygon layer manager
             isInitialized = false
             Log.d(TAG, "Unified annotation manager cleaned up")
         } catch (e: Exception) {

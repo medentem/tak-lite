@@ -12,5 +12,5 @@ data class PopoverData(
 )
 
 enum class PopoverType {
-    PEER, POI
+    PEER, POI, POLYGON
 } 

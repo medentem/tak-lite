@@ -85,6 +85,21 @@ class AnnotationViewModel @Inject constructor(
         }
     }
     
+    fun addPolygon(points: List<LatLng>, nickname: String? = null) {
+        viewModelScope.launch {
+            // Store polygon without the closing point - it will be added during rendering
+            val annotation = MapAnnotation.Polygon(
+                creatorId = nickname ?: "local", // Use nickname if available
+                color = currentColor,
+                points = points.map { LatLngSerializable.fromMapLibreLatLng(it) },
+                fillOpacity = 0.3f,
+                strokeWidth = 3f,
+                expirationTime = null
+            )
+            annotationRepository.addAnnotation(annotation)
+        }
+    }
+    
     fun removeAnnotation(annotationId: String) {
         viewModelScope.launch {
             annotationRepository.removeAnnotation(annotationId)
@@ -116,16 +131,31 @@ class AnnotationViewModel @Inject constructor(
         }
     }
     
-    fun setAnnotationExpiration(annotationId: String, expirationTime: Long) {
+    fun setAnnotationExpiration(annotationId: String, expirationTime: Long?) {
         viewModelScope.launch {
             val current = annotationRepository.annotations.value.find { it.id == annotationId } ?: return@launch
             val updated = when (current) {
                 is MapAnnotation.PointOfInterest -> current.copy(expirationTime = expirationTime, timestamp = System.currentTimeMillis())
                 is MapAnnotation.Line -> current.copy(expirationTime = expirationTime, timestamp = System.currentTimeMillis())
                 is MapAnnotation.Area -> current.copy(expirationTime = expirationTime, timestamp = System.currentTimeMillis())
-                is MapAnnotation.Deletion -> current // Don't modify deletions
+                is MapAnnotation.Polygon -> current.copy(expirationTime = expirationTime, timestamp = System.currentTimeMillis())
+                else -> current
             }
             annotationRepository.addAnnotation(updated)
+        }
+    }
+
+    fun updatePolygon(polygonId: String, newColor: AnnotationColor? = null, newLabel: String? = null) {
+        viewModelScope.launch {
+            val current = annotationRepository.annotations.value.find { it.id == polygonId } ?: return@launch
+            if (current is MapAnnotation.Polygon) {
+                val updated = current.copy(
+                    color = newColor ?: current.color,
+                    label = newLabel,
+                    timestamp = System.currentTimeMillis()
+                )
+                annotationRepository.addAnnotation(updated)
+            }
         }
     }
     

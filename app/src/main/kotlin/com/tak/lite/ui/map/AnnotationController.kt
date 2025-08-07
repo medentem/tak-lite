@@ -45,6 +45,8 @@ class AnnotationController(
     var editingPoiId: String? = null
     var isLineDrawingMode: Boolean = false
     var tempLinePoints: MutableList<LatLng> = mutableListOf()
+    private var shouldCreatePolygon: Boolean = false
+    private var pendingPolygonTouchLatLng: LatLng? = null // Store touch location for polygon POI creation
     private lateinit var lineToolConfirmButton: View
     private lateinit var lineToolCancelButton: View
     private lateinit var lineToolButtonFrame: View
@@ -55,6 +57,9 @@ class AnnotationController(
     private var lastOverlayAnnotations: List<MapAnnotation> = emptyList()
     private var lastPoiAnnotations: List<MapAnnotation.PointOfInterest> = emptyList()
     var mapController: MapController? = null
+    
+    // Polygon auto-closure threshold
+    private val POLYGON_CLOSURE_THRESHOLD_PIXELS = 30f
     
     // === NATIVE CLUSTERING SUPPORT ===
     private var clusteredLayerManager: ClusteredLayerManager;
@@ -78,6 +83,12 @@ class AnnotationController(
     
     // Getter for line timer manager
     val lineTimerManager: LineTimerManager? get() = _lineTimerManager
+
+    // === POLYGON TIMER SUPPORT ===
+    private var _polygonTimerManager: PolygonTimerManager? = null
+    
+    // Getter for polygon timer manager
+    val polygonTimerManager: PolygonTimerManager? get() = _polygonTimerManager
 
     // === DEVICE LOCATION MANAGER ===
     private var _deviceLocationManager: DeviceLocationLayerManager? = null
@@ -335,6 +346,10 @@ class AnnotationController(
             _lineTimerManager = LineTimerManager(mapLibreMap, annotationViewModel)
             Log.d("AnnotationController", "Line timer manager initialized")
         }
+        if (polygonTimerManager == null && mapLibreMap != null) {
+            _polygonTimerManager = PolygonTimerManager(mapLibreMap, annotationViewModel)
+            Log.d("AnnotationController", "Polygon timer manager initialized")
+        }
         if (deviceLocationManager == null && mapLibreMap != null) {
             _deviceLocationManager = DeviceLocationLayerManager(mapLibreMap)
             Log.d("AnnotationController", "Device location manager initialized")
@@ -349,6 +364,7 @@ class AnnotationController(
     fun cleanup() {
         poiTimerManager?.cleanup()
         lineTimerManager?.cleanup()
+        polygonTimerManager?.cleanup()
         unifiedAnnotationManager?.cleanup()
         deviceLocationManager?.cleanup()
         clusterTextManager?.cleanup()
@@ -395,6 +411,7 @@ class AnnotationController(
             initializeTimerManager(mapLibreMap)
             poiTimerManager?.setupTimerLayers()
             lineTimerManager?.setupTimerLayers()
+            polygonTimerManager?.setupTimerLayers()
             
             // Setup device location layers
             deviceLocationManager?.setupDeviceLocationLayers()
@@ -473,6 +490,7 @@ class AnnotationController(
                     // Retry timer layer setup now that POI layer exists
                     poiTimerManager?.retrySetupTimerLayers()
                     lineTimerManager?.retrySetupTimerLayers()
+                    polygonTimerManager?.retrySetupTimerLayers()
                 } else {
                     Log.d("PoiDebug", "Non-clustered POI layer already exists")
                 }
@@ -591,6 +609,7 @@ class AnnotationController(
                 // Retry timer layer setup now that clustered POI layer exists
                 poiTimerManager?.retrySetupTimerLayers()
                 lineTimerManager?.retrySetupTimerLayers()
+                polygonTimerManager?.retrySetupTimerLayers()
             }
         }
     }
@@ -690,6 +709,17 @@ class AnnotationController(
             val areaId = areaFeature.getStringProperty("areaId")
             // TODO: Implement area edit menu
             Log.d("AnnotationController", "Area long press detected: $areaId")
+            return true
+        }
+        
+        // Check if we're long pressing on a polygon
+        val polygonFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, PolygonLayerManager.POLYGON_HIT_AREA_LAYER)
+        val polygonFeature = polygonFeatures.firstOrNull { it.getStringProperty("polygonId") != null }
+        if (polygonFeature != null) {
+            val polygonId = polygonFeature.getStringProperty("polygonId")
+            Log.d("AnnotationController", "Polygon long press detected: $polygonId")
+            pendingPolygonTouchLatLng = latLng // Store the touch location
+            showPolygonFanMenu(screenPoint, polygonId)
             return true
         }
         
@@ -977,8 +1007,8 @@ class AnnotationController(
                     else -> {}
                 }
                 val nonPoiAnnotations = annotationViewModel.uiState.value.annotations.filterNot { it is MapAnnotation.PointOfInterest }
-                val linesAndAreas = nonPoiAnnotations.filter { it is MapAnnotation.Line || it is MapAnnotation.Area }
-                Log.d("AnnotationController", "Updating unified annotation manager with ${linesAndAreas.size} lines/areas")
+                val linesAndAreas = nonPoiAnnotations.filter { it is MapAnnotation.Line || it is MapAnnotation.Area || it is MapAnnotation.Polygon }
+                Log.d("AnnotationController", "Updating unified annotation manager with ${linesAndAreas.size} lines/areas/polygons")
                 unifiedAnnotationManager?.updateAnnotations(linesAndAreas)
                 annotationOverlayView.updateAnnotations(nonPoiAnnotations)
                 annotationOverlayView.setTempLinePoints(null)
@@ -1015,18 +1045,33 @@ class AnnotationController(
         }
     }
 
-    private fun finishLineDrawing(cancel: Boolean) {
+    fun finishLineDrawing(cancel: Boolean) {
         if (!cancel && tempLinePoints.size >= 2) {
-            annotationViewModel.addLine(tempLinePoints.toList())
-            Toast.makeText(fragment.requireContext(), "Line added!", Toast.LENGTH_SHORT).show()
+            if (shouldCreatePolygon && tempLinePoints.size >= 3) {
+                // Create as polygon
+                Log.d("PolygonDebug", "Creating polygon with ${tempLinePoints.size} points")
+                annotationViewModel.addPolygon(tempLinePoints.toList())
+                Toast.makeText(fragment.requireContext(), "Polygon created!", Toast.LENGTH_SHORT).show()
+            } else {
+                // Create as line
+                Log.d("PolygonDebug", "Creating line with ${tempLinePoints.size} points")
+                annotationViewModel.addLine(tempLinePoints.toList())
+                Toast.makeText(fragment.requireContext(), "Line added!", Toast.LENGTH_SHORT).show()
+            }
         }
         isLineDrawingMode = false
+        shouldCreatePolygon = false
         tempLinePoints.clear()
         annotationOverlayView.setTempLinePoints(null)
         lineToolButtonFrame.visibility = View.VISIBLE
         lineToolLabel.visibility = View.VISIBLE
         lineToolCancelButton.visibility = View.GONE
         lineToolConfirmButton.visibility = View.GONE
+    }
+    
+    fun setShouldCreatePolygon(shouldCreate: Boolean) {
+        Log.d("PolygonDebug", "Setting shouldCreatePolygon to $shouldCreate")
+        shouldCreatePolygon = shouldCreate
     }
 
     // Rendering overlays
@@ -1047,10 +1092,10 @@ class AnnotationController(
         Log.d("PoiDebug", "renderAllAnnotations: total=${allAnnotations.size}, nonPoi=${nonPoiAnnotations.size}, poi=${poiAnnotations.size}, lines=${lineAnnotations.size}")
         Log.d("PoiDebug", "POI annotations: ${poiAnnotations.map { "${it.id}:${it.label}" }}")
         
-        // Update unified annotation manager for lines and areas
-        val linesAndAreas = nonPoiAnnotations.filter { it is MapAnnotation.Line || it is MapAnnotation.Area }
+        // Update unified annotation manager for lines, areas, and polygons
+        val linesAndAreas = nonPoiAnnotations.filter { it is MapAnnotation.Line || it is MapAnnotation.Area || it is MapAnnotation.Polygon }
         unifiedAnnotationManager?.updateAnnotations(linesAndAreas)
-        Log.d(TAG, "Updated unified annotation manager with ${linesAndAreas.size} lines/areas")
+        Log.d(TAG, "Updated unified annotation manager with ${linesAndAreas.size} lines/areas/polygons")
         
         // Line endpoints are now included in POI clustering, no separate update needed
         
@@ -1087,8 +1132,8 @@ class AnnotationController(
         }
         
         // Only update unified annotations if they've actually changed
-        val linesAndAreas = nonPoiAnnotations.filter { it is MapAnnotation.Line || it is MapAnnotation.Area }
-        val lastLinesAndAreas = lastOverlayAnnotations.filter { it is MapAnnotation.Line || it is MapAnnotation.Area }
+        val linesAndAreas = nonPoiAnnotations.filter { it is MapAnnotation.Line || it is MapAnnotation.Area || it is MapAnnotation.Polygon }
+        val lastLinesAndAreas = lastOverlayAnnotations.filter { it is MapAnnotation.Line || it is MapAnnotation.Area || it is MapAnnotation.Polygon }
         val linesAndAreasChanged = linesAndAreas != lastLinesAndAreas
         if (linesAndAreasChanged) {
             Log.d("PoiDebug", "syncAnnotationOverlayView: lines/areas changed, updating unified manager")
@@ -1450,5 +1495,235 @@ class AnnotationController(
         // Show the dialog and request focus for the EditText
         dialog.show()
         editText.requestFocus()
+    }
+
+    fun showPolygonFanMenu(center: PointF, polygonId: String) {
+        Log.d("AnnotationController", "showPolygonFanMenu: center=$center, polygonId=$polygonId")
+        val options = listOf(
+            // Shape options for adding POIs within polygon
+            FanMenuView.Option.Shape(PointShape.CIRCLE),
+            FanMenuView.Option.Shape(PointShape.EXCLAMATION),
+            FanMenuView.Option.Shape(PointShape.SQUARE),
+            FanMenuView.Option.Shape(PointShape.TRIANGLE),
+            // Edit option for the polygon itself
+            FanMenuView.Option.EditPolygon(polygonId)
+        )
+        val screenSize = PointF(binding.root.width.toFloat(), binding.root.height.toFloat())
+        
+        // Get polygon center for menu positioning
+        val polygon = annotationViewModel.uiState.value.annotations.filterIsInstance<MapAnnotation.Polygon>().find { it.id == polygonId }
+        val polygonLatLng = polygon?.let { poly ->
+            if (poly.points.isNotEmpty()) {
+                val avgLat = poly.points.map { it.lt }.average()
+                val avgLng = poly.points.map { it.lng }.average()
+                LatLng(avgLat, avgLng)
+            } else null
+        }
+        
+        fanMenuView.showAt(center, options, object : FanMenuView.OnOptionSelectedListener {
+            override fun onOptionSelected(option: FanMenuView.Option): Boolean {
+                when (option) {
+                    is FanMenuView.Option.Shape -> {
+                        // Set current shape and show color menu for POI creation within polygon
+                        annotationViewModel.setCurrentShape(option.shape)
+                        showPolygonColorMenu(center, option.shape, polygonId)
+                        return true // Keep menu open for transition
+                    }
+                    is FanMenuView.Option.EditPolygon -> {
+                        // Show polygon edit menu
+                        showPolygonEditMenu(center, option.polygonId)
+                        return true // Keep menu open for transition
+                    }
+                    else -> {}
+                }
+                return false
+            }
+            override fun onMenuDismissed() {
+                Log.d("AnnotationController", "fanMenuView.onMenuDismissed for POLYGON")
+                fanMenuView.visibility = View.GONE
+            }
+        }, screenSize, polygonLatLng)
+        fanMenuView.bringToFront()
+        fanMenuView.visibility = View.VISIBLE
+        Log.d("AnnotationController", "fanMenuView.visibility set to VISIBLE for POLYGON")
+    }
+
+    fun showPolygonEditMenu(center: PointF, polygonId: String) {
+        Log.d("AnnotationController", "showPolygonEditMenu: center=$center, polygonId=$polygonId")
+        val polygon = annotationViewModel.uiState.value.annotations.filterIsInstance<MapAnnotation.Polygon>().find { it.id == polygonId } ?: return
+        val options = listOf(
+            FanMenuView.Option.Color(AnnotationColor.GREEN),
+            FanMenuView.Option.Color(AnnotationColor.YELLOW),
+            FanMenuView.Option.Color(AnnotationColor.RED),
+            FanMenuView.Option.Color(AnnotationColor.BLACK),
+            FanMenuView.Option.Timer(polygonId),
+            FanMenuView.Option.Label(polygonId),
+            FanMenuView.Option.Delete(polygonId)
+        )
+        val screenSize = PointF(binding.root.width.toFloat(), binding.root.height.toFloat())
+        
+        // Get polygon center for menu positioning
+        val polygonLatLng = if (polygon.points.isNotEmpty()) {
+            val avgLat = polygon.points.map { it.lt }.average()
+            val avgLng = polygon.points.map { it.lng }.average()
+            LatLng(avgLat, avgLng)
+        } else null
+        
+        fanMenuView.showAt(center, options, object : FanMenuView.OnOptionSelectedListener {
+            override fun onOptionSelected(option: FanMenuView.Option): Boolean {
+                Log.d("AnnotationController", "Polygon edit menu option selected: $option")
+                when (option) {
+                    is FanMenuView.Option.Color -> {
+                        Log.d("AnnotationController", "Updating polygon color to: ${option.color}")
+                        updatePolygonColor(polygonId, option.color)
+                    }
+                    is FanMenuView.Option.Timer -> {
+                        Log.d("AnnotationController", "Setting polygon expiration")
+                        setAnnotationExpiration(polygonId)
+                    }
+                    is FanMenuView.Option.Label -> {
+                        Log.d("AnnotationController", "Showing polygon label dialog")
+                        showPolygonLabelEditDialog(polygonId, polygon.label)
+                    }
+                    is FanMenuView.Option.Delete -> {
+                        Log.d("AnnotationController", "Deleting polygon: ${option.id}")
+                        deletePoi(option.id)
+                    }
+                    else -> {}
+                }
+                // Force map redraw to update polygon layer
+                onAnnotationChanged?.invoke()
+                return false
+            }
+            override fun onMenuDismissed() {
+                Log.d("AnnotationController", "fanMenuView.onMenuDismissed for POLYGON EDIT")
+                fanMenuView.visibility = View.GONE
+            }
+        }, screenSize, polygonLatLng)
+        fanMenuView.bringToFront()
+        fanMenuView.visibility = View.VISIBLE
+        Log.d("AnnotationController", "fanMenuView.visibility set to VISIBLE for POLYGON EDIT")
+    }
+
+    fun updatePolygonColor(polygonId: String, color: AnnotationColor) {
+        annotationViewModel.updatePolygon(polygonId, newColor = color)
+    }
+
+    private fun showPolygonLabelEditDialog(polygonId: String, currentLabel: String?) {
+        val context = fragment.requireContext()
+        val editText = android.widget.EditText(context).apply {
+            setText(currentLabel)
+            filters = arrayOf(android.text.InputFilter.LengthFilter(50)) // Limit label length
+            // Set input type to prevent newlines
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        }
+        
+        // Helper function to handle label submission
+        fun submitLabel() {
+            val newLabel = editText.text.toString().takeIf { it.isNotBlank() }
+            annotationViewModel.updatePolygon(polygonId, newLabel = newLabel)
+            // Force map redraw to update polygon layer with new label
+            onAnnotationChanged?.invoke()
+        }
+        
+        // Add editor action listener to handle Enter key
+        editText.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
+                submitLabel()
+                true // Consume the event
+            } else {
+                false // Don't consume other events
+            }
+        }
+        
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(context)
+            .setTitle("Edit Polygon Label")
+            .setView(editText)
+            .setPositiveButton("OK") { _, _ ->
+                submitLabel()
+            }
+            .setNegativeButton("Cancel", null)
+            .create()
+        
+        // Show the dialog and request focus for the EditText
+        dialog.show()
+        editText.requestFocus()
+    }
+
+    // Helper method to calculate distance between two points
+    private fun PointF.distanceTo(other: PointF): Float {
+        val dx = this.x - other.x
+        val dy = this.y - other.y
+        return kotlin.math.sqrt(dx * dx + dy * dy)
+    }
+
+    fun showPolygonColorMenu(center: PointF, shape: PointShape, polygonId: String) {
+        val colorOptions = listOf(
+            FanMenuView.Option.Color(AnnotationColor.GREEN),
+            FanMenuView.Option.Color(AnnotationColor.YELLOW),
+            FanMenuView.Option.Color(AnnotationColor.RED),
+            FanMenuView.Option.Color(AnnotationColor.BLACK)
+        )
+        val screenSize = PointF(binding.root.width.toFloat(), binding.root.height.toFloat())
+        
+        // Get polygon center for POI placement
+        val polygon = annotationViewModel.uiState.value.annotations.filterIsInstance<MapAnnotation.Polygon>().find { it.id == polygonId }
+        val polygonLatLng = polygon?.let { poly ->
+            if (poly.points.isNotEmpty()) {
+                val avgLat = poly.points.map { it.lt }.average()
+                val avgLng = poly.points.map { it.lng }.average()
+                LatLng(avgLat, avgLng)
+            } else null
+        }
+        
+        fanMenuView.showAt(center, colorOptions, object : FanMenuView.OnOptionSelectedListener {
+            override fun onOptionSelected(option: FanMenuView.Option): Boolean {
+                if (option is FanMenuView.Option.Color) {
+                    annotationViewModel.setCurrentColor(option.color)
+                    addPoiFromPolygonFanMenu(shape, option.color, polygonId)
+                    return false // Dismiss menu after POI creation
+                }
+                return false
+            }
+            override fun onMenuDismissed() {
+                fanMenuView.visibility = View.GONE
+            }
+        }, screenSize, polygonLatLng)
+        fanMenuView.bringToFront()
+        fanMenuView.visibility = View.VISIBLE
+    }
+
+    fun addPoiFromPolygonFanMenu(shape: PointShape, color: AnnotationColor, polygonId: String) {
+        // Use the stored touch location for POI placement
+        val latLng = pendingPolygonTouchLatLng
+        if (latLng != null) {
+            annotationViewModel.setCurrentShape(shape)
+            annotationViewModel.setCurrentColor(color)
+            annotationViewModel.addPointOfInterest(latLng)
+            fanMenuView.visibility = View.GONE
+            pendingPolygonTouchLatLng = null // Clear the stored location
+            onAnnotationChanged?.invoke()
+            val nonPoiAnnotations = annotationViewModel.uiState.value.annotations.filterNot { it is MapAnnotation.PointOfInterest }
+            annotationOverlayView.updateAnnotations(nonPoiAnnotations)
+            annotationOverlayView.invalidate()
+            
+            Toast.makeText(fragment.requireContext(), "POI added to polygon!", Toast.LENGTH_SHORT).show()
+        } else {
+            Log.e("AnnotationController", "No touch location stored for polygon POI creation")
+            Toast.makeText(fragment.requireContext(), "Error: Could not place POI", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun showPolygonLabel(polygonId: String, screenPosition: PointF) {
+        Log.d("AnnotationController", "showPolygonLabel: polygonId=$polygonId, screenPosition=$screenPosition")
+        // Find the polygon annotation to get its details
+        val polygon = annotationViewModel.uiState.value.annotations.filterIsInstance<MapAnnotation.Polygon>().find { it.id == polygonId }
+        if (polygon != null) {
+            Log.d("AnnotationController", "Found polygon: ${polygon.label}, points: ${polygon.points.size}")
+            popoverManager.showPolygonPopover(polygonId, polygon)
+            Log.d("AnnotationController", "showPolygonLabel: called popoverManager.showPolygonPopover")
+        } else {
+            Log.e("AnnotationController", "Polygon not found: $polygonId")
+        }
     }
 }

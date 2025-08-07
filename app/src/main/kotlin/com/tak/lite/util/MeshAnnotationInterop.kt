@@ -195,6 +195,73 @@ object MeshAnnotationInterop {
                     }
                 }))
             }
+            is MapAnnotation.Polygon -> {
+                val colorShort = when (annotation.color) {
+                    AnnotationColor.GREEN -> "g"
+                    AnnotationColor.YELLOW -> "y"
+                    AnnotationColor.RED -> "r"
+                    AnnotationColor.BLACK -> "b"
+                    AnnotationColor.WHITE -> "w"
+                }
+                
+                // Send all polygon points - the closing point will be added during rendering
+                val pointsForTransmission = annotation.points
+                
+                // Delta encoding with 5 decimal places (same as lines)
+                val absPoints = pointsForTransmission.map { pt ->
+                    listOf(
+                        (pt.lt * 1e5).toLong(),
+                        (pt.lng * 1e5).toLong()
+                    )
+                }
+                val pointsArr = if (absPoints.isNotEmpty()) {
+                    val deltas = mutableListOf<List<Long>>()
+                    deltas.add(absPoints[0]) // first point absolute
+                    for (i in 1 until absPoints.size) {
+                        val prev = absPoints[i - 1]
+                        val curr = absPoints[i]
+                        deltas.add(listOf(curr[0] - prev[0], curr[1] - prev[1]))
+                    }
+                    deltas
+                } else {
+                    emptyList()
+                }
+                val map = mutableMapOf<String, Any>(
+                    "t" to "polygon",
+                    "i" to annotation.id,
+                    "c" to annotation.creatorId,
+                    "ts" to annotation.timestamp,
+                    "cl" to colorShort,
+                    "pts" to pointsArr,
+                    "fo" to annotation.fillOpacity,
+                    "sw" to annotation.strokeWidth
+                )
+                annotation.expirationTime?.let { map["e"] = it }
+                annotation.label?.let { map["l"] = it }
+                kotlinx.serialization.json.Json.encodeToString(kotlinx.serialization.json.JsonObject(map.mapValues { (k, v) ->
+                    when (v) {
+                        is String -> kotlinx.serialization.json.JsonPrimitive(v)
+                        is Number -> kotlinx.serialization.json.JsonPrimitive(v)
+                        is List<*> -> kotlinx.serialization.json.JsonArray(v.map { pt ->
+                            val arr = pt as List<Long>
+                            kotlinx.serialization.json.JsonArray(arr.map { n ->
+                                kotlinx.serialization.json.JsonPrimitive(n)
+                            })
+                        })
+                        is Map<*, *> -> {
+                            val m = v as Map<String, Any>
+                            kotlinx.serialization.json.JsonObject(m.mapValues { (_, vv) ->
+                                when (vv) {
+                                    is String -> kotlinx.serialization.json.JsonPrimitive(vv)
+                                    is Number -> kotlinx.serialization.json.JsonPrimitive(vv)
+                                    else -> kotlinx.serialization.json.JsonNull
+                                }
+                            })
+                        }
+                        else -> kotlinx.serialization.json.JsonNull
+                    }
+                }))
+            }
             is MapAnnotation.Deletion -> {
                 val map = mutableMapOf<String, Any>(
                     "t" to "del",
@@ -391,6 +458,59 @@ object MeshAnnotationInterop {
                             center = com.tak.lite.model.LatLngSerializable(lat, lon),
                             radius = radius,
                             expirationTime = expirationTime
+                        )
+                    }
+                    "polygon" -> {
+                        val id = json["i"]?.jsonPrimitive?.content ?: return null
+                        val creatorId = json["c"]?.jsonPrimitive?.content ?: "local"
+                        val timestamp = json["ts"]?.jsonPrimitive?.longOrNull ?: System.currentTimeMillis()
+                        val colorShort = json["cl"]?.jsonPrimitive?.content ?: "g"
+                        val color = when (colorShort) {
+                            "g" -> AnnotationColor.GREEN
+                            "y" -> AnnotationColor.YELLOW
+                            "r" -> AnnotationColor.RED
+                            "b" -> AnnotationColor.BLACK
+                            else -> AnnotationColor.GREEN
+                        }
+                        // Delta decoding with 5 decimal places
+                        val pointsArr = json["pts"]?.jsonArray?.let { arr ->
+                            val decoded = mutableListOf<com.tak.lite.model.LatLngSerializable>()
+                            var lastLat: Long? = null
+                            var lastLon: Long? = null
+                            for ((i, pt) in arr.withIndex()) {
+                                val pair = pt.jsonArray
+                                val lat = pair[0].jsonPrimitive.longOrNull ?: 0L
+                                val lon = pair[1].jsonPrimitive.longOrNull ?: 0L
+                                if (i == 0) {
+                                    // first point is absolute
+                                    decoded.add(com.tak.lite.model.LatLngSerializable(lat.toDouble() / 1e5, lon.toDouble() / 1e5))
+                                    lastLat = lat
+                                    lastLon = lon
+                                } else {
+                                    // delta from previous
+                                    val newLat = (lastLat ?: 0L) + lat
+                                    val newLon = (lastLon ?: 0L) + lon
+                                    decoded.add(com.tak.lite.model.LatLngSerializable(newLat.toDouble() / 1e5, newLon.toDouble() / 1e5))
+                                    lastLat = newLat
+                                    lastLon = newLon
+                                }
+                            }
+                            decoded
+                        } ?: emptyList()
+                        val fillOpacity = json["fo"]?.jsonPrimitive?.doubleOrNull ?: 0.0
+                        val strokeWidth = json["sw"]?.jsonPrimitive?.doubleOrNull ?: 0.0
+                        val expirationTime = json["e"]?.jsonPrimitive?.longOrNull
+                        val label = json["l"]?.jsonPrimitive?.content
+                        MapAnnotation.Polygon(
+                            id = id,
+                            creatorId = creatorId,
+                            timestamp = timestamp,
+                            color = color,
+                            points = pointsArr,
+                            fillOpacity = fillOpacity.toFloat(),
+                            strokeWidth = strokeWidth.toFloat(),
+                            expirationTime = expirationTime,
+                            label = label
                         )
                     }
                     "del" -> {

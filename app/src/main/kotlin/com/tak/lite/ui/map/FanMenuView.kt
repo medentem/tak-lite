@@ -38,6 +38,7 @@ class FanMenuView @JvmOverloads constructor(
         data class Info(val id: String) : Option()
         data class DrawLine(val id: String) : Option()
         data class Label(val id: String) : Option()
+        data class EditPolygon(val polygonId: String) : Option()
     }
 
     interface OnOptionSelectedListener {
@@ -216,6 +217,7 @@ class FanMenuView @JvmOverloads constructor(
                     is Option.Info -> drawInfoIcon(canvas, x, y, isSelected, usedIconRadius)
                     is Option.DrawLine -> drawDrawLineIcon(canvas, x, y, isSelected, usedIconRadius)
                     is Option.Label -> drawLabelIcon(canvas, x, y, isSelected, usedIconRadius)
+                    is Option.EditPolygon -> drawEditPolygonIcon(canvas, x, y, isSelected, usedIconRadius)
                 }
             }
         }
@@ -621,6 +623,32 @@ class FanMenuView @JvmOverloads constructor(
             textAlign = Paint.Align.CENTER
         }
         canvas.drawText("Aa", x, y + textPaint.textSize/3, textPaint)
+    }
+
+    private fun drawEditPolygonIcon(canvas: Canvas, x: Float, y: Float, highlight: Boolean, iconRadius: Float) {
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (highlight) Color.YELLOW else Color.WHITE
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(x, y, iconRadius, bgPaint)
+        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (highlight) Color.WHITE else Color.DKGRAY
+            style = Paint.Style.STROKE
+            strokeWidth = 2.5f
+        }
+        canvas.drawCircle(x, y, iconRadius, borderPaint)
+        
+        // Draw the edit polygon icon from vector drawable
+        val iconSize = iconRadius * 1.6f
+        val icon = context.getDrawable(R.drawable.ic_edit_polygon)
+        icon?.setBounds(
+            (x - iconSize/2).toInt(),
+            (y - iconSize/2).toInt(),
+            (x + iconSize/2).toInt(),
+            (y + iconSize/2).toInt()
+        )
+        icon?.setTint(if (highlight) Color.BLACK else Color.DKGRAY)
+        icon?.draw(canvas)
     }
 
     // Returns Triple<ringIdx, idxInRing, Ring>

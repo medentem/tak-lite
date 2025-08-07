@@ -32,6 +32,13 @@ class AnnotationFragment : Fragment() {
 
     private var _binding: FragmentAnnotationBinding? = null
     private val binding get() = _binding!!
+    
+    // Helper method to calculate distance between two points
+    private fun PointF.distanceTo(other: PointF): Float {
+        val dx = this.x - other.x
+        val dy = this.y - other.y
+        return kotlin.math.sqrt(dx * dx + dy * dy)
+    }
 
     private val viewModel: AnnotationViewModel by viewModels()
     private val meshNetworkViewModel: MeshNetworkViewModel by activityViewModels()
@@ -45,6 +52,7 @@ class AnnotationFragment : Fragment() {
     private lateinit var predictionOverlayView: PredictionOverlayView
     private lateinit var timerTextOverlayView: TimerTextOverlayView
     private lateinit var lineTimerTextOverlayView: LineTimerTextOverlayView
+    private lateinit var polygonTimerTextOverlayView: PolygonTimerTextOverlayView
     
     // POI tap detection state
     private var poiTapDownTime: Long? = null
@@ -77,10 +85,12 @@ class AnnotationFragment : Fragment() {
         predictionOverlayView = view.findViewById(R.id.predictionOverlayView)
         
         // Initialize timer text overlays
-        timerTextOverlayView = mainActivity?.findViewById(R.id.timerTextOverlayView) ?: 
+        timerTextOverlayView = mainActivity?.findViewById(R.id.timerTextOverlayView) ?:
             view.findViewById(R.id.timerTextOverlayView)
-        lineTimerTextOverlayView = mainActivity?.findViewById(R.id.lineTimerTextOverlayView) ?: 
+        lineTimerTextOverlayView = mainActivity?.findViewById(R.id.lineTimerTextOverlayView) ?:
             view.findViewById(R.id.lineTimerTextOverlayView)
+        polygonTimerTextOverlayView = mainActivity?.findViewById(R.id.polygonTimerTextOverlayView) ?:
+            view.findViewById(R.id.polygonTimerTextOverlayView)
         
         // Initialize cluster text overlay
         val clusterTextOverlayView = mainActivity?.findViewById<ClusterTextOverlayView>(R.id.clusterTextOverlayView) ?: 
@@ -163,6 +173,28 @@ class AnnotationFragment : Fragment() {
                 }
                 
                 if (annotationController.isLineDrawingMode) {
+                    // Check for auto-closure BEFORE adding the new point
+                    if (annotationController.tempLinePoints.size >= 2) {
+                        val firstPoint = annotationController.tempLinePoints.first()
+                        val screenFirst = mapLibreMap.projection.toScreenLocation(firstPoint)
+                        val screenNew = mapLibreMap.projection.toScreenLocation(latLng)
+                        
+                        val distance = PointF(screenFirst.x, screenFirst.y).distanceTo(
+                            PointF(screenNew.x, screenNew.y)
+                        )
+                        
+                        Log.d("PolygonDebug", "Auto-closure check: distance=$distance, threshold=30f, points=${annotationController.tempLinePoints.size}")
+                        
+                        if (distance <= 30f) { // POLYGON_CLOSURE_THRESHOLD_PIXELS
+                            // Auto-close polygon
+                            Log.d("PolygonDebug", "Auto-closing polygon with ${annotationController.tempLinePoints.size} points")
+                            annotationController.setShouldCreatePolygon(true)
+                            annotationController.finishLineDrawing(cancel = false)
+                            return@addOnMapClickListener true
+                        }
+                    }
+                    
+                    // Add the new point if not auto-closing
                     annotationController.tempLinePoints.add(latLng)
                     annotationOverlayView.setTempLinePoints(annotationController.tempLinePoints)
                     annotationController.updateLineToolConfirmState()
@@ -218,10 +250,21 @@ class AnnotationFragment : Fragment() {
                             // Show line edit menu
                             annotationController.showLineEditMenu(screenPoint, lineId)
                             true
+                        } else {
+                            // Check for polygon tap detection
+                            val polygonFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, PolygonLayerManager.POLYGON_HIT_AREA_LAYER)
+                            val polygonFeature = polygonFeatures.firstOrNull { it.getStringProperty("polygonId") != null }
+                            if (polygonFeature != null) {
+                                val polygonId = polygonFeature.getStringProperty("polygonId")
+                                Log.d("AnnotationFragment", "Polygon tapped: $polygonId")
+                                // For single taps, show polygon popover
+                                annotationController.showPolygonLabel(polygonId, screenPoint)
+                                true
                             } else {
                                 // Line endpoints are now part of POI clusters, handled by POI tap detection
                                 false
                             }
+                        }
                         }
                 }
             }
@@ -248,6 +291,7 @@ class AnnotationFragment : Fragment() {
                 predictionOverlayView.setProjection(mapLibreMap.projection)
                 timerTextOverlayView.setProjection(mapLibreMap.projection)
                 lineTimerTextOverlayView.setProjection(mapLibreMap.projection)
+                polygonTimerTextOverlayView.setProjection(mapLibreMap.projection)
                 clusterTextOverlayView.setProjection(mapLibreMap.projection)
                 
                 // Notify cluster text manager about camera movement for performance optimization
@@ -289,6 +333,14 @@ class AnnotationFragment : Fragment() {
                 lineTimerTextOverlayView.setProjection(mapLibreMap.projection)
                 lineTimerManager.startTimerUpdates()
                 Log.d("AnnotationFragment", "Line timer updates started")
+            }
+            
+            // Set up polygon timer text overlay callback
+            annotationController.polygonTimerManager?.let { polygonTimerManager ->
+                polygonTimerManager.setTimerTextCallback(polygonTimerTextOverlayView)
+                polygonTimerTextOverlayView.setProjection(mapLibreMap.projection)
+                polygonTimerManager.startTimerUpdates()
+                Log.d("AnnotationFragment", "Polygon timer updates started")
             }
             
             // === ENHANCED: Single data flow for peer locations with native clustering ===

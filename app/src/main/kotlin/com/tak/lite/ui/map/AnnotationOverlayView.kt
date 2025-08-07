@@ -449,6 +449,24 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     }
                     canvas.drawLine(p1.x, p1.y, p2.x, p2.y, tempPaint)
                 }
+                
+                // Draw closing line if near first point (polygon preview)
+                if (points.size >= 3) {
+                    val firstPoint = screenPoints.first()
+                    val lastPoint = screenPoints.last()
+                    val distance = PointF(firstPoint.x, firstPoint.y).distanceTo(
+                        PointF(lastPoint.x, lastPoint.y)
+                    )
+                    
+                    if (distance <= 30f) { // POLYGON_CLOSURE_THRESHOLD_PIXELS
+                        // Draw dashed closing line
+                        val closingPaint = Paint(paint).apply {
+                            color = Color.GREEN
+                            pathEffect = DashPathEffect(floatArrayOf(10f, 5f), 0f)
+                        }
+                        canvas.drawLine(firstPoint.x, firstPoint.y, lastPoint.x, lastPoint.y, closingPaint)
+                    }
+                }
             }
             // Draw dots at each point
             points.forEach { latLng ->
@@ -510,8 +528,25 @@ class AnnotationOverlayView @JvmOverloads constructor(
             is MapAnnotation.PointOfInterest -> this.position.toMapLibreLatLng()
             is MapAnnotation.Line -> this.points.first().toMapLibreLatLng()
             is MapAnnotation.Area -> this.center.toMapLibreLatLng()
+            is MapAnnotation.Polygon -> {
+                // Return the center point of the polygon
+                if (this.points.isNotEmpty()) {
+                    val avgLat = this.points.map { it.lt }.average()
+                    val avgLng = this.points.map { it.lng }.average()
+                    LatLng(avgLat, avgLng)
+                } else {
+                    LatLng(0.0, 0.0)
+                }
+            }
             is MapAnnotation.Deletion -> throw IllegalArgumentException("Deletion has no LatLng")
         }
+    }
+    
+    // Helper method to calculate distance between two points
+    private fun PointF.distanceTo(other: PointF): Float {
+        val dx = this.x - other.x
+        val dy = this.y - other.y
+        return kotlin.math.sqrt(dx * dx + dy * dy)
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
