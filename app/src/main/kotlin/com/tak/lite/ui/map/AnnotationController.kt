@@ -724,10 +724,8 @@ class AnnotationController(
         
         // Check if we're long pressing on an area
         val areaFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, AreaLayerManager.AREA_FILL_LAYER)
-        val areaStrokeFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, AreaLayerManager.AREA_STROKE_LAYER)
         val areaHitAreaFeatures = mapLibreMap.queryRenderedFeatures(screenPoint, AreaLayerManager.AREA_HIT_AREA_LAYER)
         val areaFeature = areaFeatures.firstOrNull { it.getStringProperty("areaId") != null }
-            ?: areaStrokeFeatures.firstOrNull { it.getStringProperty("areaId") != null }
             ?: areaHitAreaFeatures.firstOrNull { it.getStringProperty("areaId") != null }
         if (areaFeature != null) {
             val areaId = areaFeature.getStringProperty("areaId")
@@ -1970,9 +1968,11 @@ class AnnotationController(
             val edgeScreen = PointF(centerScreen.x + tempAreaRadiusPixels, centerScreen.y)
             val edgeLatLng = projection.fromScreenLocation(edgeScreen)
             tempAreaRadius = calculateDistance(latLng, edgeLatLng)
+            Log.d("AnnotationController", "Initial area radius (from 300px): ${tempAreaRadius} m at latLng=$latLng")
         } else {
             // Fallback: rough conversion (1 pixel ≈ 1 meter at zoom level 15)
             tempAreaRadius = tempAreaRadiusPixels.toDouble()
+            Log.w("AnnotationController", "Projection null; using fallback radius=${tempAreaRadius} m")
         }
         
         // Show color menu for area
@@ -2037,7 +2037,25 @@ class AnnotationController(
         val center = tempAreaCenter ?: return
         Log.d("AnnotationController", "createAreaFromFanMenu: center=$center, radius=$tempAreaRadius, color=$color")
         annotationViewModel.setCurrentColor(color)
-        annotationViewModel.addArea(center, tempAreaRadius)
+
+        var radiusMeters = tempAreaRadius
+        if (radiusMeters <= 0.0) {
+            // Recompute defensively from pixels to meters to avoid creating zero-radius areas
+            val projection = mapController?.mapLibreMap?.projection
+            radiusMeters = if (projection != null) {
+                val centerScreen = projection.toScreenLocation(center)
+                val edgeScreen = PointF(centerScreen.x + tempAreaRadiusPixels, centerScreen.y)
+                val edgeLatLng = projection.fromScreenLocation(edgeScreen)
+                val recomputed = calculateDistance(center, edgeLatLng)
+                Log.w("AnnotationController", "Recomputed area radius from pixels: ${recomputed} m (was ${tempAreaRadius})")
+                recomputed
+            } else {
+                Log.w("AnnotationController", "Projection null while recomputing; defaulting radius to 50m")
+                50.0
+            }
+        }
+
+        annotationViewModel.addArea(center, radiusMeters)
         fanMenuView.visibility = View.GONE
         finishAreaDrawing()
         onAnnotationChanged?.invoke()
