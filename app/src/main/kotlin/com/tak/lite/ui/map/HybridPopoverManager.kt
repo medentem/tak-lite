@@ -473,6 +473,11 @@ class HybridPopoverManager(
         val title = area.label ?: "Area"
         lines.add(title)
         
+        // Calculate area in square miles
+        val areaSqMiles = calculateCircleArea(area.center.lt, area.radius)
+        lines.add("${String.format("%.2f", areaSqMiles)} sq mi")
+        Log.d(TAG, "Area calculation: radius=${area.radius}m, area=${String.format("%.2f", areaSqMiles)} sq mi")
+        
         // Content lines
         val ageSec = (System.currentTimeMillis() - area.timestamp) / 1000
         val ageStr = if (ageSec > 60) "${ageSec / 60}m old" else "${ageSec}s old"
@@ -512,6 +517,22 @@ class HybridPopoverManager(
         val lngMilesPerDegree = 69.0 * Math.cos(Math.toRadians(avgLat))
         
         val areaSqMiles = area * latMilesPerDegree * lngMilesPerDegree
+        return areaSqMiles
+    }
+
+    /**
+     * Calculate the area of a circle in square miles
+     * @param centerLat Latitude of the circle center
+     * @param radiusMeters Radius of the circle in meters
+     * @return Area in square miles
+     */
+    private fun calculateCircleArea(centerLat: Double, radiusMeters: Double): Double {
+        // Convert radius from meters to miles
+        val radiusMiles = radiusMeters / 1609.344
+        
+        // Calculate area using πr²
+        val areaSqMiles = Math.PI * radiusMiles * radiusMiles
+        
         return areaSqMiles
     }
 } 

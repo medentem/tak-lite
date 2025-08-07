@@ -164,6 +164,9 @@ object MeshAnnotationInterop {
                     else -> "g"
                 }
                 val center = annotation.center
+                
+                // Optimize for bandwidth: use shorter field names and integer encoding
+                // Integer encoding with 5 decimal places (same precision, smaller size)
                 val map = mutableMapOf<String, Any>(
                     "t" to "area",
                     "i" to annotation.id,
@@ -171,13 +174,19 @@ object MeshAnnotationInterop {
                     "ts" to annotation.timestamp,
                     "cl" to colorShort,
                     "ctr" to mapOf(
-                        "a" to (center.lt * 1e5).toLong(),
-                        "o" to (center.lng * 1e5).toLong()
+                        "a" to (center.lt * 1e5).toLong(), // lat as integer
+                        "o" to (center.lng * 1e5).toLong()  // lon as integer
                     ),
-                    "r" to annotation.radius
+                    "r" to (annotation.radius * 100).toLong() // radius in cm for integer precision
                 )
+                
+                // Only include optional fields if they have values
                 annotation.expirationTime?.let { map["e"] = it }
                 annotation.label?.let { map["l"] = it }
+                
+                // Log bandwidth optimization for areas
+                Log.d(TAG, "Area mesh serialization: radius=${annotation.radius}m -> ${(annotation.radius * 100).toLong()}cm (integer encoding)")
+                
                 kotlinx.serialization.json.Json.encodeToString(kotlinx.serialization.json.JsonObject(map.mapValues { (k, v) ->
                     when (v) {
                         is String -> kotlinx.serialization.json.JsonPrimitive(v)
@@ -449,7 +458,9 @@ object MeshAnnotationInterop {
                         // Integer decoding with 5 decimal places
                         val lat = centerObj?.get("a")?.jsonPrimitive?.longOrNull?.toDouble()?.div(1e5) ?: 0.0
                         val lon = centerObj?.get("o")?.jsonPrimitive?.longOrNull?.toDouble()?.div(1e5) ?: 0.0
-                        val radius = json["r"]?.jsonPrimitive?.doubleOrNull ?: 0.0
+                        // Radius is now stored as integer centimeters, convert back to meters
+                        val radiusCm = json["r"]?.jsonPrimitive?.longOrNull ?: 0L
+                        val radius = radiusCm.toDouble() / 100.0
                         val expirationTime = json["e"]?.jsonPrimitive?.longOrNull
                         val label = json["l"]?.jsonPrimitive?.content
                         MapAnnotation.Area(
