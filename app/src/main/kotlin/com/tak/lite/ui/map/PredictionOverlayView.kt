@@ -178,9 +178,8 @@ class PredictionOverlayView @JvmOverloads constructor(
     
     fun setProjection(projection: Projection?) {
         this.projection = projection
-        // Force viewport update when projection changes
+        // Reset cached viewport; caller should explicitly notify on camera idle
         currentViewportBounds = null
-        updateViewport()
         invalidate()
     }
     
@@ -206,10 +205,17 @@ class PredictionOverlayView @JvmOverloads constructor(
     
     fun setZoom(zoom: Float) {
         this.currentZoom = zoom
-        // Force viewport update on zoom change
+        // Reset cached viewport; caller should explicitly notify on camera idle
         currentViewportBounds = null
-        updateViewport()
         invalidate()
+    }
+
+    /**
+     * Explicit notification entrypoint to recompute and push viewport changes.
+     * Call this on camera idle to avoid recalculating predictions during pan/zoom.
+     */
+    fun notifyViewportChanged() {
+        updateViewport()
     }
     
     override fun onDraw(canvas: Canvas) {

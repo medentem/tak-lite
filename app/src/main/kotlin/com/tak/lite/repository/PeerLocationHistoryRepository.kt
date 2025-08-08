@@ -232,7 +232,7 @@ class PeerLocationHistoryRepository @Inject constructor(
     
     // Viewport state for performance optimization
     private var lastViewportUpdate: Long = 0
-    private val VIEWPORT_UPDATE_THROTTLE_MS = 200L // Throttle viewport updates
+    private val VIEWPORT_UPDATE_THROTTLE_MS = 250L // Slight throttle; main gating is camera idle
     private var currentViewportBounds: android.graphics.RectF? = null
     
     /**
@@ -242,68 +242,40 @@ class PeerLocationHistoryRepository @Inject constructor(
      */
     fun updateVisiblePredictions(viewportBounds: android.graphics.RectF?) {
         val startTime = System.currentTimeMillis()
-        val currentConfig = _predictionConfig.value
-        val currentModel = _selectedModel.value
-        
         if (viewportBounds == null) {
-            // Fallback to updating all predictions when viewport is unknown
-            Log.d(TAG, "Viewport bounds null, falling back to updateAllPredictions")
-            updateAllPredictions()
+            Log.d(TAG, "Viewport bounds null; skipping prediction recompute (predictions update only on new data)")
             return
         }
-        
-        Log.d(TAG, "Updating predictions for viewport: $viewportBounds")
-        
+
+        Log.d(TAG, "Filtering predictions for viewport: $viewportBounds")
+
         // Create a snapshot of peer histories to avoid concurrent modification
-        val peerHistoriesSnapshot = synchronized(peerHistories) {
-            peerHistories.toMap()
-        }
-        
-        // Filter peers to only those in viewport
-        val visiblePeers = peerHistoriesSnapshot.filter { (peerId, history) ->
-            val latestEntry = history.entries.lastOrNull() ?: return@filter false
+        val peerHistoriesSnapshot = synchronized(peerHistories) { peerHistories.toMap() }
+
+        // Determine which peers are visible
+        val visiblePeerIds = peerHistoriesSnapshot.mapNotNull { (peerId, history) ->
+            val latestEntry = history.entries.lastOrNull() ?: return@mapNotNull null
             val lat = latestEntry.latitude.toFloat()
             val lon = latestEntry.longitude.toFloat()
-            val inBounds = lat >= viewportBounds.bottom && lat <= viewportBounds.top && 
-                          lon >= viewportBounds.left && lon <= viewportBounds.right
-            
-            if (inBounds) {
-                Log.d(TAG, "Peer $peerId in viewport: lat=$lat, lon=$lon")
-            }
-            inBounds
-        }
-        
-        Log.d(TAG, "Viewport filtering: ${peerHistoriesSnapshot.size} total peers, ${visiblePeers.size} visible")
-        
-        // Update predictions only for visible peers
-        visiblePeers.forEach { (peerId, history) ->
-            updatePrediction(peerId, history, currentConfig, currentModel)
-        }
-        
-        // Remove predictions for non-visible peers to save memory
-        val currentPredictions = _predictions.value.toMutableMap()
-        val currentCones = _confidenceCones.value.toMutableMap()
-        
-        val removedPredictions = mutableListOf<String>()
-        peerHistoriesSnapshot.keys.forEach { peerId ->
-            if (!visiblePeers.containsKey(peerId)) {
-                if (currentPredictions.remove(peerId) != null) {
-                    removedPredictions.add(peerId)
-                }
-                currentCones.remove(peerId)
-            }
-        }
-        
-        if (removedPredictions.isNotEmpty()) {
-            Log.d(TAG, "Removed predictions for off-screen peers: $removedPredictions")
-        }
-        
-        _predictions.value = currentPredictions
-        _confidenceCones.value = currentCones
-        
-        val endTime = System.currentTimeMillis()
-        val duration = endTime - startTime
-        Log.d(TAG, "Viewport prediction update completed in ${duration}ms: ${visiblePeers.size} visible peers processed")
+            val inBounds = lat >= viewportBounds.bottom && lat <= viewportBounds.top &&
+                    lon >= viewportBounds.left && lon <= viewportBounds.right
+            if (inBounds) peerId else null
+        }.toSet()
+
+        Log.d(TAG, "Viewport filtering: ${peerHistoriesSnapshot.size} total peers, ${visiblePeerIds.size} visible")
+
+        // Filter existing predictions and cones to visible peers only. Do NOT recompute here.
+        val currentPredictions = _predictions.value
+        val currentCones = _confidenceCones.value
+
+        val filteredPredictions = currentPredictions.filterKeys { it in visiblePeerIds }
+        val filteredCones = currentCones.filterKeys { it in visiblePeerIds }
+
+        _predictions.value = filteredPredictions
+        _confidenceCones.value = filteredCones
+
+        val duration = System.currentTimeMillis() - startTime
+        Log.d(TAG, "Viewport filter completed in ${duration}ms: predictions=${filteredPredictions.size}")
     }
     
     /**
@@ -321,7 +293,7 @@ class PeerLocationHistoryRepository @Inject constructor(
         currentViewportBounds = viewportBounds
         lastViewportUpdate = now
         
-        // Update predictions for the new viewport
+        // Update predictions for the new viewport (only called from camera idle)
         updateVisiblePredictions(viewportBounds)
     }
     

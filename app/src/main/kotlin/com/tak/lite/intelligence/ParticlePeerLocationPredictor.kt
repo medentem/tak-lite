@@ -1,6 +1,7 @@
 package com.tak.lite.intelligence
 
 import android.util.Log
+import com.tak.lite.BuildConfig
 import com.tak.lite.data.model.ConfidenceCone
 import com.tak.lite.data.model.LocationPrediction
 import com.tak.lite.data.model.MovementPattern
@@ -50,8 +51,8 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
     override fun predictPeerLocation(history: PeerLocationHistory, config: PredictionConfig): LocationPrediction? {
         val startTime = System.currentTimeMillis()
         
-        // COORDINATE SYSTEM TEST: Run coordinate system validation (only once per prediction)
-        if (System.currentTimeMillis() % 10000 < 100) { // Run test approximately every 10 seconds
+        // COORDINATE SYSTEM TEST: Only in debug builds
+        if (BuildConfig.DEBUG && System.currentTimeMillis() % 10000 < 100) {
             testCoordinateSystemConversions()
         }
         
@@ -305,8 +306,8 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
                     Log.d(TAG, "Particle filter: HISTORICAL_MOVEMENT - distance=${historicalDistance.toInt()}m, heading=${historicalHeading.toInt()}°, dt=${dt.toInt()}s")
                 }
 
-                // Predict particle positions
-                particles.forEach { particle ->
+                // Predict particle positions with per-step process noise and geodesic propagation
+                particles.forEachIndexed { idx, particle ->
                     // DEBUG: Log particle movement for first few particles
                     val particleStartLat = particle.lat
                     val particleStartLon = particle.lon
@@ -314,31 +315,58 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
                     // FIXED: Validate particle velocities before movement to prevent excessive movement
                     val vLatMps = particle.vLat * EARTH_RADIUS_METERS * DEG_TO_RAD
                     val vLonMps = particle.vLon * EARTH_RADIUS_METERS * cos(particle.lat * DEG_TO_RAD) * DEG_TO_RAD
-                    val particleSpeed = sqrt(vLatMps * vLatMps + vLonMps * vLonMps)
+                    var particleSpeed = sqrt(vLatMps * vLatMps + vLonMps * vLonMps)
+                    var particleHeading = normalizeAngle360(atan2(vLonMps, vLatMps) * RAD_TO_DEG)
+
+                    // Per-step process noise (scaled by dt and movement pattern)
+                    val baseSpeedJitter = when (movementPattern) {
+                        MovementPattern.HIGHWAY_DRIVING -> 0.2
+                        MovementPattern.URBAN_DRIVING -> 0.5
+                        MovementPattern.BOATING -> 0.6
+                        MovementPattern.WALKING_HIKING -> 0.8
+                        MovementPattern.STATIONARY -> 0.05
+                        else -> 0.6
+                    }
+                    val baseHeadingJitterDeg = when (movementPattern) {
+                        MovementPattern.HIGHWAY_DRIVING -> 2.0
+                        MovementPattern.URBAN_DRIVING -> 5.0
+                        MovementPattern.BOATING -> 6.0
+                        MovementPattern.WALKING_HIKING -> 8.0
+                        MovementPattern.STATIONARY -> 1.0
+                        else -> 6.0
+                    }
+                    val timeScale = sqrt(dt / 15.0)
+                    val speedJitter = Random.nextDouble(-baseSpeedJitter, baseSpeedJitter) * timeScale
+                    val headingJitter = Random.nextDouble(-baseHeadingJitterDeg, baseHeadingJitterDeg) * timeScale
+                    particleSpeed = (particleSpeed + speedJitter).coerceAtLeast(0.1)
+                    particleHeading = normalizeAngle360(particleHeading + headingJitter)
 
                     // Cap particle speed to prevent excessive movement
                     val maxParticleSpeed = 100.0 // 100 m/s = ~224 mph
                     if (particleSpeed > maxParticleSpeed) {
                         Log.w(TAG, "Particle filter: Particle speed too high: ${particleSpeed.toInt()}m/s - capping movement")
-                        // Scale down the velocity components proportionally
-                        val scaleFactor = maxParticleSpeed / particleSpeed
-                        particle.vLat *= scaleFactor
-                        particle.vLon *= scaleFactor
+                        particleSpeed = maxParticleSpeed
                     }
 
-                    particle.lat += particle.vLat * dt
-                    particle.lon += particle.vLon * dt
+                    // Geodesic propagation
+                    val travelDistance = particleSpeed * dt
+                    val (newLat, newLon) = calculateDestination(particle.lat, particle.lon, travelDistance, particleHeading)
+                    particle.lat = newLat
+                    particle.lon = newLon
+
+                    // Recompute velocity components at new latitude to keep m/s consistent
+                    val newVLat = particleSpeed * cos(particleHeading * DEG_TO_RAD) / (EARTH_RADIUS_METERS * DEG_TO_RAD)
+                    val newVLon = particleSpeed * sin(particleHeading * DEG_TO_RAD) / (EARTH_RADIUS_METERS * cos(particle.lat * DEG_TO_RAD) * DEG_TO_RAD)
+                    particle.vLat = if (newVLat.isFinite()) newVLat else 0.0
+                    particle.vLon = if (newVLon.isFinite()) newVLon else 0.0
                     
                     // DEBUG: Log particle movement for first few particles
-                    if (i == 1 && particles.indexOf(particle) < 3) {
+                    if (i == 1 && idx < 3) {
                         val particleDistance = haversine(particleStartLat, particleStartLon, particle.lat, particle.lon)
-                        val particleHeading = calculateBearing(particleStartLat, particleStartLon, particle.lat, particle.lon)
-                        val recoveredHeading = atan2(vLonMps, vLatMps) * RAD_TO_DEG
-                        val geographicHeading = (recoveredHeading + 360.0) % 360.0
-                        Log.d(TAG, "Particle filter: PARTICLE_MOVEMENT ${particles.indexOf(particle)} - from=(${particleStartLat}, ${particleStartLon}) to=(${particle.lat}, ${particle.lon})")
-                        Log.d(TAG, "Particle filter: PARTICLE_MOVEMENT ${particles.indexOf(particle)} - distance=${particleDistance.toInt()}m, heading=${particleHeading.toInt()}°, speed=${particleSpeed.toInt()}m/s")
-                        Log.d(TAG, "Particle filter: PARTICLE_MOVEMENT ${particles.indexOf(particle)} - vLat=${String.format("%.6f", particle.vLat)}°/s, vLon=${String.format("%.6f", particle.vLon)}°/s")
-                        Log.d(TAG, "Particle filter: PARTICLE_MOVEMENT ${particles.indexOf(particle)} - recoveredHeading=${recoveredHeading.toInt()}°, geographicHeading=${geographicHeading.toInt()}°")
+                        val movedHeading = calculateBearing(particleStartLat, particleStartLon, particle.lat, particle.lon)
+                        Log.d(TAG, "Particle filter: PARTICLE_MOVEMENT $idx - from=(${particleStartLat}, ${particleStartLon}) to=(${particle.lat}, ${particle.lon})")
+                        Log.d(TAG, "Particle filter: PARTICLE_MOVEMENT $idx - distance=${particleDistance.toInt()}m, heading=${movedHeading.toInt()}°, speed=${particleSpeed.toInt()}m/s")
+                        Log.d(TAG, "Particle filter: PARTICLE_MOVEMENT $idx - vLat=${String.format("%.6f", particle.vLat)}°/s, vLon=${String.format("%.6f", particle.vLon)}°/s")
                     }
 
                     // ENHANCED: Adjust measurement noise based on GPS quality if available
@@ -373,15 +401,15 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
                     }
 
                     // ROBUST WEIGHT CALCULATION: Use log-weights to prevent numerical underflow
-                    val distance = haversine(particle.lat, particle.lon, current.latitude, current.longitude)
+                    val measurementDistance = haversine(particle.lat, particle.lon, current.latitude, current.longitude)
                     
                     // Convert to log-weights to prevent numerical underflow
-                    val logWeight = -distance * distance / (2 * measurementNoise * measurementNoise)
+                    val logWeight = -measurementDistance * measurementDistance / (2 * measurementNoise * measurementNoise)
                     particle.logWeight += logWeight
                     
                     // FIXED: Add debug logging for weight calculation (only occasionally)
-                    if (i % 5 == 0 && particles.indexOf(particle) < 3) { // Log first 3 particles every 5th iteration
-                        Log.d(TAG, "Particle filter: Weight calc - particle=${particles.indexOf(particle)}, distance=${distance.toInt()}m, noise=${measurementNoise.toInt()}m, logWeight=${String.format("%.3f", logWeight)}")
+                    if (i % 5 == 0 && idx < 3) { // Log first 3 particles every 5th iteration
+                        Log.d(TAG, "Particle filter: Weight calc - particle=$idx, distance=${measurementDistance.toInt()}m, noise=${measurementNoise.toInt()}m, logWeight=${String.format("%.3f", logWeight)}")
                     }
                 }
 
@@ -491,33 +519,39 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
 
             // Predict future positions for all particles from current position
             val predictionTimeSeconds = config.predictionHorizonMinutes * 60.0
-            val predictedParticles = currentPositionParticles.map { particle ->
+            val predictedParticles = currentPositionParticles.mapIndexed { idx, particle ->
                 val startLat = particle.lat
                 val startLon = particle.lon
-                
+
+                val vLatMps = particle.vLat * EARTH_RADIUS_METERS * DEG_TO_RAD
+                val vLonMps = particle.vLon * EARTH_RADIUS_METERS * cos(particle.lat * DEG_TO_RAD) * DEG_TO_RAD
+                val particleSpeed = sqrt(vLatMps * vLatMps + vLonMps * vLonMps)
+                val particleHeading = normalizeAngle360(atan2(vLonMps, vLatMps) * RAD_TO_DEG)
+
+                val distance = particleSpeed * predictionTimeSeconds
+                val (futureLat, futureLon) = calculateDestination(particle.lat, particle.lon, distance, particleHeading)
+
+                // Recompute velocity components at future latitude for consistency
+                val newVLat = particleSpeed * cos(particleHeading * DEG_TO_RAD) / (EARTH_RADIUS_METERS * DEG_TO_RAD)
+                val newVLon = particleSpeed * sin(particleHeading * DEG_TO_RAD) / (EARTH_RADIUS_METERS * cos(futureLat * DEG_TO_RAD) * DEG_TO_RAD)
+
                 val futureParticle = Particle(
-                    lat = particle.lat + particle.vLat * predictionTimeSeconds,
-                    lon = particle.lon + particle.vLon * predictionTimeSeconds,
-                    vLat = particle.vLat,
-                    vLon = particle.vLon,
+                    lat = futureLat,
+                    lon = futureLon,
+                    vLat = if (newVLat.isFinite()) newVLat else 0.0,
+                    vLon = if (newVLon.isFinite()) newVLon else 0.0,
                     weight = particle.weight,
-                    logWeight = particle.logWeight // Preserve log-weight for confidence calculation
+                    logWeight = particle.logWeight
                 )
-                
+
                 // DEBUG: Log future movement for first few particles
-                if (currentPositionParticles.indexOf(particle) < 3) {
+                if (idx < 3) {
                     val futureDistance = haversine(startLat, startLon, futureParticle.lat, futureParticle.lon)
                     val futureHeading = calculateBearing(startLat, startLon, futureParticle.lat, futureParticle.lon)
-                    val vLatMps = particle.vLat * EARTH_RADIUS_METERS * DEG_TO_RAD
-                    val vLonMps = particle.vLon * EARTH_RADIUS_METERS * cos(particle.lat * DEG_TO_RAD) * DEG_TO_RAD
-                    val particleSpeed = sqrt(vLatMps * vLatMps + vLonMps * vLonMps)
-                    val recoveredHeading = atan2(vLonMps, vLatMps) * RAD_TO_DEG
-                    val geographicHeading = (recoveredHeading + 360.0) % 360.0
-                    Log.d(TAG, "Particle filter: FUTURE_MOVEMENT ${currentPositionParticles.indexOf(particle)} - from=(${startLat}, ${startLon}) to=(${futureParticle.lat}, ${futureParticle.lon})")
-                    Log.d(TAG, "Particle filter: FUTURE_MOVEMENT ${currentPositionParticles.indexOf(particle)} - distance=${futureDistance.toInt()}m, heading=${futureHeading.toInt()}°, speed=${particleSpeed.toInt()}m/s")
-                    Log.d(TAG, "Particle filter: FUTURE_MOVEMENT ${currentPositionParticles.indexOf(particle)} - geographicHeading=${geographicHeading.toInt()}°, predictionTime=${predictionTimeSeconds.toInt()}s")
+                    Log.d(TAG, "Particle filter: FUTURE_MOVEMENT $idx - from=(${startLat}, ${startLon}) to=(${futureParticle.lat}, ${futureParticle.lon})")
+                    Log.d(TAG, "Particle filter: FUTURE_MOVEMENT $idx - distance=${futureDistance.toInt()}m, heading=${futureHeading.toInt()}°, speed=${particleSpeed.toInt()}m/s, predictionTime=${predictionTimeSeconds.toInt()}s")
                 }
-                
+
                 futureParticle
             }
 
@@ -685,7 +719,7 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
 
         // FIXED: Calculate velocity from actual particle velocities (already in degrees/second)
         // Convert particle velocities from degrees/second back to m/s with proper heading calculation
-        val particleVelocities = predictedParticles.map { particle ->
+            val particleVelocities = predictedParticles.mapIndexed { index, particle ->
             val vLatMps = particle.vLat * EARTH_RADIUS_METERS * DEG_TO_RAD
             val vLonMps = particle.vLon * EARTH_RADIUS_METERS * cos(particle.lat * DEG_TO_RAD) * DEG_TO_RAD
             val speed = sqrt(vLatMps * vLatMps + vLonMps * vLonMps)
@@ -697,8 +731,8 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
             val geographicHeading = (recoveredHeading + 360.0) % 360.0
             
             // COORDINATE SYSTEM ANALYSIS: Log detailed velocity conversion for first few particles
-            if (predictedParticles.indexOf(particle) < 3) {
-                Log.d(TAG, "COORDINATE_ANALYSIS: Particle ${predictedParticles.indexOf(particle)} velocity extraction:")
+            if (index < 3) {
+                Log.d(TAG, "COORDINATE_ANALYSIS: Particle $index velocity extraction:")
                 Log.d(TAG, "COORDINATE_ANALYSIS: Stored vLat=${String.format("%.8f", particle.vLat)}°/s, vLon=${String.format("%.8f", particle.vLon)}°/s")
                 Log.d(TAG, "COORDINATE_ANALYSIS: Converted vLatMps=${String.format("%.2f", vLatMps)}m/s, vLonMps=${String.format("%.2f", vLonMps)}m/s")
                 Log.d(TAG, "COORDINATE_ANALYSIS: Calculated speed=${String.format("%.2f", speed)}m/s")
@@ -748,7 +782,7 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
         // Calculate weighted average heading using circular mean
         // FIXED: Ensure all headings are properly normalized to 0-360° range before circular mean calculation
         val normalizedParticleVelocities = particleVelocities.map { (speed, heading, weight) ->
-            val normalizedHeading = (heading + 360.0) % 360.0
+            val normalizedHeading = normalizeAngle360(heading)
             Triple(speed, normalizedHeading, weight)
         }
         
@@ -786,7 +820,7 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
         }
         
         // Check if circular mean is close to median (within 45°)
-        val circularMeanDifference = abs(((weightedHeading - medianHeading + 180) % 360) - 180)
+        val circularMeanDifference = abs(normalizeAngle180(weightedHeading - medianHeading))
         Log.d(TAG, "COORDINATE_ANALYSIS: Circular mean heading=${String.format("%.2f", weightedHeading)}°")
         Log.d(TAG, "COORDINATE_ANALYSIS: Median heading=${String.format("%.2f", medianHeading)}°")
         Log.d(TAG, "COORDINATE_ANALYSIS: Heading difference=${String.format("%.1f", circularMeanDifference)}°")
@@ -836,7 +870,7 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
 
         // FIXED: Validate heading consistency with movement direction - less strict threshold
         val predictedHeading = calculateBearing(latest.latitude, latest.longitude, predLat, predLon)
-        val headingDifference = abs(((finalWeightedHeading - predictedHeading + 180) % 360) - 180)
+        val headingDifference = abs(normalizeAngle180(finalWeightedHeading - predictedHeading))
 
         // DEBUG: Add detailed logging for heading analysis
         Log.d(TAG, "Particle filter: HEADING_DEBUG - weightedHeading=${finalWeightedHeading.toInt()}°, predictedHeading=${predictedHeading.toInt()}°, difference=${headingDifference.toInt()}°")
@@ -847,8 +881,8 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
             
             // FIXED: Use more sophisticated heading correction with better logic
             // Check if the particle heading is in the opposite direction (180° difference)
-            val oppositeHeading = (finalWeightedHeading + 180.0) % 360.0
-            val oppositeDifference = abs(((oppositeHeading - predictedHeading + 180) % 360) - 180)
+            val oppositeHeading = normalizeAngle360(finalWeightedHeading + 180.0)
+            val oppositeDifference = abs(normalizeAngle180(oppositeHeading - predictedHeading))
             
             val correctedHeading = if (oppositeDifference < 45.0) { // FIXED: Reduced tolerance from 60° to 45°
                 // Particle heading is opposite - use the opposite direction
@@ -860,7 +894,7 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
                 predictedHeading
             }
 
-            return Quadruple(predLat, predLon, finalValidatedSpeed, (correctedHeading + 360) % 360)
+            return Quadruple(predLat, predLon, finalValidatedSpeed, normalizeAngle360(correctedHeading))
         }
 
         // Log detailed information for debugging
@@ -875,7 +909,7 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
         Log.d(TAG, "  - Distance ratio (actual/expected): ${if (expectedDistance > 0) distanceFromCurrent / expectedDistance else 0.0}")
         Log.d(TAG, "  - Speed validation: original=${String.format("%.2f", weightedSpeed)}m/s, final=${String.format("%.2f", finalValidatedSpeed)}m/s")
 
-        return Quadruple(predLat, predLon, finalValidatedSpeed, (finalWeightedHeading + 360) % 360)
+        return Quadruple(predLat, predLon, finalValidatedSpeed, normalizeAngle360(finalWeightedHeading))
     }
 
     private fun resampleParticles(particles: MutableList<Particle>, movementPattern: MovementPattern) {
@@ -1069,20 +1103,35 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
         for (i in 0..steps) {
             val t = i * predictionHorizonSeconds / steps
             val positions = predictedParticles.map { particle ->
-                val lat = particle.lat + particle.vLat * t
-                val lon = particle.lon + particle.vLon * t
+                val speedMps = sqrt(
+                    (particle.vLat * EARTH_RADIUS_METERS * DEG_TO_RAD).pow(2) +
+                    (particle.vLon * EARTH_RADIUS_METERS * cos(particle.lat * DEG_TO_RAD) * DEG_TO_RAD).pow(2)
+                )
+                val headingDeg = normalizeAngle360(atan2(
+                    particle.vLon * EARTH_RADIUS_METERS * cos(particle.lat * DEG_TO_RAD) * DEG_TO_RAD,
+                    particle.vLat * EARTH_RADIUS_METERS * DEG_TO_RAD
+                ) * RAD_TO_DEG)
+                val distance = speedMps * t
+                val (lat, lon) = calculateDestination(particle.lat, particle.lon, distance, headingDeg)
                 LatLngSerializable(lat, lon)
             }
 
             // Compute weighted mean position
-            val avgLat = predictedParticles.mapIndexed { index, particle ->
-                val lat = particle.lat + particle.vLat * t
-                lat * particle.weight
-            }.sum()
-            val avgLon = predictedParticles.mapIndexed { index, particle ->
-                val lon = particle.lon + particle.vLon * t
-                lon * particle.weight
-            }.sum()
+            val weightedPositions = predictedParticles.map { particle ->
+                val speedMps = sqrt(
+                    (particle.vLat * EARTH_RADIUS_METERS * DEG_TO_RAD).pow(2) +
+                    (particle.vLon * EARTH_RADIUS_METERS * cos(particle.lat * DEG_TO_RAD) * DEG_TO_RAD).pow(2)
+                )
+                val headingDeg = normalizeAngle360(atan2(
+                    particle.vLon * EARTH_RADIUS_METERS * cos(particle.lat * DEG_TO_RAD) * DEG_TO_RAD,
+                    particle.vLat * EARTH_RADIUS_METERS * DEG_TO_RAD
+                ) * RAD_TO_DEG)
+                val (lat, lon) = calculateDestination(particle.lat, particle.lon, speedMps * t, headingDeg)
+                Triple(lat, lon, particle.weight)
+            }
+            val totalWStep = weightedPositions.sumOf { it.third }
+            val avgLat = if (totalWStep > 0) weightedPositions.sumOf { it.first * it.third } / totalWStep else Double.NaN
+            val avgLon = if (totalWStep > 0) weightedPositions.sumOf { it.second * it.third } / totalWStep else Double.NaN
 
             // Validate weighted mean
             if (avgLat.isNaN() || avgLon.isNaN() || avgLat.isInfinite() || avgLon.isInfinite()) {
@@ -1105,13 +1154,13 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
                 val bearing = calculateBearing(avgLat, avgLon, position.lt, position.lng)
 
                 // Cross-track projection (perpendicular to movement direction)
-                val perpAngle = (meanHeading + 90.0) % 360.0
-                val crossTrackAngleDiff = ((bearing - perpAngle + 540) % 360) - 180 // [-180,180]
+                val perpAngle = normalizeAngle360(meanHeading + 90.0)
+                val crossTrackAngleDiff = normalizeAngle180(bearing - perpAngle) // [-180,180]
                 val crossTrackProjection = d * cos(crossTrackAngleDiff * DEG_TO_RAD)
                 crossTrackProjections.add(crossTrackProjection)
 
                 // Along-track projection (parallel to movement direction)
-                val alongTrackAngleDiff = ((bearing - meanHeading + 540) % 360) - 180 // [-180,180]
+                val alongTrackAngleDiff = normalizeAngle180(bearing - meanHeading) // [-180,180]
                 val alongTrackProjection = d * cos(alongTrackAngleDiff * DEG_TO_RAD)
                 alongTrackProjections.add(alongTrackProjection)
 
@@ -1134,8 +1183,9 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
                 continue
             }
             
-            val validCrossTrack = validIndices.map { crossTrackProjections[it] }.sorted()
-            val validAlongTrack = validIndices.map { alongTrackProjections[it] }.sorted()
+            val validCrossTrack = validIndices.map { crossTrackProjections[it] }
+            val validAlongTrack = validIndices.map { alongTrackProjections[it] }
+            val validWeights = validIndices.map { predictedParticles[it].weight }
 
             // Convert confidence to percentile range (e.g., 0.8 confidence = 10th to 90th percentiles)
             val percentileRange = (1.0 - desiredConfidence) / 2.0
@@ -1143,25 +1193,21 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
             val upperPercentile = 1.0 - percentileRange
 
             // FIXED: Use calculated percentiles for cross-track (left/right uncertainty) with minimum bounds
-            val leftIdx = (lowerPercentile * validCrossTrack.size).toInt().coerceIn(0, validCrossTrack.size - 1)
-            val rightIdx = (upperPercentile * validCrossTrack.size).toInt().coerceIn(0, validCrossTrack.size - 1)
-            val leftOffset = validCrossTrack[leftIdx]
-            val rightOffset = validCrossTrack[rightIdx]
+            val leftOffset = weightedPercentile(validCrossTrack, validWeights, lowerPercentile)
+            val rightOffset = weightedPercentile(validCrossTrack, validWeights, upperPercentile)
 
             // FIXED: Use calculated percentiles for along-track (forward/backward uncertainty) with minimum bounds
-            val backIdx = (lowerPercentile * validAlongTrack.size).toInt().coerceIn(0, validAlongTrack.size - 1)
-            val forwardIdx = (upperPercentile * validAlongTrack.size).toInt().coerceIn(0, validAlongTrack.size - 1)
-            val backOffset = validAlongTrack[backIdx]
-            val forwardOffset = validAlongTrack[forwardIdx]
+            val backOffset = weightedPercentile(validAlongTrack, validWeights, lowerPercentile)
+            val forwardOffset = weightedPercentile(validAlongTrack, validWeights, upperPercentile)
 
             // FIXED: Apply more reasonable minimum uncertainty bounds to prevent unrealistically small cones
-            val minUncertaintyMeters = 25.0 // Minimum 25m uncertainty for realistic cones
-            val adjustedLeftOffset = if (abs(leftOffset) < minUncertaintyMeters) {
+            val minUncertaintyMeters = 15.0 // Lowered minimum uncertainty to reflect better measurements
+            val adjustedLeftOffset = if (leftOffset.isFinite() && abs(leftOffset) < minUncertaintyMeters) {
                 if (leftOffset >= 0) minUncertaintyMeters else -minUncertaintyMeters
             } else {
                 leftOffset
             }
-            val adjustedRightOffset = if (abs(rightOffset) < minUncertaintyMeters) {
+            val adjustedRightOffset = if (rightOffset.isFinite() && abs(rightOffset) < minUncertaintyMeters) {
                 if (rightOffset >= 0) minUncertaintyMeters else -minUncertaintyMeters
             } else {
                 rightOffset
@@ -1172,13 +1218,13 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
             val movementHeading = calculateBearing(latest.latitude, latest.longitude, avgLat, avgLon)
 
             // Calculate perpendicular direction for cross-track uncertainty
-            val perpHeading = (movementHeading + 90.0) % 360.0
+            val perpHeading = normalizeAngle360(movementHeading + 90.0)
 
             // FIXED: Convert cross-track offsets to lat/lon using proper destination calculation with adjusted offsets
             val (leftLat, leftLon) = calculateDestination(avgLat, avgLon, abs(adjustedLeftOffset),
-                if (adjustedLeftOffset >= 0) perpHeading else (perpHeading + 180.0) % 360.0)
+                if (adjustedLeftOffset >= 0) perpHeading else normalizeAngle360(perpHeading + 180.0))
             val (rightLat, rightLon) = calculateDestination(avgLat, avgLon, abs(adjustedRightOffset),
-                if (adjustedRightOffset >= 0) perpHeading else (perpHeading + 180.0) % 360.0)
+                if (adjustedRightOffset >= 0) perpHeading else normalizeAngle360(perpHeading + 180.0))
 
             // Use the properly calculated boundary points
             val leftBoundaryLat = leftLat
@@ -1343,8 +1389,13 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
         // Combine GPS and movement noise using root sum of squares
         val totalNoise = sqrt(gpsNoise * gpsNoise + movementNoise * movementNoise) * timeMultiplier
 
-        // Apply reasonable bounds - FIXED: Increased minimum noise to be proportional to particle initialization
-        val finalNoise = totalNoise.coerceIn(50.0, 1000.0) // FIXED: Increased minimum to 50m to match particle spread scale
+        // Apply reasonable bounds - reduced minimum to strengthen high-quality measurements
+        val minNoise = when {
+            gpsNoise <= 5.0 -> 10.0
+            gpsNoise <= 10.0 -> 15.0
+            else -> 20.0
+        }
+        val finalNoise = totalNoise.coerceIn(minNoise, 800.0)
 
         // REDUCED LOGGING: Only log occasionally to avoid spam
         // Use a simple counter to log every 10th call

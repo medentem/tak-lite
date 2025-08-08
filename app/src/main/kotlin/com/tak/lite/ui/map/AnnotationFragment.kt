@@ -283,10 +283,9 @@ class AnnotationFragment : Fragment() {
                 }
             }
             
-            // Add viewport update listener for prediction optimization
+            // Add viewport update listener for prediction optimization (will be invoked on camera idle)
             predictionOverlayView.viewportUpdateListener = object : PredictionOverlayView.ViewportUpdateListener {
                 override fun onViewportChanged(viewportBounds: android.graphics.RectF?) {
-                    // Update repository with new viewport bounds
                     meshNetworkViewModel.updatePredictionViewport(viewportBounds)
                 }
             }
@@ -317,6 +316,11 @@ class AnnotationFragment : Fragment() {
                     lastCameraUpdate = now
                     annotationController.syncAnnotationOverlayView(mapLibreMap)
                 }
+            }
+
+            // Only compute predictions when the camera becomes idle
+            mapLibreMap.addOnCameraIdleListener {
+                predictionOverlayView.notifyViewportChanged()
             }
             
             // === NATIVE CLUSTERING SETUP ===

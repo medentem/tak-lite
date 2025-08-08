@@ -23,6 +23,57 @@ abstract class BasePeerLocationPredictor : IPeerLocationPredictor {
     }
 
     /**
+     * Normalize an angle in degrees to the [0, 360) range.
+     */
+    internal fun normalizeAngle360(angleDeg: Double): Double {
+        if (angleDeg.isNaN() || angleDeg.isInfinite()) return Double.NaN
+        val r = angleDeg % 360.0
+        return if (r < 0) r + 360.0 else r
+    }
+
+    /**
+     * Normalize an angle in degrees to the (-180, 180] range, i.e., centered at 0.
+     */
+    internal fun normalizeAngle180(angleDeg: Double): Double {
+        val a = normalizeAngle360(angleDeg)
+        return if (a > 180.0) a - 360.0 else a
+    }
+
+    /**
+     * Normalize longitude to [-180, 180] range to avoid dateline issues.
+     */
+    internal fun normalizeLongitude(lonDeg: Double): Double {
+        if (lonDeg.isNaN() || lonDeg.isInfinite()) return lonDeg
+        val r = ((lonDeg + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
+        // Map -180 exclusive to 180 for consistency
+        return if (r == -180.0) 180.0 else r
+    }
+
+    /**
+     * Compute a weighted percentile for a set of scalar samples.
+     * - values and weights must be the same size and non-empty
+     * - p in [0,1]
+     * Returns Double.NaN if inputs are invalid or total weight is zero.
+     */
+    internal fun weightedPercentile(values: List<Double>, weights: List<Double>, p: Double): Double {
+        if (values.isEmpty() || values.size != weights.size) return Double.NaN
+        if (p.isNaN() || p < 0.0 || p > 1.0) return Double.NaN
+        val pairs = values.zip(weights).filter { (_, w) -> w.isFinite() && w > 0.0 }
+        if (pairs.isEmpty()) return Double.NaN
+        val sorted = pairs.sortedBy { it.first }
+        val totalW = sorted.sumOf { it.second }
+        if (!totalW.isFinite() || totalW <= 0.0) return Double.NaN
+        val target = totalW * p
+        var acc = 0.0
+        for ((v, w) in sorted) {
+            acc += w
+            if (acc >= target) return v
+        }
+        // Fallback to max value if due to precision we didn't return
+        return sorted.last().first
+    }
+
+    /**
      * Validate that entries are in chronological order
      * This is critical for accurate predictions
      */
@@ -101,7 +152,7 @@ abstract class BasePeerLocationPredictor : IPeerLocationPredictor {
         val meanAngle = atan2(sinSum, cosSum) * RAD_TO_DEG
 
         val variance = headings.map { heading ->
-            val diff = ((heading - meanAngle + 180) % 360) - 180
+            val diff = normalizeAngle180(heading - meanAngle)
             diff * diff
         }.average()
 
@@ -348,7 +399,7 @@ abstract class BasePeerLocationPredictor : IPeerLocationPredictor {
         )
 
         val resultLat = newLatRad * RAD_TO_DEG
-        val resultLon = newLonRad * RAD_TO_DEG
+        val resultLon = normalizeLongitude(newLonRad * RAD_TO_DEG)
 
         // Validate output to ensure we don't return NaN
         if (resultLat.isNaN() || resultLon.isNaN()) {
