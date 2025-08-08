@@ -52,6 +52,8 @@ class SettingsActivity : BaseActivity() {
     private lateinit var simulatePeersSwitch: SwitchMaterial
     private lateinit var simulatedPeersCountEditText: com.google.android.material.textfield.TextInputEditText
     private lateinit var simulatedPeersCountLayout: com.google.android.material.textfield.TextInputLayout
+    private lateinit var simulatedPeersCentralTendencyEditText: com.google.android.material.textfield.TextInputEditText
+    private lateinit var simulatedPeersCentralTendencyLayout: com.google.android.material.textfield.TextInputLayout
     private lateinit var meshNetworkTypeLayout: com.google.android.material.textfield.TextInputLayout
     private lateinit var unlockAppButton: com.google.android.material.button.MaterialButton
     private var connectedDevice: BluetoothDevice? = null
@@ -145,6 +147,8 @@ class SettingsActivity : BaseActivity() {
         simulatePeersSwitch = findViewById(R.id.simulatePeersSwitch)
         simulatedPeersCountEditText = findViewById(R.id.simulatedPeersCountEditText)
         simulatedPeersCountLayout = findViewById(R.id.simulatedPeersCountLayout)
+        simulatedPeersCentralTendencyEditText = findViewById(R.id.simulatedPeersCentralTendencyEditText)
+        simulatedPeersCentralTendencyLayout = findViewById(R.id.simulatedPeersCentralTendencyLayout)
         meshNetworkTypeLayout = findViewById(R.id.meshNetworkTypeLayout)
         unlockAppButton = findViewById(R.id.unlockAppButton)
         configProgressBar = findViewById(R.id.configProgressBar)
@@ -566,21 +570,34 @@ class SettingsActivity : BaseActivity() {
         // Load and set Simulate Peers settings
         val simulatePeersEnabled = prefs.getBoolean("simulate_peers_enabled", false)
         val simulatedPeersCount = prefs.getInt("simulated_peers_count", 3)
+        val simulatedPeersCentralTendency = prefs.getFloat("simulated_peers_central_tendency", 1.0f)
         simulatePeersSwitch.isChecked = simulatePeersEnabled
         simulatedPeersCountEditText.setText(simulatedPeersCount.toString())
+        simulatedPeersCentralTendencyEditText.setText(String.format("%.1f", simulatedPeersCentralTendency))
         simulatedPeersCountLayout.isEnabled = simulatePeersEnabled
         simulatedPeersCountEditText.isEnabled = simulatePeersEnabled
+        simulatedPeersCentralTendencyLayout.isEnabled = simulatePeersEnabled
+        simulatedPeersCentralTendencyEditText.isEnabled = simulatePeersEnabled
 
         simulatePeersSwitch.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean("simulate_peers_enabled", isChecked).apply()
             simulatedPeersCountLayout.isEnabled = isChecked
             simulatedPeersCountEditText.isEnabled = isChecked
+            simulatedPeersCentralTendencyLayout.isEnabled = isChecked
+            simulatedPeersCentralTendencyEditText.isEnabled = isChecked
         }
         simulatedPeersCountEditText.setOnFocusChangeListener { _, hasFocus ->
             if (!hasFocus) {
                 val value = simulatedPeersCountEditText.text.toString().toIntOrNull()?.coerceIn(1, 10) ?: 1
                 simulatedPeersCountEditText.setText(value.toString())
                 prefs.edit().putInt("simulated_peers_count", value).apply()
+            }
+        }
+        simulatedPeersCentralTendencyEditText.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) {
+                val value = simulatedPeersCentralTendencyEditText.text.toString().toFloatOrNull()?.coerceIn(0.1f, 10.0f) ?: 1.0f
+                simulatedPeersCentralTendencyEditText.setText(String.format("%.1f", value))
+                prefs.edit().putFloat("simulated_peers_central_tendency", value).apply()
             }
         }
 

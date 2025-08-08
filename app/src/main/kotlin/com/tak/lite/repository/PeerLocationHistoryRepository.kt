@@ -367,6 +367,24 @@ class PeerLocationHistoryRepository @Inject constructor(
     }
     
     /**
+     * Clear predictions for multiple peers (for simulated peer cleanup)
+     */
+    fun clearPredictionsForPeers(peerIds: List<String>) {
+        val currentPredictions = _predictions.value.toMutableMap()
+        val currentCones = _confidenceCones.value.toMutableMap()
+        
+        peerIds.forEach { peerId ->
+            currentPredictions.remove(peerId)
+            currentCones.remove(peerId)
+        }
+        
+        _predictions.value = currentPredictions
+        _confidenceCones.value = currentCones
+        
+        Log.d(TAG, "Cleared predictions for ${peerIds.size} peers")
+    }
+    
+    /**
      * Update prediction configuration
      */
     fun updatePredictionConfig(config: PredictionConfig) {
