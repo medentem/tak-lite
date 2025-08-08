@@ -1178,6 +1178,11 @@ class Layer2MeshNetworkProtocol @Inject constructor(
         sendToAllPeers(packetJson.toByteArray(), STATUS_PORT, PacketType.STATUS)
     }
 
+    override fun syncAmbientLedWithStatus(status: com.tak.lite.model.UserStatus) {
+        // Layer2 protocol doesn't support ambient LED control
+        Log.d(TAG, "Ambient LED sync not supported in Layer2 protocol")
+    }
+
     companion object {
         private const val STATUS_PORT = 4568
     }

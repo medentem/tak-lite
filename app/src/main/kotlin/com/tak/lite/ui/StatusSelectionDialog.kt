@@ -20,12 +20,15 @@ class StatusSelectionDialog(
         val popupView = inflater.inflate(R.layout.status_selection_menu, null)
 
         // Set up click listeners for each status option
-        val greenContainer = popupView.findViewById<View>(R.id.statusGreenContainer)
-        val yellowContainer = popupView.findViewById<View>(R.id.statusYellowContainer)
         val redContainer = popupView.findViewById<View>(R.id.statusRedContainer)
+        val yellowContainer = popupView.findViewById<View>(R.id.statusYellowContainer)
+        val blueContainer = popupView.findViewById<View>(R.id.statusBlueContainer)
+        val orangeContainer = popupView.findViewById<View>(R.id.statusOrangeContainer)
+        val violetContainer = popupView.findViewById<View>(R.id.statusVioletContainer)
+        val greenContainer = popupView.findViewById<View>(R.id.statusGreenContainer)
 
-        greenContainer.setOnClickListener {
-            onStatusSelected(UserStatus.GREEN)
+        redContainer.setOnClickListener {
+            onStatusSelected(UserStatus.RED)
             dismiss()
         }
 
@@ -34,16 +37,34 @@ class StatusSelectionDialog(
             dismiss()
         }
 
-        redContainer.setOnClickListener {
-            onStatusSelected(UserStatus.RED)
+        blueContainer.setOnClickListener {
+            onStatusSelected(UserStatus.BLUE)
+            dismiss()
+        }
+
+        orangeContainer.setOnClickListener {
+            onStatusSelected(UserStatus.ORANGE)
+            dismiss()
+        }
+
+        violetContainer.setOnClickListener {
+            onStatusSelected(UserStatus.VIOLET)
+            dismiss()
+        }
+
+        greenContainer.setOnClickListener {
+            onStatusSelected(UserStatus.GREEN)
             dismiss()
         }
 
         // Highlight current status
         when (currentStatus) {
-            UserStatus.GREEN -> greenContainer.alpha = 0.7f
-            UserStatus.YELLOW -> yellowContainer.alpha = 0.7f
             UserStatus.RED -> redContainer.alpha = 0.7f
+            UserStatus.YELLOW -> yellowContainer.alpha = 0.7f
+            UserStatus.BLUE -> blueContainer.alpha = 0.7f
+            UserStatus.ORANGE -> orangeContainer.alpha = 0.7f
+            UserStatus.VIOLET -> violetContainer.alpha = 0.7f
+            UserStatus.GREEN -> greenContainer.alpha = 0.7f
         }
 
         // Create and show popup window

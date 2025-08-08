@@ -1253,6 +1253,8 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
         )
         dialog.show(statusButton)
     }
+
+
     
     private fun setupCoverageAnalysis() {
         // Set up coverage analysis button with toggle behavior

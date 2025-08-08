@@ -173,4 +173,8 @@ class DisabledMeshProtocol(private val context: Context) : MeshProtocol {
     override fun sendStatusUpdate(status: com.tak.lite.model.UserStatus) {
         // Disabled protocol doesn't send status updates
     }
+
+    override fun syncAmbientLedWithStatus(status: com.tak.lite.model.UserStatus) {
+        // Disabled protocol doesn't support ambient LED control
+    }
 } 

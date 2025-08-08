@@ -2,6 +2,7 @@ package com.tak.lite.network
 
 import android.content.Context
 import android.util.Log
+import com.geeksville.mesh.AdminProtos
 import com.geeksville.mesh.MeshProtos
 import com.geeksville.mesh.MeshProtos.FromRadio.PayloadVariantCase
 import com.geeksville.mesh.Portnums.PortNum
@@ -1521,6 +1522,62 @@ abstract class MeshtasticBaseProtocol(
             .build()
         
         queuePacket(packet)
+    }
+
+    override fun syncAmbientLedWithStatus(status: com.tak.lite.model.UserStatus) {
+        Log.d(TAG, "Syncing ambient LED with status: $status")
+        
+        // Convert status to RGB values
+        val (red, green, blue) = when (status) {
+            com.tak.lite.model.UserStatus.RED -> Triple(255, 0, 0)
+            com.tak.lite.model.UserStatus.YELLOW -> Triple(255, 235, 59)
+            com.tak.lite.model.UserStatus.BLUE -> Triple(0, 0, 255)
+            com.tak.lite.model.UserStatus.ORANGE -> Triple(255, 87, 34)
+            com.tak.lite.model.UserStatus.VIOLET -> Triple(225, 190, 231)
+            com.tak.lite.model.UserStatus.GREEN -> Triple(0, 255, 0)
+        }
+        
+        // Create ambient lighting config
+        val ambientLightingConfig = com.geeksville.mesh.ModuleConfigProtos.ModuleConfig.AmbientLightingConfig.newBuilder()
+            .setLedState(true)  // Turn LED on
+            .setCurrent(10)     // Default current
+            .setRed(red)
+            .setGreen(green)
+            .setBlue(blue)
+            .build()
+        
+        // Create module config with ambient lighting
+        val moduleConfig = com.geeksville.mesh.ModuleConfigProtos.ModuleConfig.newBuilder()
+            .setAmbientLighting(ambientLightingConfig)
+            .build()
+        
+        // Send module config to device
+        sendModuleConfig(moduleConfig)
+    }
+    
+    /**
+     * Send module config to the connected device
+     */
+    private fun sendModuleConfig(moduleConfig: com.geeksville.mesh.ModuleConfigProtos.ModuleConfig) {
+        Log.d(TAG, "Sending module config to device")
+        
+        // Create admin packet with module config
+        val adminPacket = AdminProtos.AdminMessage.newBuilder()
+            .setSetModuleConfig(moduleConfig)
+            .build()
+        
+        val packet = MeshProtos.MeshPacket.newBuilder()
+            .setTo(0xffffffffL.toInt())  // Broadcast to all nodes
+            .setDecoded(MeshProtos.Data.newBuilder()
+                .setPortnum(PortNum.ADMIN_APP)
+                .setPayload(adminPacket.toByteString())
+                .build())
+            .setChannel(selectedChannelIndex)
+            .setId(generatePacketId())
+            .build()
+        
+        queuePacket(packet)
+        Log.d(TAG, "Module config packet queued for ambient LED sync")
     }
 
     override fun cleanupState() {

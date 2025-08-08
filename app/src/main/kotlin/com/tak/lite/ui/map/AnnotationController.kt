@@ -144,28 +144,34 @@ class AnnotationController(
             val now = System.currentTimeMillis()
             val isStale = (now - entry.timestamp) > stalenessThresholdMs
             
-            // Calculate colors based on status and staleness
-            val fillColor = if (isStale) {
-                "#BDBDBD" // gray for stale
-            } else {
-                when (userStatus) {
-                    "GREEN" -> "#4CAF50"
-                    "YELLOW" -> "#FFC107"
-                    "RED" -> "#F44336"
-                    else -> "#4CAF50" // default green
-                }
+                    // Calculate colors based on status and staleness
+        val fillColor = if (isStale) {
+            "#BDBDBD" // gray for stale
+        } else {
+            when (userStatus) {
+                "RED" -> "#F44336"
+                "YELLOW" -> "#FFC107"
+                "BLUE" -> "#2196F3"
+                "ORANGE" -> "#FF9800"
+                "VIOLET" -> "#9C27B0"
+                "GREEN" -> "#4CAF50"
+                else -> "#4CAF50" // default green
             }
-            
-            val borderColor = if (isStale) {
-                when (userStatus) {
-                    "GREEN" -> "#4CAF50"
-                    "YELLOW" -> "#FFC107"
-                    "RED" -> "#F44336"
-                    else -> "#4CAF50" // default green
-                }
-            } else {
-                "#FFFFFF" // white for fresh
+        }
+        
+        val borderColor = if (isStale) {
+            when (userStatus) {
+                "RED" -> "#F44336"
+                "YELLOW" -> "#FFC107"
+                "BLUE" -> "#2196F3"
+                "ORANGE" -> "#FF9800"
+                "VIOLET" -> "#9C27B0"
+                "GREEN" -> "#4CAF50"
+                else -> "#4CAF50" // default green
             }
+        } else {
+            "#FFFFFF" // white for fresh
+        }
             
             feature.addStringProperty("peerId", peerId)
             feature.addStringProperty("userStatus", userStatus)

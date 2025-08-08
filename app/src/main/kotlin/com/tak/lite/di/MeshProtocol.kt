@@ -94,6 +94,9 @@ interface MeshProtocol {
 
     // User status operations
     fun sendStatusUpdate(status: com.tak.lite.model.UserStatus)
+    
+    // Ambient LED operations
+    fun syncAmbientLedWithStatus(status: com.tak.lite.model.UserStatus)
 }
 
 // Device information abstraction

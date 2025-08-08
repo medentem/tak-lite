@@ -920,6 +920,53 @@ class MeshtasticAidlProtocol @Inject constructor(
         
         return "$appAccessible, $serviceResponsive"
     }
+
+    override fun syncAmbientLedWithStatus(status: com.tak.lite.model.UserStatus) {
+        Log.d(TAG, "Syncing ambient LED with status via AIDL: $status")
+        
+        if (meshService == null) {
+            Log.w(TAG, "MeshService is not bound, cannot sync ambient LED")
+            return
+        }
+        
+        try {
+            // Convert status to RGB values
+            val (red, green, blue) = when (status) {
+                com.tak.lite.model.UserStatus.RED -> Triple(255, 0, 0)
+                com.tak.lite.model.UserStatus.YELLOW -> Triple(255, 235, 59)
+                com.tak.lite.model.UserStatus.BLUE -> Triple(0, 0, 255)
+                com.tak.lite.model.UserStatus.ORANGE -> Triple(255, 87, 34)
+                com.tak.lite.model.UserStatus.VIOLET -> Triple(225, 190, 231)
+                com.tak.lite.model.UserStatus.GREEN -> Triple(0, 255, 0)
+            }
+            
+            // Create ambient lighting config
+            val ambientLightingConfig = com.geeksville.mesh.ModuleConfigProtos.ModuleConfig.AmbientLightingConfig.newBuilder()
+                .setLedState(true)  // Turn LED on
+                .setCurrent(10)     // Default current
+                .setRed(red)
+                .setGreen(green)
+                .setBlue(blue)
+                .build()
+            
+            // Create module config with ambient lighting
+            val moduleConfig = com.geeksville.mesh.ModuleConfigProtos.ModuleConfig.newBuilder()
+                .setAmbientLighting(ambientLightingConfig)
+                .build()
+            
+            // Send module config via AIDL service
+            val requestId = meshService?.getPacketId() ?: 0
+            val destNum = 0xffffffffL.toInt() // Broadcast to all nodes
+            
+            Log.d(TAG, "Sending module config via AIDL: requestId=$requestId, destNum=$destNum")
+            meshService?.setModuleConfig(requestId, destNum, moduleConfig.toByteArray())
+            
+            Log.d(TAG, "Module config sent successfully via AIDL for ambient LED sync")
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to sync ambient LED via AIDL", e)
+        }
+    }
     
     /**
      * Check if the AIDL service is still responsive by making a simple call

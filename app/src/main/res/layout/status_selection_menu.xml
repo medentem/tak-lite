@@ -17,14 +17,16 @@
         android:layout_marginBottom="8dp"
         android:gravity="center" />
 
+    <!-- First row: Red, Yellow, Green -->
     <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:gravity="center">
+        android:gravity="center"
+        android:layout_marginBottom="4dp">
 
         <LinearLayout
-            android:id="@+id/statusGreenContainer"
+            android:id="@+id/statusRedContainer"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -37,7 +39,7 @@
             <View
                 android:layout_width="32dp"
                 android:layout_height="32dp"
-                android:background="@drawable/circle_green"
+                android:background="@drawable/circle_red"
                 android:layout_marginBottom="4dp" />
         </LinearLayout>
 
@@ -61,7 +63,7 @@
         </LinearLayout>
 
         <LinearLayout
-            android:id="@+id/statusRedContainer"
+            android:id="@+id/statusGreenContainer"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -75,7 +77,71 @@
             <View
                 android:layout_width="32dp"
                 android:layout_height="32dp"
-                android:background="@drawable/circle_red"
+                android:background="@drawable/circle_green"
+                android:layout_marginBottom="4dp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Second row: Blue, Orange, Violet -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center">
+
+        <LinearLayout
+            android:id="@+id/statusBlueContainer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="8dp"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true">
+
+            <View
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="@drawable/circle_blue"
+                android:layout_marginBottom="4dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/statusOrangeContainer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="8dp"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:layout_marginStart="8dp">
+
+            <View
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="@drawable/circle_orange"
+                android:layout_marginBottom="4dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/statusVioletContainer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="8dp"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:layout_marginStart="8dp">
+
+            <View
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="@drawable/circle_violet"
                 android:layout_marginBottom="4dp" />
         </LinearLayout>
     </LinearLayout>
