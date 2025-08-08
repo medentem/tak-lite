@@ -1,5 +1,6 @@
 package com.tak.lite.ui.map
 
+import android.content.Context
 import android.util.Log
 import com.tak.lite.model.MapAnnotation
 import org.maplibre.android.maps.MapLibreMap
@@ -9,13 +10,14 @@ import org.maplibre.android.maps.MapLibreMap
  * Provides a single interface for managing all geometric annotations.
  */
 class UnifiedAnnotationManager(
-    private val mapLibreMap: MapLibreMap
+    private val mapLibreMap: MapLibreMap,
+    private val context: Context
 ) {
     companion object {
         private const val TAG = "UnifiedAnnotationManager"
     }
 
-    private val lineLayerManager = LineLayerManager(mapLibreMap)
+    private val lineLayerManager = LineLayerManager(mapLibreMap, context)
     private val areaLayerManager = AreaLayerManager(mapLibreMap)
     private val polygonLayerManager = PolygonLayerManager(mapLibreMap)
     private var isInitialized = false

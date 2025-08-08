@@ -95,6 +95,10 @@ class AnnotationFragment : Fragment() {
         areaTimerTextOverlayView = mainActivity?.findViewById(R.id.areaTimerTextOverlayView) ?:
             view.findViewById(R.id.areaTimerTextOverlayView)
         
+        // Initialize distance text overlay
+        val lineDistanceTextOverlayView = mainActivity?.findViewById<LineDistanceTextOverlayView>(R.id.lineDistanceTextOverlayView) ?:
+            view.findViewById(R.id.lineDistanceTextOverlayView)
+        
         // Initialize cluster text overlay
         val clusterTextOverlayView = mainActivity?.findViewById<ClusterTextOverlayView>(R.id.clusterTextOverlayView) ?: 
             view.findViewById(R.id.clusterTextOverlayView)
@@ -368,6 +372,13 @@ class AnnotationFragment : Fragment() {
                 areaTimerTextOverlayView.setProjection(mapLibreMap.projection)
                 areaTimerManager.startTimerUpdates()
                 Log.d("AnnotationFragment", "Area timer updates started")
+            }
+            
+            // Set up line distance text overlay callback
+            annotationController.lineDistanceManager?.let { lineDistanceManager ->
+                lineDistanceManager.setDistanceTextCallback(lineDistanceTextOverlayView)
+                lineDistanceTextOverlayView.setProjection(mapLibreMap.projection)
+                Log.d("AnnotationFragment", "Line distance text overlay setup completed")
             }
             
             // === ENHANCED: Single data flow for peer locations with native clustering ===

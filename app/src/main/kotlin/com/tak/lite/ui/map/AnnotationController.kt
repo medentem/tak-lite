@@ -87,6 +87,12 @@ class AnnotationController(
     // === LINE TIMER SUPPORT ===
     var lineTimerManager: LineTimerManager? = null
     
+    // === LINE DISTANCE SUPPORT ===
+    private var _lineDistanceManager: LineDistanceManager? = null
+    
+    // Getter for line distance manager
+    val lineDistanceManager: LineDistanceManager? get() = _lineDistanceManager
+    
     // === AREA TIMER SUPPORT ===
     private var _areaTimerManager: AreaTimerManager? = null
     
@@ -121,7 +127,7 @@ class AnnotationController(
         clusteringConfig = ClusteringConfig.getDefault()
         clusteredLayerManager = ClusteredLayerManager(mapLibreMap, clusteringConfig)
         popoverManager = HybridPopoverManager(mapLibreMap, binding.root, meshNetworkViewModel)
-        unifiedAnnotationManager = UnifiedAnnotationManager(mapLibreMap)
+        unifiedAnnotationManager = UnifiedAnnotationManager(mapLibreMap, fragment.requireContext())
         _deviceLocationManager = DeviceLocationLayerManager(mapLibreMap)
         _clusterTextManager = ClusterTextManager(mapLibreMap)
         Log.d("PeerDotDebug", "AnnotationController initialized with clustering config: $clusteringConfig")
@@ -361,6 +367,10 @@ class AnnotationController(
             lineTimerManager = LineTimerManager(mapLibreMap, annotationViewModel)
             Log.d("AnnotationController", "Line timer manager initialized")
         }
+        if (_lineDistanceManager == null && mapLibreMap != null) {
+            _lineDistanceManager = LineDistanceManager(mapLibreMap, fragment.requireContext())
+            Log.d("AnnotationController", "Line distance manager initialized")
+        }
         if (polygonTimerManager == null && mapLibreMap != null) {
             _polygonTimerManager = PolygonTimerManager(mapLibreMap, annotationViewModel)
             Log.d("AnnotationController", "Polygon timer manager initialized")
@@ -394,6 +404,7 @@ class AnnotationController(
         deviceLocationManager?.cleanup()
         clusterTextManager?.cleanup()
         _areaTimerManager?.cleanup()
+        _lineDistanceManager?.clearDistanceFeatures()
         Log.d("AnnotationController", "Annotation controller cleaned up")
     }
 
@@ -1126,6 +1137,10 @@ class AnnotationController(
         unifiedAnnotationManager?.updateAnnotations(linesAndAreas)
         Log.d(TAG, "Updated unified annotation manager with ${linesAndAreas.size} lines/areas/polygons")
         
+        // Update distance features for lines
+        _lineDistanceManager?.updateDistanceFeatures(lineAnnotations)
+        Log.d(TAG, "Updated distance features for ${lineAnnotations.size} lines")
+        
         // Line endpoints are now included in POI clustering, no separate update needed
         
         // Update overlay view for remaining annotations (temporary lines, device location, etc.)
@@ -1168,6 +1183,11 @@ class AnnotationController(
             Log.d("PoiDebug", "syncAnnotationOverlayView: lines/areas changed, updating unified manager")
             unifiedAnnotationManager?.updateAnnotations(linesAndAreas)
             lastOverlayAnnotations = nonPoiAnnotations
+            
+            // Update distance features for lines
+            val lineAnnotations = nonPoiAnnotations.filterIsInstance<MapAnnotation.Line>()
+            _lineDistanceManager?.updateDistanceFeatures(lineAnnotations)
+            Log.d(TAG, "Updated distance features for ${lineAnnotations.size} lines")
             
             // Line endpoints are now included in POI clustering, no separate update needed
         }

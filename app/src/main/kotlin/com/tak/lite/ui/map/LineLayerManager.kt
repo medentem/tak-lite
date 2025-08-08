@@ -1,5 +1,6 @@
 package com.tak.lite.ui.map
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -27,20 +28,21 @@ import kotlin.math.sin
  * Handles line rendering, styling, arrow heads, and distance labels.
  * Uses separate sources for different layer types to avoid MapLibre layer conflicts.
  */
-class LineLayerManager(private val mapLibreMap: MapLibreMap) {
+class LineLayerManager(
+    private val mapLibreMap: MapLibreMap,
+    private val context: Context
+) {
     companion object {
         private const val TAG = "LineLayerManager"
         const val LINE_SOURCE = "annotation-lines-source"
         const val LINE_ARROW_SOURCE = "annotation-line-arrows-source"
-        const val LINE_LABEL_SOURCE = "annotation-line-labels-source"
         const val LINE_LAYER = "annotation-lines-layer"
         const val LINE_HIT_AREA_LAYER = "annotation-lines-hit-area-layer"
-        const val LINE_LABEL_LAYER = "annotation-line-labels-layer"
         const val LINE_ARROW_LAYER = "annotation-line-arrows-layer"
     }
 
     private var isInitialized = false
-    private val lineFeatureConverter = LineFeatureConverter()
+    private val lineFeatureConverter = LineFeatureConverter(mapLibreMap, context)
 
     /**
      * Setup line layers in the map style with separate sources
@@ -56,12 +58,10 @@ class LineLayerManager(private val mapLibreMap: MapLibreMap) {
                 // Create separate sources for different layer types
                 val lineSource = GeoJsonSource(LINE_SOURCE, FeatureCollection.fromFeatures(arrayOf()))
                 val arrowSource = GeoJsonSource(LINE_ARROW_SOURCE, FeatureCollection.fromFeatures(arrayOf()))
-                val labelSource = GeoJsonSource(LINE_LABEL_SOURCE, FeatureCollection.fromFeatures(arrayOf()))
                 
                 style.addSource(lineSource)
                 style.addSource(arrowSource)
-                style.addSource(labelSource)
-                Log.d(TAG, "Added separate line sources: $LINE_SOURCE, $LINE_ARROW_SOURCE, $LINE_LABEL_SOURCE")
+                Log.d(TAG, "Added separate line sources: $LINE_SOURCE, $LINE_ARROW_SOURCE")
 
                 // Create invisible hit area layer for easier line tapping (add this first so it's behind the visible line)
                 val hitAreaLayer = LineLayer(LINE_HIT_AREA_LAYER, LINE_SOURCE)
@@ -139,29 +139,6 @@ class LineLayerManager(private val mapLibreMap: MapLibreMap) {
                 style.addLayer(arrowLayer)
                 Log.d(TAG, "Added arrow layer: $LINE_ARROW_LAYER with min zoom filter")
 
-                // Create label layer using separate source
-                val labelLayer = SymbolLayer(LINE_LABEL_LAYER, LINE_LABEL_SOURCE)
-                    .withProperties(
-                        PropertyFactory.textField(Expression.get("distanceLabel")),
-                        PropertyFactory.textColor("#FFFFFF"),
-                        PropertyFactory.textSize(
-                            Expression.interpolate(
-                                Expression.Interpolator.linear(),
-                                Expression.zoom(),
-                                Expression.stop(10f, 12f),
-                                Expression.stop(15f, 16f),
-                                Expression.stop(18f, 20f)
-                            )
-                        ),
-                        PropertyFactory.textHaloColor("#000000"),
-                        PropertyFactory.textHaloWidth(2f),
-                        PropertyFactory.textAllowOverlap(false),
-                        PropertyFactory.textIgnorePlacement(false)
-                    )
-                    .withFilter(Expression.gte(Expression.zoom(), Expression.literal(8f))) // Only show labels at zoom 8+
-                style.addLayer(labelLayer)
-                Log.d(TAG, "Added label layer: $LINE_LABEL_LAYER with min zoom filter")
-
                 isInitialized = true
                 Log.d(TAG, "Line layers setup completed successfully with separate sources")
 
@@ -184,7 +161,6 @@ class LineLayerManager(private val mapLibreMap: MapLibreMap) {
             // Convert lines to separate feature collections
             val lineFeatures = mutableListOf<Feature>()
             val arrowFeatures = mutableListOf<Feature>()
-            val labelFeatures = mutableListOf<Feature>()
 
             lines.forEach { line ->
                 // Main line feature
@@ -200,12 +176,6 @@ class LineLayerManager(private val mapLibreMap: MapLibreMap) {
                 } else {
                     Log.d(TAG, "Skipping arrow feature for line: ${line.id} (arrowHead: ${line.arrowHead})")
                 }
-
-                // Label features (always create them, with default label if no segments)
-                val distanceLabels = lineFeatureConverter.calculateSegmentDistances(line)
-                val labelFeaturesForLine = lineFeatureConverter.convertToLabelFeatures(line, distanceLabels)
-                labelFeatures.addAll(labelFeaturesForLine)
-                Log.d(TAG, "Added label features for line: ${line.id} with ${distanceLabels.size} segments")
             }
             
             Log.d(TAG, "Total lines processed: ${lines.size}, total arrow features: ${arrowFeatures.size}")
@@ -232,19 +202,6 @@ class LineLayerManager(private val mapLibreMap: MapLibreMap) {
                     }
                 } else {
                     Log.e(TAG, "Arrow source not found: $LINE_ARROW_SOURCE")
-                }
-
-                // Update label source
-                val labelSource = style.getSourceAs<GeoJsonSource>(LINE_LABEL_SOURCE)
-                if (labelSource != null) {
-                    val labelCollection = FeatureCollection.fromFeatures(labelFeatures.toTypedArray())
-                    labelSource.setGeoJson(labelCollection)
-                    Log.d(TAG, "Updated label features: ${labelFeatures.size} labels")
-                    labelFeatures.forEach { feature ->
-                        Log.d(TAG, "  Label feature: ${feature.getStringProperty("id")} with label: ${feature.getStringProperty("distanceLabel")}")
-                    }
-                } else {
-                    Log.e(TAG, "Label source not found: $LINE_LABEL_SOURCE")
                 }
             }
         } catch (e: Exception) {
@@ -314,7 +271,7 @@ class LineLayerManager(private val mapLibreMap: MapLibreMap) {
 /**
  * Converts line annotations to GeoJSON features
  */
-class LineFeatureConverter {
+class LineFeatureConverter(private val mapLibreMap: MapLibreMap, private val context: Context) {
     
     /**
      * Convert line annotation to GeoJSON line feature
@@ -392,66 +349,6 @@ class LineFeatureConverter {
     }
 
     /**
-     * Convert line annotation to GeoJSON label features (multiple points along the line)
-     */
-    fun convertToLabelFeatures(line: MapAnnotation.Line, distanceLabels: List<DistanceLabel>): List<Feature> {
-        val labelFeatures = mutableListOf<Feature>()
-        
-        // Create labels at specific positions along each line segment
-        line.points.zipWithNext().forEachIndexed { index, (point1, point2) ->
-            // Use the distance label midpoint if available, otherwise calculate midpoint
-            val labelPoint = if (index < distanceLabels.size) {
-                val distanceLabel = distanceLabels[index]
-                Point.fromLngLat(distanceLabel.midpoint.lng, distanceLabel.midpoint.lt)
-            } else {
-                // Calculate midpoint of this segment
-                val midLat = (point1.lt + point2.lt) / 2
-                val midLng = (point1.lng + point2.lng) / 2
-                Point.fromLngLat(midLng, midLat)
-            }
-            
-            val feature = Feature.fromGeometry(labelPoint)
-            feature.addStringProperty("id", "${line.id}-label-${labelFeatures.size}")
-            feature.addStringProperty("lineId", line.id)
-            feature.addStringProperty("color", line.color.toHexString())
-            
-            // Add distance label for this segment
-            val label = if (index < distanceLabels.size) {
-                "%.2f mi".format(distanceLabels[index].distanceMiles)
-            } else {
-                "0.00 mi" // Default label
-            }
-            feature.addStringProperty("distanceLabel", label)
-            
-            labelFeatures.add(feature)
-        }
-        
-        return labelFeatures
-    }
-
-    /**
-     * Calculate distances for line segments
-     */
-    fun calculateSegmentDistances(line: MapAnnotation.Line): List<DistanceLabel> {
-        return line.points.zipWithNext { point1, point2 ->
-            val distanceMeters = haversine(
-                point1.lt, point1.lng,
-                point2.lt, point2.lng
-            )
-            val distanceMiles = distanceMeters / 1609.344
-
-            DistanceLabel(
-                segmentIndex = line.points.indexOf(point1),
-                distanceMiles = distanceMiles,
-                midpoint = com.tak.lite.model.LatLngSerializable(
-                    (point1.lt + point2.lt) / 2,
-                    (point1.lng + point2.lng) / 2
-                )
-            )
-        }
-    }
-
-    /**
      * Calculate bearing between two geographic points
      */
     private fun calculateBearing(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
@@ -465,20 +362,7 @@ class LineFeatureConverter {
 
         return (bearing + 360) % 360
     }
-}
-
-/**
- * Represents a distance label for a line segment
- */
-data class DistanceLabel(
-    val segmentIndex: Int,
-    val distanceMiles: Double,
-    val midpoint: com.tak.lite.model.LatLngSerializable
-) {
-    fun format(decimals: Int): String {
-        return "%.${decimals}f".format(distanceMiles)
-    }
-}
+} 
 
 /**
  * Extension function to convert AnnotationColor to hex string
