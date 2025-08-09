@@ -62,8 +62,9 @@ class BluetoothDeviceManager(private val context: Context) {
     // Add FROMNUM characteristic UUID
     private val FROMNUM_CHARACTERISTIC_UUID: UUID = UUID.fromString("ed9da18c-a800-4f66-a670-aa7547e34453")
 
-    private val MAX_RECONNECT_ATTEMPTS = 5
-    private val MAX_RECONNECT_TIME_MS = 30000L // 30 seconds total time for reconnection attempts
+    // Make reconnection persistent while service/feature is enabled
+    private val MAX_RECONNECT_ATTEMPTS = Int.MAX_VALUE
+    private val MAX_RECONNECT_TIME_MS = Long.MAX_VALUE
     private var reconnectStartTime: Long = 0
     private var reconnectAttempts = 0
     private var pendingReconnect: Boolean = false
@@ -553,9 +554,8 @@ class BluetoothDeviceManager(private val context: Context) {
                             restartBleStack()
                         }
                         else -> {
-                            Log.w("BluetoothDeviceManager", "Disconnected with status $status. Letting client handle reconnection.")
-                            // Let the client handle reconnection instead of automatic scheduling
-                            lostConnectionCallback?.invoke()
+                            Log.w("BluetoothDeviceManager", "Disconnected with status $status. Scheduling reconnect automatically.")
+                            scheduleReconnect("Generic disconnect status $status")
                         }
                     }
                 }
@@ -844,13 +844,32 @@ class BluetoothDeviceManager(private val context: Context) {
      */
     fun forceReset() {
         Log.i("BluetoothDeviceManager", "Force reset requested")
-        userInitiatedDisconnect = true
-        forceCleanup()
-        
-        // Additional reset: clear all state and wait for Bluetooth stack to settle
-        CoroutineScope(Dispatchers.Main).launch {
-            delay(3000) // Wait 3 seconds for complete reset
-            Log.d("BluetoothDeviceManager", "Force reset completed")
+        // Do a soft reset: release GATT and queue, but preserve lastDevice so we can reconnect
+        try {
+            forceCleanupGatt()
+        } catch (e: Exception) {
+            Log.w("BluetoothDeviceManager", "Error during soft GATT cleanup: ${e.message}")
+        }
+        // Clear queue and timers but keep lastDevice/lastOnConnected for reconnect
+        try {
+            failAllPendingOperations(Exception("Force reset"))
+            bleQueue.clear()
+            bleOperationInProgress = false
+            currentOperation = null
+            currentOperationTimeoutJob?.cancel()
+            currentOperationTimeoutJob = null
+        } catch (e: Exception) {
+            Log.w("BluetoothDeviceManager", "Error clearing BLE queue during force reset: ${e.message}")
+        }
+        _connectionState.value = ConnectionState.Disconnected
+        // Attempt reconnect if we have a remembered device
+        val device = lastDevice
+        val onConnectedCb = lastOnConnected
+        if (device != null && onConnectedCb != null) {
+            Log.i("BluetoothDeviceManager", "Attempting reconnect after force reset to ${device.address}")
+            scheduleReconnect("Force reset requested")
+        } else {
+            Log.w("BluetoothDeviceManager", "No remembered device/callback to reconnect after force reset")
         }
     }
 
@@ -901,26 +920,9 @@ class BluetoothDeviceManager(private val context: Context) {
             return
         }
 
-        // Check if we've exceeded the maximum reconnection time
+        // For persistent reconnection, do not enforce global time/attempt caps
         val currentTime = System.currentTimeMillis()
-        if (reconnectStartTime == 0L) {
-            reconnectStartTime = currentTime
-        } else if (currentTime - reconnectStartTime > MAX_RECONNECT_TIME_MS) {
-            Log.e("BluetoothDeviceManager", "Reconnect timeout exceeded after ${currentTime - reconnectStartTime}ms")
-            _connectionState.value = ConnectionState.Failed("Connection timeout - device may be unavailable")
-            lastOnConnected?.invoke(false)
-            forceCleanup() // Force cleanup when timeout is exceeded
-            return
-        }
-
-        // Check if we've exceeded maximum attempts
-        if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-            Log.e("BluetoothDeviceManager", "Maximum reconnect attempts reached")
-            _connectionState.value = ConnectionState.Failed("Maximum reconnection attempts reached")
-            lastOnConnected?.invoke(false)
-            forceCleanup() // Force cleanup when max attempts are reached
-            return
-        }
+        if (reconnectStartTime == 0L) reconnectStartTime = currentTime
 
         // Check if the OS is stuck in a connected state (this often happens after device power cycles)
         lastDevice?.let { device ->
@@ -948,10 +950,12 @@ class BluetoothDeviceManager(private val context: Context) {
         
         // Progressive delay strategy: longer delays for early attempts, then exponential backoff
         val delayMs = when (reconnectAttempts) {
-            1 -> 2000L  // 2 seconds for first attempt
-            2 -> 4000L  // 4 seconds for second attempt  
-            3 -> 6000L  // 6 seconds for third attempt
-            else -> (1000L * reconnectAttempts).coerceAtMost(10000L) // Exponential backoff with max 10s
+            1 -> 2000L
+            2 -> 4000L
+            3 -> 8000L
+            4 -> 16000L
+            5 -> 32000L
+            else -> 60000L // settle to 60s between attempts for long-term persistence
         }
         
         Log.w("BluetoothDeviceManager", "[Reconnect] Scheduling reconnect in ${delayMs}ms because: $reason (attempt $reconnectAttempts)")

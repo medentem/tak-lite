@@ -21,7 +21,6 @@
     <uses-permission android:name="com.android.vending.BILLING" />
     
     <!-- AIDL Service permissions -->
-    <uses-permission android:name="android.permission.BIND_SERVICE" />
     <uses-permission android:name="com.geeksville.mesh.permission.BIND_MESH_SERVICE" />
 
     <!-- Declare that we want to interact with Meshtastic app -->

@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.ServiceConnection
 import android.os.IBinder
+import android.os.Build
 import android.util.Log
 import com.geeksville.mesh.AppOnlyProtos
 import com.geeksville.mesh.ChannelProtos
@@ -88,6 +89,12 @@ class MeshtasticAidlProtocol @Inject constructor(
             
             isMeshServiceBound = true
             Log.i(TAG, "Connected to Meshtastic AIDL Service")
+
+            // Ensure broadcast receiver remains registered after bind
+            if (!isReceiverRegistered) {
+                Log.d(TAG, "Receiver not registered after onServiceConnected, registering")
+                registerMeshReceiver()
+            }
             // Set to Connecting initially - we'll update to Connected only after successful handshake
             _connectionState.value = MeshConnectionState.Connecting
             
@@ -110,13 +117,19 @@ class MeshtasticAidlProtocol @Inject constructor(
             Log.w(TAG, "User initiated disconnect: $userInitiatedDisconnect")
             _connectionState.value = MeshConnectionState.Disconnected
             
+            // Ensure receiver stays registered during transient disconnects
+            if (!isReceiverRegistered) {
+                Log.d(TAG, "Receiver was unregistered during disconnect; re-registering")
+                registerMeshReceiver()
+            }
+
             // Only attempt to rebind if this wasn't a user-initiated disconnect
             if (!userInitiatedDisconnect) {
                 Log.d(TAG, "Service disconnected unexpectedly, attempting to rebind...")
                 CoroutineScope(coroutineContext).launch {
                     // Use exponential backoff for rebinding attempts
                     var retryCount = 0
-                    val maxRetries = 5
+                    val maxRetries = 30 // make rebind persistent for minutes if needed
                     val baseDelay = 2000L
                     
                     while (retryCount < maxRetries && !userInitiatedDisconnect && !isMeshServiceBound) {
@@ -221,6 +234,12 @@ class MeshtasticAidlProtocol @Inject constructor(
             Log.d(TAG, "App target SDK: ${appInfo.targetSdkVersion}")
 
             Log.i(TAG, "Attempting to bind to Mesh Service...")
+
+            // Ensure our broadcast receiver is registered before binding (idempotent)
+            if (!isReceiverRegistered) {
+                Log.d(TAG, "Receiver not registered prior to bind, registering now")
+                registerMeshReceiver()
+            }
             val intent = Intent("com.geeksville.mesh.Service")
             intent.setClassName("com.geeksville.mesh", "com.geeksville.mesh.service.MeshService")
             
@@ -311,14 +330,19 @@ class MeshtasticAidlProtocol @Inject constructor(
             Log.d(TAG, "Using application context for background mesh operations")
             Log.d(TAG, "Filter actions: ${filter.actionsIterator().asSequence().toList()}")
             
-            // Try with RECEIVER_EXPORTED first (needed for cross-app broadcasts)
-            try {
-                context.registerReceiver(meshReceiver, filter, Context.RECEIVER_EXPORTED)
-                Log.d(TAG, "Successfully registered mesh broadcast receiver with RECEIVER_EXPORTED")
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to register with RECEIVER_EXPORTED, trying RECEIVER_NOT_EXPORTED: ${e.message}")
-                context.registerReceiver(meshReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-                Log.d(TAG, "Successfully registered mesh broadcast receiver with RECEIVER_NOT_EXPORTED")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                // On API 33+, specify exported to allow cross-app broadcasts from Meshtastic
+                try {
+                    context.registerReceiver(meshReceiver, filter, Context.RECEIVER_EXPORTED)
+                    Log.d(TAG, "Registered receiver with RECEIVER_EXPORTED (API33+)")
+                } catch (e: Exception) {
+                    Log.w(TAG, "API33+ exported registration failed: ${e.message}. Trying NOT_EXPORTED as fallback (may not receive cross-app).")
+                    context.registerReceiver(meshReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+                }
+            } else {
+                // On older APIs, use legacy signature; cross-app broadcasts are allowed by default
+                context.registerReceiver(meshReceiver, filter)
+                Log.d(TAG, "Registered receiver using legacy API (<33)")
             }
             
             // Track successful registration
@@ -815,11 +839,18 @@ class MeshtasticAidlProtocol @Inject constructor(
 
     override fun forceReset() {
         Log.i(TAG, "Force reset requested")
-        userInitiatedDisconnect = false // Reset disconnect flag for force reset
-        disconnectFromDevice()
+        userInitiatedDisconnect = false // Ensure auto-rebind logic will run
+        // Avoid calling disconnectFromDevice() to prevent flipping userInitiatedDisconnect
+        // Perform targeted cleanup and rebind
+        cleanup()
+        cleanupState()
         // Reconnect after a short delay
         CoroutineScope(coroutineContext).launch {
             kotlinx.coroutines.delay(1000)
+            // Ensure receiver is registered before attempting to bind again
+            if (!isReceiverRegistered) {
+                registerMeshReceiver()
+            }
             bindMeshService()
         }
     }

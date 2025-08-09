@@ -75,9 +75,6 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
     private lateinit var locationController: LocationController
     private lateinit var audioController: AudioController
     private lateinit var channelController: ChannelController
-    private lateinit var locationSourceOverlay: FrameLayout
-    private lateinit var locationSourceIcon: ImageView
-    private lateinit var locationSourceLabel: TextView
     private var is3DBuildingsEnabled = false
     private var isTrackingLocation = false
 
@@ -223,12 +220,6 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
                 lastLocation?.let { (lat, lon, zoom) ->
                     val latLng = org.maplibre.android.geometry.LatLng(lat, lon)
                     map.moveCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(latLng, zoom.toDouble()))
-                    // Set source to PHONE if not mesh
-                    locationSourceOverlay.visibility = View.VISIBLE
-                    locationSourceIcon.setImageResource(R.drawable.ic_baseline_my_location_24)
-                    locationSourceIcon.setColorFilter(ContextCompat.getColor(this, R.color.interactive_color_light))
-                    locationSourceLabel.text = "Phone"
-                    locationSourceLabel.setTextColor(ContextCompat.getColor(this, R.color.interactive_color_light))
                 }
                 // Only try to get location if we have permissions
                 if (androidx.core.app.ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED ||
@@ -263,10 +254,6 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
         )
         mapController.onCreate(savedInstanceState, lastLocation)
 
-        locationSourceOverlay = findViewById(R.id.locationSourceOverlay)
-        locationSourceIcon = findViewById(R.id.locationSourceIcon)
-        locationSourceLabel = findViewById(R.id.locationSourceLabel)
-
         // Initialize status button
         statusButton = findViewById(R.id.statusButton)
         statusLabel = findViewById(R.id.statusLabel)
@@ -278,13 +265,6 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
         coverageProgressBar = findViewById(R.id.coverageProgressBar)
         coverageProgressText = findViewById(R.id.coverageProgressText)
         coverageStatusText = findViewById(R.id.coverageStatusText)
-
-        // Set to unknown by default
-        locationSourceOverlay.visibility = View.VISIBLE
-        locationSourceIcon.setImageResource(R.drawable.baseline_help_24) // Use a gray question mark icon
-        locationSourceIcon.setColorFilter(Color.GRAY)
-        locationSourceLabel.text = "Unknown"
-        locationSourceLabel.setTextColor(Color.GRAY)
 
         lifecycleScope.launch {
             repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
@@ -308,14 +288,6 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
                 if (isTrackingLocation) {
                     mapController.mapLibreMap?.locationComponent?.cameraMode = org.maplibre.android.location.modes.CameraMode.TRACKING
                 }
-                // Set source to PHONE if not mesh
-                if (locationSourceLabel.text != "Mesh") {
-                    locationSourceOverlay.visibility = View.VISIBLE
-                    locationSourceIcon.setImageResource(R.drawable.ic_baseline_my_location_24)
-                    locationSourceIcon.setColorFilter(ContextCompat.getColor(this, R.color.interactive_color_light))
-                    locationSourceLabel.text = "Phone"
-                    locationSourceLabel.setTextColor(ContextCompat.getColor(this, R.color.interactive_color_light))
-                }
                 // --- NEW: propagate phone location to ViewModel ---
                 viewModel.setPhoneLocation(org.maplibre.android.geometry.LatLng(location.latitude, location.longitude))
             },
@@ -323,31 +295,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
                 Toast.makeText(this, "Location permission not granted", Toast.LENGTH_SHORT).show()
             },
             onSourceChanged = { source: LocationSource ->
-                runOnUiThread {
-                    when (source) {
-                        LocationSource.MESH_RIDER -> {
-                            locationSourceOverlay.visibility = View.VISIBLE
-                            locationSourceIcon.setImageResource(R.drawable.mesh_rider_icon)
-                            locationSourceIcon.setColorFilter(ContextCompat.getColor(this, R.color.interactive_color_light))
-                            locationSourceLabel.text = "Mesh"
-                            locationSourceLabel.setTextColor(ContextCompat.getColor(this, R.color.interactive_color_light))
-                        }
-                        LocationSource.PHONE -> {
-                            locationSourceOverlay.visibility = View.VISIBLE
-                            locationSourceIcon.setImageResource(R.drawable.ic_baseline_my_location_24)
-                            locationSourceIcon.setColorFilter(ContextCompat.getColor(this, R.color.interactive_color_light))
-                            locationSourceLabel.text = "Phone"
-                            locationSourceLabel.setTextColor(ContextCompat.getColor(this, R.color.interactive_color_light))
-                        }
-                        LocationSource.UNKNOWN -> {
-                            locationSourceOverlay.visibility = View.VISIBLE
-                            locationSourceIcon.setImageResource(R.drawable.baseline_help_24)
-                            locationSourceIcon.setColorFilter(Color.GRAY)
-                            locationSourceLabel.text = "Unknown"
-                            locationSourceLabel.setTextColor(Color.GRAY)
-                        }
-                    }
-                }
+                Log.d("MainActivity", "Location source changed to ${source}")
             },
             onCalibrationNeeded = {
                 runOnUiThread {
@@ -529,38 +477,6 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
                         // Center map or update user marker as needed
                         val currentZoom = mapController.mapLibreMap?.cameraPosition?.zoom ?: DEFAULT_US_ZOOM
                         mapController.mapLibreMap?.moveCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(userLatLng, currentZoom))
-                    }
-                }
-            }
-        }
-        // Improved UI: show source and staleness
-        lifecycleScope.launch {
-            repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
-                viewModel.isDeviceLocationStale.collectLatest { isStale ->
-                    val userLatLng = viewModel.userLocation.value
-                    if (userLatLng != null) {
-                        if (!isStale) {
-                            // Device location is fresh
-                            locationSourceOverlay.visibility = View.VISIBLE
-                            locationSourceIcon.setImageResource(R.drawable.ic_baseline_my_location_24)
-                            locationSourceIcon.setColorFilter(Color.parseColor("#4CAF50")) // Green
-                            locationSourceLabel.text = "Device"
-                            locationSourceLabel.setTextColor(Color.parseColor("#4CAF50"))
-                        } else {
-                            // Device location is stale, using phone or last known
-                            locationSourceOverlay.visibility = View.VISIBLE
-                            locationSourceIcon.setImageResource(R.drawable.ic_baseline_my_location_24)
-                            locationSourceIcon.setColorFilter(Color.parseColor("#FFA726")) // Orange
-                            locationSourceLabel.text = "Stale"
-                            locationSourceLabel.setTextColor(Color.parseColor("#FFA726"))
-                        }
-                    } else {
-                        // No location available, fallback to phone
-                        locationSourceOverlay.visibility = View.VISIBLE
-                        locationSourceIcon.setImageResource(R.drawable.ic_baseline_my_location_24)
-                        locationSourceIcon.setColorFilter(ContextCompat.getColor(this@MainActivity, R.color.interactive_color_light))
-                        locationSourceLabel.text = "Phone"
-                        locationSourceLabel.setTextColor(ContextCompat.getColor(this@MainActivity, R.color.interactive_color_light))
                     }
                 }
             }

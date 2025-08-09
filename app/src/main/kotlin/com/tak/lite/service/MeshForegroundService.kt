@@ -188,12 +188,33 @@ class MeshForegroundService : Service() {
             while (true) {
                 delay(30000) // Check every 30 seconds
                 val protocol = currentProtocol
+                // Unified diagnostics
+                try {
+                    val diag = protocol?.getDiagnosticInfo()
+                    if (diag != null) Log.d("MeshForegroundService", "Protocol diagnostics: $diag")
+                } catch (e: Exception) {
+                    Log.w("MeshForegroundService", "Diagnostic info retrieval failed: ${e.message}")
+                }
+
                 if (protocol is com.tak.lite.network.MeshtasticAidlProtocol) {
                     val isResponsive = protocol.isServiceResponsive()
                     if (!isResponsive) {
                         Log.w("MeshForegroundService", "AIDL service not responsive, attempting to reconnect...")
-                        // Force a reset to trigger reconnection
                         protocol.forceReset()
+                    }
+                }
+
+                // BLE watchdog: if BLE protocol is selected and remains disconnected/failed, nudge reconnection
+                if (protocol is com.tak.lite.network.MeshtasticBluetoothProtocol) {
+                    val state = protocol.connectionState.value
+                    if (state is com.tak.lite.di.MeshConnectionState.Disconnected || state is com.tak.lite.di.MeshConnectionState.Error) {
+                        Log.w("MeshForegroundService", "BLE protocol state ${state::class.java.simpleName}; attempting recovery")
+                        try {
+                            // Ask protocol to force reset which triggers reconnect logic
+                            protocol.forceReset()
+                        } catch (e: Exception) {
+                            Log.e("MeshForegroundService", "BLE recovery attempt failed: ${e.message}")
+                        }
                     }
                 }
             }
