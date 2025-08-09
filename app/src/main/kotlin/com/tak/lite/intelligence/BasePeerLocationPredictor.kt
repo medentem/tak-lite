@@ -319,21 +319,19 @@ abstract class BasePeerLocationPredictor : IPeerLocationPredictor {
     internal fun calculateVelocityFromPositionChanges(entries: List<PeerLocationEntry>): Triple<Double, Double, String> {
         if (entries.size < 2) return Triple(0.0, 0.0, "insufficient_data")
 
-        val speeds = mutableListOf<Double>()
-        val headings = mutableListOf<Double>()
+        data class Segment(val speed: Double, val heading: Double, val dt: Double, val distance: Double)
+        val segments = mutableListOf<Segment>()
 
-        Log.d(TAG, "POSITION_VELOCITY: Processing ${entries.size} entries for velocity calculation")
+        Log.d(TAG, "POSITION_VELOCITY: Processing ${entries.size} entries for velocity calculation (robust)")
 
         for (i in 1 until entries.size) {
             val current = entries[i]
             val previous = entries[i - 1]
 
-            // Use best available timestamp for more accurate time calculations
             val currentTimestamp = current.getBestTimestamp()
             val previousTimestamp = previous.getBestTimestamp()
             val timeDiff = (currentTimestamp - previousTimestamp) / 1000.0
 
-            // Skip entries with zero or negative time difference
             if (timeDiff <= 0) {
                 Log.w(TAG, "POSITION_VELOCITY: Skipping entry $i - invalid time difference: ${timeDiff}s")
                 continue
@@ -344,29 +342,44 @@ abstract class BasePeerLocationPredictor : IPeerLocationPredictor {
                 current.latitude, current.longitude
             )
             val speed = distance / timeDiff
+            val heading = calculateBearing(previous.latitude, previous.longitude, current.latitude, current.longitude)
 
-            // Note: Speed validation is now handled by filterGpsCoordinateJumps upstream
-            // No need to duplicate the validation here since entries are pre-filtered
-
-            speeds.add(speed)
-            val heading = calculateBearing(
-                previous.latitude, previous.longitude,
-                current.latitude, current.longitude
-            )
-            headings.add(heading)
-
-            Log.d(TAG, "POSITION_VELOCITY: Entry $i: distance=${distance.toInt()}m, timeDiff=${timeDiff.toInt()}s, speed=${String.format("%.2f", speed)}m/s, heading=${heading.toInt()}°")
+            segments.add(Segment(speed, heading, timeDiff, distance))
+            Log.d(TAG, "POSITION_VELOCITY: Entry $i: distance=${distance.toInt()}m, timeDiff=${String.format("%.2f", timeDiff)}s, speed=${String.format("%.2f", speed)}m/s, heading=${heading.toInt()}°")
         }
 
-        val avgSpeed = if (speeds.isNotEmpty()) speeds.average() else 0.0
-        // Average heading using circular mean
-        val avgHeading = if (headings.isNotEmpty()) {
-            val sinSum = headings.sumOf { sin(it * DEG_TO_RAD) }
-            val cosSum = headings.sumOf { cos(it * DEG_TO_RAD) }
-            atan2(sinSum, cosSum) * RAD_TO_DEG
-        } else 0.0
+        if (segments.isEmpty()) return Triple(0.0, 0.0, "insufficient_data")
 
-        Log.d(TAG, "POSITION_VELOCITY: Final average speed=${String.format("%.2f", avgSpeed)}m/s (${String.format("%.1f", avgSpeed * 2.23694)}mph), average heading=${avgHeading.toInt()}° (from ${speeds.size} valid entries)")
+        // Consider only the last few recent segments to reflect current motion
+        val recent = segments.takeLast(8)
+        // Keep segments with sufficient duration to avoid tiny-dt noise
+        val minDt = 5.0
+        val filteredByDt = recent.filter { it.dt >= minDt }
+        val candidates = if (filteredByDt.isNotEmpty()) filteredByDt else recent
+
+        // Hard cap for position-derived speeds to avoid early outliers biasing init
+        val hardSpeedCap = 100.0 // m/s (~224 mph) to allow driving/flying scenarios
+        val capped = candidates.map { seg -> seg.copy(speed = seg.speed.coerceAtMost(hardSpeedCap)) }
+
+        // Robust trimming: drop top and bottom 20% by speed when enough samples
+        val kept = if (capped.size >= 5) {
+            val sorted = capped.sortedBy { it.speed }
+            val drop = (sorted.size * 0.2).toInt()
+            sorted.subList(drop, sorted.size - drop)
+        } else capped
+
+        if (kept.isEmpty()) return Triple(0.0, 0.0, "insufficient_data")
+
+        // Weighted averages by dt (or distance)
+        val totalWeight = kept.sumOf { it.dt }
+        val avgSpeed = if (totalWeight > 0) kept.sumOf { it.speed * it.dt } / totalWeight else kept.map { it.speed }.average()
+
+        // Weighted circular mean for heading
+        val sinSum = kept.sumOf { sin(it.heading * DEG_TO_RAD) * it.dt }
+        val cosSum = kept.sumOf { cos(it.heading * DEG_TO_RAD) * it.dt }
+        val avgHeading = atan2(sinSum, cosSum) * RAD_TO_DEG
+
+        Log.d(TAG, "POSITION_VELOCITY: Robust avg speed=${String.format("%.2f", avgSpeed)}m/s, avg heading=${avgHeading.toInt()}° (segments kept=${kept.size}/${segments.size})")
 
         return Triple(avgSpeed, (avgHeading + 360) % 360, "position_calculated")
     }
@@ -516,8 +529,8 @@ abstract class BasePeerLocationPredictor : IPeerLocationPredictor {
             }
             "position_calculated" -> {
                 // Position-calculated velocity may have more noise
-                // Be more conservative with speed limits
-                val calculatedMaxSpeed = 80.0 // 80 m/s = ~179 mph
+                // Allow up to 100 m/s (~224 mph) for driving/flying scenarios
+                val calculatedMaxSpeed = 100.0
                 if (validatedSpeed > calculatedMaxSpeed) {
                     Log.w(TAG, "$context: Calculated speed suspiciously high: ${String.format("%.2f", validatedSpeed)}m/s - capping at ${calculatedMaxSpeed}m/s")
                     validatedSpeed = calculatedMaxSpeed

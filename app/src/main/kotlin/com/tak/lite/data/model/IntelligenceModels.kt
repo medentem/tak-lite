@@ -64,13 +64,14 @@ data class VelocityVector(
 
 @Serializable
 data class KalmanState(
-    val lat: Double, val lon: Double,
-    val vLat: Double, val vLon: Double,
-    val pLat: Double, val pLon: Double,
-    val pVLat: Double, val pVLon: Double,
-    val pLatVLat: Double = 0.0, // Cross-covariance between lat position and lat velocity
-    val pLonVLon: Double = 0.0, // Cross-covariance between lon position and lon velocity
-    val lastUpdateTime: Long = System.currentTimeMillis() // Track time for proper covariance propagation
+    val originLat: Double, // Geodetic origin for the local ENU frame
+    val originLon: Double,
+    val x: Double, // East (meters)
+    val y: Double, // North (meters)
+    val vx: Double, // East velocity (m/s)
+    val vy: Double, // North velocity (m/s)
+    val P: DoubleArray, // 4x4 covariance matrix (row-major), size must be 16
+    val lastUpdateTime: Long = System.currentTimeMillis()
 )
 
 @Serializable

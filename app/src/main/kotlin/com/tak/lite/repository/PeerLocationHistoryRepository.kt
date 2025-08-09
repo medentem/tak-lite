@@ -113,6 +113,7 @@ class PeerLocationHistoryRepository @Inject constructor(
         }
         
         val currentHistory = peerHistories.getOrPut(peerId) { PeerLocationHistory(peerId) }
+        val previousEntry = currentHistory.entries.lastOrNull()
         val updatedHistory = currentHistory.addEntry(entry)
         
         // Validate the updated history has proper chronological order
@@ -133,6 +134,45 @@ class PeerLocationHistoryRepository @Inject constructor(
         } else {
             Log.d(TAG, "Added location entry for peer $peerId: ${entry.latitude}, ${entry.longitude}")
         }
+
+        // If this is a simulated peer and we have a previous point, log ground truth vs prediction
+        if (peerId.startsWith("sim_peer_") && previousEntry != null) {
+            val dtSec = (entry.getBestTimestamp() - previousEntry.getBestTimestamp()) / 1000.0
+            if (dtSec > 0) {
+                val distance = haversine(previousEntry.latitude, previousEntry.longitude, entry.latitude, entry.longitude)
+                val actualSpeed = distance / dtSec
+                val actualHeading = calculateHeading(previousEntry.latitude, previousEntry.longitude, entry.latitude, entry.longitude)
+                val pred = _predictions.value[peerId]
+                val predSpeed = pred?.velocity?.speed
+                val predHead = pred?.velocity?.heading
+                if (predSpeed != null && predHead != null) {
+                    val speedErr = predSpeed - actualSpeed
+                    val headErr = angularDiffDegrees(predHead, actualHeading)
+                    Log.d("SimEval", "peer=$peerId dt=${String.format("%.1f", dtSec)}s actualSpeed=${String.format("%.2f", actualSpeed)}mps predSpeed=${String.format("%.2f", predSpeed)}mps speedErr=${String.format("%.2f", speedErr)} actualHead=${actualHeading.toInt()}° predHead=${predHead.toInt()}° headErr=${String.format("%.1f", headErr)}°")
+                } else {
+                    Log.d("SimEval", "peer=$peerId dt=${String.format("%.1f", dtSec)}s actualSpeed=${String.format("%.2f", actualSpeed)}mps actualHead=${actualHeading.toInt()}° (no prediction velocity)")
+                }
+            }
+        }
+    }
+
+    // Local helper: calculate heading in degrees
+    private fun calculateHeading(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        val dLon = (lon2 - lon1) * kotlin.math.PI / 180.0
+        val lat1Rad = lat1 * kotlin.math.PI / 180.0
+        val lat2Rad = lat2 * kotlin.math.PI / 180.0
+        val y = kotlin.math.sin(dLon) * kotlin.math.cos(lat2Rad)
+        val x = kotlin.math.cos(lat1Rad) * kotlin.math.sin(lat2Rad) - kotlin.math.sin(lat1Rad) * kotlin.math.cos(lat2Rad) * kotlin.math.cos(dLon)
+        val bearing = kotlin.math.atan2(y, x) * 180.0 / kotlin.math.PI
+        val norm = (bearing + 360.0) % 360.0
+        return norm
+    }
+
+    // Smallest absolute angular difference in degrees
+    private fun angularDiffDegrees(a: Double, b: Double): Double {
+        var diff = (a - b + 540.0) % 360.0 - 180.0
+        if (diff < -180.0) diff += 360.0
+        return kotlin.math.abs(diff)
     }
     
     /**
