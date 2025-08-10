@@ -22,14 +22,7 @@
         android:src="@android:drawable/ic_menu_preferences"
         app:backgroundTint="@android:color/holo_blue_dark" />
 
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/coverageAnalysisButton"
-        android:layout_width="56dp"
-        android:layout_height="56dp"
-        android:layout_marginTop="8dp"
-        android:src="@android:drawable/ic_menu_view"
-        android:contentDescription="Coverage Analysis"
-        app:backgroundTint="@android:color/holo_blue_dark" />
+    <!-- Coverage Analysis moved to Layers menu -->
 
     <ImageButton
         android:id="@+id/groupAudioButton"

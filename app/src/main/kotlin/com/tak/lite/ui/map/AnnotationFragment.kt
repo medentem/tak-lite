@@ -11,6 +11,7 @@ import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.tak.lite.BuildConfig
 import com.tak.lite.MainActivity
 import com.tak.lite.R
 import com.tak.lite.databinding.DialogRestoreAnnotationsBinding
@@ -28,7 +29,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
-class AnnotationFragment : Fragment() {
+class AnnotationFragment : Fragment(), ElevationChartBottomSheet.LayersTarget {
 
     private var _binding: FragmentAnnotationBinding? = null
     private val binding get() = _binding!!
@@ -54,6 +55,7 @@ class AnnotationFragment : Fragment() {
     private lateinit var lineTimerTextOverlayView: LineTimerTextOverlayView
     private lateinit var polygonTimerTextOverlayView: PolygonTimerTextOverlayView
     private lateinit var areaTimerTextOverlayView: AreaTimerTextOverlayView
+    private var weatherLayerManager: WeatherLayerManager? = null
     
     // POI tap detection state
     private var poiTapDownTime: Long? = null
@@ -143,6 +145,8 @@ class AnnotationFragment : Fragment() {
                 // Add a small delay to ensure the style is fully loaded
                 viewLifecycleOwner.lifecycleScope.launch {
                     kotlinx.coroutines.delay(100) // 100ms delay
+                    // Restore weather overlay first so annotation layers render above it
+                    weatherLayerManager?.restore()
                     annotationController.setupAnnotationOverlay(mapLibreMap)
                     annotationController.renderAllAnnotations(mapLibreMap)
                     
@@ -165,6 +169,26 @@ class AnnotationFragment : Fragment() {
                 }
             }
             annotationController.mapController = mapController
+            
+            // Initialize weather overlay manager
+            runCatching {
+                val prefs = requireContext().getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
+                val enabled = prefs.getBoolean("weather_enabled", false)
+                Log.d("AnnotationFragment", "Initializing WeatherLayerManager, enabled=" + enabled)
+                val opacity = prefs.getFloat("weather_opacity", 0.7f)
+                // Use OpenWeatherMap tiles for current radar
+                val owmKey = BuildConfig.OPENWEATHERMAP_API_KEY.takeIf { it.isNotBlank() }
+                    ?: ""
+                val provider = com.tak.lite.network.OwmWeatherTileProvider(owmKey)
+                weatherLayerManager = WeatherLayerManager(
+                    mapLibreMap = mapLibreMap,
+                    urlTemplateProvider = { provider.latestRadarUrlTemplate() },
+                    initialEnabled = enabled,
+                    initialOpacity = opacity
+                ).also { it.restore() }
+            }.onFailure { e ->
+                Log.w("AnnotationFragment", "Weather overlay initialization failed: ${e.message}", e)
+            }
             
             // Set up cluster text overlay
             clusterTextOverlayView.setProjection(mapLibreMap.projection)
@@ -552,5 +576,24 @@ class AnnotationFragment : Fragment() {
         val prefs = requireContext().getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
         val showPredictionOverlay = prefs.getBoolean("show_prediction_overlay", false)
         predictionOverlayView.setShowPredictionOverlay(showPredictionOverlay)
+    }
+
+    // Exposed to activity for toggling weather overlay from the Layers popup
+    override fun setWeatherLayerEnabled(enabled: Boolean) {
+        try {
+            Log.d("AnnotationFragment", "setWeatherLayerEnabled called: enabled=" + enabled)
+            weatherLayerManager?.setEnabled(enabled)
+            weatherLayerManager?.restore()
+        } catch (e: Exception) {
+            android.util.Log.w("AnnotationFragment", "Failed to toggle weather overlay: ${e.message}", e)
+        }
+    }
+
+    override fun setPredictionsLayerEnabled(enabled: Boolean) {
+        try {
+            predictionOverlayView.setShowPredictionOverlay(enabled)
+        } catch (e: Exception) {
+            android.util.Log.w("AnnotationFragment", "Failed to toggle predictions overlay: ${e.message}", e)
+        }
     }
 } 

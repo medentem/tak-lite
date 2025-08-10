@@ -59,6 +59,11 @@ class MapController(
         this.onCameraMove = callback
     }
 
+    // Allow external callers to re-fire the style changed callback so dynamic overlays can restore ordering
+    fun refireStyleChanged() {
+        onStyleChanged?.invoke()
+    }
+
     enum class MapType {
         LAST_USED, STREETS, SATELLITE, HYBRID
     }

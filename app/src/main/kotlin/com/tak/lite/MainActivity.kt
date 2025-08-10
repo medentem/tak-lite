@@ -89,6 +89,10 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
     private lateinit var settingsButton: View
     private lateinit var statusButton: com.google.android.material.floatingactionbutton.FloatingActionButton
     private lateinit var statusLabel: TextView
+    private lateinit var layersButton: com.google.android.material.floatingactionbutton.FloatingActionButton
+    private lateinit var layersOptionsContainer: LinearLayout
+    private lateinit var predictionToggleButton: com.google.android.material.floatingactionbutton.FloatingActionButton
+    private lateinit var weatherToggleButton: com.google.android.material.floatingactionbutton.FloatingActionButton
 
     // Direction overlay views
     private lateinit var directionOverlay: LinearLayout
@@ -123,7 +127,6 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
     // Coverage analysis
     private val coverageViewModel: CoverageViewModel by viewModels()
     private lateinit var coverageOverlayView: CoverageOverlayView
-    private lateinit var coverageAnalysisButton: com.google.android.material.floatingactionbutton.FloatingActionButton
     private lateinit var coverageProgressContainer: LinearLayout
     private lateinit var coverageProgressBar: ProgressBar
     private lateinit var coverageProgressText: TextView
@@ -257,9 +260,13 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
         // Initialize status button
         statusButton = findViewById(R.id.statusButton)
         statusLabel = findViewById(R.id.statusLabel)
+        // Initialize layers button and option toggles
+        layersButton = findViewById(R.id.layersButton)
+        layersOptionsContainer = findViewById(R.id.layersOptionsContainer)
+        predictionToggleButton = findViewById(R.id.predictionToggleButton)
+        weatherToggleButton = findViewById(R.id.weatherToggleButton)
         
-        // Initialize coverage analysis
-        coverageAnalysisButton = findViewById(R.id.coverageAnalysisButton)
+        // Initialize coverage overlay/progress UI (triggered via Layers menu)
         coverageOverlayView = findViewById(R.id.coverageOverlayView)
         coverageProgressContainer = findViewById(R.id.coverageProgressContainer)
         coverageProgressBar = findViewById(R.id.coverageProgressBar)
@@ -376,8 +383,10 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
         // Setup status button
         setupStatusButton()
         
-        // Setup coverage analysis
+        // Setup coverage analysis observers (control via Layers menu)
         setupCoverageAnalysis()
+        // Setup layers FAB and toggles
+        setupLayersControls()
 
         toggle3dFab.setOnClickListener {
             is3DBuildingsEnabled = !is3DBuildingsEnabled
@@ -595,6 +604,65 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
         }
     }
 
+    private var layersDialog: com.tak.lite.ui.LayersSelectionDialog? = null
+    private fun setupLayersControls() {
+        // Clicking the layers FAB toggles a persistent popup menu
+        layersButton.setOnClickListener {
+            val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
+            val weatherEnabled = prefs.getBoolean("weather_enabled", false)
+            val predictionEnabled = prefs.getBoolean("show_prediction_overlay", false)
+            val existing = layersDialog
+            if (existing != null && existing.isShowing) {
+                existing.dismiss()
+                layersDialog = null
+                return@setOnClickListener
+            }
+            val isCoverageActive = !coverageViewModel.isAnalysisIdle() || coverageViewModel.coverageGrid.value != null
+            layersDialog = com.tak.lite.ui.LayersSelectionDialog(
+                context = this,
+                isWeatherEnabled = weatherEnabled,
+                isPredictionsEnabled = predictionEnabled,
+                onWeatherToggled = { next ->
+                    android.util.Log.d("MainActivity", "onWeatherToggled invoked from LayersSelectionDialog: next=" + next)
+                    prefs.edit().putBoolean("weather_enabled", next).apply()
+                    (this as com.tak.lite.ui.map.ElevationChartBottomSheet.MapControllerProvider)
+                        .getLayersTarget()?.setWeatherLayerEnabled(next)
+                },
+                onPredictionsToggled = { next ->
+                    prefs.edit().putBoolean("show_prediction_overlay", next).apply()
+                    (this as com.tak.lite.ui.map.ElevationChartBottomSheet.MapControllerProvider)
+                        .getLayersTarget()?.setPredictionsLayerEnabled(next)
+                },
+                onCoverageToggled = { next ->
+                    if (next) {
+                        val map = mapController.mapLibreMap
+                        if (map == null) {
+                            Toast.makeText(this, "Map not ready yet", Toast.LENGTH_SHORT).show()
+                            return@LayersSelectionDialog
+                        }
+                        val center = map.cameraPosition.target
+                        val zoomLevel = map.cameraPosition.zoom.roundToInt()
+                        if (center == null) {
+                            Toast.makeText(this, "Map center not available", Toast.LENGTH_SHORT).show()
+                            return@LayersSelectionDialog
+                        }
+                        val viewportBounds = getCurrentViewportBounds(map)
+                        coverageViewModel.startCoverageAnalysis(center, zoomLevel, viewportBounds)
+                    } else {
+                        coverageOverlayView.clearCoverage()
+                        coverageViewModel.clearCoverageAnalysis()
+                    }
+                },
+                isCoverageActive = isCoverageActive
+            ).also { it.show(layersButton) }
+        }
+    }
+
+    private fun updateLayerToggleAppearance(button: com.google.android.material.floatingactionbutton.FloatingActionButton, enabled: Boolean) {
+        val color = if (enabled) android.graphics.Color.parseColor("#4CAF50") else android.graphics.Color.DKGRAY
+        button.backgroundTintList = android.content.res.ColorStateList.valueOf(color)
+    }
+
     private fun observeMeshNetworkState() {
         lifecycleScope.launch {
             viewModel.uiState.collectLatest { state ->
@@ -721,8 +789,9 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
         val pttButtonMargin = (16 * density).toInt() // Standard margin in dp
         val totalPTTSpace = pttButtonHeight + pttButtonMargin // 72dp total (button + bottom margin only)
         
-        val targetLineToolMargin = if (showPTT) (165 * density).toInt() else ((165 - 72) * density).toInt()
+        val targetLineToolMargin = if (showPTT) (170 * density).toInt() else ((170 - 72) * density).toInt()
         val targetStatusMargin = if (showPTT) (80 * density).toInt() else (16 * density).toInt() // Keep some margin from bottom
+        // Layers button is managed by its own logic (e.g., line tool); do not override here
         
         Log.d("MainActivity", "FAB animation - showPTT: $showPTT, targetLineToolMargin: ${targetLineToolMargin}px, targetStatusMargin: ${targetStatusMargin}px")
         
@@ -743,8 +812,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
                     statusParams.bottomMargin = animator.animatedValue as Int
                     statusButtonContainer.layoutParams = statusParams
                 }
-                
-                // Run animations together
+                // Run animations together (exclude layers container)
                 AnimatorSet().apply {
                     playTogether(lineToolAnimator, statusAnimator)
                     duration = 300
@@ -1042,6 +1110,12 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
 
     override fun getMapController(): com.tak.lite.ui.map.MapController? = mapController
 
+    // Provide a stable target for layer toggles without fragment lookup
+    override fun getLayersTarget(): com.tak.lite.ui.map.ElevationChartBottomSheet.LayersTarget? {
+        val fragment = supportFragmentManager.findFragmentById(R.id.mainFragmentContainer)
+        return fragment as? com.tak.lite.ui.map.ElevationChartBottomSheet.LayersTarget
+    }
+
     private fun showAppropriateDialog() {
         // Check if Google Play Services are available
         val isGooglePlayAvailable = billingManager.isGooglePlayAvailable.value
@@ -1299,47 +1373,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
 
     
     private fun setupCoverageAnalysis() {
-        // Set up coverage analysis button with toggle behavior
-        coverageAnalysisButton.setOnClickListener {
-            Log.d("MainActivity", "Coverage analysis button clicked")
-            
-            // If coverage is active, clear it
-            if (!coverageViewModel.isAnalysisIdle()) {
-                Log.d("MainActivity", "Clearing coverage analysis")
-                // Clear overlay immediately for instant feedback
-                coverageOverlayView.clearCoverage()
-                updateCoverageButtonState(false)
-                // Then clear the analysis
-                coverageViewModel.clearCoverageAnalysis()
-                return@setOnClickListener
-            }
-            
-            // Otherwise, start new coverage analysis
-            val map = mapController.mapLibreMap
-            if (map == null) {
-                Log.d("MainActivity", "Map not ready yet")
-                Toast.makeText(this, "Map not ready yet", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            
-            val center = map.cameraPosition.target
-            val zoomLevel = map.cameraPosition.zoom.roundToInt()
-            
-            if (center == null) {
-                Log.d("MainActivity", "Map center is null")
-                Toast.makeText(this, "Map center not available", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            
-            Log.d("MainActivity", "Starting coverage analysis at center: $center, zoom: $zoomLevel")
-            
-            // Get current viewport bounds
-            val viewportBounds = getCurrentViewportBounds(map)
-            
-            // Start coverage analysis
-            coverageViewModel.startCoverageAnalysis(center, zoomLevel, viewportBounds)
-        }
-        
+        // Coverage actions are triggered from the Layers menu; here we only observe and render
         // Observe coverage analysis state
         lifecycleScope.launch {
             repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
@@ -1347,7 +1381,6 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
                     when (state) {
                         is com.tak.lite.model.CoverageAnalysisState.Idle -> {
                             hideCoverageProgressBar()
-                            updateCoverageButtonState(false)
                             // Only clear overlay if there's no coverage data available
                             val hasCoverageData = coverageViewModel.coverageGrid.value != null
                             if (!hasCoverageData) {
@@ -1359,20 +1392,16 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
                         }
                         is com.tak.lite.model.CoverageAnalysisState.Calculating -> {
                             showCoverageProgressBar()
-                            updateCoverageButtonState(true)
                         }
                         is com.tak.lite.model.CoverageAnalysisState.Progress -> {
                             updateCoverageProgressBar(state.progress, state.message)
-                            updateCoverageButtonState(true)
                         }
                         is com.tak.lite.model.CoverageAnalysisState.Success -> {
                             hideCoverageProgressBar()
-                            updateCoverageButtonState(true)
                             Toast.makeText(this@MainActivity, "Coverage analysis complete!", Toast.LENGTH_SHORT).show()
                         }
                         is com.tak.lite.model.CoverageAnalysisState.Error -> {
                             hideCoverageProgressBar()
-                            updateCoverageButtonState(false)
                             Toast.makeText(this@MainActivity, "Coverage analysis failed: ${state.message}", Toast.LENGTH_LONG).show()
                         }
                     }
@@ -1437,17 +1466,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
     /**
      * Updates the coverage analysis button appearance based on state
      */
-    private fun updateCoverageButtonState(isActive: Boolean) {
-        if (isActive) {
-            // Show red X when coverage is active
-            coverageAnalysisButton.setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
-            coverageAnalysisButton.backgroundTintList = ColorStateList.valueOf(Color.RED)
-        } else {
-            // Show normal coverage icon when inactive
-            coverageAnalysisButton.setImageResource(android.R.drawable.ic_menu_view)
-            coverageAnalysisButton.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#0099CC"))
-        }
-    }
+    // Coverage is controlled from Layers menu now; button UI removed
     
     private fun showCoverageProgressBar() {
         coverageProgressContainer.visibility = View.VISIBLE

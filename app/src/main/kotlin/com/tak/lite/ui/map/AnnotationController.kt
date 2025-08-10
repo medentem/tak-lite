@@ -1107,6 +1107,12 @@ class AnnotationController(
         lineToolLabel.visibility = View.VISIBLE
         lineToolCancelButton.visibility = View.GONE
         lineToolConfirmButton.visibility = View.GONE
+        // Restore layers button container position when exiting line mode
+        try {
+            val activity = fragment.activity as? android.app.Activity
+            val container = activity?.findViewById<android.widget.LinearLayout>(com.tak.lite.R.id.layersButtonContainer)
+            container?.animate()?.translationY(0f)?.setDuration(150)?.start()
+        } catch (_: Exception) { }
     }
     
     fun setShouldCreatePolygon(shouldCreate: Boolean) {
@@ -1315,6 +1321,13 @@ class AnnotationController(
             lineToolCancelButton.visibility = View.VISIBLE
             lineToolConfirmButton.visibility = View.VISIBLE
             updateLineToolConfirmState()
+            // Move layers button container up to avoid overlap with confirm/cancel FABs
+            try {
+                val activity = fragment.activity as? android.app.Activity
+                val container = activity?.findViewById<android.widget.LinearLayout>(com.tak.lite.R.id.layersButtonContainer)
+                val density = fragment.resources.displayMetrics.density
+                container?.animate()?.translationY((-60f * density))?.setDuration(150)?.start()
+            } catch (_: Exception) { }
         }
         lineToolCancelButton.setOnClickListener {
             finishLineDrawing(cancel = true)

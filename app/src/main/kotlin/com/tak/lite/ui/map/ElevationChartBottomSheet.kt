@@ -450,5 +450,12 @@ class ElevationChartBottomSheet(
     // Interface for getting MapController from the activity
     interface MapControllerProvider {
         fun getMapController(): MapController?
+        // Add provider contract for layers targets to avoid brittle fragment lookup
+        fun getLayersTarget(): LayersTarget?
+    }
+
+    interface LayersTarget {
+        fun setWeatherLayerEnabled(enabled: Boolean)
+        fun setPredictionsLayerEnabled(enabled: Boolean)
     }
 } 
