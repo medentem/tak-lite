@@ -633,6 +633,9 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                     prefs.edit().putBoolean("show_prediction_overlay", next).apply()
                     (this as com.tak.lite.ui.map.MapControllerProvider)
                         .getLayersTarget()?.setPredictionsLayerEnabled(next)
+                    if (next) {
+                        Toast.makeText(this, "Loading peer predictions. This may take a minute.", Toast.LENGTH_SHORT).show()
+                    }
                 },
                 onCoverageToggled = { next ->
                     if (next) {

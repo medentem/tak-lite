@@ -54,7 +54,24 @@ class PeerLocationHistoryRepository @Inject constructor(
     
     init {
         loadConfiguration()
+        // Listen for prediction overlay preference changes to gate computation and clear state
+        prefs.registerOnSharedPreferenceChangeListener { _, key ->
+            if (key == "show_prediction_overlay") {
+                if (!isPredictionsEnabled()) {
+                    // Predictions disabled: clear all predictions and cones
+                    _predictions.value = emptyMap()
+                    _confidenceCones.value = emptyMap()
+                    Log.d(TAG, "Predictions disabled; cleared predictions and cones")
+                } else {
+                    // Predictions enabled: recompute for current histories
+                    updateAllPredictions()
+                }
+            }
+        }
     }
+
+    private fun isPredictionsEnabled(): Boolean =
+        prefs.getBoolean("show_prediction_overlay", false)
     
     /**
      * Add a new location entry for a peer
@@ -124,8 +141,21 @@ class PeerLocationHistoryRepository @Inject constructor(
         
         peerHistories.put(peerId, updatedHistory)
         
-        // Update predictions
-        updatePrediction(peerId, updatedHistory)
+        // Update predictions only if predictions are enabled
+        if (isPredictionsEnabled()) {
+            updatePrediction(peerId, updatedHistory)
+        } else {
+            // Ensure we don't keep stale predictions for this peer while disabled
+            val currentPredictions = _predictions.value.toMutableMap()
+            val currentCones = _confidenceCones.value.toMutableMap()
+            var changed = false
+            if (currentPredictions.remove(peerId) != null) changed = true
+            if (currentCones.remove(peerId) != null) changed = true
+            if (changed) {
+                _predictions.value = currentPredictions
+                _confidenceCones.value = currentCones
+            }
+        }
         
         // Log additional data if available
         if (entry.hasVelocityData()) {
@@ -179,6 +209,11 @@ class PeerLocationHistoryRepository @Inject constructor(
      * Update prediction for a specific peer
      */
     private fun updatePrediction(peerId: String, history: PeerLocationHistory, config: PredictionConfig? = null, model: PredictionModel? = null) {
+        // Respect predictions enabled flag
+        if (!isPredictionsEnabled()) {
+            Log.d(TAG, "updatePrediction skipped (predictions disabled)")
+            return
+        }
         val currentConfig = config ?: _predictionConfig.value
         val currentModel = model ?: _selectedModel.value
         
@@ -257,6 +292,13 @@ class PeerLocationHistoryRepository @Inject constructor(
      * Update predictions for all peers
      */
     fun updateAllPredictions() {
+        // Respect predictions enabled flag
+        if (!isPredictionsEnabled()) {
+            _predictions.value = emptyMap()
+            _confidenceCones.value = emptyMap()
+            Log.d(TAG, "updateAllPredictions skipped and cleared (predictions disabled)")
+            return
+        }
         val currentConfig = _predictionConfig.value
         val currentModel = _selectedModel.value
         
@@ -433,7 +475,9 @@ class PeerLocationHistoryRepository @Inject constructor(
             val filteredEntries = history.entries.filter { it.timestamp >= cutoffTime }
             if (filteredEntries.size != history.entries.size) {
                 peerHistories.put(peerId, history.copy(entries = filteredEntries))
-                updatePrediction(peerId, peerHistories.get(peerId)!!, currentConfig, currentModel)
+                if (isPredictionsEnabled()) {
+                    updatePrediction(peerId, peerHistories.get(peerId)!!, currentConfig, currentModel)
+                }
             }
         }
 
