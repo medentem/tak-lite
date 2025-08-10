@@ -175,7 +175,7 @@ class AnnotationFragment : Fragment(), LayersTarget {
                 val prefs = requireContext().getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
                 val enabled = prefs.getBoolean("weather_enabled", false)
                 Log.d("AnnotationFragment", "Initializing WeatherLayerManager, enabled=" + enabled)
-                val opacity = prefs.getFloat("weather_opacity", 0.7f)
+                val opacity = prefs.getFloat("weather_opacity", 0.9f)
                 // Use OpenWeatherMap tiles for current radar
                 val owmKey = BuildConfig.OPENWEATHERMAP_API_KEY.takeIf { it.isNotBlank() }
                     ?: ""

@@ -15,7 +15,7 @@ class WeatherLayerManager(
     private val mapLibreMap: MapLibreMap,
     private val urlTemplateProvider: () -> String?,
     initialEnabled: Boolean = false,
-    initialOpacity: Float = 0.7f
+    initialOpacity: Float = 0.9f
 ) {
     companion object {
         private const val TAG = "WeatherLayerManager"
