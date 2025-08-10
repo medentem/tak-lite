@@ -124,6 +124,8 @@ abstract class MeshtasticBaseProtocol(
 
     override val requiresAppLocationSend: Boolean = false
     override val allowsChannelManagement: Boolean = false
+    override val supportsAudio: Boolean = false
+    override val requiresConnection: Boolean = true
 
     internal val _localNodeIdOrNickname = MutableStateFlow<String?>(null)
     override val localNodeIdOrNickname: StateFlow<String?>

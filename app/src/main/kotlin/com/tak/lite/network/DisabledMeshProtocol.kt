@@ -39,6 +39,8 @@ class DisabledMeshProtocol(private val context: Context) : MeshProtocol {
 
     override val requiresAppLocationSend: Boolean = false
     override val allowsChannelManagement: Boolean = false
+    override val supportsAudio: Boolean = false
+    override val requiresConnection: Boolean = true
 
     override suspend fun createChannel(name: String) {
         // No-op

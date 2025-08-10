@@ -1068,8 +1068,9 @@ class Layer2MeshNetworkProtocol @Inject constructor(
     }
 
     override val requiresAppLocationSend: Boolean = true
-
     override val allowsChannelManagement: Boolean = true
+    override val supportsAudio: Boolean = true
+    override val requiresConnection: Boolean = false
 
     override suspend fun createChannel(name: String) {
         // No-op for Layer 2

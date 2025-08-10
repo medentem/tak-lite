@@ -45,6 +45,8 @@ interface MeshProtocol {
 
     val requiresAppLocationSend: Boolean
     val allowsChannelManagement: Boolean
+    val supportsAudio: Boolean
+    val requiresConnection: Boolean
     
     // Device connection management
     fun scanForDevices(onResult: (DeviceInfo) -> Unit, onScanFinished: () -> Unit)

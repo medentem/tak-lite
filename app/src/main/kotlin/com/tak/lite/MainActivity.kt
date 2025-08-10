@@ -316,6 +316,11 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
         )
         audioController.setupAudioUI()
         audioController.setupPTTButton()
+        
+        // Update PTT button visibility based on protocol audio support
+        Log.d("MainActivity", "Initial setup - calling updatePTTButtonVisibility")
+        Log.d("MainActivity", "Current protocol at startup: ${meshProtocolProvider.protocol.value.javaClass.simpleName}")
+        updatePTTButtonVisibility()
 
         channelController = ChannelController(
             activity = this,
@@ -328,6 +333,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
         channelController.setupChannelButton(peerIdToNickname)
 
         observeMeshNetworkState()
+        observeProtocolChanges()
 
         mapTypeToggleButton.setOnClickListener {
             onMapModeToggled()
@@ -364,6 +370,8 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
             val intent = android.content.Intent(this, SettingsActivity::class.java)
             startActivity(intent)
         }
+        
+
 
         // Setup status button
         setupStatusButton()
@@ -601,6 +609,9 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
                         // Hide the connection status bar when connected
                         statusBar.visibility = View.GONE
                         Log.d("MainActivity", "Hiding connection status bar - Connected")
+                        Log.d("MainActivity", "Connection state changed to Connected - updating PTT button")
+                        // Update PTT button visibility when connection state changes
+                        updatePTTButtonVisibility()
                     }
                     is MeshNetworkUiState.Connecting -> {
                         Toast.makeText(this@MainActivity, "Connecting to mesh network...", Toast.LENGTH_SHORT).show()
@@ -608,6 +619,8 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
                         // Show the connection status bar when disconnected
                         statusBar.visibility = View.VISIBLE
                         Log.d("MainActivity", "Showing connection status bar - Disconnected")
+                        // Update PTT button visibility when connection state changes
+                        updatePTTButtonVisibility()
                     }
                     is MeshNetworkUiState.Disconnected -> {
                         Toast.makeText(this@MainActivity, "Disconnected from mesh network", Toast.LENGTH_SHORT).show()
@@ -615,20 +628,133 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
                         // Show the connection status bar when disconnected
                         statusBar.visibility = View.VISIBLE
                         Log.d("MainActivity", "Showing connection status bar - Disconnected")
+                        // Update PTT button visibility when connection state changes
+                        updatePTTButtonVisibility()
                     }
                     is MeshNetworkUiState.Error -> {
                         Toast.makeText(this@MainActivity, state.message, Toast.LENGTH_LONG).show()
                         // Show the connection status bar on error
                         statusBar.visibility = View.VISIBLE
                         Log.d("MainActivity", "Showing connection status bar - Error: ${state.message}")
+                        // Update PTT button visibility when connection state changes
+                        updatePTTButtonVisibility()
                     }
                     MeshNetworkUiState.Initial -> {
                         // Show the connection status bar in initial state
                         statusBar.visibility = View.VISIBLE
                         Log.d("MainActivity", "Showing connection status bar - Initial state")
+                        // Update PTT button visibility when connection state changes
+                        updatePTTButtonVisibility()
                     }
                 }
             }
+        }
+    }
+
+    private fun observeProtocolChanges() {
+        Log.d("MainActivity", "Setting up protocol observer")
+        lifecycleScope.launch {
+            repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                Log.d("MainActivity", "Protocol observer lifecycle started")
+                meshProtocolProvider.protocol.collect { protocol ->
+                    Log.d("MainActivity", "Protocol changed to: ${protocol.javaClass.simpleName}")
+                    updatePTTButtonVisibility()
+                }
+            }
+        }
+    }
+
+    private fun updatePTTButtonVisibility() {
+        val currentProtocol = meshProtocolProvider.protocol.value
+        val supportsAudio = currentProtocol.supportsAudio
+        val currentState = viewModel.uiState.value
+        val isConnected = currentState is MeshNetworkUiState.Connected
+        
+        // Show PTT button if protocol supports audio and either doesn't require connection or is connected
+        val shouldShowPTT = supportsAudio && (!currentProtocol.requiresConnection || isConnected)
+        
+        Log.d("MainActivity", "updatePTTButtonVisibility called - protocol: ${currentProtocol.javaClass.simpleName}, supportsAudio: $supportsAudio, currentState: $currentState, isConnected: $isConnected, shouldShowPTT: $shouldShowPTT")
+        
+        // Animate the PTT button visibility
+        if (shouldShowPTT && binding.pttButton.visibility != View.VISIBLE) {
+            Log.d("MainActivity", "Showing PTT button with animation")
+            binding.pttButton.visibility = View.VISIBLE
+            binding.pttButton.alpha = 0f
+            binding.pttButton.animate()
+                .alpha(1f)
+                .setDuration(300)
+                .start()
+        } else if (!shouldShowPTT && binding.pttButton.visibility != View.GONE) {
+            Log.d("MainActivity", "Hiding PTT button with animation")
+            binding.pttButton.animate()
+                .alpha(0f)
+                .setDuration(300)
+                .withEndAction {
+                    binding.pttButton.visibility = View.GONE
+                }
+                .start()
+        } else {
+            Log.d("MainActivity", "PTT button visibility unchanged - current: ${binding.pttButton.visibility}")
+        }
+        
+        // Animate the FABs above the PTT button
+        animateFABsForPTTVisibility(shouldShowPTT)
+        
+        Log.d("MainActivity", "PTT button visibility updated - supportsAudio: $supportsAudio, isConnected: $isConnected, visible: $shouldShowPTT")
+    }
+
+
+
+    private fun animateFABsForPTTVisibility(showPTT: Boolean) {
+        val lineToolContainer = findViewById<LinearLayout>(R.id.lineToolButtonContainer)
+        val statusButtonContainer = findViewById<LinearLayout>(R.id.statusButtonContainer)
+        
+        // Safety check - if views are not found, don't animate
+        if (lineToolContainer == null || statusButtonContainer == null) {
+            Log.w("MainActivity", "FAB containers not found, skipping animation")
+            return
+        }
+        
+        // Calculate target margins (using hardcoded values since dimens don't exist)
+        val density = resources.displayMetrics.density
+        val pttButtonHeight = (56 * density).toInt() // Standard FAB size in dp
+        val pttButtonMargin = (16 * density).toInt() // Standard margin in dp
+        val totalPTTSpace = pttButtonHeight + pttButtonMargin // 72dp total (button + bottom margin only)
+        
+        val targetLineToolMargin = if (showPTT) (165 * density).toInt() else ((165 - 72) * density).toInt()
+        val targetStatusMargin = if (showPTT) (80 * density).toInt() else (16 * density).toInt() // Keep some margin from bottom
+        
+        Log.d("MainActivity", "FAB animation - showPTT: $showPTT, targetLineToolMargin: ${targetLineToolMargin}px, targetStatusMargin: ${targetStatusMargin}px")
+        
+        // Animate line tool container
+        val lineToolParams = lineToolContainer.layoutParams as? androidx.constraintlayout.widget.ConstraintLayout.LayoutParams
+        if (lineToolParams != null) {
+            val lineToolAnimator = ObjectAnimator.ofInt(lineToolParams.bottomMargin, targetLineToolMargin)
+            lineToolAnimator.addUpdateListener { animator ->
+                lineToolParams.bottomMargin = animator.animatedValue as Int
+                lineToolContainer.layoutParams = lineToolParams
+            }
+            
+            // Animate status button container
+            val statusParams = statusButtonContainer.layoutParams as? androidx.constraintlayout.widget.ConstraintLayout.LayoutParams
+            if (statusParams != null) {
+                val statusAnimator = ObjectAnimator.ofInt(statusParams.bottomMargin, targetStatusMargin)
+                statusAnimator.addUpdateListener { animator ->
+                    statusParams.bottomMargin = animator.animatedValue as Int
+                    statusButtonContainer.layoutParams = statusParams
+                }
+                
+                // Run animations together
+                AnimatorSet().apply {
+                    playTogether(lineToolAnimator, statusAnimator)
+                    duration = 300
+                    start()
+                }
+            } else {
+                Log.w("MainActivity", "Status button container layout params not found")
+            }
+        } else {
+            Log.w("MainActivity", "Line tool container layout params not found")
         }
     }
 
