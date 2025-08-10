@@ -4,7 +4,6 @@ import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.PointF
@@ -634,7 +633,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                     (this as com.tak.lite.ui.map.MapControllerProvider)
                         .getLayersTarget()?.setPredictionsLayerEnabled(next)
                     if (next) {
-                        Toast.makeText(this, "Loading peer predictions. This may take a minute.", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, "Predictions will take a minute and only show if location history available.", Toast.LENGTH_LONG).show()
                     }
                 },
                 onCoverageToggled = { next ->
