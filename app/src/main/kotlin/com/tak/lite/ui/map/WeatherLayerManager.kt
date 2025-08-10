@@ -13,9 +13,10 @@ import org.maplibre.android.style.sources.TileSet
  */
 class WeatherLayerManager(
     private val mapLibreMap: MapLibreMap,
-    private val urlTemplateProvider: () -> String?,
+    private val urlTemplateProvider: (String) -> String?,
     initialEnabled: Boolean = false,
-    initialOpacity: Float = 0.9f
+    initialOpacity: Float = 0.9f,
+    initialWeatherSource: String = "precipitation_new"
 ) {
     companion object {
         private const val TAG = "WeatherLayerManager"
@@ -25,6 +26,7 @@ class WeatherLayerManager(
 
     private var isEnabled: Boolean = initialEnabled
     private var opacity: Float = initialOpacity.coerceIn(0f, 1f)
+    private var weatherSource: String = initialWeatherSource
 
     fun setEnabled(enabled: Boolean) {
         android.util.Log.d(TAG, "setEnabled called with enabled=" + enabled)
@@ -41,12 +43,17 @@ class WeatherLayerManager(
         }
     }
 
+    fun setWeatherSource(source: String) {
+        weatherSource = source
+        restore()
+    }
+
     /**
      * Re-add the weather source+layer to the current style if enabled.
      * Safe to call after style changes.
      */
     fun restore() {
-        android.util.Log.d(TAG, "restore() invoked; isEnabled=" + isEnabled)
+        android.util.Log.d(TAG, "restore() invoked; isEnabled=" + isEnabled + ", weatherSource=" + weatherSource)
         mapLibreMap.getStyle { style ->
             // Clean up any remnants
             try {
@@ -61,7 +68,7 @@ class WeatherLayerManager(
                 return@getStyle
             }
 
-            val url = urlTemplateProvider()
+            val url = urlTemplateProvider(weatherSource)
             android.util.Log.d(TAG, "URL template from provider: " + url)
             if (url.isNullOrBlank()) {
                 Log.w(TAG, "No weather radar URL template available; skipping")
@@ -79,7 +86,7 @@ class WeatherLayerManager(
 
                 // Add early so other interactive layers added later draw above this
                 style.addLayer(layer)
-                Log.d(TAG, "Weather radar layer added with opacity=$opacity")
+                Log.d(TAG, "Weather radar layer added with opacity=$opacity, source=$weatherSource")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed adding weather radar layer: ${e.message}", e)
             }

@@ -56,6 +56,7 @@ class AnnotationFragment : Fragment(), LayersTarget {
     private lateinit var polygonTimerTextOverlayView: PolygonTimerTextOverlayView
     private lateinit var areaTimerTextOverlayView: AreaTimerTextOverlayView
     private var weatherLayerManager: WeatherLayerManager? = null
+    private var weatherSettingsListener: android.content.SharedPreferences.OnSharedPreferenceChangeListener? = null
     
     // POI tap detection state
     private var poiTapDownTime: Long? = null
@@ -172,19 +173,20 @@ class AnnotationFragment : Fragment(), LayersTarget {
             
             // Initialize weather overlay manager
             runCatching {
-                val prefs = requireContext().getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
                 val enabled = prefs.getBoolean("weather_enabled", false)
                 Log.d("AnnotationFragment", "Initializing WeatherLayerManager, enabled=" + enabled)
                 val opacity = prefs.getFloat("weather_opacity", 0.9f)
+                val weatherSource = prefs.getString("weather_source", "precipitation_new") ?: "precipitation_new"
                 // Use OpenWeatherMap tiles for current radar
                 val owmKey = BuildConfig.OPENWEATHERMAP_API_KEY.takeIf { it.isNotBlank() }
                     ?: ""
                 val provider = com.tak.lite.network.OwmWeatherTileProvider(owmKey)
                 weatherLayerManager = WeatherLayerManager(
                     mapLibreMap = mapLibreMap,
-                    urlTemplateProvider = { provider.latestRadarUrlTemplate() },
+                    urlTemplateProvider = { source -> provider.latestRadarUrlTemplate(source) },
                     initialEnabled = enabled,
-                    initialOpacity = opacity
+                    initialOpacity = opacity,
+                    initialWeatherSource = weatherSource
                 ).also { it.restore() }
             }.onFailure { e ->
                 Log.w("AnnotationFragment", "Weather overlay initialization failed: ${e.message}", e)
@@ -512,6 +514,25 @@ class AnnotationFragment : Fragment(), LayersTarget {
             }
         }
         observeViewModel()
+        
+        // Listen for weather settings changes
+        weatherSettingsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            when (key) {
+                "weather_enabled" -> {
+                    val enabled = prefs.getBoolean("weather_enabled", false)
+                    weatherLayerManager?.setEnabled(enabled)
+                }
+                "weather_opacity" -> {
+                    val opacity = prefs.getFloat("weather_opacity", 0.9f)
+                    weatherLayerManager?.setOpacity(opacity)
+                }
+                "weather_source" -> {
+                    val source = prefs.getString("weather_source", "precipitation_new") ?: "precipitation_new"
+                    weatherLayerManager?.setWeatherSource(source)
+                }
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(weatherSettingsListener!!)
     }
 
     private fun observeViewModel() {
@@ -567,6 +588,18 @@ class AnnotationFragment : Fragment(), LayersTarget {
         if (::annotationController.isInitialized) {
             annotationController.cleanup()
         }
+        
+        // Unregister SharedPreferences listener
+        weatherSettingsListener?.let { listener ->
+            try {
+                val prefs = requireContext().getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
+                prefs.unregisterOnSharedPreferenceChangeListener(listener)
+            } catch (e: Exception) {
+                // Ignore if context is no longer valid
+            }
+        }
+        weatherSettingsListener = null
+        
         _binding = null
     }
 

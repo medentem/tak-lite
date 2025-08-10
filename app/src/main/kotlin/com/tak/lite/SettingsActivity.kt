@@ -22,6 +22,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.switchmaterial.SwitchMaterial
+import com.google.android.material.slider.Slider
 import android.widget.RadioGroup
 import android.widget.RadioButton
 import com.tak.lite.di.ConfigDownloadStep
@@ -69,6 +70,8 @@ class SettingsActivity : BaseActivity() {
     )
     private val darkModeOptions = listOf("Use Phone Setting", "Always Dark", "Always Light")
     private val darkModeValues = listOf("system", "dark", "light")
+    private val weatherSourceOptions = listOf("Precipitation", "Clouds", "Wind Speed", "Temperature")
+    private val weatherSourceValues = listOf("precipitation_new", "clouds_new", "wind_new", "temp_new")
     private val BLUETOOTH_PERMISSIONS = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         arrayOf(
             Manifest.permission.BLUETOOTH_SCAN,
@@ -98,6 +101,11 @@ class SettingsActivity : BaseActivity() {
     private lateinit var coverageDetailHigh: RadioButton
     private lateinit var userAntennaHeightEditText: com.google.android.material.textfield.TextInputEditText
     private lateinit var receivingAntennaHeightEditText: com.google.android.material.textfield.TextInputEditText
+    private lateinit var weatherSettingsCard: com.google.android.material.card.MaterialCardView
+    private lateinit var weatherEnabledSwitch: com.google.android.material.switchmaterial.SwitchMaterial
+    private lateinit var weatherSourceSpinner: com.google.android.material.textfield.MaterialAutoCompleteTextView
+    private lateinit var weatherOpacitySlider: com.google.android.material.slider.Slider
+    private lateinit var weatherOpacityValue: TextView
     private val REQUEST_CODE_FOREGROUND_SERVICE_CONNECTED_DEVICE = 2003
     private val REQUEST_CODE_NOTIFICATION_PERMISSION = 3001
     private val REQUEST_CODE_ALL_PERMISSIONS = 4001
@@ -167,6 +175,11 @@ class SettingsActivity : BaseActivity() {
         coverageDetailHigh = findViewById(R.id.coverageDetailHigh)
         userAntennaHeightEditText = findViewById(R.id.userAntennaHeightEditText)
         receivingAntennaHeightEditText = findViewById(R.id.receivingAntennaHeightEditText)
+        weatherSettingsCard = findViewById(R.id.weatherSettingsCard)
+        weatherEnabledSwitch = findViewById(R.id.weatherEnabledSwitch)
+        weatherSourceSpinner = findViewById(R.id.weatherSourceSpinner)
+        weatherOpacitySlider = findViewById(R.id.weatherOpacitySlider)
+        weatherOpacityValue = findViewById(R.id.weatherOpacityValue)
 
         // Check premium status and update UI accordingly
         lifecycleScope.launch {
@@ -174,6 +187,7 @@ class SettingsActivity : BaseActivity() {
                 billingManager.isPremium.collectLatest { isPremium ->
                     val inTrial = billingManager.isInTrialPeriod()
                     updateMeshSettingsVisibility(isPremium || inTrial)
+                    updateWeatherSettingsVisibility(isPremium)
                 }
             }
         }
@@ -546,6 +560,9 @@ class SettingsActivity : BaseActivity() {
 
         // Setup compass calibration
         setupCompassCalibration()
+
+        // Setup weather settings
+        setupWeatherSettings()
 
         // Setup map dark mode spinner
         val darkModeAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, darkModeOptions)
@@ -1040,6 +1057,46 @@ class SettingsActivity : BaseActivity() {
             aidlConnectButton.visibility = View.GONE
             aidlStatusText.visibility = View.GONE
             unlockAppButton.visibility = View.VISIBLE
+        }
+    }
+
+    private fun updateWeatherSettingsVisibility(isEnabled: Boolean) {
+        weatherSettingsCard.visibility = if (isEnabled) View.VISIBLE else View.GONE
+    }
+
+    private fun setupWeatherSettings() {
+        val prefs = applicationContext.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+        
+        // Setup weather enabled switch
+        val weatherEnabled = prefs.getBoolean("weather_enabled", false)
+        weatherEnabledSwitch.isChecked = weatherEnabled
+        weatherEnabledSwitch.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean("weather_enabled", isChecked).apply()
+        }
+        
+        // Setup weather source spinner
+        val weatherSourceAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, weatherSourceOptions)
+        weatherSourceSpinner.setAdapter(weatherSourceAdapter)
+        
+        val savedWeatherSource = prefs.getString("weather_source", "precipitation_new") ?: "precipitation_new"
+        val selectedWeatherSourceIndex = weatherSourceValues.indexOf(savedWeatherSource).takeIf { it >= 0 } ?: 0
+        weatherSourceSpinner.setText(weatherSourceOptions[selectedWeatherSourceIndex], false)
+        
+        weatherSourceSpinner.setOnItemClickListener { _, _, position, _ ->
+            prefs.edit().putString("weather_source", weatherSourceValues[position]).apply()
+        }
+        
+        // Setup weather opacity slider
+        val weatherOpacity = prefs.getFloat("weather_opacity", 0.9f)
+        weatherOpacitySlider.value = weatherOpacity
+        weatherOpacityValue.text = String.format("%.1f", weatherOpacity)
+        
+        weatherOpacitySlider.addOnChangeListener { _, value, fromUser ->
+            if (fromUser) {
+                val opacity = value.coerceIn(0.5f, 1.0f)
+                weatherOpacityValue.text = String.format("%.1f", opacity)
+                prefs.edit().putFloat("weather_opacity", opacity).apply()
+            }
         }
     }
 

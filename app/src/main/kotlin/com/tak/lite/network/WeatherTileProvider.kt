@@ -10,13 +10,13 @@ interface WeatherTileProvider {
      * Expected format includes {z}/{x}/{y} placeholders.
      * Return null if not available (e.g., no API key configured).
      */
-    fun latestRadarUrlTemplate(): String?
+    fun latestRadarUrlTemplate(weatherSource: String = "precipitation_new"): String?
 
     /**
      * Return a URL template for a time-specific radar frame, if supported by the provider.
      * Return null if not supported.
      */
-    fun timeboxedRadarUrlTemplate(epochMillis: Long): String? = latestRadarUrlTemplate()
+    fun timeboxedRadarUrlTemplate(epochMillis: Long, weatherSource: String = "precipitation_new"): String? = latestRadarUrlTemplate(weatherSource)
 }
 
 /**
@@ -26,10 +26,10 @@ interface WeatherTileProvider {
 class OwmWeatherTileProvider(
     private val apiKey: String
 ) : WeatherTileProvider {
-    override fun latestRadarUrlTemplate(): String? {
+    override fun latestRadarUrlTemplate(weatherSource: String): String? {
         if (apiKey.isBlank()) return null
-        // Older OWM tiles endpoint (PNG): https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=KEY
-        return "https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=$apiKey"
+        // OpenWeatherMap tiles endpoint with configurable weather source
+        return "https://tile.openweathermap.org/map/$weatherSource/{z}/{x}/{y}.png?appid=$apiKey"
     }
 }
 
