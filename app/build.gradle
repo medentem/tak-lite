@@ -27,8 +27,8 @@ android {
         applicationId "com.tak.lite"
         minSdk 26       // <— modern key
         targetSdk 35
-        versionCode 84
-        versionName "1.1.0-alpha.54"
+        versionCode 85
+        versionName "1.1.0-alpha.55"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders = [
