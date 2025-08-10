@@ -29,7 +29,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
-class AnnotationFragment : Fragment(), ElevationChartBottomSheet.LayersTarget {
+class AnnotationFragment : Fragment(), LayersTarget {
 
     private var _binding: FragmentAnnotationBinding? = null
     private val binding get() = _binding!!

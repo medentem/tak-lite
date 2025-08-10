@@ -13,6 +13,7 @@ class LayersSelectionDialog(
     private val context: Context,
     isWeatherEnabled: Boolean,
     isPredictionsEnabled: Boolean,
+    private val showWeatherOption: Boolean,
     private val onWeatherToggled: (Boolean) -> Unit,
     private val onPredictionsToggled: (Boolean) -> Unit,
     private val onCoverageToggled: (Boolean) -> Unit,
@@ -34,6 +35,9 @@ class LayersSelectionDialog(
         val predictionsState = popupView.findViewById<ImageView>(R.id.layerPredictionsState)
         val coverageState = popupView.findViewById<ImageView>(R.id.layerCoverageState)
         val title = popupView.findViewById<TextView>(R.id.layersTitle)
+
+        // Weather row visibility based on premium status
+        weatherRow.visibility = if (showWeatherOption) View.VISIBLE else View.GONE
 
         updateIndicator(weatherState, weatherEnabledInternal)
         updateIndicator(predictionsState, predictionsEnabledInternal)

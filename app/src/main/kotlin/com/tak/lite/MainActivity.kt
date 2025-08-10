@@ -61,7 +61,7 @@ val DEFAULT_US_CENTER = LatLng(39.8283, -98.5795)
 const val DEFAULT_US_ZOOM = 4.0
 
 @AndroidEntryPoint
-class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomSheet.MapControllerProvider {
+class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
 
     lateinit var binding: ActivityMainBinding
     private lateinit var mapView: MapView
@@ -622,15 +622,16 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
                 context = this,
                 isWeatherEnabled = weatherEnabled,
                 isPredictionsEnabled = predictionEnabled,
+                showWeatherOption = billingManager.isPremium(),
                 onWeatherToggled = { next ->
                     android.util.Log.d("MainActivity", "onWeatherToggled invoked from LayersSelectionDialog: next=" + next)
                     prefs.edit().putBoolean("weather_enabled", next).apply()
-                    (this as com.tak.lite.ui.map.ElevationChartBottomSheet.MapControllerProvider)
+                    (this as com.tak.lite.ui.map.MapControllerProvider)
                         .getLayersTarget()?.setWeatherLayerEnabled(next)
                 },
                 onPredictionsToggled = { next ->
                     prefs.edit().putBoolean("show_prediction_overlay", next).apply()
-                    (this as com.tak.lite.ui.map.ElevationChartBottomSheet.MapControllerProvider)
+                    (this as com.tak.lite.ui.map.MapControllerProvider)
                         .getLayersTarget()?.setPredictionsLayerEnabled(next)
                 },
                 onCoverageToggled = { next ->
@@ -1111,9 +1112,9 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.ElevationChartBottomShe
     override fun getMapController(): com.tak.lite.ui.map.MapController? = mapController
 
     // Provide a stable target for layer toggles without fragment lookup
-    override fun getLayersTarget(): com.tak.lite.ui.map.ElevationChartBottomSheet.LayersTarget? {
+    override fun getLayersTarget(): com.tak.lite.ui.map.LayersTarget? {
         val fragment = supportFragmentManager.findFragmentById(R.id.mainFragmentContainer)
-        return fragment as? com.tak.lite.ui.map.ElevationChartBottomSheet.LayersTarget
+        return fragment as? com.tak.lite.ui.map.LayersTarget
     }
 
     private fun showAppropriateDialog() {
