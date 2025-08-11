@@ -70,4 +70,10 @@ object AppModule {
     fun provideCryptoQRCodeGenerator(): CryptoQRCodeGenerator {
         return CryptoQRCodeGenerator()
     }
+    
+    @Provides
+    @Singleton
+    fun provideWeatherRepository(@ApplicationContext context: Context): com.tak.lite.repository.WeatherRepository {
+        return com.tak.lite.repository.WeatherRepository(context)
+    }
 } 

@@ -186,7 +186,6 @@ class MeshNetworkViewModel @Inject constructor(
      * This triggers viewport-based filtering in the prediction repository
      */
     fun updatePredictionViewport(viewportBounds: android.graphics.RectF?) {
-        Log.d("MeshNetworkViewModel", "Updating prediction viewport: $viewportBounds")
         peerLocationHistoryRepository.updateViewportBounds(viewportBounds)
     }
     

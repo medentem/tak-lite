@@ -329,6 +329,11 @@ class PeerLocationHistoryRepository @Inject constructor(
             return
         }
 
+        if (!isPredictionsEnabled()){
+            // Predictions aren't running
+            return
+        }
+
         Log.d(TAG, "Filtering predictions for viewport: $viewportBounds")
 
         // Create a snapshot of peer histories to avoid concurrent modification

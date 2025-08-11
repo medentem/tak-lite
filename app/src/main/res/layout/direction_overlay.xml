@@ -4,10 +4,9 @@
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:background="@drawable/overlay_bg"
-    android:padding="20dp"
+    android:padding="0dp"
     android:gravity="center"
-    android:elevation="8dp">
+    >
 
     <FrameLayout
         android:layout_width="wrap_content"

@@ -58,6 +58,7 @@ import kotlin.math.roundToInt
 
 val DEFAULT_US_CENTER = LatLng(39.8283, -98.5795)
 const val DEFAULT_US_ZOOM = 4.0
+const val WEATHER_FETCH_INTERVAL_MS = 15 * 60 * 1000L // 15 minutes
 
 @AndroidEntryPoint
 class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
@@ -76,6 +77,11 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
     private lateinit var channelController: ChannelController
     private var is3DBuildingsEnabled = false
     private var isTrackingLocation = false
+    
+    // Weather fetch state tracking
+    private var weatherLastFetchTime = 0L
+    private var weatherLastLat = 0.0
+    private var weatherLastLon = 0.0
 
     // LiveData to notify when the map is ready
     private val _mapReadyLiveData = MutableLiveData<MapLibreMap>()
@@ -93,8 +99,12 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
     private lateinit var predictionToggleButton: com.google.android.material.floatingactionbutton.FloatingActionButton
     private lateinit var weatherToggleButton: com.google.android.material.floatingactionbutton.FloatingActionButton
 
-    // Direction overlay views
-    private lateinit var directionOverlay: LinearLayout
+    // Swipeable overlay manager
+    @Inject lateinit var swipeableOverlayManager: com.tak.lite.ui.overlay.SwipeableOverlayManager
+    private lateinit var swipeableOverlayContainer: LinearLayout
+    
+    // Legacy direction overlay views (for backward compatibility)
+    private lateinit var directionOverlay: View
     private lateinit var degreeText: TextView
     private lateinit var headingSourceText: TextView
     private lateinit var speedText: TextView
@@ -161,19 +171,21 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
         downloadSectorButton = findViewById(R.id.downloadSectorButton)
         settingsButton = findViewById(R.id.settingsButton)
 
-        // Initialize direction overlay views
-        directionOverlay = findViewById(R.id.directionOverlay)
-        degreeText = directionOverlay.findViewById(R.id.degreeText)
-        headingSourceText = directionOverlay.findViewById(R.id.headingSourceText)
-        speedText = directionOverlay.findViewById(R.id.speedText)
-        altitudeText = directionOverlay.findViewById(R.id.altitudeText)
-        latLngText = directionOverlay.findViewById(R.id.latLngText)
-        compassCardinalView = directionOverlay.findViewById(R.id.compassCardinalView)
-        compassQualityIndicator = directionOverlay.findViewById(R.id.compassQualityIndicator)
-        compassQualityText = directionOverlay.findViewById(R.id.compassQualityText)
-        calibrationIndicator = directionOverlay.findViewById(R.id.calibrationIndicator)
+        // Initialize swipeable overlay
+        swipeableOverlayContainer = findViewById(R.id.swipeableOverlayContainer)
+        swipeableOverlayManager.initialize(swipeableOverlayContainer)
+        
+        // Set up callback for when direction overlay views are ready
+        swipeableOverlayManager.setOnViewsReadyCallback {
+            initializeDirectionOverlayViews()
+        }
+        
+        // Set up callback for when weather page is opened
+        swipeableOverlayManager.setOnWeatherPageOpenedCallback {
+            refreshWeatherIfNeeded()
+        }
 
-        updateDirectionOverlayPosition(resources.configuration.orientation)
+        updateSwipeableOverlayPosition(resources.configuration.orientation)
 
         // Add AnnotationFragment if not already present
         if (savedInstanceState == null) {
@@ -434,35 +446,53 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
         setupFabMenu()
         setFabMenuOrientation(resources.configuration.orientation)
 
+        // Direction overlay views will be initialized via callback when ViewPager2 is ready
+        
         // Collect direction overlay data and update UI
         lifecycleScope.launch {
             repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
                 locationController.directionOverlayData.collect { data ->
-                    // Update compass cardinal view with new heading
-                    compassCardinalView.updateHeading(data.headingDegrees)
+                    // Check if views are initialized before updating
+                    if (::compassCardinalView.isInitialized) {
+                        // Update compass cardinal view with new heading
+                        compassCardinalView.updateHeading(data.headingDegrees)
+                        
+                        // Update other UI elements
+                        degreeText.text = String.format("%d°", data.headingDegrees.toInt())
+                        headingSourceText.text = data.headingSource.name
+                        speedText.text = String.format("%d", data.speedMph.toInt())
+                        altitudeText.text = String.format("%.0f", data.altitudeFt)
+                        latLngText.text = String.format("%.7f, %.7f", data.latitude, data.longitude)
+                        
+                        // Update compass quality indicators
+                        updateCompassQualityIndicator(data.compassQuality)
+                        
+                        // Update calibration indicator
+                        updateCalibrationIndicator(data.needsCalibration)
+                    }
                     
-                    // Update other UI elements
-                    degreeText.text = String.format("%d°", data.headingDegrees.toInt())
-                    headingSourceText.text = data.headingSource.name
-                    speedText.text = String.format("%d", data.speedMph.toInt())
-                    altitudeText.text = String.format("%.0f", data.altitudeFt)
-                    latLngText.text = String.format("%.7f, %.7f", data.latitude, data.longitude)
+                    // Fetch weather data when location changes (with rate limiting)
+                    // Only fetch if location has changed significantly or enough time has passed
+                    val currentTime = System.currentTimeMillis()
+                    val lastWeatherFetch = weatherLastFetchTime
+                    val locationChanged = weatherLastLat != data.latitude || weatherLastLon != data.longitude
+                    val timeElapsed = currentTime - lastWeatherFetch
                     
-                    // Update compass quality indicators
-                    updateCompassQualityIndicator(data.compassQuality)
+                    // Check if location change is significant (more than ~10 miles)
+                    val locationChangeThreshold = 0.144 // roughly 10 miles
+                    val significantLocationChange = Math.abs(weatherLastLat - data.latitude) > locationChangeThreshold ||
+                                                   Math.abs(weatherLastLon - data.longitude) > locationChangeThreshold
                     
-                    // Update calibration indicator
-                    updateCalibrationIndicator(data.needsCalibration)
+                    // Only update weather on significant location changes (10+ miles)
+                    if (locationChanged && significantLocationChange && timeElapsed > WEATHER_FETCH_INTERVAL_MS) {
+                        weatherLastLat = data.latitude
+                        weatherLastLon = data.longitude
+                        weatherLastFetchTime = currentTime
+                        swipeableOverlayManager.fetchWeatherData(data.latitude, data.longitude)
+                    }
                 }
             }
         }
-
-        detailsContainer = directionOverlay.findViewById(R.id.detailsContainer)
-        // Make the whole overlay clickable for toggling
-        directionOverlay.setOnClickListener {
-            toggleOverlayExpanded()
-        }
-        updateOverlayExpansion(animated = false)
 
         lassoToolFab = findViewById(R.id.lassoToolFab)
         lassoToolFab.setOnClickListener {
@@ -1050,33 +1080,79 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
         fabMenuContainer.orientation = if (orientation == Configuration.ORIENTATION_LANDSCAPE) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
     }
 
-    private fun updateDirectionOverlayPosition(orientation: Int) {
-        val params = directionOverlay.layoutParams as androidx.constraintlayout.widget.ConstraintLayout.LayoutParams
+    private fun initializeDirectionOverlayViews() {
+        try {
+            directionOverlay = swipeableOverlayManager.getDirectionOverlay()
+            degreeText = swipeableOverlayManager.getDegreeText()
+            headingSourceText = swipeableOverlayManager.getHeadingSourceText()
+            speedText = swipeableOverlayManager.getSpeedText()
+            altitudeText = swipeableOverlayManager.getAltitudeText()
+            latLngText = swipeableOverlayManager.getLatLngText()
+            compassCardinalView = swipeableOverlayManager.getCompassCardinalView()
+            compassQualityIndicator = swipeableOverlayManager.getCompassQualityIndicator()
+            compassQualityText = swipeableOverlayManager.getCompassQualityText()
+            calibrationIndicator = swipeableOverlayManager.getCalibrationIndicator()
+            detailsContainer = swipeableOverlayManager.getDetailsContainer()
+            
+            // Make the whole overlay clickable for toggling
+            directionOverlay.setOnClickListener {
+                toggleOverlayExpanded()
+            }
+            updateOverlayExpansion(animated = false)
+            
+            Log.d("MainActivity", "Direction overlay views initialized successfully")
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Failed to initialize direction overlay views", e)
+        }
+    }
+    
+    private fun refreshWeatherIfNeeded() {
+        val currentTime = System.currentTimeMillis()
+        val timeElapsed = currentTime - weatherLastFetchTime
+        
+        // Only refresh if enough time has passed (15 minutes)
+        if (timeElapsed > WEATHER_FETCH_INTERVAL_MS) {
+            // Get current location from location controller
+            val currentData = locationController.directionOverlayData.value
+            weatherLastLat = currentData.latitude
+            weatherLastLon = currentData.longitude
+            weatherLastFetchTime = currentTime
+            swipeableOverlayManager.fetchWeatherData(currentData.latitude, currentData.longitude)
+            Log.d("MainActivity", "Weather refreshed when page opened")
+        } else {
+            Log.d("MainActivity", "Weather refresh skipped - too soon since last fetch (${timeElapsed}ms < ${WEATHER_FETCH_INTERVAL_MS}ms)")
+        }
+    }
+    
+    private fun updateSwipeableOverlayPosition(orientation: Int) {
+        val params = swipeableOverlayContainer.layoutParams as androidx.constraintlayout.widget.ConstraintLayout.LayoutParams
         fun dpToPx(dp: Int): Int = (dp * resources.displayMetrics.density + 0.5f).toInt()
         if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
-            // Bottom end (right), with margin to avoid FABs
-            params.startToStart = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.UNSET
-            params.endToEnd = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
-            params.bottomToBottom = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
-            params.topToTop = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.UNSET
-            params.marginEnd = dpToPx(96) // 96dp, enough to avoid FABs (adjust as needed)
-            params.bottomMargin = dpToPx(24)
-        } else {
-            // Bottom center
+            // Bottom center in landscape, with margins to avoid FABs
             params.startToStart = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
             params.endToEnd = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
             params.bottomToBottom = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
             params.topToTop = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.UNSET
-            params.marginEnd = 0
+            params.marginStart = dpToPx(96) // 96dp margin from left FAB
+            params.marginEnd = dpToPx(96) // 96dp margin from right FABs
+            params.bottomMargin = dpToPx(24)
+        } else {
+            // Bottom center in portrait, with margins to avoid FABs
+            params.startToStart = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
+            params.endToEnd = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
+            params.bottomToBottom = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
+            params.topToTop = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.UNSET
+            params.marginStart = dpToPx(96) // 96dp margin from left FAB
+            params.marginEnd = dpToPx(96) // 96dp margin from right FABs
             params.bottomMargin = dpToPx(24)
         }
-        directionOverlay.layoutParams = params
+        swipeableOverlayContainer.layoutParams = params
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         setFabMenuOrientation(newConfig.orientation)
-        updateDirectionOverlayPosition(newConfig.orientation)
+        updateSwipeableOverlayPosition(newConfig.orientation)
     }
 
     private fun toggleOverlayExpanded() {
@@ -1085,6 +1161,11 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
     }
 
     private fun updateOverlayExpansion(animated: Boolean) {
+        // Check if views are initialized
+        if (!::detailsContainer.isInitialized) {
+            return
+        }
+        
         val details = detailsContainer
         if (isOverlayExpanded) {
             // Expand: show details, rotate chevron down
@@ -1142,6 +1223,11 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
 
 
     private fun updateCompassQualityIndicator(quality: com.tak.lite.ui.location.CompassQuality) {
+        // Check if views are initialized
+        if (!::compassQualityIndicator.isInitialized || !::compassQualityText.isInitialized) {
+            return
+        }
+        
         // Only show compass quality indicator when status is degraded
         val isDegraded = quality == com.tak.lite.ui.location.CompassQuality.POOR || 
                         quality == com.tak.lite.ui.location.CompassQuality.UNRELIABLE
@@ -1175,6 +1261,11 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
     }
     
     private fun updateCalibrationIndicator(needsCalibration: Boolean) {
+        // Check if views are initialized
+        if (!::calibrationIndicator.isInitialized) {
+            return
+        }
+        
         if (needsCalibration) {
             calibrationIndicator.visibility = View.VISIBLE
             calibrationIndicator.setColorFilter(android.graphics.Color.parseColor("#FF9800"))

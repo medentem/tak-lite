@@ -18,6 +18,7 @@ if (localPropertiesFile.exists()) {
 }
 def maptileApiKey = localProperties.getProperty("MAPTILER_API_KEY", "")
 def owmApiKey = localProperties.getProperty("OPENWEATHERMAP_API_KEY", "")
+def owfApiKey = localProperties.getProperty("OPENWEATHERFORECAST_API_KEY", "")
 
 android {
     namespace "com.tak.lite"
@@ -36,6 +37,7 @@ android {
         ]
         buildConfigField "String", "MAPTILER_API_KEY", "\"${maptileApiKey}\""
         buildConfigField "String", "OPENWEATHERMAP_API_KEY", "\"${owmApiKey}\""
+        buildConfigField "String", "OPENWEATHERFORECAST_API_KEY", "\"${owfApiKey}\""
     }
     
     buildTypes {

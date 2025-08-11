@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="10dp"
+    android:layout_marginBottom="6dp"
+    android:background="@drawable/alert_bg"
+    android:elevation="2dp">
+
+    <TextView
+        android:id="@+id/alertEventText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Small Craft Advisory"
+        android:textSize="13sp"
+        android:textColor="#FF6B6B"
+        android:gravity="start"
+        android:textStyle="bold"
+        android:layout_marginBottom="3dp" />
+
+    <TextView
+        android:id="@+id/alertTimeText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Until 3 AM EST Friday"
+        android:textSize="11sp"
+        android:textColor="#B0B0B0"
+        android:gravity="start"
+        android:layout_marginBottom="6dp" />
+
+    <TextView
+        android:id="@+id/alertDescriptionText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="North winds 15 to 20 kt with gusts up to 25 kt and seas 3 to 5 ft expected."
+        android:textSize="10sp"
+        android:textColor="#F0F0F0"
+        android:gravity="start"
+        android:maxLines="3"
+        android:ellipsize="end" />
+
+</LinearLayout>

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/swipeableOverlayContainer"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="12dp"
+    android:gravity="center"
+    android:background="@drawable/overlay_bg"
+    >
+
+    <!-- Custom swipeable content containers -->
+    <FrameLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content">
+
+        <!-- Direction overlay container -->
+        <LinearLayout
+            android:id="@+id/directionOverlayContainer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+        <!-- Weather overlay container -->
+        <LinearLayout
+            android:id="@+id/weatherOverlayContainer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone" />
+
+    </FrameLayout>
+
+    <!-- Page Indicator at bottom -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:layout_marginTop="8dp">
+
+        <View
+            android:id="@+id/pageIndicator1"
+            android:layout_width="8dp"
+            android:layout_height="8dp"
+            android:background="@drawable/circle_blue"
+            android:layout_marginEnd="4dp" />
+
+        <View
+            android:id="@+id/pageIndicator2"
+            android:layout_width="8dp"
+            android:layout_height="8dp"
+            android:background="@drawable/circle_gray"
+            android:layout_marginStart="4dp" />
+
+    </LinearLayout>
+
+</LinearLayout>

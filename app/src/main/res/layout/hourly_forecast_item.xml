@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="6dp"
+    android:layout_marginEnd="6dp">
+
+    <TextView
+        android:id="@+id/hourText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="2 PM"
+        android:textSize="10sp"
+        android:textColor="#B0B0B0"
+        android:gravity="center"
+        android:layout_marginBottom="4dp" />
+
+    <TextView
+        android:id="@+id/hourlyTempText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="75°"
+        android:textSize="14sp"
+        android:textColor="#F0F0F0"
+        android:gravity="center"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/hourlyPopText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="20%"
+        android:textSize="9sp"
+        android:textColor="#4CAF50"
+        android:gravity="center"
+        android:layout_marginTop="2dp" />
+
+</LinearLayout>
