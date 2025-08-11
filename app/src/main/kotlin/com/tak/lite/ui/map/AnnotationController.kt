@@ -9,6 +9,7 @@ import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.tak.lite.MessageActivity
+import com.tak.lite.R
 import com.tak.lite.databinding.ActivityMainBinding
 import com.tak.lite.model.AnnotationColor
 import com.tak.lite.model.LineStyle
@@ -1089,12 +1090,12 @@ class AnnotationController(
                 // Create as polygon
                 Log.d("PolygonDebug", "Creating polygon with ${tempLinePoints.size} points")
                 annotationViewModel.addPolygon(tempLinePoints.toList())
-                Toast.makeText(fragment.requireContext(), "Polygon created!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(fragment.requireContext(), fragment.getString(R.string.polygon_created), Toast.LENGTH_SHORT).show()
             } else {
                 // Create as line
                 Log.d("PolygonDebug", "Creating line with ${tempLinePoints.size} points")
                 annotationViewModel.addLine(tempLinePoints.toList())
-                Toast.makeText(fragment.requireContext(), "Line added!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(fragment.requireContext(), fragment.getString(R.string.line_added), Toast.LENGTH_SHORT).show()
             }
         }
         isLineDrawingMode = false
@@ -1384,12 +1385,12 @@ class AnnotationController(
                         }
                         
                         val dialog = androidx.appcompat.app.AlertDialog.Builder(fragment.requireContext())
-                            .setTitle("Set Expiration (minutes)")
+                            .setTitle(fragment.getString(R.string.set_expiration_minutes))
                             .setView(input)
-                            .setPositiveButton("OK") { _, _ ->
+                            .setPositiveButton(fragment.getString(R.string.ok)) { _, _ ->
                                 submitExpiration()
                             }
-                            .setNegativeButton("Cancel", null)
+                            .setNegativeButton(fragment.getString(R.string.cancel), null)
                             .create()
                         
                         // Show the dialog and request focus for the EditText
@@ -1470,7 +1471,7 @@ class AnnotationController(
                 }
             } catch (e: Exception) {
                 Log.e("AnnotationController", "Error handling direct message: ${e.message}", e)
-                Toast.makeText(fragment.requireContext(), "Failed to start direct message", Toast.LENGTH_SHORT).show()
+                Toast.makeText(fragment.requireContext(), fragment.getString(R.string.failed_to_start_direct_message), Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -1478,13 +1479,13 @@ class AnnotationController(
     private fun handleLocationRequest(peerId: String) {
         fragment.viewLifecycleOwner.lifecycleScope.launch {
             val peerName = meshNetworkViewModel.getPeerName(peerId)
-            Toast.makeText(fragment.requireContext(), "Waiting for location update from $peerName", Toast.LENGTH_LONG).show()
+            Toast.makeText(fragment.requireContext(), fragment.getString(R.string.waiting_for_location_update, peerName), Toast.LENGTH_LONG).show()
             meshNetworkViewModel.requestPeerLocation(peerId, onLocationReceived = { timeout ->
                 fragment.viewLifecycleOwner.lifecycleScope.launch {
                     if (timeout) {
-                        Toast.makeText(fragment.requireContext(), "$peerName did not respond", Toast.LENGTH_LONG).show()
+                        Toast.makeText(fragment.requireContext(), fragment.getString(R.string.peer_did_not_respond, peerName), Toast.LENGTH_LONG).show()
                     } else {
-                        Toast.makeText(fragment.requireContext(), "Received updated location for $peerName", Toast.LENGTH_LONG).show()
+                        Toast.makeText(fragment.requireContext(), fragment.getString(R.string.received_updated_location, peerName), Toast.LENGTH_LONG).show()
                     }
                 }
             })
@@ -1512,7 +1513,7 @@ class AnnotationController(
             )
             Log.d("AnnotationController", "handleDrawLineToPeer: Creating line with points=$points")
             annotationViewModel.addLine(points)
-            Toast.makeText(fragment.requireContext(), "Line drawn to $peerId", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(fragment.requireContext(), fragment.getString(R.string.line_drawn_to_peer, peerId), Toast.LENGTH_SHORT).show()
         } else {
             val errorMsg = when {
                 userLocation == null -> "User location is not available"
@@ -1520,7 +1521,7 @@ class AnnotationController(
                 else -> "Unknown error"
             }
             Log.e("AnnotationController", "handleDrawLineToPeer: Cannot draw line: $errorMsg")
-            Toast.makeText(fragment.requireContext(), "Cannot draw line: $errorMsg", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(fragment.requireContext(), fragment.getString(R.string.cannot_draw_line, errorMsg), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -1552,12 +1553,12 @@ class AnnotationController(
         }
         
         val dialog = androidx.appcompat.app.AlertDialog.Builder(context)
-            .setTitle("Edit Label")
+            .setTitle(fragment.getString(R.string.edit_label))
             .setView(editText)
-            .setPositiveButton("OK") { _, _ ->
+            .setPositiveButton(fragment.getString(R.string.ok)) { _, _ ->
                 submitLabel()
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(fragment.getString(R.string.cancel), null)
             .create()
         
         // Show the dialog and request focus for the EditText
@@ -1705,12 +1706,12 @@ class AnnotationController(
         }
         
         val dialog = androidx.appcompat.app.AlertDialog.Builder(context)
-            .setTitle("Edit Polygon Label")
+            .setTitle(fragment.getString(R.string.edit_polygon_label))
             .setView(editText)
-            .setPositiveButton("OK") { _, _ ->
+            .setPositiveButton(fragment.getString(R.string.ok)) { _, _ ->
                 submitLabel()
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(fragment.getString(R.string.cancel), null)
             .create()
         
         // Show the dialog and request focus for the EditText
@@ -1775,10 +1776,10 @@ class AnnotationController(
             annotationOverlayView.updateAnnotations(nonPoiAnnotations)
             annotationOverlayView.invalidate()
             
-            Toast.makeText(fragment.requireContext(), "POI added to polygon!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(fragment.requireContext(), fragment.getString(R.string.poi_added_to_polygon), Toast.LENGTH_SHORT).show()
         } else {
             Log.e("AnnotationController", "No touch location stored for polygon POI creation")
-            Toast.makeText(fragment.requireContext(), "Error: Could not place POI", Toast.LENGTH_SHORT).show()
+            Toast.makeText(fragment.requireContext(), fragment.getString(R.string.error_could_not_place_poi), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -1934,10 +1935,10 @@ class AnnotationController(
             annotationOverlayView.updateAnnotations(nonPoiAnnotations)
             annotationOverlayView.invalidate()
             
-            Toast.makeText(fragment.requireContext(), "POI added to area!", Toast.LENGTH_SHORT).show()
+            Toast.makeText(fragment.requireContext(), fragment.getString(R.string.poi_added_to_area), Toast.LENGTH_SHORT).show()
         } else {
             Log.e("AnnotationController", "No touch location stored for area POI creation")
-            Toast.makeText(fragment.requireContext(), "Error: Could not place POI", Toast.LENGTH_SHORT).show()
+            Toast.makeText(fragment.requireContext(), fragment.getString(R.string.error_could_not_place_poi), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -1969,12 +1970,12 @@ class AnnotationController(
         }
         
         val dialog = androidx.appcompat.app.AlertDialog.Builder(context)
-            .setTitle("Edit Area Label")
+            .setTitle(fragment.getString(R.string.edit_area_label))
             .setView(editText)
-            .setPositiveButton("OK") { _, _ ->
+            .setPositiveButton(fragment.getString(R.string.ok)) { _, _ ->
                 submitLabel()
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(fragment.getString(R.string.cancel), null)
             .create()
         
         // Show the dialog and request focus for the EditText
@@ -2103,7 +2104,7 @@ class AnnotationController(
         annotationOverlayView.invalidate()
         
         Log.d("AnnotationController", "Area created successfully with radius: $tempAreaRadius meters")
-        Toast.makeText(fragment.requireContext(), "Area created!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(fragment.requireContext(), fragment.getString(R.string.area_created), Toast.LENGTH_SHORT).show()
     }
     
     private fun finishAreaDrawing() {

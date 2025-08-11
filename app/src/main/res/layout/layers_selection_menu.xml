@@ -11,7 +11,7 @@
         android:id="@+id/layersTitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Layers"
+        android:text="@string/layers"
         android:textSize="16sp"
         android:textStyle="bold"
         android:textColor="@android:color/white"
@@ -38,7 +38,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Weather Radar"
+            android:text="@string/weather_radar"
             android:textColor="@android:color/white"
             android:textSize="14sp"
             android:layout_marginStart="8dp" />
@@ -71,7 +71,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Peer Predictions"
+            android:text="@string/peer_predictions"
             android:textColor="@android:color/white"
             android:textSize="14sp"
             android:layout_marginStart="8dp" />
@@ -104,7 +104,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Coverage Analysis"
+            android:text="@string/coverage_analysis_short"
             android:textColor="@android:color/white"
             android:textSize="14sp"
             android:layout_marginStart="8dp" />

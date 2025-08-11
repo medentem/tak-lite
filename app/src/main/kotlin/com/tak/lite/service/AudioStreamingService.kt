@@ -21,9 +21,10 @@ import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
-import com.tak.lite.data.model.ChannelSettings
-import com.tak.lite.audio.JitterBuffer
+import com.tak.lite.R
 import com.tak.lite.audio.AudioFeedbackManager
+import com.tak.lite.audio.JitterBuffer
+import com.tak.lite.data.model.ChannelSettings
 import com.tak.lite.network.Layer2MeshNetworkManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
@@ -110,8 +111,8 @@ class AudioStreamingService : Service() {
             manager.createNotificationChannel(channel)
         }
         val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Tak Lite Audio Streaming")
-            .setContentText("Voice chat is active")
+            .setContentTitle(getString(R.string.tak_lite_audio_streaming))
+            .setContentText(getString(R.string.voice_chat_active))
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setOngoing(true)
             .build()

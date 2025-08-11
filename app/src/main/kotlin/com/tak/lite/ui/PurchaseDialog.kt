@@ -75,25 +75,25 @@ class PurchaseDialog : DialogFragment() {
     private fun updateProductDetails(view: View, productDetails: Map<String, ProductDetails>) {
         // Update Tier 1
         view.findViewById<TextView>(R.id.tier1Name)?.text = 
-            productDetails[BillingManager.PRODUCT_ID_TIER_1]?.name ?: "Support Tier 1"
+            productDetails[BillingManager.PRODUCT_ID_TIER_1]?.name ?: getString(R.string.support_tier_1)
         view.findViewById<TextView>(R.id.tier1Description)?.text = 
-            productDetails[BillingManager.PRODUCT_ID_TIER_1]?.description ?: "Basic support tier"
+            productDetails[BillingManager.PRODUCT_ID_TIER_1]?.description ?: getString(R.string.basic_support_tier)
         view.findViewById<TextView>(R.id.tier1Price)?.text = 
             productDetails[BillingManager.PRODUCT_ID_TIER_1]?.getFormattedPrice() ?: "$5"
 
         // Update Tier 2
         view.findViewById<TextView>(R.id.tier2Name)?.text = 
-            productDetails[BillingManager.PRODUCT_ID_TIER_2]?.name ?: "Support Tier 2"
+            productDetails[BillingManager.PRODUCT_ID_TIER_2]?.name ?: getString(R.string.support_tier_2)
         view.findViewById<TextView>(R.id.tier2Description)?.text = 
-            productDetails[BillingManager.PRODUCT_ID_TIER_2]?.description ?: "Enhanced support tier"
+            productDetails[BillingManager.PRODUCT_ID_TIER_2]?.description ?: getString(R.string.enhanced_support_tier)
         view.findViewById<TextView>(R.id.tier2Price)?.text = 
             productDetails[BillingManager.PRODUCT_ID_TIER_2]?.getFormattedPrice() ?: "$15"
 
         // Update Tier 3
         view.findViewById<TextView>(R.id.tier3Name)?.text = 
-            productDetails[BillingManager.PRODUCT_ID_TIER_3]?.name ?: "Support Tier 3"
+            productDetails[BillingManager.PRODUCT_ID_TIER_3]?.name ?: getString(R.string.support_tier_3)
         view.findViewById<TextView>(R.id.tier3Description)?.text = 
-            productDetails[BillingManager.PRODUCT_ID_TIER_3]?.description ?: "Premium support tier"
+            productDetails[BillingManager.PRODUCT_ID_TIER_3]?.description ?: getString(R.string.premium_support_tier)
         view.findViewById<TextView>(R.id.tier3Price)?.text = 
             productDetails[BillingManager.PRODUCT_ID_TIER_3]?.getFormattedPrice() ?: "$30"
     }
@@ -101,7 +101,7 @@ class PurchaseDialog : DialogFragment() {
     private fun ProductDetails.getFormattedPrice(): String {
         return subscriptionOfferDetails?.firstOrNull()?.pricingPhases?.pricingPhaseList?.firstOrNull()?.formattedPrice
             ?: oneTimePurchaseOfferDetails?.formattedPrice
-            ?: "Price not available"
+            ?: getString(R.string.price_not_available)
     }
 
     private fun updateUI(view: View, isOffline: Boolean) {
@@ -111,19 +111,19 @@ class PurchaseDialog : DialogFragment() {
         val tier3Button = view.findViewById<Button>(R.id.tier3Button)
 
         val baseMessage = if (billingManager.isInTrialPeriod()) {
-            "Map APIs cost money to keep running! You are currently in your 7-day free trial period. Your support is critical to ensuring the ongoing development of the app. Pick any paid option - we hope you'll support this app with the highest paid level you can afford. Thank you in advance."
+            getString(R.string.trial_message_active)
         } else {
-            "Map APIs cost money to keep running! Your trial period has ended. Your support is critical to ensuring the ongoing development of the app. Pick any paid option to continue - we hope you'll support this app with the highest paid level you can afford. Thank you in advance."
+            getString(R.string.trial_message_ended)
         }
 
         trialStatusText.text = if (isEmulator()) {
-            "$baseMessage\n\n[TEST MODE: Using Google Play Billing test products]"
+            "$baseMessage${getString(R.string.test_mode_message)}"
         } else {
             baseMessage
         }
 
         if (isOffline) {
-            trialStatusText.text = "You are currently offline. Please check your internet connection to make a purchase."
+            trialStatusText.text = getString(R.string.offline_message)
             tier1Button.isEnabled = false
             tier2Button.isEnabled = false
             tier3Button.isEnabled = false
@@ -134,7 +134,7 @@ class PurchaseDialog : DialogFragment() {
         }
 
         tier1Button.apply {
-            text = "Purchase"
+            text = getString(R.string.purchase)
             setOnClickListener {
                 billingManager.launchBillingFlow(requireActivity(), BillingManager.PRODUCT_ID_TIER_1)
                 dismiss()
@@ -142,7 +142,7 @@ class PurchaseDialog : DialogFragment() {
         }
 
         tier2Button.apply {
-            text = "Purchase"
+            text = getString(R.string.purchase)
             setOnClickListener {
                 billingManager.launchBillingFlow(requireActivity(), BillingManager.PRODUCT_ID_TIER_2)
                 dismiss()
@@ -150,7 +150,7 @@ class PurchaseDialog : DialogFragment() {
         }
 
         tier3Button.apply {
-            text = "Purchase"
+            text = getString(R.string.purchase)
             setOnClickListener {
                 billingManager.launchBillingFlow(requireActivity(), BillingManager.PRODUCT_ID_TIER_3)
                 dismiss()

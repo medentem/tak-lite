@@ -8,7 +8,7 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Restore Previous Annotations?"
+        android:text="@string/restore_previous_annotations_title"
         android:textSize="20sp"
         android:textStyle="bold"
         android:layout_marginBottom="16dp"/>
@@ -16,7 +16,7 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Would you like to restore the annotations from your previous session?"
+        android:text="@string/restore_annotations_description_long"
         android:layout_marginBottom="24dp"/>
 
     <LinearLayout
@@ -29,7 +29,7 @@
             android:id="@+id/btnClear"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Clear"
+            android:text="@string/clear"
             android:layout_marginEnd="8dp"
             style="@style/Widget.MaterialComponents.Button.TextButton"/>
 
@@ -37,7 +37,7 @@
             android:id="@+id/btnRestore"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Restore"/>
+            android:text="@string/restore"/>
 
     </LinearLayout>
 

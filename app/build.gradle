@@ -38,6 +38,9 @@ android {
         buildConfigField "String", "MAPTILER_API_KEY", "\"${maptileApiKey}\""
         buildConfigField "String", "OPENWEATHERMAP_API_KEY", "\"${owmApiKey}\""
         buildConfigField "String", "OPENWEATHERFORECAST_API_KEY", "\"${owfApiKey}\""
+        
+        // Localization support
+        resConfigs "en", "es", "fr"
     }
     
     buildTypes {

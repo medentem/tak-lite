@@ -5,13 +5,14 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Bundle
 import android.widget.Toast
+import com.tak.lite.R
+import com.tak.lite.util.saveTileWebpWithType
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import java.io.File
-import com.tak.lite.util.saveTileWebpWithType
-import kotlinx.coroutines.Dispatchers
 
 class MapController(
     private val context: Context,
@@ -714,7 +715,7 @@ class MapController(
                 """
             }
             else -> {
-                Toast.makeText(context, "No map tiles available (offline tiles missing and no internet)", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, context.getString(R.string.no_map_tiles_available), Toast.LENGTH_LONG).show()
                 """
                 {
                   "version": 8,

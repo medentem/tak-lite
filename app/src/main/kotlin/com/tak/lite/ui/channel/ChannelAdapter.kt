@@ -64,9 +64,9 @@ class ChannelAdapter(
             val infoText = buildString {
                 if (channel is MeshtasticChannel) {
                     append(when (channel.role) {
-                        MeshtasticChannel.ChannelRole.PRIMARY -> "Primary"
-                        MeshtasticChannel.ChannelRole.SECONDARY -> "Secondary"
-                        MeshtasticChannel.ChannelRole.DISABLED -> "Disabled"
+                        MeshtasticChannel.ChannelRole.PRIMARY -> itemView.context.getString(R.string.channel_role_primary)
+                        MeshtasticChannel.ChannelRole.SECONDARY -> itemView.context.getString(R.string.channel_role_secondary)
+                        MeshtasticChannel.ChannelRole.DISABLED -> itemView.context.getString(R.string.channel_role_disabled)
                     })
                 }
                 // Add precision info if available
@@ -82,7 +82,7 @@ class ChannelAdapter(
             channel.lastMessage?.let { message ->
                 recentMessage.text = "${message.senderShortName}: ${message.content}"
             } ?: run {
-                recentMessage.text = "No messages"
+                recentMessage.text = itemView.context.getString(R.string.no_messages)
             }
 
             // Handle active state - use getIsActive callback to determine if this channel is active

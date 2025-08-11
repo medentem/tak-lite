@@ -1,5 +1,7 @@
 package com.tak.lite.model
 
+import android.content.Context
+import com.tak.lite.R
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -25,13 +27,13 @@ fun UserStatus.toColor(): Int {
     }
 }
 
-fun UserStatus.toDisplayName(): String {
+fun UserStatus.toDisplayName(context: Context): String {
     return when (this) {
-        UserStatus.RED -> "Red"
-        UserStatus.YELLOW -> "Yellow"
-        UserStatus.BLUE -> "Blue"
-        UserStatus.ORANGE -> "Orange"
-        UserStatus.VIOLET -> "Violet"
-        UserStatus.GREEN -> "Green"
+        UserStatus.RED -> context.getString(R.string.status_red)
+        UserStatus.YELLOW -> context.getString(R.string.status_yellow)
+        UserStatus.BLUE -> context.getString(R.string.status_blue)
+        UserStatus.ORANGE -> context.getString(R.string.status_orange)
+        UserStatus.VIOLET -> context.getString(R.string.status_violet)
+        UserStatus.GREEN -> context.getString(R.string.status_green)
     }
 } 

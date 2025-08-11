@@ -15,7 +15,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
-            android:text="Support TAK Lite Development"
+            android:text="@string/support_tak_lite"
             android:textAlignment="center"
             android:textSize="18sp"
             android:textStyle="bold"
@@ -25,7 +25,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
-            android:text="Map APIs cost money to keep running. Your support helps ensure the ongoing development of this app. Choose your preferred donation method:"
+            android:text="@string/support_description"
             android:textAlignment="center"
             android:textSize="14sp"
             android:textColor="?attr/colorOnSurface" />
@@ -36,7 +36,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:layout_marginBottom="8dp"
-            android:text="GitHub Sponsors"
+            android:text="@string/github_sponsors"
             android:textStyle="bold"
             android:textSize="16sp"
             android:textColor="?attr/colorOnSurface" />
@@ -46,7 +46,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
-            android:text="Support via GitHub Sponsors"
+            android:text="@string/support_via_github"
             android:backgroundTint="@color/interactive_color_light"
             android:textColor="@android:color/white" />
 
@@ -56,7 +56,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:layout_marginBottom="8dp"
-            android:text="Cryptocurrency (Click to copy address)"
+            android:text="@string/cryptocurrency_click_copy"
             android:textStyle="bold"
             android:textSize="16sp"
             android:textColor="?attr/colorOnSurface" />
@@ -66,7 +66,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="8dp"
-            android:text="Bitcoin (BTC)"
+            android:text="@string/bitcoin_btc"
             android:backgroundTint="@color/interactive_color_light"
             android:textColor="@android:color/white" />
 
@@ -75,7 +75,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
-            android:text="Ethereum (ETH)"
+            android:text="@string/ethereum_eth"
             android:backgroundTint="@color/interactive_color_light"
             android:textColor="@android:color/white" />
 
@@ -87,7 +87,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:layout_marginBottom="8dp"
-            android:text="After donating, click below to activate premium features:"
+            android:text="@string/after_donating_click"
             android:textAlignment="center"
             android:textSize="14sp"
             android:textColor="?attr/colorOnSurface" />
@@ -97,7 +97,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="8dp"
-            android:text="Activate Premium Features"
+            android:text="@string/activate_premium_features"
             android:backgroundTint="@color/interactive_color_light"
             android:textColor="@android:color/white" />
 
@@ -105,7 +105,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="Note: This app respects your privacy and doesn't require Google Play Services to function. All donation methods are privacy-focused and avoid traditional payment processors."
+            android:text="@string/privacy_note"
             android:textAlignment="center"
             android:textSize="12sp"
             android:textColor="?attr/colorOnSurfaceVariant" />

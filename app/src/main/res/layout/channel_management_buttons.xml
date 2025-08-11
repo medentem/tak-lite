@@ -10,14 +10,14 @@
         android:id="@+id/addChannelButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Add Channel"
+        android:text="@string/add_channel"
         style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
 
     <Button
         android:id="@+id/manageChannelsButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Manage Channels"
+        android:text="@string/manage_channels"
         android:layout_marginTop="8dp"
         style="@style/Widget.MaterialComponents.Button.TextButton" />
 </LinearLayout> 

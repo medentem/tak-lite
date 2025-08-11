@@ -316,7 +316,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                 swipeableOverlayManager.updateUserLocation(location.latitude, location.longitude)
             },
             onPermissionDenied = {
-                Toast.makeText(this, "Location permission not granted", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.location_permission_not_granted), Toast.LENGTH_SHORT).show()
             },
             onSourceChanged = { source: LocationSource ->
                 Log.d("MainActivity", "Location source changed to ${source}")
@@ -365,7 +365,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
 
         downloadSectorButton.setOnClickListener {
             android.util.Log.d("MainActivity", "Starting offline tile download")
-            Toast.makeText(this, "Downloading offline tiles...", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.downloading_offline_tiles), Toast.LENGTH_SHORT).show()
             binding.tileDownloadProgressBar.progress = 0
             binding.tileDownloadProgressBar.visibility = View.VISIBLE
             lifecycleScope.launch {
@@ -381,11 +381,11 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                     }
                     binding.tileDownloadProgressBar.visibility = View.GONE
                     android.util.Log.d("MainActivity", "Offline tile download completed - Success: $successCount, Failed: $failCount")
-                    Toast.makeText(this@MainActivity, "Offline tile download complete: $successCount success, $failCount failed", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@MainActivity, getString(R.string.offline_tile_download_complete, successCount, failCount), Toast.LENGTH_LONG).show()
                 } catch (e: Exception) {
                     android.util.Log.e("MainActivity", "Exception during tile download: ${e.message}", e)
                     binding.tileDownloadProgressBar.visibility = View.GONE
-                    Toast.makeText(this@MainActivity, "Download failed: ${e.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@MainActivity, getString(R.string.download_failed, e.message), Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -415,13 +415,13 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
         binding.zoomToLocationButton.setOnClickListener {
             val map = mapController.mapLibreMap
             if (map == null) {
-                Toast.makeText(this, "Map not ready yet", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.map_not_ready), Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             // Check permissions
             if (androidx.core.app.ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != android.content.pm.PackageManager.PERMISSION_GRANTED &&
                 androidx.core.app.ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                Toast.makeText(this, "Location permission not granted", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.location_permission_not_granted), Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             // Optionally recenter to last known location for instant feedback
@@ -511,13 +511,13 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                 lassoToolFab.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.RED)
                 fragment?.setLassoMode(true)
                 android.util.Log.d("MainActivity", "Lasso activated, fragment=$fragment")
-                android.widget.Toast.makeText(this, "Lasso activated", android.widget.Toast.LENGTH_SHORT).show()
+                android.widget.Toast.makeText(this, getString(R.string.lasso_activated), android.widget.Toast.LENGTH_SHORT).show()
             } else {
                 lassoToolFab.setImageResource(R.drawable.ic_lasso)
                 lassoToolFab.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#1976D2"))
                 fragment?.setLassoMode(false)
                 android.util.Log.d("MainActivity", "Lasso deactivated, fragment=$fragment")
-                android.widget.Toast.makeText(this, "Lasso deactivated", android.widget.Toast.LENGTH_SHORT).show()
+                android.widget.Toast.makeText(this, getString(R.string.lasso_deactivated), android.widget.Toast.LENGTH_SHORT).show()
             }
             if (fragment == null) {
                 android.util.Log.w("MainActivity", "AnnotationFragment not found!")
@@ -671,20 +671,20 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                     (this as com.tak.lite.ui.map.MapControllerProvider)
                         .getLayersTarget()?.setPredictionsLayerEnabled(next)
                     if (next) {
-                        Toast.makeText(this, "Predictions will take a minute and only show if location history available.", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this, getString(R.string.predictions_will_take_minute), Toast.LENGTH_LONG).show()
                     }
                 },
                 onCoverageToggled = { next ->
                     if (next) {
                         val map = mapController.mapLibreMap
                         if (map == null) {
-                            Toast.makeText(this, "Map not ready yet", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this, getString(R.string.map_not_ready), Toast.LENGTH_SHORT).show()
                             return@LayersSelectionDialog
                         }
                         val center = map.cameraPosition.target
                         val zoomLevel = map.cameraPosition.zoom.roundToInt()
                         if (center == null) {
-                            Toast.makeText(this, "Map center not available", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this, getString(R.string.map_center_not_available), Toast.LENGTH_SHORT).show()
                             return@LayersSelectionDialog
                         }
                         val viewportBounds = getCurrentViewportBounds(map)
@@ -723,7 +723,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                         updatePTTButtonVisibility()
                     }
                     is MeshNetworkUiState.Connecting -> {
-                        Toast.makeText(this@MainActivity, "Connecting to mesh network...", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@MainActivity, getString(R.string.connecting_to_mesh), Toast.LENGTH_SHORT).show()
                         peerIdToNickname.clear()
                         // Show the connection status bar when disconnected
                         statusBar.visibility = View.VISIBLE
@@ -732,7 +732,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                         updatePTTButtonVisibility()
                     }
                     is MeshNetworkUiState.Disconnected -> {
-                        Toast.makeText(this@MainActivity, "Disconnected from mesh network", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@MainActivity, getString(R.string.disconnected_from_mesh), Toast.LENGTH_SHORT).show()
                         peerIdToNickname.clear()
                         // Show the connection status bar when disconnected
                         statusBar.visibility = View.VISIBLE
@@ -923,7 +923,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                     }
                 }
             } else {
-                Toast.makeText(this, "Permissions required for app functionality", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, getString(R.string.permissions_required), Toast.LENGTH_LONG).show()
             }
         } else if (requestCode == REQUEST_CODE_ALL_PERMISSIONS) {
             if (grantResults.isNotEmpty() && grantResults.all { it == android.content.pm.PackageManager.PERMISSION_GRANTED }) {
@@ -956,7 +956,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                     }
                 }
             } else {
-                Toast.makeText(this, "All permissions are required to enable background processing.", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, getString(R.string.all_permissions_required), Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -1316,10 +1316,10 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
         val osCalibrationTriggered = prefs.getBoolean("os_calibration_triggered", false)
         
         val qualityText = when {
-            calibrationQuality >= 0.8f -> "Excellent"
-            calibrationQuality >= 0.6f -> "Good"
-            calibrationQuality >= 0.4f -> "Fair"
-            else -> "Poor"
+            calibrationQuality >= 0.8f -> getString(R.string.excellent)
+            calibrationQuality >= 0.6f -> getString(R.string.good)
+            calibrationQuality >= 0.4f -> getString(R.string.fair)
+            else -> getString(R.string.poor)
         }
         
         val timeAgo = if (calibrationTimestamp > 0) {
@@ -1329,7 +1329,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
             else if (hours == 1L) "1 hour ago"
             else "$hours hours ago"
         } else {
-            "Unknown"
+            getString(R.string.unknown)
         }
         
         val message = "Calibration Status: $status\n" +
@@ -1339,12 +1339,12 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                      if (osCalibrationTriggered) "\nOS-level calibration applied" else ""
         
         android.app.AlertDialog.Builder(this)
-            .setTitle("Compass Calibration Status")
+            .setTitle(getString(R.string.compass_calibration_status_title))
             .setMessage(message)
-            .setPositiveButton("Recalibrate") { _, _ ->
+            .setPositiveButton(getString(R.string.recalibrate)) { _, _ ->
                 showCalibrationDialog()
             }
-            .setNegativeButton("Close", null)
+            .setNegativeButton(getString(R.string.close), null)
             .show()
     }
     
@@ -1379,10 +1379,10 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                 
                 // Show detailed feedback to the user
                 val qualityText = when {
-                    calibrationQuality >= 0.8f -> "excellent"
-                    calibrationQuality >= 0.6f -> "good"
-                    calibrationQuality >= 0.4f -> "fair"
-                    else -> "poor"
+                    calibrationQuality >= 0.8f -> getString(R.string.compass_calibration_excellent)
+                    calibrationQuality >= 0.6f -> getString(R.string.compass_calibration_good)
+                    calibrationQuality >= 0.4f -> getString(R.string.compass_calibration_fair)
+                    else -> getString(R.string.compass_calibration_poor)
                 }
                 
                 val accuracyImprovement = if (finalAccuracy > initialAccuracy) {
@@ -1401,7 +1401,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                 
                 Log.d("MainActivity", "Calibration completed - Quality: $calibrationQuality, OS triggered: $osCalibrationTriggered, Samples: $sampleCount")
             } else if (resultCode == RESULT_CANCELED) {
-                android.widget.Toast.makeText(this, "Calibration was skipped", android.widget.Toast.LENGTH_SHORT).show()
+                android.widget.Toast.makeText(this, getString(R.string.calibration_skipped), android.widget.Toast.LENGTH_SHORT).show()
                 Log.d("MainActivity", "Calibration was skipped by user")
             }
         }
@@ -1409,11 +1409,11 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
     
     private fun getAccuracyString(accuracy: Int): String {
         return when (accuracy) {
-            SensorManager.SENSOR_STATUS_ACCURACY_HIGH -> "HIGH"
-            SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM -> "MEDIUM"
-            SensorManager.SENSOR_STATUS_ACCURACY_LOW -> "LOW"
-            SensorManager.SENSOR_STATUS_UNRELIABLE -> "UNRELIABLE"
-            else -> "UNKNOWN"
+            SensorManager.SENSOR_STATUS_ACCURACY_HIGH -> getString(R.string.high)
+            SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM -> getString(R.string.medium)
+            SensorManager.SENSOR_STATUS_ACCURACY_LOW -> getString(R.string.low)
+            SensorManager.SENSOR_STATUS_UNRELIABLE -> getString(R.string.unreliable)
+            else -> getString(R.string.unknown)
         }
     }
 
@@ -1447,7 +1447,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
 
     private fun updateStatusButtonAppearance(status: com.tak.lite.model.UserStatus) {
         statusButton.backgroundTintList = android.content.res.ColorStateList.valueOf(status.toColor())
-        statusLabel.text = status.toDisplayName()
+        statusLabel.text = status.toDisplayName(this)
     }
 
     private fun showStatusSelectionDialog(currentStatus: com.tak.lite.model.UserStatus) {
@@ -1466,7 +1466,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                 updateStatusButtonAppearance(newStatus)
 
                 // Show feedback
-                Toast.makeText(this, "Status updated to: ${newStatus.toDisplayName()}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.status_updated_to, newStatus.toDisplayName(this)), Toast.LENGTH_SHORT).show()
             }
         )
         dialog.show(statusButton)
@@ -1500,11 +1500,11 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                         }
                         is com.tak.lite.model.CoverageAnalysisState.Success -> {
                             hideCoverageProgressBar()
-                            Toast.makeText(this@MainActivity, "Coverage analysis complete!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this@MainActivity, getString(R.string.coverage_analysis_complete), Toast.LENGTH_SHORT).show()
                         }
                         is com.tak.lite.model.CoverageAnalysisState.Error -> {
                             hideCoverageProgressBar()
-                            Toast.makeText(this@MainActivity, "Coverage analysis failed: ${state.message}", Toast.LENGTH_LONG).show()
+                            Toast.makeText(this@MainActivity, getString(R.string.coverage_analysis_failed, state.message), Toast.LENGTH_LONG).show()
                         }
                     }
                 }
@@ -1573,8 +1573,8 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
     private fun showCoverageProgressBar() {
         coverageProgressContainer.visibility = View.VISIBLE
         coverageProgressBar.isIndeterminate = true
-        coverageProgressText.text = "Coverage Analysis"
-        coverageStatusText.text = "Initializing analysis..."
+        coverageProgressText.text = getString(R.string.coverage_analysis_short)
+        coverageStatusText.text = getString(R.string.initializing_analysis)
     }
     
     private fun hideCoverageProgressBar() {
@@ -1584,7 +1584,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
     private fun updateCoverageProgressBar(progress: Float, message: String) {
         coverageProgressBar.isIndeterminate = false
         coverageProgressBar.progress = (progress * 100).toInt()
-        coverageProgressText.text = "Coverage Analysis"
+        coverageProgressText.text = getString(R.string.coverage_analysis_short)
         coverageStatusText.text = message
     }
     

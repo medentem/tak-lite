@@ -10,7 +10,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="?attr/colorPrimary"
-        android:title="Manage Channels"
+        android:title="@string/manage_channels_title"
         android:titleTextColor="@android:color/white"
         app:navigationIcon="@android:drawable/ic_menu_revert" />
 
@@ -30,7 +30,7 @@
             android:id="@+id/addChannelButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Add Channel"
+            android:text="@string/add_channel"
             android:layout_marginTop="16dp" />
 
     </LinearLayout>

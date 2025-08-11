@@ -61,17 +61,19 @@ class SettingsActivity : BaseActivity() {
     
     private lateinit var currentProtocol: com.tak.lite.di.MeshProtocol
     
-    private val mapModeOptions = listOf("Last Used", "Street", "Satellite", "Hybrid")
     private val mapModeEnumValues = listOf(
         MapController.MapType.LAST_USED,
         MapController.MapType.STREETS,
         MapController.MapType.SATELLITE,
         MapController.MapType.HYBRID
     )
-    private val darkModeOptions = listOf("Use Phone Setting", "Always Dark", "Always Light")
     private val darkModeValues = listOf("system", "dark", "light")
-    private val weatherSourceOptions = listOf("Precipitation", "Clouds", "Wind Speed", "Temperature")
     private val weatherSourceValues = listOf("precipitation_new", "clouds_new", "wind_new", "temp_new")
+    
+    // These will be initialized in onCreate()
+    private lateinit var mapModeOptions: List<String>
+    private lateinit var darkModeOptions: List<String>
+    private lateinit var weatherSourceOptions: List<String>
     private val BLUETOOTH_PERMISSIONS = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         arrayOf(
             Manifest.permission.BLUETOOTH_SCAN,
@@ -138,10 +140,15 @@ class SettingsActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
 
+        // Initialize string options that require context
+        mapModeOptions = listOf(getString(R.string.last_used), getString(R.string.street), getString(R.string.satellite), getString(R.string.hybrid))
+        darkModeOptions = listOf(getString(R.string.use_phone_setting), getString(R.string.always_dark), getString(R.string.always_light))
+        weatherSourceOptions = listOf(getString(R.string.precipitation), getString(R.string.clouds), getString(R.string.wind_speed), getString(R.string.temperature))
+
         val toolbar = findViewById<MaterialToolbar>(R.id.settingsToolbar)
         setSupportActionBar(toolbar)
         toolbar.setNavigationOnClickListener { finish() }
-        title = "Settings"
+        title = getString(R.string.settings)
 
         mapModeSpinner = findViewById(R.id.mapModeSpinner)
         endBeepSwitch = findViewById(R.id.endBeepSwitch)
@@ -272,9 +279,9 @@ class SettingsActivity : BaseActivity() {
                 }
                 if (status.contains("service may not be running")) {
                     android.app.AlertDialog.Builder(this)
-                        .setTitle("Meshtastic App Not Running")
-                        .setMessage("Please open the Meshtastic app and keep it running in the background.")
-                        .setPositiveButton("OK", null)
+                        .setTitle(getString(R.string.meshtastic_app_not_running))
+                        .setMessage(getString(R.string.meshtastic_app_background_required))
+                        .setPositiveButton(getString(R.string.ok), null)
                         .show()
                     aidlConnectButton.isEnabled = true
                     return@setOnClickListener
@@ -529,9 +536,9 @@ class SettingsActivity : BaseActivity() {
                 }
                 
                 android.app.AlertDialog.Builder(this)
-                    .setTitle("Detail Level Warning")
+                    .setTitle(getString(R.string.detail_level_warning))
                     .setMessage(warningMessage)
-                    .setPositiveButton("OK", null)
+                    .setPositiveButton(getString(R.string.ok), null)
                     .show()
             }
         }
@@ -768,7 +775,7 @@ class SettingsActivity : BaseActivity() {
         // Use current protocol reference
         val protocol = currentProtocol
         val isConnected = protocol.connectionState.value is MeshConnectionState.Connected
-        val buttonText = if (isConnected) "Disconnect" else "Connect to Meshtastic via Bluetooth"
+        val buttonText = if (isConnected) getString(R.string.disconnect) else getString(R.string.connect_bluetooth)
         
         Log.d("SettingsActivity", "updateBluetoothButtonState - protocol: ${protocol.javaClass.simpleName}, isConnected: $isConnected, buttonText: $buttonText")
         
@@ -783,7 +790,7 @@ class SettingsActivity : BaseActivity() {
         val deviceNames = mutableListOf<String>()
 
         val progressDialog = android.app.AlertDialog.Builder(this)
-            .setTitle("Scanning for devices...")
+            .setTitle(getString(R.string.scanning_for_devices))
             .setView(android.widget.ProgressBar(this))
             .setCancelable(true)
             .setOnCancelListener {
@@ -807,13 +814,13 @@ class SettingsActivity : BaseActivity() {
                 bluetoothConnectButton.isEnabled = true // Re-enable button when scan finishes
                 if (deviceNames.isEmpty()) {
                     android.app.AlertDialog.Builder(this)
-                        .setTitle("No devices found")
-                        .setMessage("No compatible devices were found. Make sure your device is powered on and try again.")
-                        .setPositiveButton("OK", null)
+                        .setTitle(getString(R.string.no_devices_found))
+                        .setMessage(getString(R.string.no_compatible_devices_found))
+                        .setPositiveButton(getString(R.string.ok), null)
                         .show()
                 } else {
                     android.app.AlertDialog.Builder(this)
-                        .setTitle("Select Device")
+                        .setTitle(getString(R.string.select_device))
                         .setItems(deviceNames.toTypedArray()) { _, which ->
                             val deviceInfo = discoveredDevices[which]
                             bluetoothStatusText.text = "Connecting to: ${deviceInfo.name} (${deviceInfo.address})..."
@@ -860,7 +867,7 @@ class SettingsActivity : BaseActivity() {
                 promptDisableBatteryOptimizationsIfNeeded()
             } else {
                 try {
-                    android.widget.Toast.makeText(this, "All permissions are required to enable background processing.", android.widget.Toast.LENGTH_LONG).show()
+                    android.widget.Toast.makeText(this, getString(R.string.all_permissions_required), android.widget.Toast.LENGTH_LONG).show()
                     backgroundProcessingSwitch.isChecked = false
                 } catch (e: Exception) {
                     Log.e("SettingsActivity", "Error showing permission denied toast: ${e.message}", e)
@@ -875,7 +882,7 @@ class SettingsActivity : BaseActivity() {
                 promptDisableBatteryOptimizationsIfNeeded()
             } else {
                 try {
-                    android.widget.Toast.makeText(this, "Background processing permission denied.", android.widget.Toast.LENGTH_LONG).show()
+                    android.widget.Toast.makeText(this, getString(R.string.background_processing_permission_denied), android.widget.Toast.LENGTH_LONG).show()
                     backgroundProcessingSwitch.isChecked = false
                 } catch (e: Exception) {
                     Log.e("SettingsActivity", "Error showing permission denied toast: ${e.message}", e)
@@ -905,10 +912,10 @@ class SettingsActivity : BaseActivity() {
                     val osCalibrationTriggered = prefs.getBoolean("os_calibration_triggered", false)
                     
                     val qualityText = when {
-                        calibrationQuality >= 0.8f -> "excellent"
-                        calibrationQuality >= 0.6f -> "good"
-                        calibrationQuality >= 0.4f -> "fair"
-                        else -> "poor"
+                        calibrationQuality >= 0.8f -> getString(R.string.compass_calibration_excellent)
+                        calibrationQuality >= 0.6f -> getString(R.string.compass_calibration_good)
+                        calibrationQuality >= 0.4f -> getString(R.string.compass_calibration_fair)
+                        else -> getString(R.string.compass_calibration_poor)
                     }
                     
                     val message = getString(R.string.compass_calibration_completed, qualityText)
@@ -992,12 +999,12 @@ class SettingsActivity : BaseActivity() {
         
         try {
             android.app.AlertDialog.Builder(this)
-                .setTitle("Enable Location")
-                .setMessage("Location services are required to scan for Bluetooth devices. Please enable location.")
-                .setPositiveButton("Open Settings") { _, _ ->
+                .setTitle(getString(R.string.enable_location))
+                .setMessage(getString(R.string.location_services_required))
+                .setPositiveButton(getString(R.string.open_settings)) { _, _ ->
                     startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
                 }
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(getString(R.string.cancel), null)
                 .show()
         } catch (e: Exception) {
             Log.e("SettingsActivity", "Error showing location prompt dialog: ${e.message}", e)
@@ -1375,9 +1382,9 @@ class SettingsActivity : BaseActivity() {
             if (!isMeshtasticInstalled) {
                 // Show dialog to install Meshtastic
                 android.app.AlertDialog.Builder(this)
-                    .setTitle("Meshtastic App Required")
-                    .setMessage("The Meshtastic AIDL protocol requires the Meshtastic app to be installed. Would you like to install it from the Play Store?")
-                    .setPositiveButton("Install") { _, _ ->
+                    .setTitle(getString(R.string.meshtastic_app_required))
+                    .setMessage(getString(R.string.meshtastic_app_install_prompt))
+                    .setPositiveButton(getString(R.string.install)) { _, _ ->
                         try {
                             val intent = Intent(Intent.ACTION_VIEW).apply {
                                 data = android.net.Uri.parse("market://details?id=com.geeksville.mesh")
@@ -1391,7 +1398,7 @@ class SettingsActivity : BaseActivity() {
                             startActivity(intent)
                         }
                     }
-                    .setNegativeButton("Cancel", null)
+                    .setNegativeButton(getString(R.string.cancel), null)
                     .show()
             } else {
                 // App is installed, show status

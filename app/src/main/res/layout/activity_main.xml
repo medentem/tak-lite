@@ -27,7 +27,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="No Device Connected"
+            android:text="@string/no_device_connected"
             android:textColor="#FFFFFF"
             android:textSize="14sp"
             android:layout_marginStart="8dp" />
@@ -58,7 +58,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Coverage Analysis"
+                android:text="@string/coverage_analysis_short"
                 android:textColor="#FFFFFF"
                 android:textSize="14sp"
                 android:textStyle="bold" />
@@ -80,7 +80,7 @@
             android:id="@+id/coverageStatusText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Initializing analysis..."
+            android:text="@string/initializing_analysis"
             android:textColor="#FFFFFF"
             android:textSize="12sp"
             android:layout_marginTop="2dp" />
@@ -257,7 +257,7 @@
             android:id="@+id/lineToolLabel"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Add Line"
+            android:text="@string/add_line"
             android:textSize="12sp"
             android:textColor="#888888"
             android:layout_marginTop="2dp"
@@ -289,7 +289,7 @@
             android:id="@+id/statusLabel"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Status"
+            android:text="@string/status_short"
             android:textSize="12sp"
             android:textColor="#888888"
             android:layout_marginTop="2dp"
@@ -357,7 +357,7 @@
             android:id="@+id/layersLabel"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Layers"
+            android:text="@string/layers"
             android:textSize="12sp"
             android:textColor="#888888"
             android:layout_marginTop="2dp"

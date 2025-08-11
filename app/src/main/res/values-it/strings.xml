@@ -1,0 +1,456 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TAK Lite</string>
+    <string name="location_source">Fonte Posizione</string>
+    <string name="status_sent">Inviato</string>
+    <string name="status_delivered">Consegnato</string>
+    <string name="status_received">Ricevuto</string>
+    
+    <!-- General UI -->
+    <string name="ok">OK</string>
+    <string name="cancel">Annulla</string>
+    <string name="close">Chiudi</string>
+    <string name="save">Salva</string>
+    <string name="delete">Elimina</string>
+    <string name="add">Aggiungi</string>
+    <string name="edit">Modifica</string>
+    <string name="connect">Connetti</string>
+    <string name="disconnect">Disconnetti</string>
+    <string name="recalibrate">Ricalibra</string>
+    <string name="install">Installa</string>
+    <string name="open_settings">Apri Impostazioni</string>
+    
+    <!-- Main Activity -->
+    <string name="location_permission_not_granted">Permesso di localizzazione non concesso</string>
+    <string name="downloading_offline_tiles">Scaricamento tile offline...</string>
+    <string name="offline_tile_download_complete">Scaricamento tile offline completato: %1$d riusciti, %2$d falliti</string>
+    <string name="download_failed">Scaricamento fallito: %1$s</string>
+    <string name="map_not_ready">La mappa non è ancora pronta</string>
+    <string name="map_center_not_available">Centro mappa non disponibile</string>
+    <string name="connecting_to_mesh">Connessione alla rete mesh...</string>
+    <string name="disconnected_from_mesh">Disconnesso dalla rete mesh</string>
+    <string name="lasso_activated">Lazo attivato</string>
+    <string name="lasso_deactivated">Lazo disattivato</string>
+    <string name="predictions_will_take_minute">Le previsioni impiegheranno un minuto e saranno visibili solo se è disponibile la cronologia delle posizioni.</string>
+    <string name="permissions_required">Permessi richiesti per la funzionalità dell\'app</string>
+    <string name="all_permissions_required">Tutti i permessi sono richiesti per abilitare l\'elaborazione in background.</string>
+    <string name="background_processing_permission_denied">Permesso di elaborazione in background negato.</string>
+    <string name="calibration_skipped">Calibrazione saltata</string>
+    <string name="status_updated_to">Stato aggiornato a: %1$s</string>
+    <string name="coverage_analysis_complete">Analisi copertura completata!</string>
+    <string name="coverage_analysis_failed">Analisi copertura fallita: %1$s</string>
+    
+    <!-- Settings -->
+    <string name="settings">Impostazioni</string>
+    <string name="mesh_network_adapter">Adattatore Rete Mesh</string>
+    <string name="select_mesh_network_adapter">Seleziona adattatore rete mesh</string>
+    <string name="connect_bluetooth">Connetti a Meshtastic via Bluetooth</string>
+    <string name="unlock_app_features">Sblocca Funzionalità App</string>
+    <string name="not_connected">Non connesso</string>
+    <string name="downloading_config">Scaricamento configurazione...</string>
+    <string name="background_processing">Elaborazione in Background</string>
+    <string name="enable_background_processing">Abilita Elaborazione in Background (mantieni connessione mesh attiva quando l\'app è in background)</string>
+    <string name="keep_screen_awake">Mantieni Schermo Attivo</string>
+    <string name="prevent_screen_sleep">Impedisci al schermo di spegnersi mentre l\'app è aperta</string>
+    <string name="show_packet_summary">Mostra Riepilogo Pacchetti</string>
+    <string name="show_packet_overlay">Mostra sovrapposizione con gli ultimi 3 pacchetti ricevuti</string>
+    <string name="location_prediction">Previsione Posizione</string>
+    <string name="show_predicted_location">Mostra posizione prevista per i peer</string>
+    <string name="advanced">Avanzato</string>
+    <string name="weather_settings">Impostazioni Meteo</string>
+    <string name="enable_weather_layer">Abilita Livello Meteo</string>
+    <string name="weather_source">Fonte Meteo</string>
+    <string name="opacity">Opacità</string>
+    <string name="coverage_analysis">Analisi Copertura</string>
+    <string name="include_peers_in_coverage">Includi Peer nella Copertura</string>
+    <string name="level_of_detail">Livello di Dettaglio</string>
+    <string name="low_detail">Basso - 3x risoluzione più grossolana, analisi più veloce</string>
+    <string name="medium_detail">Medio - 1.5x risoluzione più grossolana, prestazioni bilanciate</string>
+    <string name="high_detail">Alto - Risoluzione completa, analisi più dettagliata</string>
+    <string name="antenna_heights">Altezze Antenna</string>
+    <string name="map_settings">Impostazioni Mappa</string>
+    <string name="min_line_segment_dist">Distanza Minima Segmento Linea (miglia)</string>
+    <string name="end_transmission_beep">Beep Fine Trasmissione</string>
+    <string name="enable_double_beep">Abilita doppio beep alla fine della trasmissione</string>
+    <string name="simulate_peers">Simula Peer</string>
+    <string name="enable_simulated_peers">Abilita peer simulati sulla mappa</string>
+    <string name="peers_tend_to_appear">I peer tenderanno ad apparire intorno a questa distanza dalla tua posizione con una variabilità naturale.</string>
+    
+    <!-- Settings Dialogs -->
+    <string name="meshtastic_app_not_running">App Meshtastic Non in Esecuzione</string>
+    <string name="detail_level_warning">Avviso Livello Dettaglio</string>
+    <string name="scanning_for_devices">Ricerca dispositivi...</string>
+    <string name="no_devices_found">Nessun dispositivo trovato</string>
+    <string name="select_device">Seleziona Dispositivo</string>
+    <string name="enable_location">Abilita Posizione</string>
+    <string name="meshtastic_app_required">App Meshtastic Richiesta</string>
+    
+    <!-- Map and Annotations -->
+    <string name="polygon_created">Poligono creato!</string>
+    <string name="line_added">Linea aggiunta!</string>
+    <string name="poi_added_to_polygon">POI aggiunto al poligono!</string>
+    <string name="poi_added_to_area">POI aggiunto all\'area!</string>
+    <string name="area_created">Area creata!</string>
+    <string name="error_could_not_place_poi">Errore: Impossibile posizionare POI</string>
+    <string name="set_expiration_minutes">Imposta Scadenza (minuti)</string>
+    <string name="edit_label">Modifica Etichetta</string>
+    <string name="edit_polygon_label">Modifica Etichetta Poligono</string>
+    <string name="edit_area_label">Modifica Etichetta Area</string>
+    <string name="failed_to_start_direct_message">Impossibile avviare messaggio diretto</string>
+    <string name="waiting_for_location_update">In attesa di aggiornamento posizione da %1$s</string>
+    <string name="peer_did_not_respond">%1$s non ha risposto</string>
+    <string name="received_updated_location">Posizione aggiornata ricevuta per %1$s</string>
+    <string name="line_drawn_to_peer">Linea disegnata verso %1$s</string>
+    <string name="cannot_draw_line">Impossibile disegnare linea: %1$s</string>
+    <string name="no_map_tiles_available">Nessuna tile mappa disponibile (tile offline mancanti e nessuna connessione internet)</string>
+    
+    <!-- Weather -->
+    <string name="forecast_for_location">Previsioni per la tua posizione</string>
+    <string name="no_weather_alerts">Nessun allarme meteo</string>
+    <string name="no_data">Nessun dato</string>
+    <string name="current">Attuale</string>
+    <string name="minute">Minuto</string>
+    <string name="hourly">Orario</string>
+    <string name="daily">Giornaliero</string>
+    <string name="alerts">Allarmi</string>
+    <string name="loading_weather">Caricamento meteo...</string>
+    <string name="weather_unavailable">Dati meteo non disponibili</string>
+    <string name="forecast_for_city">Previsioni per [Città]</string>
+    <string name="from_5_min_ago">da 5 min fa</string>
+    <string name="partly_cloudy">Parzialmente Nuvoloso</string>
+    <string name="feels_like">Percepito %1$s</string>
+    <string name="humidity">UMIDITÀ</string>
+    <string name="wind">VENTO</string>
+    <string name="uv_index">INDICE UV</string>
+    <string name="pressure">PRESSIONE</string>
+    <string name="next_hour_precipitation">Precipitazioni Prossima Ora</string>
+    <string name="today">Oggi</string>
+    <string name="seven_day_forecast">Previsioni 7 Giorni</string>
+    <string name="weather_alerts">Allarmi Meteo</string>
+    <string name="small_craft_advisory">Avviso per Piccole Imbarcazioni</string>
+    <string name="until_time">Fino alle %1$s</string>
+    <string name="north_winds_expected">Venti da nord 15-20 nodi con raffiche fino a 25 nodi e mari 3-5 piedi previsti.</string>
+    
+    <!-- Status and Quality -->
+    <string name="excellent">Eccellente</string>
+    <string name="good">Buono</string>
+    <string name="fair">Discreto</string>
+    <string name="poor">Scarso</string>
+    <string name="unknown">Sconosciuto</string>
+    <string name="high">ALTO</string>
+    <string name="medium">MEDIO</string>
+    <string name="low">BASSO</string>
+    <string name="unreliable">INATTENDIBILE</string>
+    <string name="degraded">DEGRADATO</string>
+    
+    <!-- Donation -->
+    <string name="support_tak_lite">Supporta lo Sviluppo di TAK Lite</string>
+    <string name="support_description">Le API delle mappe costano denaro per essere mantenute. Il tuo supporto aiuta a garantire lo sviluppo continuo di questa app. Scegli il tuo metodo di donazione preferito:</string>
+    <string name="github_sponsors">Sponsor GitHub</string>
+    <string name="support_via_github">Supporta via Sponsor GitHub</string>
+    <string name="cryptocurrency_click_copy">Criptovaluta (Clicca per copiare indirizzo)</string>
+    <string name="bitcoin_btc">Bitcoin (BTC)</string>
+    <string name="ethereum_eth">Ethereum (ETH)</string>
+    <string name="after_donating_click">Dopo aver donato, clicca sotto per attivare le funzionalità premium:</string>
+    <string name="activate_premium_features">Attiva Funzionalità Premium</string>
+    <string name="privacy_note">Nota: Questa app rispetta la tua privacy e non richiede i Servizi Google Play per funzionare. Tutti i metodi di donazione sono focalizzati sulla privacy ed evitano i processori di pagamento tradizionali.</string>
+    <string name="premium_activated">Funzionalità premium attivate! Grazie per il tuo supporto.</string>
+    <string name="address_copied_to_clipboard">Indirizzo %1$s copiato negli appunti</string>
+    <string name="label_copied_to_clipboard">%1$s copiato negli appunti</string>
+    
+    <!-- Channels and Peers -->
+    <string name="add_channel">Aggiungi Canale</string>
+    <string name="edit_channel">Modifica Canale</string>
+    <string name="delete_channel">Elimina Canale</string>
+    <string name="channels_chats">Canali / Chat</string>
+    <string name="no_device_connected">Nessun Dispositivo Connesso</string>
+    <string name="connect_to_device_manage">Connetti a un dispositivo per gestire canali / chat</string>
+    <string name="peers_count">Peer (%1$d)</string>
+    <string name="connect_to_device_view_peers">Connetti a un dispositivo per vedere i peer</string>
+    <string name="set_status">Imposta Stato</string>
+    <string name="cannot_send_messages">Impossibile Inviare Messaggi</string>
+    <string name="user_disabled_incoming">Questo utente ha disabilitato i messaggi in arrivo</string>
+    
+    <!-- Compass Calibration -->
+    <string name="compass_calibration_needed">La tua bussola ha bisogno di calibrazione per letture precise. Segui le istruzioni qui sotto.</string>
+    <string name="compass_calibration_optional">La qualità della tua bussola potrebbe essere migliorata. Vuoi calibrarla?</string>
+    <string name="compass_calibration_instructions">Tieni il telefono a livello e muovilo in un pattern a forma di 8 come mostrato. Tienilo lontano da oggetti metallici e muovilo lentamente e dolcemente.</string>
+    <string name="compass_calibration_complete">Calibrazione completata! La tua bussola dovrebbe ora essere più precisa.</string>
+    <string name="compass_quality_excellent">Eccellente</string>
+    <string name="compass_quality_good">Buona</string>
+    <string name="compass_quality_fair">Discreta</string>
+    <string name="compass_quality_poor">Scarsa</string>
+    <string name="compass_quality_unreliable">Inattendibile</string>
+    
+    <!-- Periodic Calibration Status -->
+    <string name="calibration_status_unknown">NON CALIBRATA</string>
+    <string name="calibration_status_poor">CAL SCARSA</string>
+    <string name="calibration_status_good">CAL BUONA</string>
+    <string name="calibration_status_excellent">CAL ECCELLENTE</string>
+    <string name="calibration_confidence_format">%1$s (%2$d%%)</string>
+    
+    <!-- Compass Calibration Settings -->
+    <string name="compass_calibration_title">Calibrazione Bussola</string>
+    <string name="compass_calibration_status">Stato: %1$s</string>
+    <string name="compass_calibration_quality">Qualità: %1$s</string>
+    <string name="compass_calibration_button">Calibra Bussola</string>
+    <string name="compass_calibration_no_sensors">Nessun sensore bussola disponibile</string>
+    <string name="compass_calibration_not_supported">Non supportato</string>
+    <string name="compass_calibration_needs_calibration">Necessita calibrazione</string>
+    <string name="compass_calibration_fair">Calibrazione discreta</string>
+    <string name="compass_calibration_poor">Calibrazione scarsa</string>
+    <string name="compass_calibration_good">Calibrazione buona</string>
+    <string name="compass_calibration_excellent">Calibrazione eccellente</string>
+    <string name="compass_calibration_completed">Calibrazione bussola completata con qualità %1$s.</string>
+    <string name="compass_calibration_os_applied">Calibrazione a livello sistema operativo applicata.</string>
+    <string name="compass_calibration_cancelled">Calibrazione bussola annullata.</string>
+    <string name="compass_calibration_status_title">Stato Calibrazione Bussola</string>
+    <string name="compass_quality_unreliable_title">Qualità Bussola: INATTENDIBILE</string>
+    <string name="start_calibration">Inizia Calibrazione</string>
+    <string name="done">Fatto</string>
+    <string name="skip">Salta</string>
+    <string name="checking">Controllo...</string>
+    
+    <!-- Prediction Settings -->
+    <string name="prediction_settings">Impostazioni Previsione</string>
+    <string name="prediction_model">Modello Previsione</string>
+    <string name="prediction_horizon">Orizzonte Previsione</string>
+    <string name="five_minutes">5 minuti</string>
+    <string name="min_history_entries">Voci Cronologia Minime</string>
+    <string name="three_entries">3 voci</string>
+    <string name="max_history_age">Età Massima Cronologia</string>
+    <string name="thirty_minutes">30 minuti</string>
+    <string name="prediction_note">Nota: I livelli di confidenza, le incertezze di direzione e velocità sono calcolati automaticamente dai pattern di movimento di ogni peer per previsioni più accurate.</string>
+    <string name="prediction_statistics">Statistiche Previsione</string>
+    
+    <!-- Restore Annotations -->
+    <string name="restore_previous_annotations">Ripristina Annotazioni Precedenti?</string>
+    <string name="restore_annotations_description">Vuoi ripristinare le annotazioni dalla tua sessione precedente?</string>
+    <string name="clear">Cancella</string>
+    <string name="restore">Ripristina</string>
+    
+    <!-- Direction Overlay -->
+    <string name="compass">BUSSOLA</string>
+    <string name="mph">MPH</string>
+    <string name="ft">PIEDI</string>
+    <string name="coordinates_format">%1$.7f, %2$.7f</string>
+    
+    <!-- Weather Forecast Items -->
+    <string name="mon">Lun</string>
+    <string name="temperature_format">%1$d°</string>
+    <string name="humidity_percent">%1$d%%</string>
+    <string name="time_format">%1$s</string>
+    <string name="precipitation_format">%1$.1f</string>
+    <string name="five_min">5m</string>
+    <string name="two_pm">14:00</string>
+    
+    <!-- Audio Service -->
+    <string name="audio_streaming">Streaming Audio</string>
+    <string name="tak_lite_audio_streaming">Streaming Audio Tak Lite</string>
+    <string name="voice_chat_active">Chat vocale attiva</string>
+    <string name="default_channel">predefinito</string>
+    
+    <!-- Map Types -->
+    <string name="last_used">Ultimo Utilizzato</string>
+    <string name="street">Strada</string>
+    <string name="satellite">Satellite</string>
+    <string name="hybrid">Ibrido</string>
+    
+    <!-- Dark Mode -->
+    <string name="use_phone_setting">Usa Impostazione Telefono</string>
+    <string name="always_dark">Sempre Scuro</string>
+    <string name="always_light">Sempre Chiaro</string>
+    
+    <!-- Weather Sources -->
+    <string name="precipitation">Precipitazioni</string>
+    <string name="clouds">Nuvole</string>
+    <string name="wind_speed">Velocità Vento</string>
+    <string name="temperature">Temperatura</string>
+    
+    <!-- Mesh Network Types -->
+    <string name="meshtastic">Meshtastic</string>
+    <string name="meshtastic_bluetooth">Meshtastic (Bluetooth)</string>
+    <string name="meshtastic_app">Meshtastic (App)</string>
+    
+    <!-- Missing Localized Strings -->
+    <string name="no_data_short">Nessun dato</string>
+    <string name="forecast_for_your_location">Previsioni per la tua posizione</string>
+    <string name="no_weather_alerts_short">Nessun allarme meteo</string>
+    <string name="unknown_peer">Peer Sconosciuto</string>
+    <string name="coverage_analysis_short">Analisi Copertura</string>
+    <string name="initializing_analysis">Inizializzazione analisi...</string>
+    <string name="add_line">Aggiungi Linea</string>
+    <string name="status_short">Stato</string>
+    <string name="layers">Livelli</string>
+    <string name="cryptocurrency_donation">Donazione Criptovaluta</string>
+    <string name="address_label">Indirizzo:</string>
+    <string name="loading_address">Caricamento indirizzo...</string>
+    <string name="qr_code_label">Codice QR:</string>
+    <string name="copy_address_to_clipboard">Copia Indirizzo negli Appunti</string>
+    <string name="close_button">Chiudi</string>
+    <string name="scan_qr_code_instruction">Scansiona il codice QR con la tua app wallet di criptovaluta per inviare una donazione.</string>
+    <string name="manage_channels">Gestisci Canali</string>
+    <string name="prediction_settings_short">Impostazioni Previsione</string>
+    <string name="prediction_model_short">Modello Previsione</string>
+    <string name="five_minutes_short">5 minuti</string>
+    <string name="minimum_history_entries">Voci Cronologia Minime</string>
+    <string name="maximum_history_age">Età Massima Cronologia</string>
+    <string name="thirty_minutes_short">30 minuti</string>
+    <string name="prediction_note_short">Nota: I livelli di confidenza, le incertezze di direzione e velocità sono calcolati automaticamente dai pattern di movimento di ogni peer per previsioni più accurate.</string>
+    <string name="prediction_statistics_short">Statistiche Previsione</string>
+    <string name="weather_radar">Radar Meteo</string>
+    <string name="peer_predictions">Previsioni Peer</string>
+    <string name="start_calibration_short">Inizia Calibrazione</string>
+    <string name="done_short">Fatto</string>
+    <string name="skip_short">Salta</string>
+    <string name="advanced_prediction_settings">Impostazioni Previsione Avanzate</string>
+    <string name="status_checking">Stato: Controllo...</string>
+    <string name="quality_unknown">Qualità: Sconosciuta</string>
+    <string name="small_craft_advisory_short">Avviso per Piccole Imbarcazioni</string>
+    <string name="until_time_example">Fino alle 3 AM EST Venerdì</string>
+    <string name="north_winds_expected_example">Venti del nord da 15 a 20 nodi con raffiche fino a 25 nodi e mari da 3 a 5 piedi previsti.</string>
+    <string name="mon_short">Lun</string>
+    <string name="from_min_ago">%1$d min fa</string>
+    <string name="forecast_for_city_placeholder">Previsioni per [Città]</string>
+    <string name="current_short">Attuale</string>
+    <string name="minute_short">Minuto</string>
+    <string name="hourly_short">Orario</string>
+    <string name="daily_short">Giornaliero</string>
+    <string name="alerts_short">Allarmi</string>
+    <string name="partly_cloudy_short">Parzialmente Nuvoloso</string>
+    <string name="feels_like_format">Percepita %1$s</string>
+    <string name="sunrise_time">%1$s</string>
+    <string name="sunset_time">%1$s</string>
+    <string name="humidity_short">UMIDITÀ</string>
+    <string name="wind_speed_format">%1$d mph</string>
+    <string name="wind_short">VENTO</string>
+    <string name="uv_format">UV %1$.1f</string>
+    <string name="uv_index_short">INDICE UV</string>
+    <string name="pressure_format">%1$d hPa</string>
+    <string name="pressure_short">PRESSIONE</string>
+    <string name="next_hour_precipitation_short">Precipitazioni Prossima Ora</string>
+    <string name="today_short">Oggi</string>
+    <string name="seven_day_forecast_short">Previsioni 7 Giorni</string>
+    <string name="weather_alerts_short">Allarmi Meteo</string>
+    <string name="loading_weather_short">Caricamento meteo...</string>
+    <string name="weather_unavailable_short">Dati meteo non disponibili</string>
+    <string name="until_time_format">Fino a %1$s</string>
+    
+    <!-- Missing Localized Strings -->
+    <string name="meshtastic_app_background_required">Apri l\'app Meshtastic e mantienila in esecuzione in background.</string>
+    <string name="no_compatible_devices_found">Nessun dispositivo compatibile trovato. Assicurati che il tuo dispositivo sia acceso e riprova.</string>
+    <string name="location_services_required">I servizi di localizzazione sono necessari per cercare dispositivi Bluetooth. Abilita la localizzazione.</string>
+    <string name="meshtastic_app_install_prompt">Il protocollo Meshtastic AIDL richiede che l\'app Meshtastic sia installata. Vuoi installarla dal Google Play Store?</string>
+    <string name="delete_channel_confirmation">Sei sicuro di voler eliminare il canale \'%1$s\'?</string>
+    <string name="manage_channels_title">Gestisci Canali</string>
+    <string name="restore_previous_annotations_title">Ripristinare le Annotazioni Precedenti?</string>
+    <string name="restore_annotations_description_long">Vuoi ripristinare le annotazioni dalla tua sessione precedente?</string>
+    <string name="channel_name_hint">Nome del canale</string>
+    
+    <!-- User Status Colors -->
+    <string name="status_red">Rosso</string>
+    <string name="status_yellow">Giallo</string>
+    <string name="status_blue">Blu</string>
+    <string name="status_orange">Arancione</string>
+    <string name="status_violet">Viola</string>
+    <string name="status_green">Verde</string>
+    
+    <!-- Time Formatting -->
+    <string name="time_now">ora</string>
+    <string name="time_minute">min</string>
+    <string name="time_hour">h</string>
+    <string name="time_day">g</string>
+    
+    <!-- Notification Strings -->
+    <string name="notification_channel_messages">Messaggi</string>
+    <string name="notification_channel_description">Notifiche per nuovi messaggi</string>
+    <string name="notification_reply">Rispondi</string>
+    <string name="notification_unknown_sender">Sconosciuto</string>
+    
+    <!-- Purchase Dialog Strings -->
+    <string name="support_tier_1">Livello di Supporto 1</string>
+    <string name="support_tier_2">Livello di Supporto 2</string>
+    <string name="support_tier_3">Livello di Supporto 3</string>
+    <string name="basic_support_tier">Livello di supporto base</string>
+    <string name="enhanced_support_tier">Livello di supporto migliorato</string>
+    <string name="premium_support_tier">Livello di supporto premium</string>
+    <string name="price_not_available">Prezzo non disponibile</string>
+    <string name="purchase">Acquista</string>
+    <string name="trial_message_active">Le API delle mappe costano denaro per continuare a funzionare! Attualmente sei nel tuo periodo di prova gratuito di 7 giorni. Il tuo supporto è fondamentale per garantire lo sviluppo continuo dell\'app. Scegli qualsiasi opzione a pagamento - speriamo che supporterai questa app con il livello di pagamento più alto che puoi permetterti. Grazie in anticipo.</string>
+    <string name="trial_message_ended">Le API delle mappe costano denaro per continuare a funzionare! Il tuo periodo di prova è terminato. Il tuo supporto è fondamentale per garantire lo sviluppo continuo dell\'app. Scegli qualsiasi opzione a pagamento per continuare - speriamo che supporterai questa app con il livello di pagamento più alto che puoi permetterti. Grazie in anticipo.</string>
+    <string name="test_mode_message">\n\n[MODO TEST: Utilizzo dei prodotti di test Google Play Billing]</string>
+    <string name="offline_message">Attualmente sei offline. Controlla la tua connessione internet per effettuare un acquisto.</string>
+    
+    <!-- Message Status Strings -->
+    <string name="message_sent_to_network">Messaggio inviato alla rete</string>
+    <string name="message_received_by_network">Messaggio ricevuto dalla rete</string>
+    <string name="message_not_confirmed_by_recipient"> ma non confermato dal destinatario</string>
+    <string name="message_confirmed_by_recipient">Messaggio confermato ricevuto dal destinatario</string>
+    <string name="error_communicating_with_mesh">Errore di comunicazione con il dispositivo mesh</string>
+    <string name="failed_to_deliver_message">Impossibile consegnare il messaggio alla rete</string>
+    
+    <!-- Channel Role Strings -->
+    <string name="channel_role_primary">Primario</string>
+    <string name="channel_role_secondary">Secondario</string>
+    <string name="channel_role_disabled">Disabilitato</string>
+    <string name="no_messages">Nessun messaggio</string>
+    
+    <!-- Missing Localized Strings Found in Code -->
+    <string name="minutes_format">%1$d minuti</string>
+    <string name="entries_format">%1$d voci</string>
+    <string name="from_minutes_ago">%1$d min fa</string>
+    <string name="no_data_dash">--</string>
+    <string name="minute_abbreviation">%1$dm</string>
+    <string name="last_connected_format">Ultima connessione: %1$s (%2$s)</string>
+    <string name="connecting_to_device">Connessione a: %1$s (%2$s)...</string>
+    <string name="bluetooth_permissions_required">Sono necessari i permessi Bluetooth per connettersi.</string>
+    <string name="bluetooth_enabled_connect">Bluetooth abilitato. Ora puoi connetterti.</string>
+    <string name="bluetooth_must_be_enabled">Bluetooth deve essere abilitato per connettersi.</string>
+    <string name="connected_device">Connesso: %1$s</string>
+    <string name="meshtastic_app_connected_no_device">App Meshtastic Connessa: Nessun Dispositivo Collegato</string>
+    <string name="connection_failed">Connessione fallita: %1$s</string>
+    <string name="connecting">Connessione...</string>
+    <string name="config_error">Errore: %1$s</string>
+    <string name="elevation_profile">Profilo di Elevazione</string>
+    <string name="loading_elevation_data">Caricamento dati di elevazione...</string>
+    <string name="downloading_terrain_data">Download dati del terreno... (%1$d/%2$d tessere)</string>
+    <string name="terrain_data_warning">Attenzione: Alcuni dati del terreno non sono disponibili. Utilizzo di elevazioni stimate.</string>
+    <string name="processing_elevation_data">Elaborazione dati di elevazione...</string>
+    <string name="no_terrain_data">Nessun dato del terreno disponibile per questa area. Visualizzazione del profilo stimato.</string>
+    <string name="elevation_summary_format">Distanza Totale: %.2f mi | Intervallo di Elevazione: %.0f ft | Elevazione Media: %.0f ft | Campionamento: %.0f m intervalli</string>
+    <string name="speed_format">%.2f mph</string>
+    <string name="compass_quality_format">Qualità Bussola: %1$s</string>
+    <string name="figure_8_detected">Figura-8 rilevata! Continua...</string>
+    <string name="distance_miles_format">%1$.1fmi</string>
+    <string name="packet_summary_format">Ricevuto %1$s da %2$s %3$s%4$d sec fa.</string>
+    <string name="members_count_format">%1$d membri</string>
+    <string name="crypto_donation_title_format">Donazione %1$s (%2$s)</string>
+    <string name="temperature_degree_format">%1$d°</string>
+    <string name="humidity_percent_format">%1$d%%</string>
+    <string name="time_pm_format">%1$d PM</string>
+    <string name="precipitation_format_decimal">%.1f</string>
+    <string name="five_minutes_abbreviation">5m</string>
+    <string name="two_pm_example">2 PM</string>
+    <string name="seventy_five_degrees">75°</string>
+    <string name="sixty_five_degrees">65°</string>
+    <string name="twenty_percent">20%</string>
+    <string name="seventy_two_degrees">72°</string>
+    <string name="sixty_five_percent">65%</string>
+    <string name="zero_point_five">0.5</string>
+    <string name="one_point_zero">1.0</string>
+    <string name="zero_point_nine">0.9</string>
+    <string name="prediction_overview">📊 PANORAMICA PREDIZIONE</string>
+    <string name="active_predictions_format">Predizioni Attive: %1$d/%2$d peer</string>
+    <string name="success_rate_format">Tasso di Successo: %1$d%%</string>
+    <string name="average_confidence_format">Confidenza Media: %1$d%%</string>
+    <string name="average_speed_format">Velocità Media: %1$d mph</string>
+    <string name="prediction_age_format">Età Predizione: %1$d min</string>
+    <string name="confidence_distribution">🎯 DISTRIBUZIONE CONFIDENZA</string>
+    <string name="confidence_level_format">%1$s: %2$d (%3$d%%)</string>
+    <string name="no_predictions_available">Nessuna predizione disponibile</string>
+    <string name="data_quality">📈 QUALITÀ DATI</string>
+    <string name="avg_history_entries_format">Voci Storico Media: %1$d</string>
+    <string name="avg_history_age_format">Età Storico Media: %1$d min</string>
+    <string name="update_frequency_format">Frequenza Aggiornamento: %1$ds</string>
+    <string name="insufficient_data_format">Dati Insufficienti: %1$d peer</string>
+</resources>

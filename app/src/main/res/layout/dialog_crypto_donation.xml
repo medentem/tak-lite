@@ -11,7 +11,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginBottom="16dp"
-        android:text="Cryptocurrency Donation"
+        android:text="@string/cryptocurrency_donation"
         android:textAlignment="center"
         android:textSize="18sp"
         android:textStyle="bold"
@@ -21,7 +21,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginBottom="8dp"
-        android:text="Address:"
+        android:text="@string/address_label"
         android:textStyle="bold"
         android:textSize="14sp"
         android:textColor="?attr/colorOnSurface" />
@@ -31,7 +31,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginBottom="16dp"
-        android:text="Loading address..."
+        android:text="@string/loading_address"
         android:textSize="12sp"
         android:textColor="?attr/colorOnSurface"
         android:fontFamily="monospace"
@@ -44,7 +44,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginBottom="8dp"
-        android:text="QR Code:"
+        android:text="@string/qr_code_label"
         android:textStyle="bold"
         android:textSize="14sp"
         android:textColor="?attr/colorOnSurface" />
@@ -64,7 +64,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginBottom="8dp"
-        android:text="Copy Address to Clipboard"
+        android:text="@string/copy_address_to_clipboard"
         android:backgroundTint="@color/interactive_color_light"
         android:textColor="@android:color/white" />
 
@@ -72,7 +72,7 @@
         android:id="@+id/closeButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Close"
+        android:text="@string/close_button"
         android:backgroundTint="@android:color/darker_gray"
         android:textColor="@android:color/white" />
 
@@ -80,7 +80,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:text="Scan the QR code with your cryptocurrency wallet app to send a donation."
+        android:text="@string/scan_qr_code_instruction"
         android:textAlignment="center"
         android:textSize="12sp"
         android:textColor="?attr/colorOnSurfaceVariant" />

@@ -39,7 +39,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="Peers (0)"
+                        android:text="@string/peers_count"
                         android:textSize="20sp"
                         android:textStyle="bold"
                         android:textColor="?android:attr/textColorPrimary" />
@@ -118,7 +118,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="No Device Connected"
+                android:text="@string/no_device_connected"
                 android:textColor="@android:color/white"
                 android:textSize="16sp"
                 android:textStyle="bold"/>
@@ -126,7 +126,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Connect to a device to view peers"
+                android:text="@string/connect_to_device_view_peers"
                 android:textColor="@android:color/white"
                 android:textSize="14sp"
                 android:layout_marginTop="8dp"/>

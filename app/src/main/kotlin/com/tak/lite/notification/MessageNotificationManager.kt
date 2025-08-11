@@ -44,10 +44,10 @@ class MessageNotificationManager @Inject constructor(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Messages",
+                context.getString(R.string.notification_channel_messages),
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Notifications for new messages"
+                description = context.getString(R.string.notification_channel_description)
                 enableVibration(true)
             }
             val notificationManager = context.getSystemService(NotificationManager::class.java)
@@ -59,7 +59,7 @@ class MessageNotificationManager @Inject constructor(
         Log.d("MessageNotificationManager", "Creating notification for channel: $channelName, message: $message")
 
         val fromShortNameDefaulted = if (fromShortName.isEmpty()) {
-            "Unknown"
+            context.getString(R.string.notification_unknown_sender)
         } else {
             fromShortName
         }
@@ -106,7 +106,7 @@ class MessageNotificationManager @Inject constructor(
 
         // Create reply action
         val remoteInput = RemoteInput.Builder(KEY_TEXT_REPLY)
-            .setLabel("Reply")
+            .setLabel(context.getString(R.string.notification_reply))
             .build()
 
         val replyIntent = Intent(context, MessageBroadcastReceiver::class.java).apply {
@@ -123,7 +123,7 @@ class MessageNotificationManager @Inject constructor(
 
         val replyAction = NotificationCompat.Action.Builder(
             R.drawable.ic_reply,
-            "Reply",
+            context.getString(R.string.notification_reply),
             replyPendingIntent
         ).addRemoteInput(remoteInput).build()
 

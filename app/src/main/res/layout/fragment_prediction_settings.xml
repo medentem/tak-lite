@@ -12,7 +12,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Prediction Settings"
+            android:text="@string/prediction_settings_short"
             android:textSize="24sp"
             android:textStyle="bold"
             android:layout_marginBottom="16dp"
@@ -22,7 +22,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Prediction Model"
+            android:text="@string/prediction_model_short"
             android:textSize="18sp"
             android:textStyle="bold"
             android:layout_marginTop="16dp"
@@ -45,7 +45,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Prediction Horizon"
+            android:text="@string/prediction_horizon"
             android:textSize="18sp"
             android:textStyle="bold"
             android:layout_marginTop="16dp"
@@ -55,7 +55,7 @@
             android:id="@+id/predictionHorizonText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="5 minutes"
+            android:text="@string/five_minutes_short"
             android:textAlignment="center"
             android:layout_marginTop="8dp"
             android:textColor="?android:textColorPrimary" />
@@ -72,7 +72,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Minimum History Entries"
+            android:text="@string/minimum_history_entries"
             android:textSize="18sp"
             android:textStyle="bold"
             android:layout_marginTop="16dp"
@@ -82,7 +82,7 @@
             android:id="@+id/minHistoryEntriesText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="3 entries"
+            android:text="@string/three_entries"
             android:textAlignment="center"
             android:layout_marginTop="8dp"
             android:textColor="?android:textColorPrimary" />
@@ -99,7 +99,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Maximum History Age"
+            android:text="@string/maximum_history_age"
             android:textSize="18sp"
             android:textStyle="bold"
             android:layout_marginTop="16dp"
@@ -109,7 +109,7 @@
             android:id="@+id/maxHistoryAgeText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="30 minutes"
+            android:text="@string/thirty_minutes_short"
             android:textAlignment="center"
             android:layout_marginTop="8dp"
             android:textColor="?android:textColorPrimary" />
@@ -126,7 +126,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Note: Confidence levels, heading, and speed uncertainties are automatically calculated from each peer's movement patterns for more accurate predictions."
+            android:text="@string/prediction_note_short"
             android:textSize="14sp"
             android:textStyle="italic"
             android:layout_marginTop="16dp"
@@ -138,7 +138,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Prediction Statistics"
+            android:text="@string/prediction_statistics_short"
             android:textSize="18sp"
             android:textStyle="bold"
             android:layout_marginTop="24dp"

@@ -97,7 +97,7 @@ class DonationDialog : DialogFragment() {
         
         copyButton.setOnClickListener {
             copyToClipboard(address, "$cryptoName address")
-            Toast.makeText(context, "$cryptoName address copied to clipboard", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context?.getString(R.string.address_copied_to_clipboard, cryptoName), Toast.LENGTH_SHORT).show()
         }
         
         closeButton.setOnClickListener {
@@ -119,7 +119,7 @@ class DonationDialog : DialogFragment() {
             Log.d("DonationDialog", "Manual activation button clicked")
             donationManager.activatePremiumManually()
             billingManager.refreshPremiumStatus()
-            Toast.makeText(context, "Premium features activated! Thank you for your support.", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, context?.getString(R.string.premium_activated), Toast.LENGTH_LONG).show()
             dismiss()
         }
     }
@@ -128,6 +128,6 @@ class DonationDialog : DialogFragment() {
         val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val clip = ClipData.newPlainText(label, text)
         clipboard.setPrimaryClip(clip)
-        Toast.makeText(context, "$label copied to clipboard", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context?.getString(R.string.label_copied_to_clipboard, label), Toast.LENGTH_SHORT).show()
     }
 } 

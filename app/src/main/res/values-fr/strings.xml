@@ -1,0 +1,456 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TAK Lite</string>
+    <string name="location_source">Source de Localisation</string>
+    <string name="status_sent">Envoyé</string>
+    <string name="status_delivered">Livré</string>
+    <string name="status_received">Reçu</string>
+    
+    <!-- General UI -->
+    <string name="ok">OK</string>
+    <string name="cancel">Annuler</string>
+    <string name="close">Fermer</string>
+    <string name="save">Enregistrer</string>
+    <string name="delete">Supprimer</string>
+    <string name="add">Ajouter</string>
+    <string name="edit">Modifier</string>
+    <string name="connect">Se Connecter</string>
+    <string name="disconnect">Se Déconnecter</string>
+    <string name="recalibrate">Recalibrer</string>
+    <string name="install">Installer</string>
+    <string name="open_settings">Ouvrir les Paramètres</string>
+    
+    <!-- Main Activity -->
+    <string name="location_permission_not_granted">Permission de localisation non accordée</string>
+    <string name="downloading_offline_tiles">Téléchargement des tuiles hors ligne...</string>
+    <string name="offline_tile_download_complete">Téléchargement des tuiles hors ligne terminé : %1$d réussis, %2$d échoués</string>
+    <string name="download_failed">Échec du téléchargement : %1$s</string>
+    <string name="map_not_ready">La carte n\'est pas encore prête</string>
+    <string name="map_center_not_available">Centre de la carte non disponible</string>
+    <string name="connecting_to_mesh">Connexion au réseau mesh...</string>
+    <string name="disconnected_from_mesh">Déconnecté du réseau mesh</string>
+    <string name="lasso_activated">Lasso activé</string>
+    <string name="lasso_deactivated">Lasso désactivé</string>
+    <string name="predictions_will_take_minute">Les prédictions prendront une minute et ne s\'afficheront que si l\'historique de localisation est disponible.</string>
+    <string name="permissions_required">Permissions requises pour la fonctionnalité de l\'application</string>
+    <string name="all_permissions_required">Toutes les permissions sont requises pour activer le traitement en arrière-plan.</string>
+    <string name="background_processing_permission_denied">Permission de traitement en arrière-plan refusée.</string>
+    <string name="calibration_skipped">L\'étalonnage a été ignoré</string>
+    <string name="status_updated_to">Statut mis à jour vers : %1$s</string>
+    <string name="coverage_analysis_complete">Analyse de couverture terminée !</string>
+    <string name="coverage_analysis_failed">Échec de l\'analyse de couverture : %1$s</string>
+    
+    <!-- Settings -->
+    <string name="settings">Paramètres</string>
+    <string name="mesh_network_adapter">Adaptateur de Réseau Mesh</string>
+    <string name="select_mesh_network_adapter">Sélectionner l\'adaptateur de réseau mesh</string>
+    <string name="connect_bluetooth">Se Connecter à Meshtastic via Bluetooth</string>
+    <string name="unlock_app_features">Débloquer les Fonctionnalités de l\'App</string>
+    <string name="not_connected">Non connecté</string>
+    <string name="downloading_config">Téléchargement de la configuration...</string>
+    <string name="background_processing">Traitement en Arrière-plan</string>
+    <string name="enable_background_processing">Activer le Traitement en Arrière-plan (maintenir la connexion mesh active quand l\'app est en arrière-plan)</string>
+    <string name="keep_screen_awake">Garder l\'Écran Allumé</string>
+    <string name="prevent_screen_sleep">Empêcher l\'écran de s\'éteindre pendant que l\'app est ouverte</string>
+    <string name="show_packet_summary">Afficher le Résumé des Paquets</string>
+    <string name="show_packet_overlay">Afficher la superposition avec les 3 derniers paquets reçus</string>
+    <string name="location_prediction">Prédiction de Localisation</string>
+    <string name="show_predicted_location">Afficher la localisation prédite pour les pairs</string>
+    <string name="advanced">Avancé</string>
+    <string name="weather_settings">Paramètres Météo</string>
+    <string name="enable_weather_layer">Activer la Couche Météo</string>
+    <string name="weather_source">Source Météo</string>
+    <string name="opacity">Opacité</string>
+    <string name="coverage_analysis">Analyse de Couverture</string>
+    <string name="include_peers_in_coverage">Inclure les Pairs dans la Couverture</string>
+    <string name="level_of_detail">Niveau de Détail</string>
+    <string name="low_detail">Faible - 3x résolution plus grossière, analyse la plus rapide</string>
+    <string name="medium_detail">Moyen - 1.5x résolution plus grossière, performance équilibrée</string>
+    <string name="high_detail">Élevé - Résolution complète, analyse la plus détaillée</string>
+    <string name="antenna_heights">Hauteurs d\'Antenne</string>
+    <string name="map_settings">Paramètres de Carte</string>
+    <string name="min_line_segment_dist">Distance Minimale de Segment de Ligne (miles)</string>
+    <string name="end_transmission_beep">Bip de Fin de Transmission</string>
+    <string name="enable_double_beep">Activer le double bip à la fin de la transmission</string>
+    <string name="simulate_peers">Simuler les Pairs</string>
+    <string name="enable_simulated_peers">Activer les pairs simulés sur la carte</string>
+    <string name="peers_tend_to_appear">Les pairs tendront à apparaître autour de cette distance de votre localisation avec une variabilité naturelle.</string>
+    
+    <!-- Settings Dialogs -->
+    <string name="meshtastic_app_not_running">L\'App Meshtastic Ne Fonctionne Pas</string>
+    <string name="detail_level_warning">Avertissement de Niveau de Détail</string>
+    <string name="scanning_for_devices">Recherche d\'appareils...</string>
+    <string name="no_devices_found">Aucun appareil trouvé</string>
+    <string name="select_device">Sélectionner l\'Appareil</string>
+    <string name="enable_location">Activer la Localisation</string>
+    <string name="meshtastic_app_required">App Meshtastic Requise</string>
+    
+    <!-- Map and Annotations -->
+    <string name="polygon_created">Polygone créé !</string>
+    <string name="line_added">Ligne ajoutée !</string>
+    <string name="poi_added_to_polygon">POI ajouté au polygone !</string>
+    <string name="poi_added_to_area">POI ajouté à la zone !</string>
+    <string name="area_created">Zone créée !</string>
+    <string name="error_could_not_place_poi">Erreur : Impossible de placer le POI</string>
+    <string name="set_expiration_minutes">Définir l\'Expiration (minutes)</string>
+    <string name="edit_label">Modifier l\'Étiquette</string>
+    <string name="edit_polygon_label">Modifier l\'Étiquette du Polygone</string>
+    <string name="edit_area_label">Modifier l\'Étiquette de Zone</string>
+    <string name="failed_to_start_direct_message">Échec du démarrage du message direct</string>
+    <string name="waiting_for_location_update">En attente de mise à jour de localisation de %1$s</string>
+    <string name="peer_did_not_respond">%1$s n\'a pas répondu</string>
+    <string name="received_updated_location">Localisation mise à jour reçue pour %1$s</string>
+    <string name="line_drawn_to_peer">Ligne dessinée vers %1$s</string>
+    <string name="cannot_draw_line">Impossible de dessiner la ligne : %1$s</string>
+    <string name="no_map_tiles_available">Aucune tuile de carte disponible (tuiles hors ligne manquantes et pas d\'internet)</string>
+    
+    <!-- Weather -->
+    <string name="forecast_for_location">Prévisions pour votre localisation</string>
+    <string name="no_weather_alerts">Aucune alerte météo</string>
+    <string name="no_data">Aucune donnée</string>
+    <string name="current">Actuel</string>
+    <string name="minute">Minute</string>
+    <string name="hourly">Horaire</string>
+    <string name="daily">Quotidien</string>
+    <string name="alerts">Alertes</string>
+    <string name="loading_weather">Chargement de la météo...</string>
+    <string name="weather_unavailable">Données météo non disponibles</string>
+    <string name="forecast_for_city">Prévisions pour [Ville]</string>
+    <string name="from_5_min_ago">il y a 5 min</string>
+    <string name="partly_cloudy">Partiellement Nuageux</string>
+    <string name="feels_like">Ressenti %1$s</string>
+    <string name="humidity">HUMIDITÉ</string>
+    <string name="wind">VENT</string>
+    <string name="uv_index">INDICE UV</string>
+    <string name="pressure">PRESSION</string>
+    <string name="next_hour_precipitation">Précipitations Prochaine Heure</string>
+    <string name="today">Aujourd\'hui</string>
+    <string name="seven_day_forecast">Prévisions 7 Jours</string>
+    <string name="weather_alerts">Alertes Météo</string>
+    <string name="small_craft_advisory">Avis pour Petits Bateaux</string>
+    <string name="until_time">Jusqu\'à %1$s</string>
+    <string name="north_winds_expected">Vents du nord de 15 à 20 nœuds avec rafales jusqu\'à 25 nœuds et mers de 3 à 5 pieds attendus.</string>
+    
+    <!-- Status and Quality -->
+    <string name="excellent">Excellent</string>
+    <string name="good">Bon</string>
+    <string name="fair">Moyen</string>
+    <string name="poor">Mauvais</string>
+    <string name="unknown">Inconnu</string>
+    <string name="high">ÉLEVÉ</string>
+    <string name="medium">MOYEN</string>
+    <string name="low">FAIBLE</string>
+    <string name="unreliable">NON FIABLE</string>
+    <string name="degraded">DÉGRADÉ</string>
+    
+    <!-- Donation -->
+    <string name="support_tak_lite">Soutenir le Développement de TAK Lite</string>
+    <string name="support_description">Les APIs de cartes coûtent de l\'argent à maintenir. Votre soutien aide à assurer le développement continu de cette application. Choisissez votre méthode de don préférée :</string>
+    <string name="github_sponsors">Sponsors GitHub</string>
+    <string name="support_via_github">Soutenir via Sponsors GitHub</string>
+    <string name="cryptocurrency_click_copy">Cryptomonnaie (Cliquer pour copier l\'adresse)</string>
+    <string name="bitcoin_btc">Bitcoin (BTC)</string>
+    <string name="ethereum_eth">Ethereum (ETH)</string>
+    <string name="after_donating_click">Après avoir fait un don, cliquez ci-dessous pour activer les fonctionnalités premium :</string>
+    <string name="activate_premium_features">Activer les Fonctionnalités Premium</string>
+    <string name="privacy_note">Note : Cette application respecte votre vie privée et ne nécessite pas les Services Google Play pour fonctionner. Toutes les méthodes de don sont axées sur la confidentialité et évitent les processeurs de paiement traditionnels.</string>
+    <string name="premium_activated">Fonctionnalités premium activées ! Merci pour votre soutien.</string>
+    <string name="address_copied_to_clipboard">Adresse %1$s copiée dans le presse-papiers</string>
+    <string name="label_copied_to_clipboard">%1$s copié dans le presse-papiers</string>
+    
+    <!-- Channels and Peers -->
+    <string name="add_channel">Ajouter un Canal</string>
+    <string name="edit_channel">Modifier le Canal</string>
+    <string name="delete_channel">Supprimer le Canal</string>
+    <string name="channels_chats">Canaux / Chats</string>
+    <string name="no_device_connected">Aucun Appareil Connecté</string>
+    <string name="connect_to_device_manage">Se connecter à un appareil pour gérer les canaux / chats</string>
+    <string name="peers_count">Pairs (%1$d)</string>
+    <string name="connect_to_device_view_peers">Se connecter à un appareil pour voir les pairs</string>
+    <string name="set_status">Définir le Statut</string>
+    <string name="cannot_send_messages">Impossible d\'Envoyer des Messages</string>
+    <string name="user_disabled_incoming">Cet utilisateur a désactivé les messages entrants</string>
+    
+    <!-- Compass Calibration -->
+    <string name="compass_calibration_needed">Votre boussole a besoin d\'étalonnage pour des lectures précises. Veuillez suivre les instructions ci-dessous.</string>
+    <string name="compass_calibration_optional">La qualité de votre boussole pourrait être améliorée. Voulez-vous l\'étalonner ?</string>
+    <string name="compass_calibration_instructions">Tenez votre téléphone à niveau et déplacez-le dans un motif en forme de 8 comme indiqué. Gardez-le à l\'écart des objets métalliques et déplacez-le lentement et en douceur.</string>
+    <string name="compass_calibration_complete">Étalonnage terminé ! Votre boussole devrait maintenant être plus précise.</string>
+    <string name="compass_quality_excellent">Excellente</string>
+    <string name="compass_quality_good">Bonne</string>
+    <string name="compass_quality_fair">Moyenne</string>
+    <string name="compass_quality_poor">Mauvaise</string>
+    <string name="compass_quality_unreliable">Non Fiable</string>
+    
+    <!-- Periodic Calibration Status -->
+    <string name="calibration_status_unknown">NON ÉTALONNÉ</string>
+    <string name="calibration_status_poor">ÉTAL MAUVAIS</string>
+    <string name="calibration_status_good">ÉTAL BON</string>
+    <string name="calibration_status_excellent">ÉTAL EXCELLENT</string>
+    <string name="calibration_confidence_format">%1$s (%2$d%%)</string>
+    
+    <!-- Compass Calibration Settings -->
+    <string name="compass_calibration_title">Étalonnage de la Boussole</string>
+    <string name="compass_calibration_status">Statut : %1$s</string>
+    <string name="compass_calibration_quality">Qualité : %1$s</string>
+    <string name="compass_calibration_button">Étalonner la Boussole</string>
+    <string name="compass_calibration_no_sensors">Aucun capteur de boussole disponible</string>
+    <string name="compass_calibration_not_supported">Non pris en charge</string>
+    <string name="compass_calibration_needs_calibration">Nécessite un étalonnage</string>
+    <string name="compass_calibration_fair">Étalonnage correct</string>
+    <string name="compass_calibration_poor">Étalonnage médiocre</string>
+    <string name="compass_calibration_good">Étalonnage bon</string>
+    <string name="compass_calibration_excellent">Étalonnage excellent</string>
+    <string name="compass_calibration_completed">Étalonnage de la boussole terminé avec une qualité %1$s.</string>
+    <string name="compass_calibration_os_applied">L\'étalonnage au niveau du système d\'exploitation a été appliqué.</string>
+    <string name="compass_calibration_cancelled">L\'étalonnage de la boussole a été annulé.</string>
+    <string name="compass_calibration_status_title">Statut d\'Étalonnage de la Boussole</string>
+    <string name="compass_quality_unreliable_title">Qualité de la Boussole : NON FIALE</string>
+    <string name="start_calibration">Commencer l\'Étalonnage</string>
+    <string name="done">Terminé</string>
+    <string name="skip">Passer</string>
+    <string name="checking">Vérification...</string>
+    
+    <!-- Prediction Settings -->
+    <string name="prediction_settings">Paramètres de Prédiction</string>
+    <string name="prediction_model">Modèle de Prédiction</string>
+    <string name="prediction_horizon">Horizon de Prédiction</string>
+    <string name="five_minutes">5 minutes</string>
+    <string name="min_history_entries">Entrées d\'Historique Minimales</string>
+    <string name="three_entries">3 entrées</string>
+    <string name="max_history_age">Âge Maximum de l\'Historique</string>
+    <string name="thirty_minutes">30 minutes</string>
+    <string name="prediction_note">Note : Les niveaux de confiance, les incertitudes de direction et de vitesse sont automatiquement calculés à partir des modèles de mouvement de chaque pair pour des prédictions plus précises.</string>
+    <string name="prediction_statistics">Statistiques de Prédiction</string>
+    
+    <!-- Restore Annotations -->
+    <string name="restore_previous_annotations">Restaurer les Annotations Précédentes ?</string>
+    <string name="restore_annotations_description">Voulez-vous restaurer les annotations de votre session précédente ?</string>
+    <string name="clear">Effacer</string>
+    <string name="restore">Restaurer</string>
+    
+    <!-- Direction Overlay -->
+    <string name="compass">BOUSSOLE</string>
+    <string name="mph">MPH</string>
+    <string name="ft">PIEDS</string>
+    <string name="coordinates_format">%1$.7f, %2$.7f</string>
+    
+    <!-- Weather Forecast Items -->
+    <string name="mon">Lun</string>
+    <string name="temperature_format">%1$d°</string>
+    <string name="humidity_percent">%1$d%%</string>
+    <string name="time_format">%1$s</string>
+    <string name="precipitation_format">%1$.1f</string>
+    <string name="five_min">5m</string>
+    <string name="two_pm">14h</string>
+    
+    <!-- Audio Service -->
+    <string name="audio_streaming">Diffusion Audio</string>
+    <string name="tak_lite_audio_streaming">Diffusion Audio de Tak Lite</string>
+    <string name="voice_chat_active">Chat vocal actif</string>
+    <string name="default_channel">par défaut</string>
+    
+    <!-- Map Types -->
+    <string name="last_used">Dernière Utilisation</string>
+    <string name="street">Rue</string>
+    <string name="satellite">Satellite</string>
+    <string name="hybrid">Hybride</string>
+    
+    <!-- Dark Mode -->
+    <string name="use_phone_setting">Utiliser le Réglage du Téléphone</string>
+    <string name="always_dark">Toujours Sombre</string>
+    <string name="always_light">Toujours Clair</string>
+    
+    <!-- Weather Sources -->
+    <string name="precipitation">Précipitations</string>
+    <string name="clouds">Nuages</string>
+    <string name="wind_speed">Vitesse du Vent</string>
+    <string name="temperature">Température</string>
+    
+    <!-- Mesh Network Types -->
+    <string name="meshtastic">Meshtastic</string>
+    <string name="meshtastic_bluetooth">Meshtastic (Bluetooth)</string>
+    <string name="meshtastic_app">Meshtastic (App)</string>
+    
+    <!-- Missing Localized Strings -->
+    <string name="no_data_short">Aucune donnée</string>
+    <string name="forecast_for_your_location">Prévisions pour votre emplacement</string>
+    <string name="no_weather_alerts_short">Aucune alerte météo</string>
+    <string name="unknown_peer">Pair Inconnu</string>
+    <string name="coverage_analysis_short">Analyse de Couverture</string>
+    <string name="initializing_analysis">Initialisation de l\'analyse...</string>
+    <string name="add_line">Ajouter une Ligne</string>
+    <string name="status_short">Statut</string>
+    <string name="layers">Couches</string>
+    <string name="cryptocurrency_donation">Don en Cryptomonnaie</string>
+    <string name="address_label">Adresse :</string>
+    <string name="loading_address">Chargement de l\'adresse...</string>
+    <string name="qr_code_label">Code QR :</string>
+    <string name="copy_address_to_clipboard">Copier l\'Adresse dans le Presse-papiers</string>
+    <string name="close_button">Fermer</string>
+    <string name="scan_qr_code_instruction">Scannez le code QR avec votre application de portefeuille de cryptomonnaie pour envoyer un don.</string>
+    <string name="manage_channels">Gérer les Canaux</string>
+    <string name="prediction_settings_short">Paramètres de Prédiction</string>
+    <string name="prediction_model_short">Modèle de Prédiction</string>
+    <string name="five_minutes_short">5 minutes</string>
+    <string name="minimum_history_entries">Entrées d\'Historique Minimales</string>
+    <string name="maximum_history_age">Âge Maximum de l\'Historique</string>
+    <string name="thirty_minutes_short">30 minutes</string>
+    <string name="prediction_note_short">Note : Les niveaux de confiance, les incertitudes de direction et de vitesse sont automatiquement calculés à partir des modèles de mouvement de chaque pair pour des prédictions plus précises.</string>
+    <string name="prediction_statistics_short">Statistiques de Prédiction</string>
+    <string name="weather_radar">Radar Météo</string>
+    <string name="peer_predictions">Prédictions de Pairs</string>
+    <string name="start_calibration_short">Commencer l\'Étalonnage</string>
+    <string name="done_short">Terminé</string>
+    <string name="skip_short">Passer</string>
+    <string name="advanced_prediction_settings">Paramètres Avancés de Prédiction</string>
+    <string name="status_checking">Statut : Vérification...</string>
+    <string name="quality_unknown">Qualité : Inconnue</string>
+    <string name="small_craft_advisory_short">Avis pour Petits Navires</string>
+    <string name="until_time_example">Jusqu\'à 3h EST Vendredi</string>
+    <string name="north_winds_expected_example">Vents du nord de 15 à 20 nœuds avec des rafales jusqu\'à 25 nœuds et des mers de 3 à 5 pieds attendus.</string>
+    <string name="mon_short">Lun</string>
+    <string name="from_min_ago">il y a %1$d min</string>
+    <string name="forecast_for_city_placeholder">Prévisions pour [Ville]</string>
+    <string name="current_short">Actuel</string>
+    <string name="minute_short">Minute</string>
+    <string name="hourly_short">Horaire</string>
+    <string name="daily_short">Quotidien</string>
+    <string name="alerts_short">Alertes</string>
+    <string name="partly_cloudy_short">Partiellement Nuageux</string>
+    <string name="feels_like_format">Ressenti %1$s</string>
+    <string name="sunrise_time">%1$s</string>
+    <string name="sunset_time">%1$s</string>
+    <string name="humidity_short">HUMIDITÉ</string>
+    <string name="wind_speed_format">%1$d mph</string>
+    <string name="wind_short">VENT</string>
+    <string name="uv_format">UV %1$.1f</string>
+    <string name="uv_index_short">INDICE UV</string>
+    <string name="pressure_format">%1$d hPa</string>
+    <string name="pressure_short">PRESSION</string>
+    <string name="next_hour_precipitation_short">Précipitations Prochaine Heure</string>
+    <string name="today_short">Aujourd\'hui</string>
+    <string name="seven_day_forecast_short">Prévisions sur 7 Jours</string>
+    <string name="weather_alerts_short">Alertes Météo</string>
+    <string name="loading_weather_short">Chargement de la météo...</string>
+    <string name="weather_unavailable_short">Données météo non disponibles</string>
+    <string name="until_time_format">Jusqu\'à %1$s</string>
+    
+    <!-- Missing Localized Strings -->
+    <string name="meshtastic_app_background_required">Veuillez ouvrir l\'application Meshtastic et la maintenir en cours d\'exécution en arrière-plan.</string>
+    <string name="no_compatible_devices_found">Aucun appareil compatible n\'a été trouvé. Assurez-vous que votre appareil est allumé et réessayez.</string>
+    <string name="location_services_required">Les services de localisation sont nécessaires pour rechercher des appareils Bluetooth. Veuillez activer la localisation.</string>
+    <string name="meshtastic_app_install_prompt">Le protocole Meshtastic AIDL nécessite que l\'application Meshtastic soit installée. Souhaitez-vous l\'installer depuis Google Play ?</string>
+    <string name="delete_channel_confirmation">Êtes-vous sûr de vouloir supprimer le canal \'%1$s\' ?</string>
+    <string name="manage_channels_title">Gérer les Canaux</string>
+    <string name="restore_previous_annotations_title">Restaurer les Annotations Précédentes ?</string>
+    <string name="restore_annotations_description_long">Souhaitez-vous restaurer les annotations de votre session précédente ?</string>
+    <string name="channel_name_hint">Nom du canal</string>
+    
+    <!-- User Status Colors -->
+    <string name="status_red">Rouge</string>
+    <string name="status_yellow">Jaune</string>
+    <string name="status_blue">Bleu</string>
+    <string name="status_orange">Orange</string>
+    <string name="status_violet">Violet</string>
+    <string name="status_green">Vert</string>
+    
+    <!-- Time Formatting -->
+    <string name="time_now">maintenant</string>
+    <string name="time_minute">min</string>
+    <string name="time_hour">h</string>
+    <string name="time_day">j</string>
+    
+    <!-- Notification Strings -->
+    <string name="notification_channel_messages">Messages</string>
+    <string name="notification_channel_description">Notifications pour les nouveaux messages</string>
+    <string name="notification_reply">Répondre</string>
+    <string name="notification_unknown_sender">Inconnu</string>
+    
+    <!-- Purchase Dialog Strings -->
+    <string name="support_tier_1">Niveau de Support 1</string>
+    <string name="support_tier_2">Niveau de Support 2</string>
+    <string name="support_tier_3">Niveau de Support 3</string>
+    <string name="basic_support_tier">Niveau de support de base</string>
+    <string name="enhanced_support_tier">Niveau de support amélioré</string>
+    <string name="premium_support_tier">Niveau de support premium</string>
+    <string name="price_not_available">Prix non disponible</string>
+    <string name="purchase">Acheter</string>
+    <string name="trial_message_active">Les APIs de cartes coûtent de l\'argent pour continuer à fonctionner ! Vous êtes actuellement dans votre période d\'essai gratuite de 7 jours. Votre soutien est crucial pour assurer le développement continu de l\'application. Choisissez n\'importe quelle option payante - nous espérons que vous soutiendrez cette application avec le niveau de paiement le plus élevé que vous puissiez vous permettre. Merci d\'avance.</string>
+    <string name="trial_message_ended">Les APIs de cartes coûtent de l\'argent pour continuer à fonctionner ! Votre période d\'essai est terminée. Votre soutien est crucial pour assurer le développement continu de l\'application. Choisissez n\'importe quelle option payante pour continuer - nous espérons que vous soutiendrez cette application avec le niveau de paiement le plus élevé que vous puissiez vous permettre. Merci d\'avance.</string>
+    <string name="test_mode_message">\n\n[MODE TEST : Utilisation des produits de test Google Play Billing]</string>
+    <string name="offline_message">Vous êtes actuellement hors ligne. Veuillez vérifier votre connexion Internet pour effectuer un achat.</string>
+    
+    <!-- Message Status Strings -->
+    <string name="message_sent_to_network">Message envoyé au réseau</string>
+    <string name="message_received_by_network">Message reçu par le réseau</string>
+    <string name="message_not_confirmed_by_recipient"> mais non confirmé par le destinataire</string>
+    <string name="message_confirmed_by_recipient">Message confirmé reçu par le destinataire</string>
+    <string name="error_communicating_with_mesh">Erreur de communication avec l\'appareil mesh</string>
+    <string name="failed_to_deliver_message">Échec de la livraison du message au réseau</string>
+    
+    <!-- Channel Role Strings -->
+    <string name="channel_role_primary">Primaire</string>
+    <string name="channel_role_secondary">Secondaire</string>
+    <string name="channel_role_disabled">Désactivé</string>
+    <string name="no_messages">Aucun message</string>
+    
+    <!-- Missing Localized Strings Found in Code -->
+    <string name="minutes_format">%1$d minutes</string>
+    <string name="entries_format">%1$d entrées</string>
+    <string name="from_minutes_ago">il y a %1$d min</string>
+    <string name="no_data_dash">--</string>
+    <string name="minute_abbreviation">%1$dm</string>
+    <string name="last_connected_format">Dernière connexion: %1$s (%2$s)</string>
+    <string name="connecting_to_device">Connexion à: %1$s (%2$s)...</string>
+    <string name="bluetooth_permissions_required">Les permissions Bluetooth sont requises pour se connecter.</string>
+    <string name="bluetooth_enabled_connect">Bluetooth activé. Vous pouvez maintenant vous connecter.</string>
+    <string name="bluetooth_must_be_enabled">Bluetooth doit être activé pour se connecter.</string>
+    <string name="connected_device">Connecté: %1$s</string>
+    <string name="meshtastic_app_connected_no_device">App Meshtastic Connectée: Aucun Appareil Connecté</string>
+    <string name="connection_failed">Échec de connexion: %1$s</string>
+    <string name="connecting">Connexion...</string>
+    <string name="config_error">Erreur: %1$s</string>
+    <string name="elevation_profile">Profil d\'Élévation</string>
+    <string name="loading_elevation_data">Chargement des données d\'élévation...</string>
+    <string name="downloading_terrain_data">Téléchargement des données de terrain... (%1$d/%2$d tuiles)</string>
+    <string name="terrain_data_warning">Avertissement: Certaines données de terrain ne sont pas disponibles. Utilisation d\'élévations estimées.</string>
+    <string name="processing_elevation_data">Traitement des données d\'élévation...</string>
+    <string name="no_terrain_data">Aucune donnée de terrain disponible pour cette zone. Affichage du profil estimé.</string>
+    <string name="elevation_summary_format">Distance Totale: %.2f mi | Plage d\'Élévation: %.0f ft | Élévation Moyenne: %.0f ft | Échantillonnage: %.0f m intervalles</string>
+    <string name="speed_format">%.2f mph</string>
+    <string name="compass_quality_format">Qualité de Boussole: %1$s</string>
+    <string name="figure_8_detected">Figure-8 détectée! Continuez...</string>
+    <string name="distance_miles_format">%1$.1fmi</string>
+    <string name="packet_summary_format">Reçu %1$s de %2$s %3$s%4$d sec il y a.</string>
+    <string name="members_count_format">%1$d membres</string>
+    <string name="crypto_donation_title_format">Don %1$s (%2$s)</string>
+    <string name="temperature_degree_format">%1$d°</string>
+    <string name="humidity_percent_format">%1$d%%</string>
+    <string name="time_pm_format">%1$d PM</string>
+    <string name="precipitation_format_decimal">%.1f</string>
+    <string name="five_minutes_abbreviation">5m</string>
+    <string name="two_pm_example">2 PM</string>
+    <string name="seventy_five_degrees">75°</string>
+    <string name="sixty_five_degrees">65°</string>
+    <string name="twenty_percent">20%</string>
+    <string name="seventy_two_degrees">72°</string>
+    <string name="sixty_five_percent">65%</string>
+    <string name="zero_point_five">0.5</string>
+    <string name="one_point_zero">1.0</string>
+    <string name="zero_point_nine">0.9</string>
+    <string name="prediction_overview">📊 APERÇU DE PRÉDICTION</string>
+    <string name="active_predictions_format">Prédictions Actives: %1$d/%2$d pairs</string>
+    <string name="success_rate_format">Taux de Réussite: %1$d%%</string>
+    <string name="average_confidence_format">Confiance Moyenne: %1$d%%</string>
+    <string name="average_speed_format">Vitesse Moyenne: %1$d mph</string>
+    <string name="prediction_age_format">Âge de Prédiction: %1$d min</string>
+    <string name="confidence_distribution">🎯 DISTRIBUTION DE CONFIANCE</string>
+    <string name="confidence_level_format">%1$s: %2$d (%3$d%%)</string>
+    <string name="no_predictions_available">Aucune prédiction disponible</string>
+    <string name="data_quality">📈 QUALITÉ DES DONNÉES</string>
+    <string name="avg_history_entries_format">Entrées d\'Historique Moyennes: %1$d</string>
+    <string name="avg_history_age_format">Âge d\'Historique Moyen: %1$d min</string>
+    <string name="update_frequency_format">Fréquence de Mise à Jour: %1$ds</string>
+    <string name="insufficient_data_format">Données Insuffisantes: %1$d pairs</string>
+</resources>

@@ -285,7 +285,7 @@ class ChannelController @Inject constructor(
                 peerAdapter?.submitList(sortedPeers)
                 
                 // Update peer count in header
-                overlay.findViewById<TextView>(R.id.peerListTitle)?.text = "Peers (${filteredPeers.size})"
+                overlay.findViewById<TextView>(R.id.peerListTitle)?.text = activity.getString(R.string.peers_count, filteredPeers.size)
             }
         }
 
@@ -345,13 +345,13 @@ class ChannelController @Inject constructor(
         val dialogView = activity.layoutInflater.inflate(R.layout.dialog_add_channel, null)
         val channelNameInput = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.channelNameInput)
         com.google.android.material.dialog.MaterialAlertDialogBuilder(activity)
-            .setTitle("Add Channel")
+            .setTitle(activity.getString(R.string.add_channel))
             .setView(dialogView)
-            .setPositiveButton("Add") { _, _ ->
+            .setPositiveButton(activity.getString(R.string.add)) { _, _ ->
                 val name = channelNameInput.text?.toString() ?: return@setPositiveButton
                 channelViewModel.createChannel(name)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(activity.getString(R.string.cancel), null)
             .show()
     }
 } 

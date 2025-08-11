@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
+import com.tak.lite.R
 import com.tak.lite.data.model.ChannelMessage
 import com.tak.lite.data.model.DirectMessageChannel
 import com.tak.lite.network.MeshProtocolProvider
@@ -113,7 +114,7 @@ class MessageRepository @Inject constructor(
     fun getCurrentUserShortName(): String {
         val protocol = meshProtocolProvider.protocol.value
         val nodeId = protocol.localNodeIdOrNickname.value
-        return protocol.getPeerName(nodeId ?: "") ?: "Unknown Peer"
+        return protocol.getPeerName(nodeId ?: "") ?: context.getString(R.string.unknown_peer)
     }
 
     fun getCurrentUserId(): String? {

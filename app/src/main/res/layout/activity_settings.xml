@@ -43,7 +43,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Mesh Network Adapter"
+                        android:text="@string/mesh_network_adapter"
                         android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
                         android:paddingBottom="8dp" />
 
@@ -51,7 +51,7 @@
                         android:id="@+id/meshNetworkTypeLayout"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="Select mesh network adapter"
+                        android:hint="@string/select_mesh_network_adapter"
                         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
                         app:boxBackgroundMode="outline">
 
@@ -72,7 +72,7 @@
                         android:id="@+id/bluetoothConnectButton"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Connect to Meshtastic via Bluetooth"
+                        android:text="@string/connect_bluetooth"
                         android:layout_marginTop="8dp"
                         android:layout_marginBottom="4dp" />
 
@@ -80,7 +80,7 @@
                         android:id="@+id/aidlConnectButton"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Connect"
+                        android:text="@string/connect"
                         android:layout_marginTop="8dp"
                         android:layout_marginBottom="4dp"
                         android:visibility="gone" />
@@ -89,7 +89,7 @@
                         android:id="@+id/unlockAppButton"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Unlock App Features"
+                        android:text="@string/unlock_app_features"
                         android:layout_marginTop="8dp"
                         android:layout_marginBottom="4dp"
                         android:visibility="gone"
@@ -99,7 +99,7 @@
                         android:id="@+id/bluetoothStatusText"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Not connected"
+                        android:text="@string/not_connected"
                         android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
                         android:paddingTop="4dp"
                         android:paddingBottom="4dp" />
@@ -108,7 +108,7 @@
                         android:id="@+id/aidlStatusText"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Not connected"
+                        android:text="@string/not_connected"
                         android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
                         android:paddingTop="4dp"
                         android:paddingBottom="4dp"
@@ -126,7 +126,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:visibility="gone"
-                        android:text="Downloading config..." />
+                        android:text="@string/downloading_config" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
@@ -146,7 +146,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Background Processing"
+                        android:text="@string/background_processing"
                         android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
                         android:paddingBottom="8dp" />
 
@@ -154,7 +154,7 @@
                         android:id="@+id/backgroundProcessingSwitch"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Enable Background Processing (keep mesh connection active when app is in background)" />
+                        android:text="@string/enable_background_processing" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
@@ -175,7 +175,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Keep Screen Awake"
+                        android:text="@string/keep_screen_awake"
                         android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
                         android:paddingBottom="8dp" />
 
@@ -183,7 +183,7 @@
                         android:id="@+id/keepScreenAwakeSwitch"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Prevent the screen from sleeping while app is open"
+                        android:text="@string/prevent_screen_sleep"
                         android:paddingTop="4dp"
                         android:paddingBottom="4dp" />
                 </LinearLayout>
@@ -206,7 +206,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Show Packet Summary"
+                        android:text="@string/show_packet_summary"
                         android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
                         android:paddingBottom="8dp" />
 
@@ -214,7 +214,7 @@
                         android:id="@+id/showPacketSummarySwitch"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Show overlay with last 3 received packets"
+                        android:text="@string/show_packet_overlay"
                         android:paddingTop="4dp"
                         android:paddingBottom="4dp" />
                 </LinearLayout>
@@ -236,7 +236,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Location Prediction"
+                        android:text="@string/location_prediction"
                         android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
                         android:paddingBottom="8dp" />
 
@@ -244,13 +244,13 @@
                         android:id="@+id/showPredictionOverlaySwitch"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Show predicted location for peers" />
+                        android:text="@string/show_predicted_location" />
 
                     <TextView
                         android:id="@+id/predictionAdvancedLink"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Advanced"
+                        android:text="@string/advanced"
                         android:textColor="?attr/colorPrimary"
                         android:textSize="14sp"
                         android:padding="8dp"
@@ -280,7 +280,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Weather Settings"
+                        android:text="@string/weather_settings"
                         android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
                         android:paddingBottom="8dp" />
 
@@ -288,12 +288,12 @@
                         android:id="@+id/weatherEnabledSwitch"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Enable Weather Layer" />
+                        android:text="@string/enable_weather_layer" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Weather Source"
+                        android:text="@string/weather_source"
                         android:textSize="16sp"
                         android:textStyle="bold"
                         android:layout_marginTop="16dp"
@@ -322,7 +322,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Opacity"
+                        android:text="@string/opacity"
                         android:textSize="16sp"
                         android:textStyle="bold"
                         android:layout_marginTop="16dp"
@@ -389,7 +389,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Coverage Analysis"
+                        android:text="@string/coverage_analysis"
                         android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
                         android:paddingBottom="8dp" />
 
@@ -397,13 +397,13 @@
                         android:id="@+id/includePeersInCoverageSwitch"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Include Peers in Coverage"
+                        android:text="@string/include_peers_in_coverage"
                         android:layout_marginBottom="16dp" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Level of Detail"
+                        android:text="@string/level_of_detail"
                         android:textSize="16sp"
                         android:textStyle="bold"
                         android:layout_marginBottom="8dp" />
@@ -418,28 +418,28 @@
                             android:id="@+id/coverageDetailLow"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:text="Low - 3x coarser resolution, fastest analysis"
+                            android:text="@string/low_detail"
                             android:layout_marginBottom="4dp" />
 
                         <RadioButton
                             android:id="@+id/coverageDetailMedium"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:text="Medium - 1.5x coarser resolution, balanced performance"
+                            android:text="@string/medium_detail"
                             android:layout_marginBottom="4dp" />
 
                         <RadioButton
                             android:id="@+id/coverageDetailHigh"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:text="High - Full resolution, most detailed analysis" />
+                            android:text="@string/high_detail" />
 
                     </RadioGroup>
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Antenna Heights"
+                        android:text="@string/antenna_heights"
                         android:textSize="16sp"
                         android:textStyle="bold"
                         android:layout_marginTop="16dp"
@@ -501,7 +501,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Map Settings"
+                        android:text="@string/map_settings"
                         android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
                         android:paddingBottom="8dp" />
 
@@ -579,7 +579,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Minimum Show Line Segment Dist. (miles)"
+                        android:text="@string/min_line_segment_dist"
                         android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
                         android:paddingBottom="8dp" />
 
@@ -617,7 +617,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="End of Transmission Beep"
+                        android:text="@string/end_transmission_beep"
                         android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
                         android:paddingBottom="8dp" />
 
@@ -625,7 +625,7 @@
                         android:id="@+id/endBeepSwitch"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Enable double beep at end of transmission"
+                        android:text="@string/enable_double_beep"
                         android:paddingTop="4dp"
                         android:paddingBottom="4dp" />
                 </LinearLayout>
@@ -647,7 +647,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Simulate Peers"
+                        android:text="@string/simulate_peers"
                         android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
                         android:paddingBottom="8dp" />
 
@@ -655,7 +655,7 @@
                         android:id="@+id/simulatePeersSwitch"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Enable simulated peers on map" />
+                        android:text="@string/enable_simulated_peers" />
 
                     <com.google.android.material.textfield.TextInputLayout
                         android:id="@+id/simulatedPeersCountLayout"
@@ -692,7 +692,7 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Peers will tend to appear around this distance from your location with some natural variability."
+                        android:text="@string/peers_tend_to_appear"
                         android:textAppearance="@style/TextAppearance.Material3.BodySmall"
                         android:textColor="?android:attr/textColorSecondary"
                         android:layout_marginTop="4dp" />
@@ -723,7 +723,7 @@
                         android:id="@+id/compassStatusText"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Status: Checking..."
+                        android:text="@string/status_checking"
                         android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
                         android:paddingTop="4dp"
                         android:paddingBottom="8dp" />
@@ -732,7 +732,7 @@
                         android:id="@+id/compassQualityText"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Quality: Unknown"
+                        android:text="@string/quality_unknown"
                         android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
                         android:paddingBottom="8dp" />
 

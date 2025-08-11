@@ -65,7 +65,7 @@ class ChannelManagementActivity : AppCompatActivity() {
 
     private fun showAddChannelDialog() {
         val editText = EditText(this).apply {
-            hint = "Channel name"
+            hint = getString(R.string.channel_name_hint)
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_WORDS
         }
         
@@ -86,12 +86,12 @@ class ChannelManagementActivity : AppCompatActivity() {
         }
         
         val dialog = MaterialAlertDialogBuilder(this)
-            .setTitle("Add Channel")
+            .setTitle(getString(R.string.add_channel))
             .setView(editText)
-            .setPositiveButton("Add") { _, _ ->
+            .setPositiveButton(getString(R.string.add)) { _, _ ->
                 createChannel()
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .create()
         
         // Show the dialog and request focus for the EditText
@@ -127,12 +127,12 @@ class ChannelManagementActivity : AppCompatActivity() {
         }
         
         val dialog = MaterialAlertDialogBuilder(this)
-            .setTitle("Edit Channel")
+            .setTitle(getString(R.string.edit_channel))
             .setView(editText)
-            .setPositiveButton("Save") { _, _ ->
+            .setPositiveButton(getString(R.string.save)) { _, _ ->
                 saveChannel()
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .create()
         
         // Show the dialog and request focus for the EditText
@@ -142,12 +142,12 @@ class ChannelManagementActivity : AppCompatActivity() {
 
     private fun showDeleteChannelDialog(channel: IChannel) {
         MaterialAlertDialogBuilder(this)
-            .setTitle("Delete Channel")
-            .setMessage("Are you sure you want to delete channel '${channel.name}'?")
-            .setPositiveButton("Delete") { _, _ ->
+            .setTitle(getString(R.string.delete_channel))
+            .setMessage(getString(R.string.delete_channel_confirmation, channel.name))
+            .setPositiveButton(getString(R.string.delete)) { _, _ ->
                 viewModel.deleteChannel(channel.id)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 } 

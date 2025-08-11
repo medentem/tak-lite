@@ -194,7 +194,7 @@ class PeerAdapter(
                         onChatClick(peer)
                     } catch (e: Exception) {
                         Log.e("PeerAdapter", "Error starting direct message: ${e.message}", e)
-                        Toast.makeText(itemView.context, "Failed to start direct message", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(itemView.context, itemView.context.getString(R.string.failed_to_start_direct_message), Toast.LENGTH_SHORT).show()
                     }
                 }
             }

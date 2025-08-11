@@ -501,7 +501,7 @@ class SwipeableOverlayManager @Inject constructor(
                 val ageMinutes = (currentTime - lastUpdated) / (1000 * 60)
                 weatherAgeText.text = "from ${ageMinutes} min ago"
             } else {
-                weatherAgeText.text = "No data"
+                weatherAgeText.text = context.getString(R.string.no_data_short)
             }
         }
         
@@ -555,7 +555,7 @@ class SwipeableOverlayManager @Inject constructor(
                     userLongitude
                 )
             } else {
-                "Forecast for your location"
+                context.getString(R.string.forecast_for_your_location)
             }
             findViewById<android.widget.TextView>(R.id.cityText).text = locationDescription
         }
@@ -655,7 +655,7 @@ class SwipeableOverlayManager @Inject constructor(
             
             if (alertsData.isEmpty()) {
                 val noAlertsText = android.widget.TextView(context).apply {
-                    text = "No weather alerts"
+                    text = context.getString(R.string.no_weather_alerts_short)
                     textSize = 12f
                     setTextColor(Color.parseColor("#B0B0B0"))
                     gravity = android.view.Gravity.CENTER

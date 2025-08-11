@@ -18,6 +18,7 @@
 package com.geeksville.mesh
 
 import android.widget.EditText
+import com.tak.lite.R
 
 /**
  * When printing strings to logs sometimes we want to print useful debugging information about users
@@ -50,14 +51,14 @@ fun Any.toPIIString() = this.toOneLineString()
 
 fun ByteArray.toHexString() = joinToString("") { "%02x".format(it) }
 
-fun formatAgo(lastSeenUnix: Int, currentTimeMillis: Long = System.currentTimeMillis()): String {
+fun formatAgo(lastSeenUnix: Int, context: android.content.Context, currentTimeMillis: Long = System.currentTimeMillis()): String {
     val currentTime = (currentTimeMillis / 1000).toInt()
     val diffMin = (currentTime - lastSeenUnix) / 60
     return when {
-        diffMin < 1 -> "now"
-        diffMin < 60 -> diffMin.toString() + " min"
-        diffMin < 2880 -> (diffMin / 60).toString() + " h"
-        diffMin < 1440000 -> (diffMin / (60 * 24)).toString() + " d"
+        diffMin < 1 -> context.getString(R.string.time_now)
+        diffMin < 60 -> diffMin.toString() + " " + context.getString(R.string.time_minute)
+        diffMin < 2880 -> (diffMin / 60).toString() + " " + context.getString(R.string.time_hour)
+        diffMin < 1440000 -> (diffMin / (60 * 24)).toString() + " " + context.getString(R.string.time_day)
         else -> "?"
     }
 }

@@ -146,22 +146,22 @@ class MessageAdapter(
             var text = "";
             when (status) {
                 MessageStatus.SENT -> {
-                    text = "Message sent to the network"
+                    text = view.context.getString(R.string.message_sent_to_network)
                 }
                 MessageStatus.DELIVERED -> {
-                    text = "Message received by the network"
+                    text = view.context.getString(R.string.message_received_by_network)
                     if (isDirectMessage) {
-                        text += " but not confirmed by target recipient"
+                        text += view.context.getString(R.string.message_not_confirmed_by_recipient)
                     }
                 }
                 MessageStatus.RECEIVED -> {
-                    text = "Message confirmed received by the target recipient"
+                    text = view.context.getString(R.string.message_confirmed_by_recipient)
                 }
                 MessageStatus.ERROR -> {
-                    text = "Error communicating with mesh device"
+                    text = view.context.getString(R.string.error_communicating_with_mesh)
                 }
                 MessageStatus.FAILED -> {
-                    text = "Failed to deliver message to the network"
+                    text = view.context.getString(R.string.failed_to_deliver_message)
                 }
                 else -> { /* keep all outline */ }
             }
