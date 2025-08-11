@@ -21,6 +21,9 @@ build/
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 
+# Release files
+app/release/
+
 # Local configuration file (sdk path, etc)
 local.properties
 
