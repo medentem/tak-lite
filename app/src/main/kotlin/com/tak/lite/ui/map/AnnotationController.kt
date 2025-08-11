@@ -283,8 +283,6 @@ class AnnotationController(
                     val bitmap = createPoiIconBitmap(shape, color)
                     style.addImage(iconName, bitmap)
                     Log.d("PoiDebug", "Generated icon: $iconName")
-                } else {
-                    Log.d("PoiDebug", "Icon already exists: $iconName")
                 }
             }
         }
