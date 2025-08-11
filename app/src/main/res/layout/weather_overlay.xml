@@ -36,6 +36,17 @@
             android:tint="#B0B0B0" />
     </LinearLayout>
 
+    <!-- Add city name TextView here, after header and before tabs -->
+    <TextView
+        android:id="@+id/cityText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Forecast for [City]"
+        android:textSize="14sp"
+        android:textColor="#F0F0F0"
+        android:gravity="center"
+        android:layout_marginBottom="8dp" />
+
     <!-- Tab Indicators -->
     <HorizontalScrollView
         android:layout_width="match_parent"

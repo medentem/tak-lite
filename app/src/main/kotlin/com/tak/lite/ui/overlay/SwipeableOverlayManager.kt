@@ -4,6 +4,7 @@ import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Color
+import android.location.Geocoder
 import android.util.Log
 import android.view.GestureDetector
 import android.view.LayoutInflater
@@ -20,6 +21,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -109,27 +112,34 @@ class SwipeableOverlayManager @Inject constructor(
     }
     
     private fun setupGestureDetection() {
+        var isHorizontalGesture = false
         var switchedThisGesture = false
         val gestureDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
             override fun onDown(e: MotionEvent): Boolean {
-                // Return true so we receive subsequent gestures (fling/scroll)
+                isHorizontalGesture = false
                 switchedThisGesture = false
                 return true
             }
             override fun onScroll(e1: MotionEvent?, e2: MotionEvent, distanceX: Float, distanceY: Float): Boolean {
-                if (e1 == null || switchedThisGesture) return false
+                if (e1 == null) return false
+                
                 val diffX = e2.x - e1.x
                 val diffY = e2.y - e1.y
-                if (kotlin.math.abs(diffX) > kotlin.math.abs(diffY) && kotlin.math.abs(diffX) > 60) {
-                    if (diffX > 0 && currentPage > 0) {
-                        showPage(currentPage - 1)
-                        switchedThisGesture = true
-                        return true
-                    } else if (diffX < 0 && currentPage < totalPages - 1) {
-                        showPage(currentPage + 1)
-                        switchedThisGesture = true
-                        return true
+                
+                if (Math.abs(diffX) > Math.abs(diffY)) {
+                    isHorizontalGesture = true
+                    
+                    // Attempt to switch page if threshold met
+                    if (Math.abs(diffX) > 60 && !switchedThisGesture) {
+                        if (diffX > 0 && currentPage > 0) {
+                            showPage(currentPage - 1)
+                            switchedThisGesture = true
+                        } else if (diffX < 0 && currentPage < totalPages - 1) {
+                            showPage(currentPage + 1)
+                            switchedThisGesture = true
+                        }
                     }
+                    return true  // Consume all horizontal scrolls
                 }
                 return false
             }
@@ -139,21 +149,19 @@ class SwipeableOverlayManager @Inject constructor(
                 val diffX = e2.x - e1.x
                 val diffY = e2.y - e1.y
                 
-                // Check if horizontal swipe is more significant than vertical
                 if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 60) {
                     if (diffX > 0) {
-                        // Swipe right - go to previous page
                         if (currentPage > 0) {
                             showPage(currentPage - 1)
                             return true
                         }
                     } else {
-                        // Swipe left - go to next page
                         if (currentPage < totalPages - 1) {
                             showPage(currentPage + 1)
                             return true
                         }
                     }
+                    return true  // Consume fling even if no page change
                 }
                 return false
             }
@@ -162,8 +170,10 @@ class SwipeableOverlayManager @Inject constructor(
         fun attachSwipeListener(view: View) {
             view.setOnTouchListener { _, event ->
                 val handled = gestureDetector.onTouchEvent(event)
-                // Do not consume by default so child interactions still work; only consume if we switched page
-                handled && switchedThisGesture
+                if (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL) {
+                    isHorizontalGesture = false
+                }
+                handled || isHorizontalGesture  // Consume if handled or during horizontal gesture
             }
         }
 
@@ -516,6 +526,21 @@ class SwipeableOverlayManager @Inject constructor(
                 2 -> updateHourlyForecast(weatherData.hourly.take(8)) // Show next 8 hours
                 3 -> updateDailyForecast(weatherData.daily.take(7)) // Show 7 days
                 4 -> updateAlerts(weatherData.alerts ?: emptyList())
+            }
+
+            // Fetch and display city name
+            scope.launch {
+                val city = withContext(Dispatchers.IO) {
+                    val geocoder = Geocoder(context, Locale.getDefault())
+                    try {
+                        val addresses = geocoder.getFromLocation(weatherData.lat, weatherData.lon, 1)
+                        addresses?.firstOrNull()?.locality ?: addresses?.firstOrNull()?.adminArea ?: "Unknown Location"
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Geocoding failed", e)
+                        "Unknown Location"
+                    }
+                }
+                findViewById<android.widget.TextView>(R.id.cityText).text = "Forecast for $city"
             }
         }
         
