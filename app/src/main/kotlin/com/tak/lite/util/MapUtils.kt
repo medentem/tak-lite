@@ -14,6 +14,8 @@ import kotlin.math.tan
 // Track missing tile logging to reduce spam
 private val missingTileLogCount = mutableMapOf<String, Int>()
 
+private const val METERS_TO_MILES = 1609.344
+
 suspend fun saveTilePngWithType(context: Context, type: String, zoom: Int, x: Int, y: Int, bytes: ByteArray): Boolean = withContext(Dispatchers.IO) {
     try {
         val dir = File(context.filesDir, "tiles/$type/$zoom/$x")
@@ -93,6 +95,10 @@ fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
     }
     
     return distance
+}
+
+fun haversineMiles(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+    return haversine(lat1, lon1, lat2, lon2) / METERS_TO_MILES
 }
 
 /**

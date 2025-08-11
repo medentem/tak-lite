@@ -199,6 +199,10 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
         mapView = findViewById(R.id.mapView)
 
         val lastLocation = loadLastLocation()
+        // Set initial user location in SwipeableOverlayManager if available
+        lastLocation?.let { location ->
+            swipeableOverlayManager.updateUserLocation(location.first, location.second)
+        }
         val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
         val startupMapMode = prefs.getString("startup_map_mode", "LAST_USED")
         val lastUsedMapModeName = prefs.getString("last_used_map_mode", null)
@@ -308,6 +312,8 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                 }
                 // --- NEW: propagate phone location to ViewModel ---
                 viewModel.setPhoneLocation(org.maplibre.android.geometry.LatLng(location.latitude, location.longitude))
+                // --- Update SwipeableOverlayManager with user location for relative positioning ---
+                swipeableOverlayManager.updateUserLocation(location.latitude, location.longitude)
             },
             onPermissionDenied = {
                 Toast.makeText(this, "Location permission not granted", Toast.LENGTH_SHORT).show()
@@ -427,6 +433,8 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                     runOnUiThread {
                         map.moveCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(latLng, targetZoom))
                     }
+                    // Update SwipeableOverlayManager with current location
+                    swipeableOverlayManager.updateUserLocation(location.latitude, location.longitude)
                 }
                 isTrackingLocation = true
                 map.locationComponent.cameraMode = org.maplibre.android.location.modes.CameraMode.TRACKING

@@ -10,6 +10,7 @@ import com.tak.lite.data.model.VelocityVector
 import com.tak.lite.model.LatLngSerializable
 import com.tak.lite.model.PeerLocationEntry
 import com.tak.lite.model.PeerLocationHistory
+import com.tak.lite.util.CoordinateUtils.calculateBearing
 import com.tak.lite.util.haversine
 import javax.inject.Inject
 import kotlin.math.atan2

@@ -4,6 +4,7 @@ import android.util.Log
 import com.tak.lite.data.model.Quadruple
 import com.tak.lite.di.IPeerLocationPredictor
 import com.tak.lite.model.PeerLocationEntry
+import com.tak.lite.util.CoordinateUtils.calculateBearing
 import com.tak.lite.util.haversine
 import kotlin.math.PI
 import kotlin.math.asin
@@ -157,21 +158,6 @@ abstract class BasePeerLocationPredictor : IPeerLocationPredictor {
         }.average()
 
         return variance
-    }
-
-    /**
-     * Calculate bearing between two points
-     */
-    internal fun calculateBearing(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-        val dLon = (lon2 - lon1) * DEG_TO_RAD
-        val lat1Rad = lat1 * DEG_TO_RAD
-        val lat2Rad = lat2 * DEG_TO_RAD
-
-        val y = sin(dLon) * cos(lat2Rad)
-        val x = cos(lat1Rad) * sin(lat2Rad) - sin(lat1Rad) * cos(lat2Rad) * cos(dLon)
-        val bearing = atan2(y, x) * RAD_TO_DEG
-
-        return (bearing + 360) % 360
     }
 
     /**

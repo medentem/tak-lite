@@ -1,21 +1,19 @@
 package com.tak.lite.repository
 
+// Standard Android networking - no additional dependencies
 import android.content.Context
 import android.util.Log
 import com.tak.lite.BuildConfig
-import com.tak.lite.data.model.WeatherResponse
 import com.tak.lite.data.model.WeatherUiState
 import com.tak.lite.network.WeatherApiService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-// Standard Android networking - no additional dependencies
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton

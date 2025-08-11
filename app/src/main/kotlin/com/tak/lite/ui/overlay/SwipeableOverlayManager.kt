@@ -4,7 +4,6 @@ import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Color
-import android.location.Geocoder
 import android.util.Log
 import android.view.GestureDetector
 import android.view.LayoutInflater
@@ -16,13 +15,13 @@ import com.tak.lite.R
 import com.tak.lite.data.model.WeatherUiState
 import com.tak.lite.repository.WeatherRepository
 import com.tak.lite.util.BillingManager
+import com.tak.lite.util.LocationUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -40,6 +39,11 @@ class SwipeableOverlayManager @Inject constructor(
     private lateinit var pageIndicator2: View
     private lateinit var directionOverlayContainer: LinearLayout
     private lateinit var weatherOverlayContainer: LinearLayout
+    
+    // User's current location for relative positioning
+    private var userLatitude: Double = 0.0
+    private var userLongitude: Double = 0.0
+    private var hasUserLocation: Boolean = false
     
     // Direction overlay views
     private lateinit var directionOverlayView: View
@@ -65,6 +69,16 @@ class SwipeableOverlayManager @Inject constructor(
     
     // Callback for when weather page is opened
     private var onWeatherPageOpenedCallback: (() -> Unit)? = null
+    
+    /**
+     * Update the user's current location for relative positioning
+     */
+    fun updateUserLocation(latitude: Double, longitude: Double) {
+        userLatitude = latitude
+        userLongitude = longitude
+        hasUserLocation = true
+        Log.d(TAG, "Updated user location: ($latitude, $longitude)")
+    }
     
     fun initialize(container: LinearLayout) {
         overlayContainer = container
@@ -173,7 +187,8 @@ class SwipeableOverlayManager @Inject constructor(
                 if (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL) {
                     isHorizontalGesture = false
                 }
-                handled || isHorizontalGesture  // Consume if handled or during horizontal gesture
+                // Only consume if we actually handled a horizontal gesture, not just any touch
+                handled && isHorizontalGesture
             }
         }
 
@@ -528,20 +543,21 @@ class SwipeableOverlayManager @Inject constructor(
                 4 -> updateAlerts(weatherData.alerts ?: emptyList())
             }
 
-            // Fetch and display city name
-            scope.launch {
-                val city = withContext(Dispatchers.IO) {
-                    val geocoder = Geocoder(context, Locale.getDefault())
-                    try {
-                        val addresses = geocoder.getFromLocation(weatherData.lat, weatherData.lon, 1)
-                        addresses?.firstOrNull()?.locality ?: addresses?.firstOrNull()?.adminArea ?: "Unknown Location"
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Geocoding failed", e)
-                        "Unknown Location"
-                    }
-                }
-                findViewById<android.widget.TextView>(R.id.cityText).text = "Forecast for $city"
+            // Display relative location description
+            val locationDescription = if (hasUserLocation) {
+                // Debug location calculations if needed (uncomment to enable)
+                // LocationUtils.debugLocationCalculations(userLatitude, userLongitude, weatherData.lat, weatherData.lon)
+                
+                LocationUtils.getRelativeLocationDescription(
+                    weatherData.lat, 
+                    weatherData.lon, 
+                    userLatitude, 
+                    userLongitude
+                )
+            } else {
+                "Forecast for your location"
             }
+            findViewById<android.widget.TextView>(R.id.cityText).text = locationDescription
         }
         
         private fun updateMinutelyForecast(minutelyData: List<com.tak.lite.data.model.MinutelyForecast>) {
