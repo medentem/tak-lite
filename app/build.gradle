@@ -40,7 +40,7 @@ android {
         buildConfigField "String", "OPENWEATHERFORECAST_API_KEY", "\"${owfApiKey}\""
         
         // Localization support
-        resConfigs "en", "es", "fr"
+        resConfigs "en", "es", "fr", "it", "pt", "de", "rm"
     }
     
     buildTypes {
