@@ -1,11 +1,10 @@
 package com.tak.lite.util
 
 import android.content.Context
-import android.content.SharedPreferences
 import android.content.res.Configuration
-import android.content.res.Resources
 import android.os.Build
-import java.util.*
+import com.tak.lite.R
+import java.util.Locale
 
 /**
  * Utility class to manage app locale settings.
