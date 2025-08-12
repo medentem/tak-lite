@@ -135,7 +135,7 @@ object LocaleManager {
      * Get all available languages with their display names
      */
     fun getAvailableLanguages(context: Context): List<Pair<Language, String>> {
-        return Language.values().map { language ->
+        return Language.entries.map { language ->
             language to getLanguageDisplayName(context, language)
         }
     }
