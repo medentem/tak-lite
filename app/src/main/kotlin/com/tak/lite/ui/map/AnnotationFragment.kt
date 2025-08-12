@@ -150,6 +150,7 @@ class AnnotationFragment : Fragment(), LayersTarget {
                     kotlinx.coroutines.delay(100) // 100ms delay
                     // Restore weather overlay first so annotation layers render above it
                     weatherLayerManager?.restore()
+                    annotationController.onStyleChanged()
                     annotationController.setupAnnotationOverlay(mapLibreMap)
                     annotationController.renderAllAnnotations(mapLibreMap)
                     

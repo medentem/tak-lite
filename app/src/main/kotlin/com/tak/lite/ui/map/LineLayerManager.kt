@@ -9,8 +9,8 @@ import android.graphics.Path
 import android.util.Log
 import com.tak.lite.model.AnnotationColor
 import com.tak.lite.model.MapAnnotation
-import com.tak.lite.util.haversine
 import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.maps.Style
 import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.PropertyFactory
@@ -41,29 +41,28 @@ class LineLayerManager(
         const val LINE_ARROW_LAYER = "annotation-line-arrows-layer"
     }
 
-    private var isInitialized = false
     private val lineFeatureConverter = LineFeatureConverter(mapLibreMap, context)
 
     /**
      * Setup line layers in the map style with separate sources
      */
-    fun setupLineLayers() {
-        if (isInitialized) {
-            Log.d(TAG, "Line layers already initialized")
-            return
-        }
+    fun setupLineLayers(style: Style) {
+        try {
+            // Create separate sources for different layer types
+            val lineSource = style.getSource(LINE_SOURCE)
+            if (lineSource == null) {
+                style.addSource(GeoJsonSource(LINE_SOURCE, FeatureCollection.fromFeatures(arrayOf())))
+            }
 
-        mapLibreMap.getStyle { style ->
-            try {
-                // Create separate sources for different layer types
-                val lineSource = GeoJsonSource(LINE_SOURCE, FeatureCollection.fromFeatures(arrayOf()))
-                val arrowSource = GeoJsonSource(LINE_ARROW_SOURCE, FeatureCollection.fromFeatures(arrayOf()))
-                
-                style.addSource(lineSource)
-                style.addSource(arrowSource)
-                Log.d(TAG, "Added separate line sources: $LINE_SOURCE, $LINE_ARROW_SOURCE")
+            val arrowSource = style.getSource(LINE_ARROW_SOURCE)
+            if(arrowSource == null) {
+                style.addSource(GeoJsonSource(LINE_ARROW_SOURCE, FeatureCollection.fromFeatures(arrayOf())))
+            }
 
-                // Create invisible hit area layer for easier line tapping (add this first so it's behind the visible line)
+            Log.d(TAG, "Added separate line sources: $LINE_SOURCE, $LINE_ARROW_SOURCE")
+
+            // Create invisible hit area layer for easier line tapping (add this first so it's behind the visible line)
+            if (style.getLayer(LINE_HIT_AREA_LAYER) == null) {
                 val hitAreaLayer = LineLayer(LINE_HIT_AREA_LAYER, LINE_SOURCE)
                     .withProperties(
                         PropertyFactory.lineColor("#FFFFFF"), // Transparent
@@ -82,17 +81,29 @@ class LineLayerManager(
                         PropertyFactory.lineDasharray(
                             Expression.match(
                                 Expression.get("style"),
-                                Expression.literal("dashed"), Expression.literal(arrayOf(20, 20)),
-                                Expression.literal("solid"), Expression.literal(arrayOf(0)),
+                                Expression.literal("dashed"),
+                                Expression.literal(arrayOf(20, 20)),
+                                Expression.literal("solid"),
+                                Expression.literal(arrayOf(0)),
                                 Expression.literal(arrayOf(0))
                             )
                         )
                     )
-                    .withFilter(Expression.gte(Expression.zoom(), Expression.literal(8f))) // Only show hit area at zoom 8+
+                    .withFilter(
+                        Expression.gte(
+                            Expression.zoom(),
+                            Expression.literal(8f)
+                        )
+                    ) // Only show hit area at zoom 8+
                 style.addLayer(hitAreaLayer)
-                Log.d(TAG, "Added line hit area layer: $LINE_HIT_AREA_LAYER with min zoom filter")
+                Log.d(
+                    TAG,
+                    "Added line hit area layer: $LINE_HIT_AREA_LAYER with min zoom filter"
+                )
+            }
 
-                // Create single line layer with conditional dash array
+            // Create single line layer with conditional dash array
+            if (style.getLayer(LINE_LAYER) == null) {
                 val lineLayer = LineLayer(LINE_LAYER, LINE_SOURCE)
                     .withProperties(
                         PropertyFactory.lineColor(Expression.get("color")),
@@ -116,18 +127,28 @@ class LineLayerManager(
                             )
                         )
                     )
-                    .withFilter(Expression.gte(Expression.zoom(), Expression.literal(8f))) // Only show lines at zoom 8+
+                    .withFilter(
+                        Expression.gte(
+                            Expression.zoom(),
+                            Expression.literal(8f)
+                        )
+                    ) // Only show lines at zoom 8+
                 style.addLayer(lineLayer)
                 Log.d(TAG, "Added line layer: $LINE_LAYER with min zoom filter")
+            }
 
-                // Generate arrow icons
-                generateArrowIcons(style)
+            // Generate arrow icons
+            generateArrowIcons(style)
 
-                // Create arrow layer using separate source
+            // Create arrow layer using separate source
+            if (style.getLayer(LINE_ARROW_LAYER) == null) {
                 val arrowLayer = SymbolLayer(LINE_ARROW_LAYER, LINE_ARROW_SOURCE)
                     .withProperties(
                         PropertyFactory.iconImage(
-                            Expression.concat(Expression.literal("arrow-"), Expression.get("color"))
+                            Expression.concat(
+                                Expression.literal("arrow-"),
+                                Expression.get("color")
+                            )
                         ),
                         PropertyFactory.iconSize(1.5f), // Reduced size significantly
                         PropertyFactory.iconAllowOverlap(true),
@@ -135,16 +156,19 @@ class LineLayerManager(
                         PropertyFactory.iconRotationAlignment("map"), // Align to map rotation
                         PropertyFactory.iconTextFit("both") // Fit both icon and text
                     )
-                    .withFilter(Expression.gte(Expression.zoom(), Expression.literal(8f))) // Only show arrows at zoom 8+
+                    .withFilter(
+                        Expression.gte(
+                            Expression.zoom(),
+                            Expression.literal(8f)
+                        )
+                    ) // Only show arrows at zoom 8+
                 style.addLayer(arrowLayer)
                 Log.d(TAG, "Added arrow layer: $LINE_ARROW_LAYER with min zoom filter")
-
-                isInitialized = true
-                Log.d(TAG, "Line layers setup completed successfully with separate sources")
-
-            } catch (e: Exception) {
-                Log.e(TAG, "Error setting up line layers", e)
             }
+            Log.d(TAG, "Line layers setup completed successfully with separate sources")
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Error setting up line layers", e)
         }
     }
 
@@ -152,11 +176,6 @@ class LineLayerManager(
      * Update line features in the GL layers using separate sources
      */
     fun updateFeatures(lines: List<MapAnnotation.Line>) {
-        if (!isInitialized) {
-            Log.w(TAG, "Line layers not initialized, skipping update")
-            return
-        }
-
         try {
             // Convert lines to separate feature collections
             val lineFeatures = mutableListOf<Feature>()
@@ -263,8 +282,7 @@ class LineLayerManager(
      * Clean up resources
      */
     fun cleanup() {
-        isInitialized = false
-        Log.d(TAG, "Line layer manager cleaned up")
+        Log.d(TAG, "Line layer manager cleanup called")
     }
 }
 

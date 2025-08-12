@@ -33,6 +33,9 @@ class BillingManager @Inject constructor(
 ) {
     private val TAG = "BillingManager"
 
+    // For debugging
+    private val IS_PREMIUM_OVERRIDE = true
+
     private val _isPremium = MutableStateFlow(false)
     val isPremium: StateFlow<Boolean> = _isPremium
 
@@ -251,14 +254,6 @@ class BillingManager @Inject constructor(
         }
     }
 
-    fun getProductName(productId: String): String {
-        return _productDetails.value[productId]?.name ?: productId
-    }
-
-    fun getProductDescription(productId: String): String {
-        return _productDetails.value[productId]?.description ?: ""
-    }
-
     fun isInTrialPeriod(): Boolean {
         val firstLaunchTime = prefs.getLong(KEY_FIRST_LAUNCH, 0L)
         if (firstLaunchTime == 0L) {
@@ -274,6 +269,10 @@ class BillingManager @Inject constructor(
     }
 
     fun isPremium(): Boolean {
+        if (IS_PREMIUM_OVERRIDE) {
+            return true
+        }
+
         // Check both Google Play purchases and manual donations
         val googlePlayPremium = prefs.getBoolean(KEY_IS_PREMIUM, false)
         val donationPremium = donationManager.isPremium()

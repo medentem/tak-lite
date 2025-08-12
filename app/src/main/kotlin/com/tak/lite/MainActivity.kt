@@ -60,7 +60,7 @@ val DEFAULT_US_CENTER = LatLng(39.8283, -98.5795)
 const val DEFAULT_US_ZOOM = 4.0
 const val WEATHER_FETCH_INTERVAL_MS = 15 * 60 * 1000L // 15 minutes
 // For generating play store screenshots
-const val HIDE_DEVICE_CONNECTION_STATUS_BAR = false
+const val HIDE_DEVICE_CONNECTION_STATUS_BAR = true
 
 @AndroidEntryPoint
 class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {

@@ -21,7 +21,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -206,7 +205,7 @@ class SwipeableOverlayManager @Inject constructor(
     }
     
     private fun showPage(pageIndex: Int) {
-        if (pageIndex == 1 && !billingManager.isPremium.value) {
+        if (pageIndex == 1 && !billingManager.isPremium()) {
             showPage(0)
             return
         }
@@ -236,7 +235,7 @@ class SwipeableOverlayManager @Inject constructor(
         pageIndicator1.setBackgroundResource(
             if (currentPage == 0) R.drawable.circle_blue else R.drawable.circle_gray
         )
-        if (billingManager.isPremium.value) {
+        if (billingManager.isPremium()) {
             pageIndicator2.visibility = View.VISIBLE
             pageIndicator2.setBackgroundResource(
                 if (currentPage == 1) R.drawable.circle_blue else R.drawable.circle_gray

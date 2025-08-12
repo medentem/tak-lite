@@ -400,6 +400,21 @@ class AnnotationController(
         Log.d("AnnotationController", "Annotation controller cleaned up")
     }
 
+    fun onStyleChanged() {
+        unifiedAnnotationManager?.cleanup()
+        // Initialize unified annotation manager
+        // Always reset the unified manager on style changes so line/area/polygon layers are re-created
+        // because MapLibre destroys all layers/sources when a new style is applied.
+        unifiedAnnotationManager?.setLineLayersReadyCallback(object : UnifiedAnnotationManager.LineLayersReadyCallback {
+            override fun onLineLayersReady() {
+                Log.d(TAG, "Line layers ready, retrying line timer setup")
+                lineTimerManager?.retrySetupTimerLayers()
+            }
+        })
+        unifiedAnnotationManager?.initialize()
+        Log.d(TAG, "Unified annotation manager initialization requested")
+    }
+
     // Overlay and menu setup
     fun setupAnnotationOverlay(mapLibreMap: MapLibreMap?) {
         mapLibreMap?.addOnCameraMoveListener {
@@ -425,16 +440,6 @@ class AnnotationController(
         mapLibreMap?.getStyle { style ->
             // Generate POI icons first
             generatePoiIcons(style)
-            
-            // Initialize unified annotation manager
-            unifiedAnnotationManager?.setLineLayersReadyCallback(object : UnifiedAnnotationManager.LineLayersReadyCallback {
-                override fun onLineLayersReady() {
-                    Log.d(TAG, "Line layers ready, retrying line timer setup")
-                    lineTimerManager?.retrySetupTimerLayers()
-                }
-            })
-            unifiedAnnotationManager?.initialize()
-            Log.d(TAG, "Unified annotation manager initialization requested")
             
             // Initialize timer managers and setup timer layers
             initializeTimerManager(mapLibreMap)

@@ -5,6 +5,7 @@ import android.util.Log
 import com.tak.lite.model.AnnotationColor
 import com.tak.lite.model.MapAnnotation
 import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.maps.Style
 import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.PropertyFactory
@@ -29,6 +30,8 @@ class AreaLayerManager(private val mapLibreMap: MapLibreMap) {
     }
 
     private var isInitialized = false
+    private var isCameraListenerAdded = false
+    private var cameraMoveListener: MapLibreMap.OnCameraMoveListener? = null
     private val areaFeatureConverter = AreaFeatureConverter(mapLibreMap)
     private var lastAreas: List<MapAnnotation.Area> = emptyList()
     private var lastZoomForAreas: Double = -1.0
@@ -37,20 +40,27 @@ class AreaLayerManager(private val mapLibreMap: MapLibreMap) {
     /**
      * Setup area layers in the map style
      */
-    fun setupAreaLayers() {
+    fun setupAreaLayers(style: Style) {
         if (isInitialized) {
             Log.d(TAG, "Area layers already initialized")
             return
         }
 
-        mapLibreMap.getStyle { style ->
-            try {
-                // Create source
-                val source = GeoJsonSource(AREA_SOURCE, FeatureCollection.fromFeatures(arrayOf()))
-                style.addSource(source)
+        try {
+            // Create source
+            val source = style.getSource(AREA_SOURCE)
+            if (source == null) {
+                style.addSource(
+                    GeoJsonSource(
+                        AREA_SOURCE,
+                        FeatureCollection.fromFeatures(arrayOf())
+                    )
+                )
                 Log.d(TAG, "Added area source: $AREA_SOURCE")
+            }
 
-                // Create circle layer for areas using precomputed pixel radius
+            // Create circle layer for areas using precomputed pixel radius
+            if (style.getLayer(AREA_FILL_LAYER) == null) {
                 val circleLayer = CircleLayer(AREA_FILL_LAYER, AREA_SOURCE)
                     .withProperties(
                         PropertyFactory.circleColor(Expression.get("fillColor")),
@@ -62,8 +72,10 @@ class AreaLayerManager(private val mapLibreMap: MapLibreMap) {
                     .withFilter(Expression.gte(Expression.zoom(), Expression.literal(7f)))
                 style.addLayer(circleLayer)
                 Log.d(TAG, "Added area circle layer: $AREA_FILL_LAYER")
-                
-                // Create hit area layer (invisible, larger for easier tapping)
+            }
+
+            // Create hit area layer (invisible, larger for easier tapping)
+            if (style.getLayer(AREA_HIT_AREA_LAYER) == null) {
                 val hitAreaLayer = CircleLayer(AREA_HIT_AREA_LAYER, AREA_SOURCE)
                     .withProperties(
                         PropertyFactory.circleColor(Expression.literal("#FFFFFF")),
@@ -73,11 +85,15 @@ class AreaLayerManager(private val mapLibreMap: MapLibreMap) {
                     .withFilter(Expression.gte(Expression.zoom(), Expression.literal(7f)))
                 style.addLayer(hitAreaLayer)
                 Log.d(TAG, "Added area hit area layer: $AREA_HIT_AREA_LAYER")
-                
-                // Create separate source and layer for area labels
-                val labelSource = GeoJsonSource(AREA_LABEL_SOURCE, FeatureCollection.fromFeatures(arrayOf()))
-                style.addSource(labelSource)
-                
+            }
+
+            // Create separate source and layer for area labels
+            val labelSource = style.getSource(AREA_LABEL_SOURCE)
+            if (labelSource == null) {
+                style.addSource(GeoJsonSource(AREA_LABEL_SOURCE, FeatureCollection.fromFeatures(arrayOf())))
+            }
+
+            if (style.getLayer(AREA_LABEL_LAYER) == null) {
                 val labelLayer = org.maplibre.android.style.layers.SymbolLayer(AREA_LABEL_LAYER, AREA_LABEL_SOURCE)
                     .withProperties(
                         PropertyFactory.textField(Expression.get("label")),
@@ -90,24 +106,29 @@ class AreaLayerManager(private val mapLibreMap: MapLibreMap) {
                     .withFilter(Expression.gte(Expression.zoom(), Expression.literal(7f)))
                 style.addLayer(labelLayer)
                 Log.d(TAG, "Added area label layer: $AREA_LABEL_LAYER")
+            }
 
-                isInitialized = true
-                Log.d(TAG, "Area layers setup completed successfully")
+            isInitialized = true
+            Log.d(TAG, "Area layers setup completed successfully")
 
-                // Recompute precomputed pixel radii while the camera moves (throttled)
-                mapLibreMap.addOnCameraMoveListener {
-                    val zoom = mapLibreMap.cameraPosition?.zoom?.toDouble() ?: return@addOnCameraMoveListener
+            // Add camera move listener only once to prevent multiple listeners
+            if (!isCameraListenerAdded) {
+                cameraMoveListener = MapLibreMap.OnCameraMoveListener {
+                    val zoom = mapLibreMap.cameraPosition?.zoom?.toDouble() ?: return@OnCameraMoveListener
                     val now = System.currentTimeMillis()
-                    if (lastAreas.isEmpty()) return@addOnCameraMoveListener
-                    if (kotlin.math.abs(zoom - lastZoomForAreas) < 0.01 && (now - lastAreaUpdateMs) < 50) return@addOnCameraMoveListener
+                    if (lastAreas.isEmpty()) return@OnCameraMoveListener
+                    if (kotlin.math.abs(zoom - lastZoomForAreas) < 0.01 && (now - lastAreaUpdateMs) < 50) return@OnCameraMoveListener
                     lastZoomForAreas = zoom
                     lastAreaUpdateMs = now
                     updateFeatures(lastAreas)
                 }
-
-            } catch (e: Exception) {
-                Log.e(TAG, "Error setting up area layers", e)
+                mapLibreMap.addOnCameraMoveListener(cameraMoveListener!!)
+                isCameraListenerAdded = true
+                Log.d(TAG, "Camera move listener added")
             }
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Error setting up area layers", e)
         }
     }
 
@@ -159,7 +180,19 @@ class AreaLayerManager(private val mapLibreMap: MapLibreMap) {
      * Clean up resources
      */
     fun cleanup() {
+        // Remove camera move listener if it exists
+        cameraMoveListener?.let { listener ->
+            try {
+                mapLibreMap.removeOnCameraMoveListener(listener)
+                Log.d(TAG, "Camera move listener removed")
+            } catch (e: Exception) {
+                Log.w(TAG, "Error removing camera move listener", e)
+            }
+        }
+        
         isInitialized = false
+        isCameraListenerAdded = false
+        cameraMoveListener = null
         Log.d(TAG, "Area layer manager cleaned up")
     }
 }

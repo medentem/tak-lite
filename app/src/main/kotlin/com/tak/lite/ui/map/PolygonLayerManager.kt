@@ -5,6 +5,7 @@ import android.util.Log
 import com.tak.lite.model.AnnotationColor
 import com.tak.lite.model.MapAnnotation
 import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.maps.Style
 import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.FillLayer
 import org.maplibre.android.style.layers.LineLayer
@@ -28,25 +29,20 @@ class PolygonLayerManager(private val mapLibreMap: MapLibreMap) {
         const val POLYGON_LABEL_LAYER = "annotation-polygons-label-layer"
     }
 
-    private var isInitialized = false
     private val polygonFeatureConverter = PolygonFeatureConverter()
 
     /**
      * Setup polygon layers in the map style
      */
-    fun setupPolygonLayers() {
-        if (isInitialized) {
-            Log.d(TAG, "Polygon layers already initialized")
-            return
-        }
+    fun setupPolygonLayers(style: Style) {
+        try {// Create source
+            val source = style.getSource(POLYGON_SOURCE)
+            if (source == null) {
+                style.addSource(GeoJsonSource(POLYGON_SOURCE, FeatureCollection.fromFeatures(arrayOf())))
+            }
 
-        try {
-            mapLibreMap.getStyle { style ->
-                // Create source
-                val source = GeoJsonSource(POLYGON_SOURCE, FeatureCollection.fromFeatures(arrayOf()))
-                style.addSource(source)
-                
-                // Create fill layer
+            // Create fill layer
+            if (style.getLayer(POLYGON_FILL_LAYER) == null) {
                 val fillLayer = FillLayer(POLYGON_FILL_LAYER, POLYGON_SOURCE)
                     .withProperties(
                         PropertyFactory.fillColor(Expression.get("fillColor")),
@@ -55,8 +51,10 @@ class PolygonLayerManager(private val mapLibreMap: MapLibreMap) {
                     )
                     .withFilter(Expression.gte(Expression.zoom(), Expression.literal(7f)))
                 style.addLayer(fillLayer)
-                
-                // Create stroke layer
+            }
+
+            // Create stroke layer
+            if (style.getLayer(POLYGON_STROKE_LAYER) == null) {
                 val strokeLayer = LineLayer(POLYGON_STROKE_LAYER, POLYGON_SOURCE)
                     .withProperties(
                         PropertyFactory.lineColor(Expression.get("strokeColor")),
@@ -65,8 +63,10 @@ class PolygonLayerManager(private val mapLibreMap: MapLibreMap) {
                     )
                     .withFilter(Expression.gte(Expression.zoom(), Expression.literal(7f)))
                 style.addLayer(strokeLayer)
-                
-                // Create hit area layer (invisible, larger for easier tapping)
+            }
+
+            // Create hit area layer (invisible, larger for easier tapping)
+            if (style.getLayer(POLYGON_HIT_AREA_LAYER) == null) {
                 val hitAreaLayer = FillLayer(POLYGON_HIT_AREA_LAYER, POLYGON_SOURCE)
                     .withProperties(
                         PropertyFactory.fillColor(Expression.literal("#FFFFFF")),
@@ -74,11 +74,20 @@ class PolygonLayerManager(private val mapLibreMap: MapLibreMap) {
                     )
                     .withFilter(Expression.gte(Expression.zoom(), Expression.literal(7f)))
                 style.addLayer(hitAreaLayer)
-                
-                // Create separate source and layer for polygon labels
-                val labelSource = GeoJsonSource(POLYGON_LABEL_SOURCE, FeatureCollection.fromFeatures(arrayOf()))
-                style.addSource(labelSource)
-                
+            }
+
+            // Create separate source and layer for polygon labels
+            val labelSource = style.getSource(POLYGON_LABEL_SOURCE)
+            if (labelSource == null) {
+                style.addSource(
+                    GeoJsonSource(
+                        POLYGON_LABEL_SOURCE,
+                        FeatureCollection.fromFeatures(arrayOf())
+                    )
+                )
+            }
+
+            if (style.getLayer(POLYGON_LABEL_LAYER) == null) {
                 val labelLayer = org.maplibre.android.style.layers.SymbolLayer(POLYGON_LABEL_LAYER, POLYGON_LABEL_SOURCE)
                     .withProperties(
                         PropertyFactory.textField(Expression.get("label")),
@@ -90,11 +99,9 @@ class PolygonLayerManager(private val mapLibreMap: MapLibreMap) {
                     )
                     .withFilter(Expression.gte(Expression.zoom(), Expression.literal(7f)))
                 style.addLayer(labelLayer)
-                
-                Log.d(TAG, "Polygon layers setup completed")
             }
-            
-            isInitialized = true
+
+            Log.d(TAG, "Polygon layers setup completed")
         } catch (e: Exception) {
             Log.e(TAG, "Error setting up polygon layers", e)
         }
@@ -104,11 +111,6 @@ class PolygonLayerManager(private val mapLibreMap: MapLibreMap) {
      * Update polygon features in the GL layer
      */
     fun updateFeatures(polygons: List<MapAnnotation.Polygon>) {
-        if (!isInitialized) {
-            Log.w(TAG, "Polygon layers not initialized, skipping update")
-            return
-        }
-
         try {
             val features = polygons.map { polygon ->
                 polygonFeatureConverter.convertToGeoJsonFeature(polygon)
@@ -147,8 +149,7 @@ class PolygonLayerManager(private val mapLibreMap: MapLibreMap) {
      * Clean up resources
      */
     fun cleanup() {
-        isInitialized = false
-        Log.d(TAG, "Polygon layer manager cleaned up")
+        Log.d(TAG, "Polygon layer manager clean up called")
     }
 }
 

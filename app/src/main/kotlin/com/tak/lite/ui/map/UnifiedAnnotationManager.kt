@@ -43,9 +43,11 @@ class UnifiedAnnotationManager(
         }
 
         try {
-            lineLayerManager.setupLineLayers()
-            areaLayerManager.setupAreaLayers()
-            polygonLayerManager.setupPolygonLayers()
+            mapLibreMap.getStyle { style ->
+                lineLayerManager.setupLineLayers(style)
+                areaLayerManager.setupAreaLayers(style)
+                polygonLayerManager.setupPolygonLayers(style)
+            }
             isInitialized = true
             Log.d(TAG, "Unified annotation manager initialized successfully")
             
