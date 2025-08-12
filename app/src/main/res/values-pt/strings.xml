@@ -453,4 +453,17 @@
     <string name="avg_history_age_format">Idade do Histórico Média: %1$d min</string>
     <string name="update_frequency_format">Frequência de Atualização: %1$ds</string>
     <string name="insufficient_data_format">Dados Insuficientes: %1$d pares</string>
+    
+    <!-- Language Settings -->
+    <string name="language_settings">Configurações de Idioma</string>
+    <string name="app_language">Idioma do Aplicativo</string>
+    <string name="use_system_language">Usar Idioma do Sistema</string>
+    <string name="english">Inglês</string>
+    <string name="german">Alemão</string>
+    <string name="spanish">Espanhol</string>
+    <string name="french">Francês</string>
+    <string name="italian">Italiano</string>
+    <string name="portuguese">Português</string>
+    <string name="romansh">Romanche</string>
+    <string name="language_change_restart">O idioma mudará imediatamente</string>
 </resources>

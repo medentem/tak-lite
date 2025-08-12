@@ -453,4 +453,17 @@
     <string name="avg_history_age_format">Avg History Age: %1$d min</string>
     <string name="update_frequency_format">Update Frequency: %1$ds</string>
     <string name="insufficient_data_format">Insufficient Data: %1$d peers</string>
+    
+    <!-- Language Settings -->
+    <string name="language_settings">Language Settings</string>
+    <string name="app_language">App Language</string>
+    <string name="use_system_language">Use System Language</string>
+    <string name="english">English</string>
+    <string name="german">German</string>
+    <string name="spanish">Spanish</string>
+    <string name="french">French</string>
+    <string name="italian">Italian</string>
+    <string name="portuguese">Portuguese</string>
+    <string name="romansh">Romansh</string>
+    <string name="language_change_restart">Language will change immediately</string>
 </resources> 

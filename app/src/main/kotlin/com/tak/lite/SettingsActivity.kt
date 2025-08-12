@@ -32,6 +32,7 @@ import com.tak.lite.service.MeshForegroundService
 import com.tak.lite.ui.map.MapController
 import com.tak.lite.ui.settings.PredictionAdvancedSettingsDialog
 import com.tak.lite.util.BillingManager
+import com.tak.lite.util.LocaleManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -108,6 +109,7 @@ class SettingsActivity : BaseActivity() {
     private lateinit var weatherSourceSpinner: com.google.android.material.textfield.MaterialAutoCompleteTextView
     private lateinit var weatherOpacitySlider: com.google.android.material.slider.Slider
     private lateinit var weatherOpacityValue: TextView
+    private lateinit var languageSpinner: com.google.android.material.textfield.MaterialAutoCompleteTextView
     private val REQUEST_CODE_FOREGROUND_SERVICE_CONNECTED_DEVICE = 2003
     private val REQUEST_CODE_NOTIFICATION_PERMISSION = 3001
     private val REQUEST_CODE_ALL_PERMISSIONS = 4001
@@ -187,6 +189,7 @@ class SettingsActivity : BaseActivity() {
         weatherSourceSpinner = findViewById(R.id.weatherSourceSpinner)
         weatherOpacitySlider = findViewById(R.id.weatherOpacitySlider)
         weatherOpacityValue = findViewById(R.id.weatherOpacityValue)
+        languageSpinner = findViewById(R.id.languageSpinner)
 
         // Check premium status and update UI accordingly
         lifecycleScope.launch {
@@ -570,6 +573,9 @@ class SettingsActivity : BaseActivity() {
 
         // Setup weather settings
         setupWeatherSettings()
+
+        // Setup language selection
+        setupLanguageSelection()
 
         // Setup map dark mode spinner
         val darkModeAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, darkModeOptions)
@@ -1103,6 +1109,37 @@ class SettingsActivity : BaseActivity() {
                 val opacity = value.coerceIn(0.5f, 1.0f)
                 weatherOpacityValue.text = String.format("%.1f", opacity)
                 prefs.edit().putFloat("weather_opacity", opacity).apply()
+            }
+        }
+    }
+
+    private fun setupLanguageSelection() {
+        // Get available languages with their display names
+        val availableLanguages = LocaleManager.getAvailableLanguages(this)
+        val languageOptions = availableLanguages.map { it.second }
+        
+        // Setup language spinner
+        val languageAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, languageOptions)
+        languageSpinner.setAdapter(languageAdapter)
+        
+        // Get current language setting
+        val currentLanguage = LocaleManager.getLanguage(this)
+        val currentLanguageIndex = availableLanguages.indexOfFirst { it.first == currentLanguage }.takeIf { it >= 0 } ?: 0
+        
+        // Set current selection
+        languageSpinner.setText(languageOptions[currentLanguageIndex], false)
+        
+        // Setup language selection listener
+        languageSpinner.setOnItemClickListener { _, _, position, _ ->
+            val selectedLanguage = availableLanguages[position].first
+            val currentLanguage = LocaleManager.getLanguage(this)
+            
+            // Only apply if language actually changed
+            if (selectedLanguage != currentLanguage) {
+                LocaleManager.setLanguage(this, selectedLanguage)
+                
+                // Apply locale immediately and recreate activity
+                LocaleManager.applyLocaleAndRecreate(this)
             }
         }
     }

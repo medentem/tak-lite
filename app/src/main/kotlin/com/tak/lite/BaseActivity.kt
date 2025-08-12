@@ -8,6 +8,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import com.tak.lite.di.ActivityContextProvider
 import com.tak.lite.repository.MessageRepository
+import com.tak.lite.util.LocaleManager
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -27,6 +28,9 @@ abstract class BaseActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Apply locale configuration to resources
+        LocaleManager.applyLocaleToResources(this)
         
         // Set the activity context for UI operations only
         // Background operations (protocols, services) should use @ApplicationContext

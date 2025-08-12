@@ -1,12 +1,17 @@
 package com.tak.lite
 
 import android.app.Application
+import com.tak.lite.util.LocaleManager
 import dagger.hilt.android.HiltAndroidApp
 
 @HiltAndroidApp
 class TakLiteApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        
+        // Apply locale configuration at startup
+        LocaleManager.applyLocaleToResources(this)
+        
         try {
             java.lang.System.setProperty("java.net.preferIPv6Addresses", "false")
             java.lang.System.setProperty("java.net.preferIPv4Stack", "true")

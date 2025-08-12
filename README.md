@@ -63,6 +63,16 @@ Settings to Configure Experience
 - MapTiler API key (for satellite imagery)
 - Doodle Labs mesh network device or Meshtastic (no audio support w/ mtastic)
 
+## Localization
+
+TAK Lite supports multiple languages to provide a better user experience for international users:
+
+- **Supported Languages**: English, German, Spanish, French, Italian, Portuguese, and Romansh
+- **Language Selection**: Users can override the system language in Settings → Language Settings
+- **System Language**: By default, the app uses the device's system language setting
+- **Language Persistence**: Language selection is saved and persists across app restarts
+- **Immediate Switching**: Language changes take effect immediately without requiring app restart
+
 ## De-Googled Device Support
 
 TAK Lite is designed to work on devices without Google Play Services (LineageOS, GrapheneOS, etc.):
