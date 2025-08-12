@@ -1513,7 +1513,7 @@ class AnnotationController(
             )
             Log.d("AnnotationController", "handleDrawLineToPeer: Creating line with points=$points")
             annotationViewModel.addLine(points)
-                            Toast.makeText(fragment.requireContext(), fragment.getString(R.string.line_drawn_to_peer, peerId), Toast.LENGTH_SHORT).show()
+            Toast.makeText(fragment.requireContext(), fragment.getString(R.string.line_drawn_to_peer, peerId), Toast.LENGTH_SHORT).show()
         } else {
             val errorMsg = when {
                 userLocation == null -> "User location is not available"
@@ -1521,7 +1521,7 @@ class AnnotationController(
                 else -> "Unknown error"
             }
             Log.e("AnnotationController", "handleDrawLineToPeer: Cannot draw line: $errorMsg")
-                            Toast.makeText(fragment.requireContext(), fragment.getString(R.string.cannot_draw_line, errorMsg), Toast.LENGTH_SHORT).show()
+            Toast.makeText(fragment.requireContext(), fragment.getString(R.string.cannot_draw_line, errorMsg), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -1776,7 +1776,7 @@ class AnnotationController(
             annotationOverlayView.updateAnnotations(nonPoiAnnotations)
             annotationOverlayView.invalidate()
             
-                            Toast.makeText(fragment.requireContext(), fragment.getString(R.string.poi_added_to_polygon), Toast.LENGTH_SHORT).show()
+            Toast.makeText(fragment.requireContext(), fragment.getString(R.string.poi_added_to_polygon), Toast.LENGTH_SHORT).show()
         } else {
             Log.e("AnnotationController", "No touch location stored for polygon POI creation")
             Toast.makeText(fragment.requireContext(), fragment.getString(R.string.error_could_not_place_poi), Toast.LENGTH_SHORT).show()
@@ -2104,7 +2104,7 @@ class AnnotationController(
         annotationOverlayView.invalidate()
         
         Log.d("AnnotationController", "Area created successfully with radius: $tempAreaRadius meters")
-                    Toast.makeText(fragment.requireContext(), fragment.getString(R.string.area_created), Toast.LENGTH_SHORT).show()
+        Toast.makeText(fragment.requireContext(), fragment.getString(R.string.area_created), Toast.LENGTH_SHORT).show()
     }
     
     private fun finishAreaDrawing() {
