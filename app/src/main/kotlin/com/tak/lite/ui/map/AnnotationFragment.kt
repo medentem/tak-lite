@@ -1,5 +1,6 @@
 package com.tak.lite.ui.map
 
+import android.app.AlertDialog
 import android.graphics.PointF
 import android.os.Bundle
 import android.util.Log
@@ -57,6 +58,7 @@ class AnnotationFragment : Fragment(), LayersTarget {
     private lateinit var areaTimerTextOverlayView: AreaTimerTextOverlayView
     private var weatherLayerManager: WeatherLayerManager? = null
     private var weatherSettingsListener: android.content.SharedPreferences.OnSharedPreferenceChangeListener? = null
+    private var restoreAnnotationsDialog: AlertDialog? = null
     
     // POI tap detection state
     private var poiTapDownTime: Long? = null
@@ -76,7 +78,7 @@ class AnnotationFragment : Fragment(), LayersTarget {
         super.onViewCreated(view, savedInstanceState)
 
         // Check for saved annotations and show dialog if needed
-        if (viewModel.hasSavedAnnotations()) {
+        if (viewModel.hasSavedAnnotations() && isAdded) {
             showRestoreAnnotationsDialog()
         }
 
@@ -561,9 +563,14 @@ class AnnotationFragment : Fragment(), LayersTarget {
     }
 
     private fun showRestoreAnnotationsDialog() {
+        // Check if fragment is still attached to prevent crashes
+        if (!isAdded || activity == null) {
+            return
+        }
+        
         val dialogBinding = DialogRestoreAnnotationsBinding.inflate(layoutInflater)
         
-        MaterialAlertDialogBuilder(requireContext())
+        restoreAnnotationsDialog = MaterialAlertDialogBuilder(requireContext())
             .setView(dialogBinding.root)
             .setCancelable(false)
             .create()
@@ -571,11 +578,13 @@ class AnnotationFragment : Fragment(), LayersTarget {
                 dialogBinding.btnClear.setOnClickListener {
                     viewModel.clearSavedAnnotations()
                     dismiss()
+                    restoreAnnotationsDialog = null
                 }
                 
                 dialogBinding.btnRestore.setOnClickListener {
                     // Annotations are already loaded in the repository
                     dismiss()
+                    restoreAnnotationsDialog = null
                 }
                 
                 show()
@@ -588,6 +597,14 @@ class AnnotationFragment : Fragment(), LayersTarget {
         if (::annotationController.isInitialized) {
             annotationController.cleanup()
         }
+        
+        // Dismiss any showing dialog to prevent window leaks
+        restoreAnnotationsDialog?.let { dialog ->
+            if (dialog.isShowing) {
+                dialog.dismiss()
+            }
+        }
+        restoreAnnotationsDialog = null
         
         // Unregister SharedPreferences listener
         weatherSettingsListener?.let { listener ->
