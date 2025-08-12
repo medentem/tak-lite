@@ -814,24 +814,12 @@ class FanMenuView @JvmOverloads constructor(
         val normalizedAngle = (rawAngle + 2 * Math.PI) % (2 * Math.PI)
         val gapAngleDeg = 4f // Must match drawing
         val gapAngleRad = Math.toRadians(gapAngleDeg.toDouble())
-        
-        // Debug: Log the exact coordinates and offsets
-        val offsetFromCenter = PointF(x - center.x, y - center.y)
-        Log.d("FanMenuView", "[DEBUG] Touch at x=$x, y=$y")
-        Log.d("FanMenuView", "[DEBUG] Center at x=${center.x}, y=${center.y}")
-        Log.d("FanMenuView", "[DEBUG] Offset from center: dx=${offsetFromCenter.x}, dy=${offsetFromCenter.y}")
-        Log.d("FanMenuView", String.format("[DEBUG] Distance=%.2f, rawAngle=%.2f°, normalizedAngle=%.2f°", 
-            distance, 
-            Math.toDegrees(rawAngle.toDouble()),
-            Math.toDegrees(normalizedAngle)
-        ))
 
         var found = false
         for ((ringIdx, ring) in rings.withIndex()) {
             val angleStep = ring.sectorAngle
             val innerRadius = centerHoleRadius + ringIdx * ringSpacing
             val outerRadius = innerRadius + ringSpacing
-            Log.d("FanMenuView", "[DEBUG] Ring $ringIdx: innerRadius=$innerRadius, outerRadius=$outerRadius")
             for (i in 0 until ring.count) {
                 // Use the same sectorStart and sectorSweep as in onDraw, without the 2π normalization
                 val sectorStart = menuStartAngle + i * angleStep + gapAngleRad / 2
@@ -847,14 +835,7 @@ class FanMenuView @JvmOverloads constructor(
                 } else {
                     normalizedAngle >= normalizedSectorStart || normalizedAngle <= normalizedSectorEnd
                 }
-                
-                Log.d("FanMenuView", String.format("[DEBUG] Sector $i: sectorStart=%.2f°, sectorEnd=%.2f°, normalizedStart=%.2f°, normalizedEnd=%.2f°, inSector=$inSector",
-                    Math.toDegrees(sectorStart),
-                    Math.toDegrees(sectorEnd),
-                    Math.toDegrees(normalizedSectorStart),
-                    Math.toDegrees(normalizedSectorEnd)
-                ))
-                
+
                 val inDonut = distance in innerRadius..outerRadius && inSector
                 if (!inDonut) continue
                 val index = ring.startIndex + i
@@ -862,7 +843,6 @@ class FanMenuView @JvmOverloads constructor(
                     if (selectedIndex != index) {
                         selectedIndex = index
                         invalidate()
-                        Log.d("FanMenuView", "Selection changed to $index")
                     }
                 }
                 found = true

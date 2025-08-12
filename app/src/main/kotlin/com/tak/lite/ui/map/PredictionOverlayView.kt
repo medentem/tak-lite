@@ -1,7 +1,13 @@
 package com.tak.lite.ui.map
 
 import android.content.Context
-import android.graphics.*
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.DashPathEffect
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.Rect
+import android.graphics.Typeface
 import android.os.Handler
 import android.os.Looper
 import android.util.AttributeSet
@@ -10,7 +16,6 @@ import android.view.View
 import com.tak.lite.data.model.ConfidenceCone
 import com.tak.lite.data.model.LocationPrediction
 import com.tak.lite.model.PeerLocationEntry
-import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Projection
 import java.util.concurrent.TimeUnit
 
@@ -160,8 +165,6 @@ class PredictionOverlayView @JvmOverloads constructor(
             (bottomRight.longitude + margin).toFloat(), // right (maximum longitude)
             (bottomRight.latitude - margin).toFloat()   // bottom (minimum latitude)
         )
-        
-        Log.d("PredictionOverlayView", "Viewport bounds: $bounds")
         
         currentViewportBounds = bounds
         lastViewportUpdate = now

@@ -131,13 +131,10 @@ class AnnotationController(
         unifiedAnnotationManager = UnifiedAnnotationManager(mapLibreMap, fragment.requireContext())
         _deviceLocationManager = DeviceLocationLayerManager(mapLibreMap)
         _clusterTextManager = ClusterTextManager(mapLibreMap)
-        Log.d("PeerDotDebug", "AnnotationController initialized with clustering config: $clusteringConfig")
     }
     
     // === ENHANCED: Convert peer locations to clustered GeoJSON FeatureCollection ===
     private fun peerLocationsToClusteredFeatureCollection(peerLocations: Map<String, com.tak.lite.model.PeerLocationEntry>): FeatureCollection {
-        Log.d("PeerDotDebug", "Creating FeatureCollection from ${peerLocations.size} peer locations")
-
         // Use user-configurable staleness threshold from SharedPreferences
         val context = fragment.requireContext()
         val prefs = context.getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
@@ -186,14 +183,10 @@ class AnnotationController(
             feature.addStringProperty("fillColor", fillColor)
             feature.addStringProperty("borderColor", borderColor)
 
-            Log.d("PeerDotDebug", "peerId=$peerId, userStatus=$userStatus, isStale=$isStale, fillColor=$fillColor, borderColor=$borderColor")
             feature
         }
-        
-        val featureCollection = FeatureCollection.fromFeatures(features)
-        Log.d("PeerDotDebug", "Created FeatureCollection with ${featureCollection.features()?.size} features")
 
-        return featureCollection
+        return FeatureCollection.fromFeatures(features)
     }
 
     // === ENHANCED: Convert POI annotations to clustered GeoJSON FeatureCollection ===
@@ -478,7 +471,6 @@ class AnnotationController(
                     )
                     .withFilter(Expression.gte(Expression.zoom(), Expression.literal(7f))) // Only show peers at zoom 7+
                     style.addLayer(layer)
-                    Log.d("PeerDotDebug", "Non-clustered peer dots layer created with properties: circleColor=${layer.circleColor}, circleStrokeColor=${layer.circleStrokeColor}")
 
                     // Add invisible hit area layer for easier tapping (non-clustered)
                     val hitAreaLayer = CircleLayer("peer-dots-hit-area", sourceId)
@@ -489,7 +481,6 @@ class AnnotationController(
                         )
                         .withFilter(Expression.gte(Expression.zoom(), Expression.literal(7f))) // Only show hit area at zoom 7+
                     style.addLayer(hitAreaLayer)
-                    Log.d("PeerDotDebug", "Non-clustered peer hit area layer created with min zoom filter")
                 }
             }
             
@@ -551,53 +542,33 @@ class AnnotationController(
         if (now - lastPeerUpdate < PEER_UPDATE_THROTTLE_MS) return
         lastPeerUpdate = now
         
-        Log.d("PeerDotDebug", "updatePeerDotsOnMap: peerCount=${peerLocations.size}, peerIds=${peerLocations.keys}")
-        if (peerLocations.isNotEmpty()) {
-            val firstPeer = peerLocations.entries.first()
-            Log.d("PeerDotDebug", "First peer: ${firstPeer.key} at ${firstPeer.value.latitude}, ${firstPeer.value.longitude}")
-        }
-        
         if (clusteringConfig.enablePeerClustering) {
-            Log.d("PeerDotDebug", "Using native clustering")
-            Log.d("PeerDotDebug", "Clustering config: radius=${clusteringConfig.clusterRadius}, maxZoom=${clusteringConfig.peerClusterMaxZoom}")
-            Log.d("PeerDotDebug", "Current zoom: ${mapLibreMap?.cameraPosition?.zoom}, should cluster: ${mapLibreMap?.cameraPosition?.zoom?.let { it <= clusteringConfig.peerClusterMaxZoom }}")
             mapLibreMap?.getStyle { style ->
                 val featureCollection = peerLocationsToClusteredFeatureCollection(peerLocations)
-                Log.d("PeerDotDebug", "Created FeatureCollection with ${featureCollection.features()?.size} features")
-                
+
                 // Debug: Log the GeoJSON string
                 val geoJsonString = featureCollection.toJson()
-                Log.d("PeerDotDebug", "GeoJSON string length: ${geoJsonString.length}")
-                Log.d("PeerDotDebug", "GeoJSON string preview: ${geoJsonString.take(500)}...")
-                
+
                 // Check if source already exists
                 val existingSource = style.getSourceAs<GeoJsonSource>(ClusteredLayerManager.PEER_CLUSTERED_SOURCE)
                 if (existingSource != null) {
                     // Update existing source
-                    Log.d("PeerDotDebug", "Updating existing clustered source")
                     existingSource.setGeoJson(featureCollection)
-                    Log.d("PeerDotDebug", "Updated existing clustered source")
                 } else {
                     // Create new source with data and clustering options
-                    Log.d("PeerDotDebug", "Creating new clustered source")
                     try {
                         clusteredLayerManager.setupPeerClusteredLayer(geoJsonString)
-                        Log.d("PeerDotDebug", "Created new clustered source with user config: radius=${clusteringConfig.clusterRadius}, maxZoom=${clusteringConfig.peerClusterMaxZoom}")
                     } catch (e: Exception) {
                         Log.e("PeerDotDebug", "Failed to create clustered source: ${e.message}", e)
                     }
                 }
-                Log.d("PeerDotDebug", "Peer clustered GL layer updated - SUCCESS")
             }
         } else {
-            Log.d("PeerDotDebug", "Using regular peer dots layer")
             mapLibreMap?.getStyle { style ->
                 val source = style.getSourceAs<GeoJsonSource>("peer-dots-source")
                 if (source != null) {
                     val featureCollection = peerLocationsToClusteredFeatureCollection(peerLocations)
-                    Log.d("PeerDotDebug", "Setting regular GeoJSON with ${featureCollection.features()?.size} features")
                     source.setGeoJson(featureCollection)
-                    Log.d("PeerDotDebug", "Regular peer dots layer updated - SUCCESS")
                 } else {
                     Log.e("PeerDotDebug", "Regular peer dots source not found")
                 }
@@ -637,7 +608,6 @@ class AnnotationController(
                 Log.d("PoiDebug", "Creating new POI clustered source")
                 try {
                     clusteredLayerManager?.setupPoiClusteredLayer(featureCollection.toJson())
-                    Log.d("PeerDotDebug", "Created new clustered source with user config: radius=${clusteringConfig.clusterRadius}, maxZoom=${clusteringConfig.peerClusterMaxZoom}")
                 } catch (e: Exception) {
                     Log.e("PeerDotDebug", "Failed to create clustered source: ${e.message}", e)
                 }
@@ -1157,8 +1127,6 @@ class AnnotationController(
     }
 
     fun syncAnnotationOverlayView(mapLibreMap: MapLibreMap?) {
-        Log.d("PeerDotDebug", "syncAnnotationOverlayView called")
-        
         val currentProjection = mapLibreMap?.projection
         val currentAnnotations = annotationViewModel.uiState.value.annotations
         var changed = false
