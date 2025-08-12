@@ -56,6 +56,7 @@ class AnnotationFragment : Fragment(), LayersTarget {
     private lateinit var lineTimerTextOverlayView: LineTimerTextOverlayView
     private lateinit var polygonTimerTextOverlayView: PolygonTimerTextOverlayView
     private lateinit var areaTimerTextOverlayView: AreaTimerTextOverlayView
+    private lateinit var coverageOverlayView: CoverageOverlayView
     private var weatherLayerManager: WeatherLayerManager? = null
     private var weatherSettingsListener: android.content.SharedPreferences.OnSharedPreferenceChangeListener? = null
     private var restoreAnnotationsDialog: AlertDialog? = null
@@ -99,6 +100,8 @@ class AnnotationFragment : Fragment(), LayersTarget {
             view.findViewById(R.id.polygonTimerTextOverlayView)
         areaTimerTextOverlayView = mainActivity?.findViewById(R.id.areaTimerTextOverlayView) ?:
             view.findViewById(R.id.areaTimerTextOverlayView)
+        coverageOverlayView = mainActivity?.findViewById(R.id.coverageOverlayView) ?:
+            view.findViewById(R.id.coverageOverlayView)
         
         // Initialize distance text overlay
         val lineDistanceTextOverlayView = mainActivity?.findViewById<LineDistanceTextOverlayView>(R.id.lineDistanceTextOverlayView) ?:
@@ -339,7 +342,9 @@ class AnnotationFragment : Fragment(), LayersTarget {
                 lineTimerTextOverlayView.setProjection(mapLibreMap.projection)
                 polygonTimerTextOverlayView.setProjection(mapLibreMap.projection)
                 areaTimerTextOverlayView.setProjection(mapLibreMap.projection)
-                lineDistanceTextOverlayView.setProjection(mapLibreMap.projection)  // Added this line
+                lineDistanceTextOverlayView.setProjection(mapLibreMap.projection)
+                coverageOverlayView.setZoom(mapLibreMap.cameraPosition.zoom.toFloat())
+                coverageOverlayView.setProjection(mapLibreMap.projection)
                 clusterTextOverlayView.setProjection(mapLibreMap.projection)
                 
                 // Notify cluster text manager about camera movement for performance optimization
@@ -355,6 +360,8 @@ class AnnotationFragment : Fragment(), LayersTarget {
                     lastCameraUpdate = now
                     annotationController.syncAnnotationOverlayView(mapLibreMap)
                 }
+                
+                coverageOverlayView.invalidate()
             }
 
             // Only compute predictions when the camera becomes idle
