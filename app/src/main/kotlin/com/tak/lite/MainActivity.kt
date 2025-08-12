@@ -59,6 +59,8 @@ import kotlin.math.roundToInt
 val DEFAULT_US_CENTER = LatLng(39.8283, -98.5795)
 const val DEFAULT_US_ZOOM = 4.0
 const val WEATHER_FETCH_INTERVAL_MS = 15 * 60 * 1000L // 15 minutes
+// For generating play store screenshots
+const val HIDE_DEVICE_CONNECTION_STATUS_BAR = false
 
 @AndroidEntryPoint
 class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
@@ -148,7 +150,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
         setContentView(binding.root)
 
         // Show the connection status bar immediately
-        findViewById<View>(R.id.connectionStatusBar).visibility = View.VISIBLE
+        toggleDeviceStatusBar(true)
 
         // Check trial status and show appropriate dialog if needed
         lifecycleScope.launch {
@@ -704,11 +706,24 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
         button.backgroundTintList = android.content.res.ColorStateList.valueOf(color)
     }
 
+    private fun toggleDeviceStatusBar(show: Boolean) {
+        val statusBar = findViewById<View>(R.id.connectionStatusBar)
+        if (HIDE_DEVICE_CONNECTION_STATUS_BAR) {
+            statusBar.visibility = View.GONE
+            return
+        }
+
+        statusBar.visibility = if (show) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
+    }
+
     private fun observeMeshNetworkState() {
         lifecycleScope.launch {
             viewModel.uiState.collectLatest { state ->
                 Log.d("MainActivity", "Mesh network state changed to: $state")
-                val statusBar = findViewById<View>(R.id.connectionStatusBar)
                 when (state) {
                     is MeshNetworkUiState.Connected -> {
                         peerIdToNickname.clear()
@@ -716,7 +731,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                             peerIdToNickname[peer.id] = peer.nickname
                         }
                         // Hide the connection status bar when connected
-                        statusBar.visibility = View.GONE
+                        toggleDeviceStatusBar(false)
                         Log.d("MainActivity", "Hiding connection status bar - Connected")
                         Log.d("MainActivity", "Connection state changed to Connected - updating PTT button")
                         // Update PTT button visibility when connection state changes
@@ -726,7 +741,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                         Toast.makeText(this@MainActivity, getString(R.string.connecting_to_mesh), Toast.LENGTH_SHORT).show()
                         peerIdToNickname.clear()
                         // Show the connection status bar when disconnected
-                        statusBar.visibility = View.VISIBLE
+                        toggleDeviceStatusBar(true)
                         Log.d("MainActivity", "Showing connection status bar - Disconnected")
                         // Update PTT button visibility when connection state changes
                         updatePTTButtonVisibility()
@@ -735,7 +750,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                         Toast.makeText(this@MainActivity, getString(R.string.disconnected_from_mesh), Toast.LENGTH_SHORT).show()
                         peerIdToNickname.clear()
                         // Show the connection status bar when disconnected
-                        statusBar.visibility = View.VISIBLE
+                        toggleDeviceStatusBar(true)
                         Log.d("MainActivity", "Showing connection status bar - Disconnected")
                         // Update PTT button visibility when connection state changes
                         updatePTTButtonVisibility()
@@ -743,14 +758,14 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                     is MeshNetworkUiState.Error -> {
                         Toast.makeText(this@MainActivity, state.message, Toast.LENGTH_LONG).show()
                         // Show the connection status bar on error
-                        statusBar.visibility = View.VISIBLE
+                        toggleDeviceStatusBar(true)
                         Log.d("MainActivity", "Showing connection status bar - Error: ${state.message}")
                         // Update PTT button visibility when connection state changes
                         updatePTTButtonVisibility()
                     }
                     MeshNetworkUiState.Initial -> {
                         // Show the connection status bar in initial state
-                        statusBar.visibility = View.VISIBLE
+                        toggleDeviceStatusBar(true)
                         Log.d("MainActivity", "Showing connection status bar - Initial state")
                         // Update PTT button visibility when connection state changes
                         updatePTTButtonVisibility()

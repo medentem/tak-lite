@@ -69,7 +69,6 @@ class WeatherLayerManager(
             }
 
             val url = urlTemplateProvider(weatherSource)
-            android.util.Log.d(TAG, "URL template from provider: " + url)
             if (url.isNullOrBlank()) {
                 Log.w(TAG, "No weather radar URL template available; skipping")
                 return@getStyle
