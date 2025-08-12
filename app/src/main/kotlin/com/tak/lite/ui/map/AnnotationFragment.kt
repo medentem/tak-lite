@@ -150,7 +150,6 @@ class AnnotationFragment : Fragment(), LayersTarget {
                     kotlinx.coroutines.delay(100) // 100ms delay
                     // Restore weather overlay first so annotation layers render above it
                     weatherLayerManager?.restore()
-                    annotationController.onStyleChanged()
                     annotationController.setupAnnotationOverlay(mapLibreMap)
                     annotationController.renderAllAnnotations(mapLibreMap)
                     
@@ -327,6 +326,7 @@ class AnnotationFragment : Fragment(), LayersTarget {
             var lastCameraUpdate = 0L
             val CAMERA_UPDATE_THROTTLE_MS = 50L // 20fps for heavy operations
             
+            // Add delegation to controller for throttled camera move logic
             mapLibreMap.addOnCameraMoveListener {
                 val now = System.currentTimeMillis()
                 val shouldUpdateHeavy = now - lastCameraUpdate >= CAMERA_UPDATE_THROTTLE_MS
@@ -339,10 +339,16 @@ class AnnotationFragment : Fragment(), LayersTarget {
                 lineTimerTextOverlayView.setProjection(mapLibreMap.projection)
                 polygonTimerTextOverlayView.setProjection(mapLibreMap.projection)
                 areaTimerTextOverlayView.setProjection(mapLibreMap.projection)
+                lineDistanceTextOverlayView.setProjection(mapLibreMap.projection)  // Added this line
                 clusterTextOverlayView.setProjection(mapLibreMap.projection)
                 
                 // Notify cluster text manager about camera movement for performance optimization
                 annotationController.clusterTextManager?.onCameraMoving()
+                
+                // Delegate to controller for any additional throttled logic
+                if (shouldUpdateHeavy) {
+                    annotationController.onCameraMoveThrottled(mapLibreMap)
+                }
                 
                 // THROTTLED: Heavy operations that can be delayed
                 if (shouldUpdateHeavy) {

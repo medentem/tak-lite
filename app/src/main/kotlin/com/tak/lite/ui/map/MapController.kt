@@ -722,11 +722,6 @@ class MapController(
         }
         map.setStyle(org.maplibre.android.maps.Style.Builder().fromJson(styleJson)) {
             onStyleChanged?.invoke()
-            // Force a redraw of the annotation overlay
-            map.addOnCameraMoveListener {
-                onStyleChanged?.invoke()
-                onCameraMove?.invoke(map)
-            }
         }
     }
 
