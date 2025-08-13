@@ -496,6 +496,7 @@
     <string name="area_format_metric">%.2f km²</string>
     
     <!-- Language Settings -->
+    <string name="localization_settings">Localization Settings</string>
     <string name="language_settings">Language Settings</string>
     <string name="app_language">App Language</string>
     <string name="use_system_language">Use System Language</string>

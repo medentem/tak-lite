@@ -496,6 +496,7 @@
     <string name="insufficient_data_format">Unzureichende Daten: %1$d Peers</string>
     
     <!-- Language Settings -->
+    <string name="localization_settings">Lokalisierungseinstellungen</string>
     <string name="language_settings">Spracheinstellungen</string>
     <string name="app_language">App-Sprache</string>
     <string name="use_system_language">Systemsprache verwenden</string>

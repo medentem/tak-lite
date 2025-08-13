@@ -496,6 +496,7 @@
     <string name="insufficient_data_format">Dati Insufficienti: %1$d peer</string>
     
     <!-- Language Settings -->
+    <string name="localization_settings">Impostazioni di Localizzazione</string>
     <string name="language_settings">Impostazioni Lingua</string>
     <string name="app_language">Lingua dell\'App</string>
     <string name="use_system_language">Usa Lingua di Sistema</string>

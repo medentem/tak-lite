@@ -27,6 +27,17 @@
             android:divider="@android:color/transparent"
             android:showDividers="middle">
 
+            <!-- Add Connection & Network section header and merged card -->
+            <!-- New Section Header: Connection & Network -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Connection &amp; Network"
+                android:textAppearance="@style/TextAppearance.Material3.HeadlineSmall"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="8dp" />
+
+            <!-- Merged Card: Mesh Network Adapter + Background Processing (combine original first two cards) -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -40,6 +51,7 @@
                     android:orientation="vertical"
                     android:padding="16dp">
 
+                    <!-- Original Mesh Network Adapter content -->
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
@@ -127,22 +139,16 @@
                         android:layout_height="wrap_content"
                         android:visibility="gone"
                         android:text="@string/downloading_config" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
 
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                app:cardElevation="2dp"
-                app:cardCornerRadius="16dp">
+                    <!-- Divider between sections in merged card -->
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="?android:attr/dividerHorizontal"
+                        android:layout_marginTop="16dp"
+                        android:layout_marginBottom="16dp" />
 
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
-
+                    <!-- Original Background Processing content -->
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
@@ -158,7 +164,17 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
+            <!-- Add Map & Display section header and merged general map settings card -->
+            <!-- New Section Header: Map & Display -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Map &amp; Display"
+                android:textAppearance="@style/TextAppearance.Material3.HeadlineSmall"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="8dp" />
 
+            <!-- Merged Card: General Map Settings (combine map settings, keep awake, packet summary, min segment, peer staleness) -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -175,6 +191,81 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
+                        android:text="@string/map_settings"
+                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                        android:paddingBottom="8dp" />
+
+                    <!-- Original map mode spinner -->
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="Startup Map Mode"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                        app:boxBackgroundMode="outline">
+
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                            android:id="@+id/mapModeSpinner"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="none"
+                            android:focusable="false"
+                            android:clickable="true"
+                            android:importantForAccessibility="yes"
+                            android:dropDownHeight="wrap_content"
+                            android:dropDownWidth="match_parent"
+                            android:background="@android:color/transparent" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <!-- Original dark mode spinner -->
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:hint="Map Dark Mode"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                        app:boxBackgroundMode="outline">
+
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                            android:id="@+id/darkModeSpinner"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="none"
+                            android:focusable="false"
+                            android:clickable="true"
+                            android:importantForAccessibility="yes"
+                            android:dropDownHeight="wrap_content"
+                            android:dropDownWidth="match_parent"
+                            android:background="@android:color/transparent" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <!-- Original peer staleness input -->
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:hint="Peer Staleness Threshold (minutes)"
+                        app:boxBackgroundMode="outline">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/peerStalenessThresholdEditText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="number"
+                            android:hint="e.g. 10 (peers older than this will show as gray)" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <!-- Divider -->
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="?android:attr/dividerHorizontal"
+                        android:layout_marginTop="16dp"
+                        android:layout_marginBottom="16dp" />
+
+                    <!-- Original keep screen awake -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:text="@string/keep_screen_awake"
                         android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
                         android:paddingBottom="8dp" />
@@ -186,23 +277,16 @@
                         android:text="@string/prevent_screen_sleep"
                         android:paddingTop="4dp"
                         android:paddingBottom="4dp" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-            
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:layout_marginBottom="8dp"
-                app:cardElevation="2dp"
-                app:cardCornerRadius="16dp">
 
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
+                    <!-- Divider -->
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="?android:attr/dividerHorizontal"
+                        android:layout_marginTop="16dp"
+                        android:layout_marginBottom="16dp" />
 
+                    <!-- Original show packet summary -->
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
@@ -217,9 +301,42 @@
                         android:text="@string/show_packet_overlay"
                         android:paddingTop="4dp"
                         android:paddingBottom="4dp" />
+
+                    <!-- Divider -->
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="?android:attr/dividerHorizontal"
+                        android:layout_marginTop="16dp"
+                        android:layout_marginBottom="16dp" />
+
+                    <!-- Original min line segment dist -->
+                    <TextView
+                        android:id="@+id/minLineSegmentDistLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/min_line_segment_dist"
+                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                        android:paddingBottom="8dp" />
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/minLineSegmentDistLayout"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="@string/min_line_segment_dist_hint_imperial"
+                        app:boxBackgroundMode="outline">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/minLineSegmentDistEditText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="numberDecimal"
+                            android:hint="e.g. 1.0" />
+                    </com.google.android.material.textfield.TextInputLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
+            <!-- Original Card: Location Prediction -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -262,117 +379,7 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <com.google.android.material.card.MaterialCardView
-                android:id="@+id/weatherSettingsCard"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                app:cardElevation="2dp"
-                app:cardCornerRadius="16dp"
-                android:visibility="gone">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/weather_settings"
-                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
-                        android:paddingBottom="8dp" />
-
-                    <com.google.android.material.switchmaterial.SwitchMaterial
-                        android:id="@+id/weatherEnabledSwitch"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/enable_weather_layer" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/weather_source"
-                        android:textSize="16sp"
-                        android:textStyle="bold"
-                        android:layout_marginTop="16dp"
-                        android:layout_marginBottom="8dp" />
-
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:hint="Select weather data type"
-                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
-                        app:boxBackgroundMode="outline">
-
-                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
-                            android:id="@+id/weatherSourceSpinner"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:inputType="none"
-                            android:focusable="false"
-                            android:clickable="true"
-                            android:importantForAccessibility="yes"
-                            android:dropDownHeight="wrap_content"
-                            android:dropDownWidth="match_parent"
-                            android:background="@android:color/transparent" />
-                    </com.google.android.material.textfield.TextInputLayout>
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/opacity"
-                        android:textSize="16sp"
-                        android:textStyle="bold"
-                        android:layout_marginTop="16dp"
-                        android:layout_marginBottom="8dp" />
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:layout_marginBottom="8dp">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="0.5"
-                            android:textSize="12sp"
-                            android:layout_marginEnd="8dp" />
-
-                        <com.google.android.material.slider.Slider
-                            android:id="@+id/weatherOpacitySlider"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:valueFrom="0.5"
-                            android:valueTo="1.0"
-                            android:stepSize="0.1"
-                            app:labelBehavior="floating" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="1.0"
-                            android:textSize="12sp"
-                            android:layout_marginStart="8dp" />
-
-                    </LinearLayout>
-
-                    <TextView
-                        android:id="@+id/weatherOpacityValue"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="0.9"
-                        android:textSize="14sp"
-                        android:textColor="?android:attr/textColorSecondary"
-                        android:layout_gravity="center_horizontal" />
-
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
+            <!-- Original Card: Coverage Analysis -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -485,12 +492,15 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
+            <!-- Original Card: Weather Settings -->
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/weatherSettingsCard"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp"
                 app:cardElevation="2dp"
-                app:cardCornerRadius="16dp">
+                app:cardCornerRadius="16dp"
+                android:visibility="gone">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -501,19 +511,34 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/map_settings"
+                        android:text="@string/weather_settings"
                         android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
                         android:paddingBottom="8dp" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/weatherEnabledSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/enable_weather_layer" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/weather_source"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:layout_marginTop="16dp"
+                        android:layout_marginBottom="8dp" />
 
                     <com.google.android.material.textfield.TextInputLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="Startup Map Mode"
+                        android:hint="Select weather data type"
                         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
                         app:boxBackgroundMode="outline">
 
                         <com.google.android.material.textfield.MaterialAutoCompleteTextView
-                            android:id="@+id/mapModeSpinner"
+                            android:id="@+id/weatherSourceSpinner"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:inputType="none"
@@ -525,83 +550,69 @@
                             android:background="@android:color/transparent" />
                     </com.google.android.material.textfield.TextInputLayout>
 
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:hint="Map Dark Mode"
-                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
-                        app:boxBackgroundMode="outline">
-
-                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
-                            android:id="@+id/darkModeSpinner"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:inputType="none"
-                            android:focusable="false"
-                            android:clickable="true"
-                            android:importantForAccessibility="yes"
-                            android:dropDownHeight="wrap_content"
-                            android:dropDownWidth="match_parent"
-                            android:background="@android:color/transparent" />
-                    </com.google.android.material.textfield.TextInputLayout>
-
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:hint="Peer Staleness Threshold (minutes)"
-                        app:boxBackgroundMode="outline">
-
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/peerStalenessThresholdEditText"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:inputType="number"
-                            android:hint="e.g. 10 (peers older than this will show as gray)" />
-                    </com.google.android.material.textfield.TextInputLayout>
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                app:cardElevation="2dp"
-                app:cardCornerRadius="16dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
-
                     <TextView
-                        android:id="@+id/minLineSegmentDistLabel"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/min_line_segment_dist"
-                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
-                        android:paddingBottom="8dp" />
+                        android:text="@string/opacity"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:layout_marginTop="16dp"
+                        android:layout_marginBottom="8dp" />
 
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:id="@+id/minLineSegmentDistLayout"
+                    <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="@string/min_line_segment_dist_hint_imperial"
-                        app:boxBackgroundMode="outline">
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginBottom="8dp">
 
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/minLineSegmentDistEditText"
-                            android:layout_width="match_parent"
+                        <TextView
+                            android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:inputType="numberDecimal"
-                            android:hint="e.g. 1.0" />
-                    </com.google.android.material.textfield.TextInputLayout>
+                            android:text="0.5"
+                            android:textSize="12sp"
+                            android:layout_marginEnd="8dp" />
+
+                        <com.google.android.material.slider.Slider
+                            android:id="@+id/weatherOpacitySlider"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:valueFrom="0.5"
+                            android:valueTo="1.0"
+                            android:stepSize="0.1"
+                            app:labelBehavior="floating" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="1.0"
+                            android:textSize="12sp"
+                            android:layout_marginStart="8dp" />
+
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/weatherOpacityValue"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0.9"
+                        android:textSize="14sp"
+                        android:textColor="?android:attr/textColorSecondary"
+                        android:layout_gravity="center_horizontal" />
+
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-
+            <!-- Add Audio & Feedback section header and original End Transmission Beep card -->
+            <!-- New Section Header: Audio & Feedback -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Audio &amp; Feedback"
+                android:textAppearance="@style/TextAppearance.Material3.HeadlineSmall"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="8dp" />
 
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
@@ -632,6 +643,148 @@
                         android:paddingBottom="4dp" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
+
+            <!-- Add Device & Calibration section header and original Compass Calibration card -->
+            <!-- New Section Header: Device & Calibration -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Device &amp; Calibration"
+                android:textAppearance="@style/TextAppearance.Material3.HeadlineSmall"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="8dp" />
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardElevation="2dp"
+                app:cardCornerRadius="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/compass_calibration_title"
+                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                        android:paddingBottom="8dp" />
+
+                    <TextView
+                        android:id="@+id/compassStatusText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/status_checking"
+                        android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+                        android:paddingTop="4dp"
+                        android:paddingBottom="8dp" />
+
+                    <TextView
+                        android:id="@+id/compassQualityText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/quality_unknown"
+                        android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+                        android:paddingBottom="8dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/compassCalibrateButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/compass_calibration_button"
+                        android:layout_marginTop="4dp"
+                        android:layout_marginBottom="4dp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Add Localization & Personalization section header and original Localization Settings card -->
+            <!-- New Section Header: Localization & Personalization -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Localization &amp; Personalization"
+                android:textAppearance="@style/TextAppearance.Material3.HeadlineSmall"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="8dp" />
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardElevation="2dp"
+                app:cardCornerRadius="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/localization_settings"
+                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                        android:paddingBottom="8dp" />
+
+                    <!-- Language Settings -->
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="@string/app_language"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                        app:boxBackgroundMode="outline">
+
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                            android:id="@+id/languageSpinner"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="none"
+                            android:focusable="false"
+                            android:clickable="true"
+                            android:importantForAccessibility="yes"
+                            android:dropDownHeight="wrap_content"
+                            android:dropDownWidth="match_parent"
+                            android:background="@android:color/transparent" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <!-- Unit System Settings -->
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:hint="@string/unit_system"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                        app:boxBackgroundMode="outline">
+
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                            android:id="@+id/unitSystemSpinner"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="none"
+                            android:focusable="false"
+                            android:clickable="true"
+                            android:importantForAccessibility="yes"
+                            android:dropDownHeight="wrap_content"
+                            android:dropDownWidth="match_parent"
+                            android:background="@android:color/transparent" />
+                    </com.google.android.material.textfield.TextInputLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Add Advanced/Testing section header and original Simulate Peers card -->
+            <!-- New Section Header: Advanced/Testing -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Advanced/Testing"
+                android:textAppearance="@style/TextAppearance.Material3.HeadlineSmall"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="8dp" />
 
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
@@ -701,146 +854,6 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                app:cardElevation="2dp"
-                app:cardCornerRadius="16dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/compass_calibration_title"
-                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
-                        android:paddingBottom="8dp" />
-
-                    <TextView
-                        android:id="@+id/compassStatusText"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/status_checking"
-                        android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
-                        android:paddingTop="4dp"
-                        android:paddingBottom="8dp" />
-
-                    <TextView
-                        android:id="@+id/compassQualityText"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/quality_unknown"
-                        android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
-                        android:paddingBottom="8dp" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/compassCalibrateButton"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/compass_calibration_button"
-                        android:layout_marginTop="4dp"
-                        android:layout_marginBottom="4dp" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <!-- Language Settings Card -->
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                app:cardElevation="2dp"
-                app:cardCornerRadius="16dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/language_settings"
-                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
-                        android:paddingBottom="8dp" />
-
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:hint="@string/app_language"
-                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
-                        app:boxBackgroundMode="outline">
-
-                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
-                            android:id="@+id/languageSpinner"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:inputType="none"
-                            android:focusable="false"
-                            android:clickable="true"
-                            android:importantForAccessibility="yes"
-                            android:dropDownHeight="wrap_content"
-                            android:dropDownWidth="match_parent"
-                            android:background="@android:color/transparent" />
-                    </com.google.android.material.textfield.TextInputLayout>
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/language_change_restart"
-                        android:textAppearance="@style/TextAppearance.Material3.BodySmall"
-                        android:textColor="?android:attr/textColorSecondary"
-                        android:layout_marginTop="8dp" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <!-- Unit System Settings Card -->
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                app:cardElevation="2dp"
-                app:cardCornerRadius="16dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/unit_system_settings"
-                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
-                        android:paddingBottom="8dp" />
-
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:hint="@string/unit_system"
-                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
-                        app:boxBackgroundMode="outline">
-
-                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
-                            android:id="@+id/unitSystemSpinner"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:inputType="none"
-                            android:focusable="false"
-                            android:clickable="true"
-                            android:importantForAccessibility="yes"
-                            android:dropDownHeight="wrap_content"
-                            android:dropDownWidth="match_parent"
-                            android:background="@android:color/transparent" />
-                    </com.google.android.material.textfield.TextInputLayout>
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
         </LinearLayout>
     </ScrollView>
 

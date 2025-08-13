@@ -496,6 +496,7 @@
     <string name="insufficient_data_format">Dados Insuficientes: %1$d pares</string>
     
     <!-- Language Settings -->
+    <string name="localization_settings">Configurações de Localização</string>
     <string name="language_settings">Configurações de Idioma</string>
     <string name="app_language">Idioma do Aplicativo</string>
     <string name="use_system_language">Usar Idioma do Sistema</string>

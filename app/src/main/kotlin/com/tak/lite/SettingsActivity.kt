@@ -207,11 +207,10 @@ class SettingsActivity : BaseActivity() {
         // Check premium status and update UI accordingly
         lifecycleScope.launch {
             repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
-                billingManager.isPremium.collectLatest { isPremium ->
-                    val inTrial = billingManager.isInTrialPeriod()
-                    updateMeshSettingsVisibility(isPremium || inTrial)
-                    updateWeatherSettingsVisibility(isPremium)
-                }
+                val isPremium = billingManager.isPremium()
+                val inTrial = billingManager.isInTrialPeriod()
+                updateMeshSettingsVisibility(isPremium || inTrial)
+                updateWeatherSettingsVisibility(isPremium)
             }
         }
 
@@ -219,8 +218,6 @@ class SettingsActivity : BaseActivity() {
         unlockAppButton.setOnClickListener {
             showAppropriateDialog()
         }
-
-
 
         // Setup map mode spinner
         val adapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, mapModeOptions)
