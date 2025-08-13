@@ -48,7 +48,20 @@ object LocaleManager {
      */
     fun setLanguage(context: Context, language: Language) {
         val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putString(KEY_LANGUAGE, language.code).apply()
+        if (language == Language.SYSTEM) {
+            // Clear the preference to use system default
+            prefs.edit().remove(KEY_LANGUAGE).apply()
+        } else {
+            prefs.edit().putString(KEY_LANGUAGE, language.code).apply()
+        }
+    }
+    
+    /**
+     * Clear language preference to use system default
+     */
+    fun clearLanguagePreference(context: Context) {
+        val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        prefs.edit().remove(KEY_LANGUAGE).apply()
     }
     
     /**
@@ -81,7 +94,21 @@ object LocaleManager {
      */
     fun applyLocaleToResources(context: Context) {
         val language = getLanguage(context)
-        if (language != Language.SYSTEM) {
+        if (language == Language.SYSTEM) {
+            // For system language, we need to reset the configuration
+            // We'll use the default locale and let the system handle it
+            val config = Configuration(context.resources.configuration)
+            // Use the default locale for system language
+            val defaultLocale = Locale.getDefault()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                config.setLocale(defaultLocale)
+            } else {
+                @Suppress("DEPRECATION")
+                config.locale = defaultLocale
+            }
+            context.resources.updateConfiguration(config, context.resources.displayMetrics)
+        } else {
+            // Apply specific locale
             val locale = Locale(language.code)
             Locale.setDefault(locale)
             
@@ -95,6 +122,15 @@ object LocaleManager {
             
             context.resources.updateConfiguration(config, context.resources.displayMetrics)
         }
+    }
+    
+    /**
+     * Get the original system locale (before any app modifications)
+     */
+    fun getOriginalSystemLocale(context: Context): Locale {
+        // For now, return the default locale
+        // This is a simplified approach
+        return Locale.getDefault()
     }
     
     /**

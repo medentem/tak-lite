@@ -986,6 +986,26 @@ class SettingsActivity : BaseActivity() {
         // Ensure keep screen awake is always set according to preference
         val keepAwakeEnabled = prefs.getBoolean("keep_screen_awake", false)
         setKeepScreenAwake(keepAwakeEnabled)
+        
+        // Refresh language dropdown to ensure it's properly configured
+        refreshLanguageDropdown()
+    }
+    
+    private fun refreshLanguageDropdown() {
+        // Get available languages with their display names
+        val availableLanguages = LocaleManager.getAvailableLanguages(this)
+        val languageOptions = availableLanguages.map { it.second }
+        
+        // Get current language setting
+        val currentLanguage = LocaleManager.getLanguage(this)
+        val currentLanguageIndex = availableLanguages.indexOfFirst { it.first == currentLanguage }.takeIf { it >= 0 } ?: 0
+        
+        // Update the adapter
+        val languageAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, languageOptions)
+        languageSpinner.setAdapter(languageAdapter)
+        
+        // Set current selection
+        languageSpinner.setText(languageOptions[currentLanguageIndex], false)
     }
 
     private fun setKeepScreenAwake(enabled: Boolean) {
@@ -1134,7 +1154,7 @@ class SettingsActivity : BaseActivity() {
         val availableLanguages = LocaleManager.getAvailableLanguages(this)
         val languageOptions = availableLanguages.map { it.second }
         
-        // Setup language spinner
+        // Setup language spinner with a fresh adapter
         val languageAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, languageOptions)
         languageSpinner.setAdapter(languageAdapter)
         
@@ -1154,8 +1174,19 @@ class SettingsActivity : BaseActivity() {
             if (selectedLanguage != currentLanguage) {
                 LocaleManager.setLanguage(this, selectedLanguage)
                 
-                // Apply locale immediately and recreate activity
-                LocaleManager.applyLocaleAndRecreate(this)
+                // For system language, we need to force a complete recreation
+                if (selectedLanguage == LocaleManager.Language.SYSTEM) {
+                    // Clear any cached resources and recreate
+                    LocaleManager.applyLocaleToResources(this)
+                    // Force a complete activity recreation
+                    val intent = intent
+                    finish()
+                    startActivity(intent)
+                    overridePendingTransition(0, 0) // No animation
+                } else {
+                    // Apply locale immediately and recreate activity
+                    LocaleManager.applyLocaleAndRecreate(this)
+                }
             }
         }
     }
