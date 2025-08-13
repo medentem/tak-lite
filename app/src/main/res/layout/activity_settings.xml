@@ -32,7 +32,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Connection &amp; Network"
+                android:text="@string/section_connection_network"
                 android:textAppearance="@style/TextAppearance.Material3.HeadlineSmall"
                 android:layout_marginTop="24dp"
                 android:layout_marginBottom="8dp" />
@@ -169,7 +169,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Map &amp; Display"
+                android:text="@string/section_map_display"
                 android:textAppearance="@style/TextAppearance.Material3.HeadlineSmall"
                 android:layout_marginTop="24dp"
                 android:layout_marginBottom="8dp" />
@@ -275,30 +275,6 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/prevent_screen_sleep"
-                        android:paddingTop="4dp"
-                        android:paddingBottom="4dp" />
-
-                    <!-- Divider -->
-                    <View
-                        android:layout_width="match_parent"
-                        android:layout_height="1dp"
-                        android:background="?android:attr/dividerHorizontal"
-                        android:layout_marginTop="16dp"
-                        android:layout_marginBottom="16dp" />
-
-                    <!-- Original show packet summary -->
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/show_packet_summary"
-                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
-                        android:paddingBottom="8dp" />
-
-                    <com.google.android.material.switchmaterial.SwitchMaterial
-                        android:id="@+id/showPacketSummarySwitch"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/show_packet_overlay"
                         android:paddingTop="4dp"
                         android:paddingBottom="4dp" />
 
@@ -609,7 +585,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Audio &amp; Feedback"
+                android:text="@string/section_audio_feedback"
                 android:textAppearance="@style/TextAppearance.Material3.HeadlineSmall"
                 android:layout_marginTop="24dp"
                 android:layout_marginBottom="8dp" />
@@ -649,7 +625,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Device &amp; Calibration"
+                android:text="@string/section_device_calibration"
                 android:textAppearance="@style/TextAppearance.Material3.HeadlineSmall"
                 android:layout_marginTop="24dp"
                 android:layout_marginBottom="8dp" />
@@ -706,7 +682,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Localization &amp; Personalization"
+                android:text="@string/section_localization_personalization"
                 android:textAppearance="@style/TextAppearance.Material3.HeadlineSmall"
                 android:layout_marginTop="24dp"
                 android:layout_marginBottom="8dp" />
@@ -781,7 +757,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Advanced/Testing"
+                android:text="@string/section_advanced_testing"
                 android:textAppearance="@style/TextAppearance.Material3.HeadlineSmall"
                 android:layout_marginTop="24dp"
                 android:layout_marginBottom="8dp" />
@@ -799,6 +775,31 @@
                     android:orientation="vertical"
                     android:padding="16dp">
 
+                    <!-- Moved: show_packet_summary -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/show_packet_summary"
+                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                        android:paddingBottom="8dp" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/showPacketSummarySwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/show_packet_overlay"
+                        android:paddingTop="4dp"
+                        android:paddingBottom="4dp" />
+
+                    <!-- Divider -->
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="?android:attr/dividerHorizontal"
+                        android:layout_marginTop="16dp"
+                        android:layout_marginBottom="16dp" />
+
+                    <!-- Original simulate peers content -->
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"

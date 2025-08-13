@@ -508,4 +508,12 @@
     <string name="portuguese">Portugais</string>
     <string name="romansh">Rumantsch</string>
     <string name="language_change_restart">La lingua vegn midada immediat</string>
+
+    <!-- Add section header strings -->
+    <string name="section_connection_network">Connexiun &amp; Rait</string>
+    <string name="section_map_display">Carta &amp; Visualisaziun</string>
+    <string name="section_audio_feedback">Audio &amp; Feedback</string>
+    <string name="section_device_calibration">Apparat &amp; Calibraziun</string>
+    <string name="section_localization_personalization">Localisaziun &amp; Persunalisaziun</string>
+    <string name="section_advanced_testing">Avanzà/Test</string>
 </resources>

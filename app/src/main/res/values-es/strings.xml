@@ -508,4 +508,12 @@
     <string name="portuguese">Portugués</string>
     <string name="romansh">Romanche</string>
     <string name="language_change_restart">El idioma cambiará inmediatamente</string>
+
+    <!-- Add section header strings -->
+    <string name="section_connection_network">Conexión &amp; Red</string>
+    <string name="section_map_display">Mapa &amp; Pantalla</string>
+    <string name="section_audio_feedback">Audio &amp; Retroalimentación</string>
+    <string name="section_device_calibration">Dispositivo &amp; Calibración</string>
+    <string name="section_localization_personalization">Localización &amp; Personalización</string>
+    <string name="section_advanced_testing">Avanzado/Pruebas</string>
 </resources>
