@@ -69,7 +69,17 @@
     <string name="high_detail">High - Full resolution, most detailed analysis</string>
     <string name="antenna_heights">Antenna Heights</string>
     <string name="map_settings">Map Settings</string>
-    <string name="min_line_segment_dist">Minimum Show Line Segment Dist. (miles)</string>
+    <string name="min_line_segment_dist">Minimum Show Line Segment Dist.</string>
+    <string name="min_line_segment_dist_imperial">Minimum Show Line Segment Dist. (miles)</string>
+    <string name="min_line_segment_dist_metric">Minimum Show Line Segment Dist. (kilometers)</string>
+    <string name="min_line_segment_dist_hint_imperial">Enter minimum distance in miles</string>
+    <string name="min_line_segment_dist_hint_metric">Enter minimum distance in kilometers</string>
+    <string name="central_tendency_distance_imperial">Central Tendency Distance (miles)</string>
+    <string name="central_tendency_distance_metric">Central Tendency Distance (kilometers)</string>
+    <string name="user_antenna_height_imperial">Your antenna height (feet)</string>
+    <string name="user_antenna_height_metric">Your antenna height (meters)</string>
+    <string name="receiving_antenna_height_imperial">Receiving antenna height (feet)</string>
+    <string name="receiving_antenna_height_metric">Receiving antenna height (meters)</string>
     <string name="end_transmission_beep">End of Transmission Beep</string>
     <string name="enable_double_beep">Enable double beep at end of transmission</string>
     <string name="simulate_peers">Simulate Peers</string>
@@ -417,11 +427,9 @@
     <string name="terrain_data_warning">Warning: Some terrain data unavailable. Using estimated elevations.</string>
     <string name="processing_elevation_data">Processing elevation data...</string>
     <string name="no_terrain_data">No terrain data available for this area. Showing estimated profile.</string>
-    <string name="elevation_summary_format">Total Distance: %.2f mi | Elevation Range: %.0f ft | Avg Elevation: %.0f ft | Sampling: %.0f m intervals</string>
-    <string name="speed_format">%.2f mph</string>
+    <string name="elevation_summary_format">Total Distance: %1$s | Elevation Range: %2$s | Avg Elevation: %3$s | Sampling: %.0f m intervals</string>
     <string name="compass_quality_format">Compass Quality: %1$s</string>
     <string name="figure_8_detected">Figure-8 detected! Keep going...</string>
-    <string name="distance_miles_format">%1$.1fmi</string>
     <string name="packet_summary_format">Received %1$s from %2$s %3$s%4$d sec ago.</string>
     <string name="members_count_format">%1$d members</string>
     <string name="crypto_donation_title_format">%1$s (%2$s) Donation</string>
@@ -443,7 +451,6 @@
     <string name="active_predictions_format">Active Predictions: %1$d/%2$d peers</string>
     <string name="success_rate_format">Success Rate: %1$d%%</string>
     <string name="average_confidence_format">Average Confidence: %1$d%%</string>
-    <string name="average_speed_format">Average Speed: %1$d mph</string>
     <string name="prediction_age_format">Prediction Age: %1$d min</string>
     <string name="confidence_distribution">🎯 CONFIDENCE DISTRIBUTION</string>
     <string name="confidence_level_format">%1$s: %2$d (%3$d%%)</string>
@@ -453,6 +460,40 @@
     <string name="avg_history_age_format">Avg History Age: %1$d min</string>
     <string name="update_frequency_format">Update Frequency: %1$ds</string>
     <string name="insufficient_data_format">Insufficient Data: %1$d peers</string>
+    
+    <!-- Unit System Settings -->
+    <string name="unit_system_settings">Unit System Settings</string>
+    <string name="unit_system">Unit System</string>
+    <string name="imperial_units">Imperial (miles, feet, mph)</string>
+    <string name="metric_units">Metric (kilometers, meters, km/h)</string>
+    <string name="use_system_units">Use System Default</string>
+    
+    <!-- Unit Labels -->
+    <string name="unit_miles">mi</string>
+    <string name="unit_kilometers">km</string>
+    <string name="unit_feet">ft</string>
+    <string name="unit_meters">m</string>
+    <string name="unit_mph">mph</string>
+    <string name="unit_kmh">km/h</string>
+    <string name="unit_sq_miles">sq mi</string>
+    <string name="unit_sq_kilometers">km²</string>
+    
+    <!-- Unit Format Strings -->
+    <string name="distance_miles_format">%1$.1fmi</string>
+    <string name="distance_kilometers_format">%1$.1fkm</string>
+    <string name="average_speed_format">Average Speed: %1$d mph</string>
+    <string name="average_speed_format_metric">Average Speed: %1$d km/h</string>
+    <string name="speed_format">%.2f mph</string>
+    <string name="distance_format_imperial">%.2f mi</string>
+    <string name="distance_format_metric">%.2f km</string>
+    <string name="distance_short_format_imperial">%.1f mi</string>
+    <string name="distance_short_format_metric">%.1f km</string>
+    <string name="speed_format_imperial">%.1f mph</string>
+    <string name="speed_format_metric">%.1f km/h</string>
+    <string name="elevation_format_imperial">%.0f ft</string>
+    <string name="elevation_format_metric">%.0f m</string>
+    <string name="area_format_imperial">%.2f sq mi</string>
+    <string name="area_format_metric">%.2f km²</string>
     
     <!-- Language Settings -->
     <string name="language_settings">Language Settings</string>

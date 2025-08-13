@@ -1,5 +1,6 @@
 package com.tak.lite.util
 
+import android.content.Context
 import android.util.Log
 import com.tak.lite.util.CoordinateUtils.calculateBearing
 import java.util.Locale
@@ -10,8 +11,8 @@ import java.util.Locale
 object LocationUtils {
     private const val TAG = "LocationUtils"
     
-    // Threshold for "your location" in miles
-    private const val YOUR_LOCATION_THRESHOLD_MILES = 5.0
+    // Threshold for "your location" in meters
+    private const val YOUR_LOCATION_THRESHOLD_METERS = 8046.72 // 5 miles in meters
     
     /**
      * Convert bearing degrees to cardinal direction (N, NE, E, SE, S, SW, W, NW)
@@ -43,6 +44,7 @@ object LocationUtils {
         forecastLon: Double, 
         userLat: Double, 
         userLon: Double,
+        context: Context,
         prefix: String = ""
     ): String {
         // Validate coordinates
@@ -51,17 +53,17 @@ object LocationUtils {
             return "Unknown distance from you"
         }
         
-        val distanceMiles = haversineMiles(userLat, userLon, forecastLat, forecastLon)
+        val distanceMeters = haversine(userLat, userLon, forecastLat, forecastLon)
         
-        Log.d(TAG, "Distance from user: ${String.format("%.1f", distanceMiles)} miles")
+        Log.d(TAG, "Distance from user: ${String.format("%.1f", distanceMeters)} meters")
         
-        return if (distanceMiles <= YOUR_LOCATION_THRESHOLD_MILES) {
+        return if (distanceMeters <= YOUR_LOCATION_THRESHOLD_METERS) {
             "${prefix}your location".replaceFirstChar { if (it. isLowerCase()) it. titlecase(Locale.getDefault()) else it. toString() }
         } else {
             val bearing = calculateBearing(userLat, userLon, forecastLat, forecastLon)
             val direction = bearingToCardinalDirection(bearing)
-            val formattedDistance = String.format("%.1f", distanceMiles)
-            "${prefix}$formattedDistance mi. $direction of your location"
+            val formattedDistance = UnitManager.metersToDistanceShort(distanceMeters, context)
+            "${prefix}$formattedDistance $direction of your location"
         }
     }
     

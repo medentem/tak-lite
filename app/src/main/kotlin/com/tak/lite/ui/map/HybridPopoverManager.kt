@@ -9,6 +9,7 @@ import android.view.ViewGroup
 import android.widget.TextView
 import com.tak.lite.R
 import com.tak.lite.model.MapAnnotation
+import com.tak.lite.util.UnitManager
 import com.tak.lite.util.haversine
 import com.tak.lite.viewmodel.MeshNetworkViewModel
 import org.maplibre.android.geometry.LatLng
@@ -21,6 +22,7 @@ import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.Point
 
 class HybridPopoverManager(
+    private val context: android.content.Context,
     private val mapLibreMap: MapLibreMap,
     private val rootView: ViewGroup,
     private val meshNetworkViewModel: MeshNetworkViewModel
@@ -403,8 +405,7 @@ class HybridPopoverManager(
             val userLocation = meshNetworkViewModel.bestLocation.value
             if (userLocation != null) {
                 val distMeters = haversine(peerLocation.latitude, peerLocation.longitude, userLocation.latitude, userLocation.longitude)
-                val distMiles = distMeters / 1609.344
-                lines.add("${String.format("%.1f", distMiles)} mi away")
+                lines.add("${UnitManager.metersToDistanceShort(distMeters, context)} away")
             }
         }
         
@@ -429,8 +430,7 @@ class HybridPopoverManager(
         val userLocation = meshNetworkViewModel.bestLocation.value
         if (userLocation != null) {
             val distMeters = haversine(poi.position.lt, poi.position.lng, userLocation.latitude, userLocation.longitude)
-            val distMiles = distMeters / 1609.344
-            lines.add("${String.format("%.1f", distMiles)} mi away")
+            lines.add("${UnitManager.metersToDistanceShort(distMeters, context)} away")
         }
         
         return lines.joinToString("|")
@@ -443,9 +443,9 @@ class HybridPopoverManager(
         val title = polygon.label ?: "Polygon"
         lines.add(title)
         
-        // Calculate area in square miles
-        val areaSqMiles = calculatePolygonArea(polygon.points)
-        lines.add("${String.format("%.2f", areaSqMiles)} sq mi")
+        // Calculate area in appropriate units
+        val areaSqMeters = calculatePolygonArea(polygon.points) * 1609.344 * 1609.344 // Convert from sq miles to sq meters
+        lines.add(UnitManager.squareMetersToArea(areaSqMeters, context))
         
         // Content lines
         val ageSec = (System.currentTimeMillis() - polygon.timestamp) / 1000
@@ -459,8 +459,7 @@ class HybridPopoverManager(
         val userLocation = meshNetworkViewModel.bestLocation.value
         if (userLocation != null) {
             val distMeters = haversine(polygon.points.map { it.lt }.average(), polygon.points.map { it.lng }.average(), userLocation.latitude, userLocation.longitude)
-            val distMiles = distMeters / 1609.344
-            lines.add("${String.format("%.1f", distMiles)} mi away")
+            lines.add("${UnitManager.metersToDistanceShort(distMeters, context)} away")
         }
         
         return lines.joinToString("|")
@@ -473,10 +472,10 @@ class HybridPopoverManager(
         val title = area.label ?: "Area"
         lines.add(title)
         
-        // Calculate area in square miles
-        val areaSqMiles = calculateCircleArea(area.center.lt, area.radius)
-        lines.add("${String.format("%.2f", areaSqMiles)} sq mi")
-        Log.d(TAG, "Area calculation: radius=${area.radius}m, area=${String.format("%.2f", areaSqMiles)} sq mi")
+        // Calculate area in appropriate units
+        val areaSqMeters = calculateCircleArea(area.center.lt, area.radius) * 1609.344 * 1609.344 // Convert from sq miles to sq meters
+        lines.add(UnitManager.squareMetersToArea(areaSqMeters, context))
+        Log.d(TAG, "Area calculation: radius=${area.radius}m, area=${UnitManager.squareMetersToArea(areaSqMeters, context)}")
         
         // Content lines
         val ageSec = (System.currentTimeMillis() - area.timestamp) / 1000
@@ -490,8 +489,7 @@ class HybridPopoverManager(
         val userLocation = meshNetworkViewModel.bestLocation.value
         if (userLocation != null) {
             val distMeters = haversine(area.center.lt, area.center.lng, userLocation.latitude, userLocation.longitude)
-            val distMiles = distMeters / 1609.344
-            lines.add("${String.format("%.1f", distMiles)} mi away")
+            lines.add("${UnitManager.metersToDistanceShort(distMeters, context)} away")
         }
         
         return lines.joinToString("|")

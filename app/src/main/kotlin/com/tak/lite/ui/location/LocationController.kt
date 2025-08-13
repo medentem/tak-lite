@@ -40,8 +40,8 @@ import kotlin.math.sqrt
 data class DirectionOverlayData(
     val headingDegrees: Float = 0f,
     val cardinal: String = "N",
-    val speedMph: Float = 0f,
-    val altitudeFt: Float = 0f,
+    val speedMps: Double = 0.0,
+    val altitudeMeters: Double = 0.0,
     val latitude: Double = 0.0,
     val longitude: Double = 0.0,
     val compassQuality: CompassQuality = CompassQuality.UNRELIABLE,
@@ -407,8 +407,8 @@ class LocationController(
         _directionOverlayData.value = _directionOverlayData.value.copy(
             headingDegrees = headingDegrees,
             cardinal = cardinal,
-            speedMph = (location.speed * 2.23694f),
-            altitudeFt = (location.altitude * 3.28084f).toFloat(),
+            speedMps = location.speed.toDouble(),
+            altitudeMeters = location.altitude.toDouble(),
             latitude = location.latitude,
             longitude = location.longitude,
             headingSource = headingSource

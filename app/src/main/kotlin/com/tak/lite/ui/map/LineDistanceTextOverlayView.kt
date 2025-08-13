@@ -9,6 +9,7 @@ import android.graphics.RectF
 import android.util.AttributeSet
 import android.util.Log
 import android.view.View
+import com.tak.lite.util.UnitManager
 import org.maplibre.android.maps.Projection
 
 /**
@@ -75,7 +76,7 @@ class LineDistanceTextOverlayView @JvmOverloads constructor(
                 val screenPoint = projection!!.toScreenLocation(latLng)
                 
                 // Draw distance text at the midpoint of the line segment
-                val distanceText = "%.2f mi".format(distanceFeature.distanceMiles)
+                val distanceText = UnitManager.metersToDistance(distanceFeature.distanceMeters, context)
                 drawDistanceText(canvas, PointF(screenPoint.x, screenPoint.y), distanceText)
                 
             } catch (e: Exception) {

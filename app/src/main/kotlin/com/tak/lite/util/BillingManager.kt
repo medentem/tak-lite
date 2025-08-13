@@ -34,7 +34,7 @@ class BillingManager @Inject constructor(
     private val TAG = "BillingManager"
 
     // For debugging
-    private val IS_PREMIUM_OVERRIDE = false
+    private val IS_PREMIUM_OVERRIDE = true
 
     private val _isPremium = MutableStateFlow(false)
     val isPremium: StateFlow<Boolean> = _isPremium

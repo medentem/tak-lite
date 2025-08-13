@@ -7,7 +7,7 @@ import com.tak.lite.model.LatLngSerializable
  */
 data class DistanceLabel(
     val segmentIndex: Int,
-    val distanceMiles: Double,
+    val distanceMeters: Double,
     val midpoint: LatLngSerializable
 )
 
@@ -17,6 +17,6 @@ data class DistanceLabel(
 data class DistanceFeature(
     val lineId: String,
     val segmentIndex: Int,
-    val distanceMiles: Double,
+    val distanceMeters: Double,
     val midpoint: LatLngSerializable
 )

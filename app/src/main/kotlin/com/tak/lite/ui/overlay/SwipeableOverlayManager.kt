@@ -16,6 +16,7 @@ import com.tak.lite.data.model.WeatherUiState
 import com.tak.lite.repository.WeatherRepository
 import com.tak.lite.util.BillingManager
 import com.tak.lite.util.LocationUtils
+import com.tak.lite.util.UnitManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -49,7 +50,9 @@ class SwipeableOverlayManager @Inject constructor(
     private lateinit var degreeText: android.widget.TextView
     private lateinit var headingSourceText: android.widget.TextView
     private lateinit var speedText: android.widget.TextView
+    private lateinit var speedUnitsText: android.widget.TextView
     private lateinit var altitudeText: android.widget.TextView
+    private lateinit var altitudeUnitsText: android.widget.TextView
     private lateinit var latLngText: android.widget.TextView
     private lateinit var compassCardinalView: com.tak.lite.ui.location.CompassCardinalView
     private lateinit var compassQualityIndicator: android.widget.ImageView
@@ -102,7 +105,9 @@ class SwipeableOverlayManager @Inject constructor(
         degreeText = directionOverlayView.findViewById(R.id.degreeText)
         headingSourceText = directionOverlayView.findViewById(R.id.headingSourceText)
         speedText = directionOverlayView.findViewById(R.id.speedText)
+        speedUnitsText = directionOverlayView.findViewById(R.id.speedUnitsText)
         altitudeText = directionOverlayView.findViewById(R.id.altitudeText)
+        altitudeUnitsText = directionOverlayView.findViewById(R.id.altitudeUnitsText)
         latLngText = directionOverlayView.findViewById(R.id.latLngText)
         compassCardinalView = directionOverlayView.findViewById(R.id.compassCardinalView)
         compassQualityIndicator = directionOverlayView.findViewById(R.id.compassQualityIndicator)
@@ -261,7 +266,9 @@ class SwipeableOverlayManager @Inject constructor(
     fun getDegreeText(): android.widget.TextView = degreeText
     fun getHeadingSourceText(): android.widget.TextView = headingSourceText
     fun getSpeedText(): android.widget.TextView = speedText
+    fun getSpeedUnitsText(): android.widget.TextView = speedUnitsText
     fun getAltitudeText(): android.widget.TextView = altitudeText
+    fun getAltitudeUnitsText(): android.widget.TextView = altitudeUnitsText
     fun getLatLngText(): android.widget.TextView = latLngText
     fun getCompassCardinalView(): com.tak.lite.ui.location.CompassCardinalView = compassCardinalView
     fun getCompassQualityIndicator(): android.widget.ImageView = compassQualityIndicator
@@ -526,9 +533,9 @@ class SwipeableOverlayManager @Inject constructor(
             
             // Update details with null safety
             humidityValueText.text = if (current.humidity != null) "${current.humidity}%" else "--"
-            windSpeedText.text = if (current.wind_speed != null) "${current.wind_speed.toInt()} mph" else "--"
+            windSpeedText.text = if (current.wind_speed != null) formatWindSpeed(current.wind_speed) else "--"
             uvIndexText.text = if (current.uvi != null) String.format("UV %.1f", current.uvi) else "--"
-            pressureText.text = if (current.pressure != null) "${current.pressure} hPa" else "--"
+            pressureText.text = if (current.pressure != null) formatPressure(current.pressure) else "--"
             sunriseText.text = formatTime(weatherData.timezone_offset, current.sunrise)
             sunsetText.text = formatTime(weatherData.timezone_offset, current.sunset)
 
@@ -551,7 +558,8 @@ class SwipeableOverlayManager @Inject constructor(
                     weatherData.lat, 
                     weatherData.lon, 
                     userLatitude, 
-                    userLongitude
+                    userLongitude,
+                    context
                 )
             } else {
                 context.getString(R.string.forecast_for_your_location)
@@ -591,7 +599,7 @@ class SwipeableOverlayManager @Inject constructor(
                 
                 // Show precipitation value (only if > 0)
                 if (minutely.precipitation > 0) {
-                    precipitationValue.text = String.format("%.1f", minutely.precipitation)
+                    precipitationValue.text = formatPrecipitation(minutely.precipitation)
                     precipitationValue.visibility = View.VISIBLE
                 } else {
                     precipitationValue.visibility = View.GONE
@@ -698,21 +706,47 @@ class SwipeableOverlayManager @Inject constructor(
             }
         }
 
-        private fun formatTemp(kelvinOrUnit: Double?): String {
-            if (kelvinOrUnit == null) return "--"
-            // API requested with imperial, values are Fahrenheit; sample provided looks Kelvin
-            // If value looks like Kelvin (> 200), convert to F. Otherwise assume F already.
-            return if (kelvinOrUnit > 200) {
-                val f = (kelvinOrUnit - 273.15) * 9/5 + 32
-                "${f.toInt()}°"
-            } else {
-                "${kelvinOrUnit.toInt()}°"
-            }
+        private fun formatTemp(temperature: Double?): String {
+            if (temperature == null) return "--"
+            // API now provides temperature in the user's preferred units
+            // Imperial: Fahrenheit, Metric: Celsius
+            return "${temperature.toInt()}°"
         }
 
         private fun formatFeelsLike(value: Double?): String {
             if (value == null) return "--"
             return "Feels like ${formatTemp(value)}"
+        }
+        
+        private fun formatWindSpeed(windSpeed: Double): String {
+            // API provides wind speed in user's preferred units
+            // Imperial: mph, Metric: m/s
+            val unitSystem = UnitManager.getUnitSystem(context)
+            return when (unitSystem) {
+                UnitManager.UnitSystem.IMPERIAL -> "${windSpeed.toInt()} mph"
+                UnitManager.UnitSystem.METRIC -> "${windSpeed.toInt()} m/s"
+            }
+        }
+        
+        private fun formatPressure(pressure: Int): String {
+            // API provides pressure in hPa (metric) regardless of unit system
+            // For imperial users, we could convert to inHg, but hPa is standard in meteorology
+            return "${pressure} hPa"
+        }
+        
+        private fun formatPrecipitation(precipitation: Double): String {
+            // API provides precipitation in mm (metric) regardless of unit system
+            // For imperial users, convert to inches
+            val unitSystem = UnitManager.getUnitSystem(context)
+            return when (unitSystem) {
+                UnitManager.UnitSystem.IMPERIAL -> {
+                    val inches = precipitation / 25.4 // mm to inches
+                    String.format("%.2f in", inches)
+                }
+                UnitManager.UnitSystem.METRIC -> {
+                    String.format("%.1f mm", precipitation)
+                }
+            }
         }
 
         private fun formatTime(offsetSeconds: Int, epochSeconds: Long): String {

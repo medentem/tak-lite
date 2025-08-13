@@ -127,7 +127,7 @@ class AnnotationController(
     init {
         clusteringConfig = ClusteringConfig.getDefault()
         clusteredLayerManager = ClusteredLayerManager(mapLibreMap, clusteringConfig)
-        popoverManager = HybridPopoverManager(mapLibreMap, binding.root, meshNetworkViewModel)
+        popoverManager = HybridPopoverManager(fragment.requireContext(), mapLibreMap, binding.root, meshNetworkViewModel)
         unifiedAnnotationManager = UnifiedAnnotationManager(mapLibreMap, fragment.requireContext())
         _deviceLocationManager = DeviceLocationLayerManager(mapLibreMap)
         _clusterTextManager = ClusterTextManager(mapLibreMap)

@@ -13,6 +13,7 @@ import androidx.core.content.ContextCompat
 import com.tak.lite.R
 import com.tak.lite.model.AnnotationColor
 import com.tak.lite.model.PointShape
+import com.tak.lite.util.UnitManager
 import com.tak.lite.util.haversine
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -1014,8 +1015,7 @@ class FanMenuView @JvmOverloads constructor(
         val userLon = prefs.getFloat("last_lon", Float.NaN).toDouble()
         val distStr = if (!userLat.isNaN() && !userLon.isNaN()) {
             val distMeters = haversine(lat, lon, userLat, userLon)
-            val distMiles = distMeters / 1609.344
-            String.format("%.1f mi away", distMiles)
+            "${UnitManager.metersToDistanceShort(distMeters, context)} away"
         } else null
         // Draw white outline around center hole
         val outlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {

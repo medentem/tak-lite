@@ -16,6 +16,7 @@ import com.github.mikephil.charting.data.LineDataSet
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.tak.lite.R
 import com.tak.lite.model.MapAnnotation
+import com.tak.lite.util.UnitManager
 import com.tak.lite.util.getOfflineElevation
 import com.tak.lite.util.haversine
 import kotlinx.coroutines.launch
@@ -104,7 +105,8 @@ class ElevationChartBottomSheet(
         xAxis.setAvoidFirstLastClipping(false)
         xAxis.valueFormatter = object : com.github.mikephil.charting.formatter.ValueFormatter() {
             override fun getFormattedValue(value: Float): String {
-                return if (value < 0.01f) "0 mi" else String.format("%.2f mi", value / 1609.344f)
+                return if (value < 0.01f) "0 ${UnitManager.getDistanceUnitLabel(context)}"
+                       else UnitManager.metersToDistance(value.toDouble(), context)
             }
         }
         // Y Axis
@@ -117,7 +119,7 @@ class ElevationChartBottomSheet(
         leftAxis.setLabelCount(8, true)
         leftAxis.valueFormatter = object : com.github.mikephil.charting.formatter.ValueFormatter() {
             override fun getFormattedValue(value: Float): String {
-                return String.format("%.0f ft", value * 3.28084f)
+                return UnitManager.metersToElevation(value.toDouble(), context)
             }
         }
         val rightAxis = chart.axisRight
@@ -334,7 +336,7 @@ class ElevationChartBottomSheet(
                     // Draw the callout above the dot if values are available
                     distMi?.let { d ->
                         elevFt?.let { e ->
-                            val text = String.format("%.2f mi\n%.0f ft", d, e)
+                            val text = "${UnitManager.metersToDistance(d.toDouble(), context)}\n${UnitManager.metersToElevation(e.toDouble(), context)}"
                             val textPaint = android.graphics.Paint().apply {
                                 color = Color.WHITE
                                 textSize = 36f
@@ -427,14 +429,12 @@ class ElevationChartBottomSheet(
             summaryLayout.setBackgroundColor(Color.argb(30, 128, 128, 128))
             summaryLayout.setPadding(16, 12, 16, 12)
 
-            val totalDistanceMi = cumulativeDistance / 1609.344f
-            val elevationRangeFt = (maxElevation - minElevation) * 3.28084f
-            val avgElevationFt = ((minElevation + maxElevation) / 2) * 3.28084f
+            val totalDistance = UnitManager.metersToDistance(cumulativeDistance.toDouble(), context)
+            val elevationRange = UnitManager.metersToElevation((maxElevation - minElevation).toDouble(), context)
+            val avgElevation = UnitManager.metersToElevation(((minElevation + maxElevation) / 2).toDouble(), context)
 
             val summaryText = TextView(context)
-            summaryText.text = "Total Distance: %.2f mi | Elevation Range: %.0f ft | Avg Elevation: %.0f ft | Sampling: %.0f m intervals".format(
-                totalDistanceMi, elevationRangeFt, avgElevationFt, samplingDistance
-            )
+            summaryText.text = context.getString(R.string.elevation_summary_format, totalDistance, elevationRange, avgElevation, samplingDistance)
             summaryText.textSize = 12f
             summaryText.setTextColor(textColor)
             summaryText.typeface = android.graphics.Typeface.MONOSPACE

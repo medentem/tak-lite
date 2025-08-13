@@ -69,7 +69,17 @@
     <string name="high_detail">Hoch - Vollständige Auflösung, detaillierteste Analyse</string>
     <string name="antenna_heights">Antennenhöhen</string>
     <string name="map_settings">Karteneinstellungen</string>
-    <string name="min_line_segment_dist">Minimale Liniensegment-Distanz (Meilen)</string>
+    <string name="min_line_segment_dist">Minimale Liniensegment-Distanz</string>
+    <string name="min_line_segment_dist_imperial">Minimale Liniensegment-Distanz (Meilen)</string>
+    <string name="min_line_segment_dist_metric">Minimale Liniensegment-Distanz (Kilometer)</string>
+    <string name="min_line_segment_dist_hint_imperial">Geben Sie die Mindestentfernung in Meilen ein</string>
+    <string name="min_line_segment_dist_hint_metric">Geben Sie die Mindestentfernung in Kilometern ein</string>
+    <string name="central_tendency_distance_imperial">Zentrale Tendenz-Distanz (Meilen)</string>
+    <string name="central_tendency_distance_metric">Zentrale Tendenz-Distanz (Kilometer)</string>
+    <string name="user_antenna_height_imperial">Ihre Antennenhöhe (Fuß)</string>
+    <string name="user_antenna_height_metric">Ihre Antennenhöhe (Meter)</string>
+    <string name="receiving_antenna_height_imperial">Empfangsantennenhöhe (Fuß)</string>
+    <string name="receiving_antenna_height_metric">Empfangsantennenhöhe (Meter)</string>
     <string name="end_transmission_beep">Ende-Übertragung-Piepton</string>
     <string name="enable_double_beep">Doppelten Piepton am Ende der Übertragung aktivieren</string>
     <string name="simulate_peers">Peers simulieren</string>
@@ -232,6 +242,35 @@
     <!-- Direction Overlay -->
     <string name="compass">KOMPASS</string>
     <string name="mph">MPH</string>
+    
+    <!-- Unit System Settings -->
+    <string name="unit_system_settings">Einheitensystem-Einstellungen</string>
+    <string name="unit_system">Einheitensystem</string>
+    <string name="imperial_units">Imperial (Meilen, Fuß, mph)</string>
+    <string name="metric_units">Metrisch (Kilometer, Meter, km/h)</string>
+    <string name="use_system_units">Systemstandard verwenden</string>
+    
+    <!-- Unit Labels -->
+    <string name="unit_miles">mi</string>
+    <string name="unit_kilometers">km</string>
+    <string name="unit_feet">ft</string>
+    <string name="unit_meters">m</string>
+    <string name="unit_mph">mph</string>
+    <string name="unit_kmh">km/h</string>
+    <string name="unit_sq_miles">mi²</string>
+    <string name="unit_sq_kilometers">km²</string>
+    
+    <!-- Unit Format Strings -->
+    <string name="distance_format_imperial">%.2f mi</string>
+    <string name="distance_format_metric">%.2f km</string>
+    <string name="distance_short_format_imperial">%.1f mi</string>
+    <string name="distance_short_format_metric">%.1f km</string>
+    <string name="speed_format_imperial">%.1f mph</string>
+    <string name="speed_format_metric">%.1f km/h</string>
+    <string name="elevation_format_imperial">%.0f ft</string>
+    <string name="elevation_format_metric">%.0f m</string>
+    <string name="area_format_imperial">%.2f mi²</string>
+    <string name="area_format_metric">%.2f km²</string>
     <string name="ft">FUß</string>
     <string name="coordinates_format">%1$.7f, %2$.7f</string>
     
@@ -422,6 +461,7 @@
     <string name="compass_quality_format">Kompassqualität: %1$s</string>
     <string name="figure_8_detected">Acht erkannt! Weiter...</string>
     <string name="distance_miles_format">%1$.1fmi</string>
+    <string name="distance_kilometers_format">%1$.1fkm</string>
     <string name="packet_summary_format">Empfangen %1$s von %2$s %3$s%4$d Sek vor.</string>
     <string name="members_count_format">%1$d Mitglieder</string>
     <string name="crypto_donation_title_format">%1$s (%2$s) Spende</string>
@@ -444,6 +484,7 @@
     <string name="success_rate_format">Erfolgsrate: %1$d%%</string>
     <string name="average_confidence_format">Durchschnittliche Konfidenz: %1$d%%</string>
     <string name="average_speed_format">Durchschnittsgeschwindigkeit: %1$d mph</string>
+    <string name="average_speed_format_metric">Durchschnittsgeschwindigkeit: %1$d km/h</string>
     <string name="prediction_age_format">Vorhersagealter: %1$d min</string>
     <string name="confidence_distribution">🎯 KONFIDENZ-VERTEILUNG</string>
     <string name="confidence_level_format">%1$s: %2$d (%3$d%%)</string>

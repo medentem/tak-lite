@@ -40,6 +40,7 @@ import com.tak.lite.ui.location.LocationSource
 import com.tak.lite.ui.map.AnnotationFragment
 import com.tak.lite.ui.map.CoverageOverlayView
 import com.tak.lite.ui.map.FanMenuView
+import com.tak.lite.util.UnitManager
 import com.tak.lite.viewmodel.ChannelViewModel
 import com.tak.lite.viewmodel.CoverageViewModel
 import com.tak.lite.viewmodel.MeshNetworkUiState
@@ -60,7 +61,7 @@ val DEFAULT_US_CENTER = LatLng(39.8283, -98.5795)
 const val DEFAULT_US_ZOOM = 4.0
 const val WEATHER_FETCH_INTERVAL_MS = 15 * 60 * 1000L // 15 minutes
 // For generating play store screenshots
-const val HIDE_DEVICE_CONNECTION_STATUS_BAR = false
+const val HIDE_DEVICE_CONNECTION_STATUS_BAR = true
 
 @AndroidEntryPoint
 class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
@@ -110,7 +111,9 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
     private lateinit var degreeText: TextView
     private lateinit var headingSourceText: TextView
     private lateinit var speedText: TextView
+    private lateinit var speedUnitsText: TextView
     private lateinit var altitudeText: TextView
+    private lateinit var altitudeUnitsText: TextView
     private lateinit var latLngText: TextView
     private lateinit var compassCardinalView: com.tak.lite.ui.location.CompassCardinalView
     private lateinit var compassQualityIndicator: ImageView
@@ -470,8 +473,13 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                         // Update other UI elements
                         degreeText.text = String.format("%d°", data.headingDegrees.toInt())
                         headingSourceText.text = data.headingSource.name
-                        speedText.text = String.format("%d", data.speedMph.toInt())
-                        altitudeText.text = String.format("%.0f", data.altitudeFt)
+                        // Update speed value and unit separately
+                        speedText.text = UnitManager.metersPerSecondToSpeedValue(data.speedMps, this@MainActivity)
+                        speedUnitsText.text = UnitManager.getSpeedUnitLabel(this@MainActivity)
+                        
+                        // Update altitude value and unit separately
+                        altitudeText.text = UnitManager.metersToElevationValue(data.altitudeMeters, this@MainActivity)
+                        altitudeUnitsText.text = UnitManager.getElevationUnitLabel(this@MainActivity)
                         latLngText.text = String.format("%.7f, %.7f", data.latitude, data.longitude)
                         
                         // Update compass quality indicators
@@ -1109,7 +1117,9 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
             degreeText = swipeableOverlayManager.getDegreeText()
             headingSourceText = swipeableOverlayManager.getHeadingSourceText()
             speedText = swipeableOverlayManager.getSpeedText()
+            speedUnitsText = swipeableOverlayManager.getSpeedUnitsText()
             altitudeText = swipeableOverlayManager.getAltitudeText()
+            altitudeUnitsText = swipeableOverlayManager.getAltitudeUnitsText()
             latLngText = swipeableOverlayManager.getLatLngText()
             compassCardinalView = swipeableOverlayManager.getCompassCardinalView()
             compassQualityIndicator = swipeableOverlayManager.getCompassQualityIndicator()

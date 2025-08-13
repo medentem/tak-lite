@@ -6,6 +6,7 @@ import android.util.Log
 import com.tak.lite.BuildConfig
 import com.tak.lite.data.model.WeatherUiState
 import com.tak.lite.network.WeatherApiService
+import com.tak.lite.util.UnitManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -75,11 +76,19 @@ class WeatherRepository @Inject constructor(
         
         repositoryScope.launch {
             try {
+                // Get user's unit preference
+                val unitSystem = UnitManager.getUnitSystem(context)
+                val apiUnits = when (unitSystem) {
+                    UnitManager.UnitSystem.IMPERIAL -> "imperial"
+                    UnitManager.UnitSystem.METRIC -> "metric"
+                }
+                
                 val weatherResponse = withContext(Dispatchers.IO) {
                     weatherApiService.getWeatherForecast(
                         lat = latitude,
                         lon = longitude,
-                        apiKey = apiKey
+                        apiKey = apiKey,
+                        units = apiUnits
                     )
                 }
                 
@@ -108,6 +117,13 @@ class WeatherRepository @Inject constructor(
     fun refreshWeatherData() {
         if (lastLocationLat != 0.0 && lastLocationLon != 0.0) {
             lastFetchTime = 0 // Force refresh
+            fetchWeatherData(lastLocationLat, lastLocationLon)
+        }
+    }
+    
+    fun refreshWeatherDataForUnitChange() {
+        if (lastLocationLat != 0.0 && lastLocationLon != 0.0) {
+            lastFetchTime = 0 // Force refresh with new units
             fetchWeatherData(lastLocationLat, lastLocationLon)
         }
     }

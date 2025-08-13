@@ -38,7 +38,7 @@ class LineDistanceManager(
     fun updateDistanceFeatures(lines: List<MapAnnotation.Line>) {
         try {
             val distanceFeatures = mutableListOf<DistanceFeature>()
-            val minDistMiles = getMinimumDistanceSetting()
+            val minDistMeters = getMinimumDistanceSetting()
             
             lines.forEach { line ->
                 // Calculate distances for line segments
@@ -46,17 +46,17 @@ class LineDistanceManager(
                 
                 // Filter segments that meet the minimum distance requirement
                 segmentDistances.forEach { distanceLabel ->
-                    if (distanceLabel.distanceMiles >= minDistMiles) {
+                    if (distanceLabel.distanceMeters >= minDistMeters) {
                         val distanceFeature = DistanceFeature(
                             lineId = line.id,
                             segmentIndex = distanceLabel.segmentIndex,
-                            distanceMiles = distanceLabel.distanceMiles,
+                            distanceMeters = distanceLabel.distanceMeters,
                             midpoint = distanceLabel.midpoint
                         )
                         distanceFeatures.add(distanceFeature)
-                        Log.d(TAG, "Added distance feature for line ${line.id} segment ${distanceLabel.segmentIndex}: ${distanceLabel.distanceMiles} mi")
+                        Log.d(TAG, "Added distance feature for line ${line.id} segment ${distanceLabel.segmentIndex}: ${distanceLabel.distanceMeters} m")
                     } else {
-                        Log.d(TAG, "Skipped distance feature for line ${line.id} segment ${distanceLabel.segmentIndex}: ${distanceLabel.distanceMiles} mi < min: ${minDistMiles} mi")
+                        Log.d(TAG, "Skipped distance feature for line ${line.id} segment ${distanceLabel.segmentIndex}: ${distanceLabel.distanceMeters} m < min: ${minDistMeters} m")
                     }
                 }
             }
@@ -82,11 +82,9 @@ class LineDistanceManager(
                 point1.lt, point1.lng,
                 point2.lt, point2.lng
             )
-            val distanceMiles = distanceMeters / 1609.344
-
-            DistanceLabel(
-                segmentIndex = line.points.indexOf(point1),
-                distanceMiles = distanceMiles,
+                    DistanceLabel(
+            segmentIndex = line.points.indexOf(point1),
+            distanceMeters = distanceMeters,
                 midpoint = com.tak.lite.model.LatLngSerializable(
                     (point1.lt + point2.lt) / 2,
                     (point1.lng + point2.lng) / 2
@@ -101,10 +99,12 @@ class LineDistanceManager(
     private fun getMinimumDistanceSetting(): Float {
         return try {
             val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-            prefs.getFloat("min_line_segment_dist_miles", 1.0f)
+            val minDistMiles = prefs.getFloat("min_line_segment_dist_miles", 1.0f)
+            // Convert miles to meters
+            minDistMiles * 1609.344f
         } catch (e: Exception) {
-            Log.w(TAG, "Could not access SharedPreferences, using default minimum distance: 1.0f", e)
-            1.0f
+            Log.w(TAG, "Could not access SharedPreferences, using default minimum distance: 1609.344f meters", e)
+            1609.344f
         }
     }
 

@@ -33,6 +33,8 @@ import com.tak.lite.ui.map.MapController
 import com.tak.lite.ui.settings.PredictionAdvancedSettingsDialog
 import com.tak.lite.util.BillingManager
 import com.tak.lite.util.LocaleManager
+import com.tak.lite.util.UnitManager
+import com.tak.lite.repository.WeatherRepository
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -42,6 +44,7 @@ import javax.inject.Inject
 class SettingsActivity : BaseActivity() {
     @Inject lateinit var meshProtocolProvider: com.tak.lite.network.MeshProtocolProvider
     @Inject lateinit var billingManager: BillingManager
+    @Inject lateinit var weatherRepository: WeatherRepository
     private lateinit var mapModeSpinner: AutoCompleteTextView
     private lateinit var endBeepSwitch: SwitchMaterial
     private lateinit var minLineSegmentDistEditText: com.google.android.material.textfield.TextInputEditText
@@ -110,6 +113,11 @@ class SettingsActivity : BaseActivity() {
     private lateinit var weatherOpacitySlider: com.google.android.material.slider.Slider
     private lateinit var weatherOpacityValue: TextView
     private lateinit var languageSpinner: com.google.android.material.textfield.MaterialAutoCompleteTextView
+    private lateinit var unitSystemSpinner: com.google.android.material.textfield.MaterialAutoCompleteTextView
+    private lateinit var minLineSegmentDistLabel: android.widget.TextView
+    private lateinit var minLineSegmentDistLayout: com.google.android.material.textfield.TextInputLayout
+    private lateinit var userAntennaHeightLayout: com.google.android.material.textfield.TextInputLayout
+    private lateinit var receivingAntennaHeightLayout: com.google.android.material.textfield.TextInputLayout
     private val REQUEST_CODE_FOREGROUND_SERVICE_CONNECTED_DEVICE = 2003
     private val REQUEST_CODE_NOTIFICATION_PERMISSION = 3001
     private val REQUEST_CODE_ALL_PERMISSIONS = 4001
@@ -190,6 +198,11 @@ class SettingsActivity : BaseActivity() {
         weatherOpacitySlider = findViewById(R.id.weatherOpacitySlider)
         weatherOpacityValue = findViewById(R.id.weatherOpacityValue)
         languageSpinner = findViewById(R.id.languageSpinner)
+        unitSystemSpinner = findViewById(R.id.unitSystemSpinner)
+        minLineSegmentDistLabel = findViewById(R.id.minLineSegmentDistLabel)
+        minLineSegmentDistLayout = findViewById(R.id.minLineSegmentDistLayout)
+        userAntennaHeightLayout = findViewById(R.id.userAntennaHeightLayout)
+        receivingAntennaHeightLayout = findViewById(R.id.receivingAntennaHeightLayout)
 
         // Check premium status and update UI accordingly
         lifecycleScope.launch {
@@ -230,13 +243,16 @@ class SettingsActivity : BaseActivity() {
         }
 
         // Load and set minimum line segment distance
-        val minDist = prefs.getFloat("min_line_segment_dist_miles", 1.0f)
-        minLineSegmentDistEditText.setText(minDist.toString())
+        updateMinLineSegmentDistanceDisplay()
+        updateCentralTendencyDistanceDisplay()
+        updateAntennaHeightDisplays()
         minLineSegmentDistEditText.setOnFocusChangeListener { _, hasFocus ->
             if (!hasFocus) {
                 val value = minLineSegmentDistEditText.text.toString().toFloatOrNull()
                 if (value != null) {
-                    prefs.edit().putFloat("min_line_segment_dist_miles", value).apply()
+                    // Convert back to miles for storage
+                    val milesValue = UnitManager.displayDistanceToMiles(value.toDouble(), this).toFloat()
+                    prefs.edit().putFloat("min_line_segment_dist_miles", milesValue).apply()
                 }
             }
         }
@@ -547,24 +563,24 @@ class SettingsActivity : BaseActivity() {
         }
 
         // Setup antenna heights
-        val userAntennaHeightFeet = prefs.getInt("user_antenna_height_feet", 6) // Default 6 feet (2 meters)
-        val receivingAntennaHeightFeet = prefs.getInt("receiving_antenna_height_feet", 6) // Default 6 feet (2 meters)
-        
-        userAntennaHeightEditText.setText(userAntennaHeightFeet.toString())
+        // Load antenna heights - will be set by updateAntennaHeightDisplays()
         userAntennaHeightEditText.setOnFocusChangeListener { _, hasFocus ->
             if (!hasFocus) {
                 val value = userAntennaHeightEditText.text.toString().toIntOrNull()?.coerceIn(1, 100) ?: 6
+                // Convert back to feet for storage
+                val feetValue = UnitManager.displayHeightToFeet(value.toDouble(), this).toInt()
                 userAntennaHeightEditText.setText(value.toString())
-                prefs.edit().putInt("user_antenna_height_feet", value).apply()
+                prefs.edit().putInt("user_antenna_height_feet", feetValue).apply()
             }
         }
         
-        receivingAntennaHeightEditText.setText(receivingAntennaHeightFeet.toString())
         receivingAntennaHeightEditText.setOnFocusChangeListener { _, hasFocus ->
             if (!hasFocus) {
                 val value = receivingAntennaHeightEditText.text.toString().toIntOrNull()?.coerceIn(1, 100) ?: 6
+                // Convert back to feet for storage
+                val feetValue = UnitManager.displayHeightToFeet(value.toDouble(), this).toInt()
                 receivingAntennaHeightEditText.setText(value.toString())
-                prefs.edit().putInt("receiving_antenna_height_feet", value).apply()
+                prefs.edit().putInt("receiving_antenna_height_feet", feetValue).apply()
             }
         }
 
@@ -576,6 +592,9 @@ class SettingsActivity : BaseActivity() {
 
         // Setup language selection
         setupLanguageSelection()
+        
+        // Setup unit system selection
+        setupUnitSystemSelection()
 
         // Setup map dark mode spinner
         val darkModeAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, darkModeOptions)
@@ -600,10 +619,8 @@ class SettingsActivity : BaseActivity() {
         // Load and set Simulate Peers settings
         val simulatePeersEnabled = prefs.getBoolean("simulate_peers_enabled", false)
         val simulatedPeersCount = prefs.getInt("simulated_peers_count", 3)
-        val simulatedPeersCentralTendency = prefs.getFloat("simulated_peers_central_tendency", 1.0f)
         simulatePeersSwitch.isChecked = simulatePeersEnabled
         simulatedPeersCountEditText.setText(simulatedPeersCount.toString())
-        simulatedPeersCentralTendencyEditText.setText(String.format("%.1f", simulatedPeersCentralTendency))
         simulatedPeersCountLayout.isEnabled = simulatePeersEnabled
         simulatedPeersCountEditText.isEnabled = simulatePeersEnabled
         simulatedPeersCentralTendencyLayout.isEnabled = simulatePeersEnabled
@@ -626,8 +643,10 @@ class SettingsActivity : BaseActivity() {
         simulatedPeersCentralTendencyEditText.setOnFocusChangeListener { _, hasFocus ->
             if (!hasFocus) {
                 val value = simulatedPeersCentralTendencyEditText.text.toString().toFloatOrNull()?.coerceIn(0.1f, 10.0f) ?: 1.0f
+                // Convert back to miles for storage
+                val milesValue = UnitManager.displayDistanceToMiles(value.toDouble(), this).toFloat()
                 simulatedPeersCentralTendencyEditText.setText(String.format("%.1f", value))
-                prefs.edit().putFloat("simulated_peers_central_tendency", value).apply()
+                prefs.edit().putFloat("simulated_peers_central_tendency", milesValue).apply()
             }
         }
 
@@ -1142,6 +1161,134 @@ class SettingsActivity : BaseActivity() {
                 LocaleManager.applyLocaleAndRecreate(this)
             }
         }
+    }
+
+    private fun setupUnitSystemSelection() {
+        // Get available unit systems with their display names
+        val unitSystemOptions = listOf(
+            getString(R.string.use_system_units),
+            getString(R.string.imperial_units),
+            getString(R.string.metric_units)
+        )
+        
+        // Setup unit system spinner
+        val unitSystemAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, unitSystemOptions)
+        unitSystemSpinner.setAdapter(unitSystemAdapter)
+        
+        // Get current unit system setting
+        val currentUnitSystem = UnitManager.getUnitSystem(this)
+        val currentUnitSystemIndex = when (currentUnitSystem) {
+            UnitManager.UnitSystem.IMPERIAL -> 1
+            UnitManager.UnitSystem.METRIC -> 2
+            else -> 0 // System default
+        }
+        
+        // Set current selection
+        unitSystemSpinner.setText(unitSystemOptions[currentUnitSystemIndex], false)
+        
+        // Setup unit system selection listener
+        unitSystemSpinner.setOnItemClickListener { _, _, position, _ ->
+            val selectedUnitSystem = when (position) {
+                0 -> null // System default
+                1 -> UnitManager.UnitSystem.IMPERIAL
+                2 -> UnitManager.UnitSystem.METRIC
+                else -> null
+            }
+            
+            val currentUnitSystem = UnitManager.getUnitSystem(this)
+            
+                            // Only apply if unit system actually changed
+                if (selectedUnitSystem != currentUnitSystem) {
+                    if (selectedUnitSystem != null) {
+                        UnitManager.setUnitSystem(this, selectedUnitSystem)
+                    } else {
+                        // Clear preference to use system default
+                        val prefs = getSharedPreferences("unit_prefs", Context.MODE_PRIVATE)
+                        prefs.edit().remove("unit_system").apply()
+                    }
+                    
+                    // Update the minimum line segment distance display
+                    updateMinLineSegmentDistanceDisplay()
+                    // Update the central tendency distance display
+                    updateCentralTendencyDistanceDisplay()
+                    // Update the antenna height displays
+                    updateAntennaHeightDisplays()
+                    // Refresh weather data with new units
+                    weatherRepository.refreshWeatherDataForUnitChange()
+                }
+        }
+    }
+    
+    private fun updateMinLineSegmentDistanceDisplay() {
+        val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
+        val milesValue = prefs.getFloat("min_line_segment_dist_miles", 1.0f)
+        val unitSystem = UnitManager.getUnitSystem(this)
+        
+        // Convert to display units
+        val displayValue = UnitManager.milesToDisplayDistance(milesValue.toDouble(), this)
+        
+        // Update the EditText
+        minLineSegmentDistEditText.setText(String.format("%.2f", displayValue))
+        
+        // Update the label
+        val labelText = when (unitSystem) {
+            UnitManager.UnitSystem.IMPERIAL -> getString(R.string.min_line_segment_dist_imperial)
+            UnitManager.UnitSystem.METRIC -> getString(R.string.min_line_segment_dist_metric)
+        }
+        minLineSegmentDistLabel.text = labelText
+        
+        // Update the hint
+        val hintText = when (unitSystem) {
+            UnitManager.UnitSystem.IMPERIAL -> getString(R.string.min_line_segment_dist_hint_imperial)
+            UnitManager.UnitSystem.METRIC -> getString(R.string.min_line_segment_dist_hint_metric)
+        }
+        minLineSegmentDistLayout.hint = hintText
+    }
+    
+    private fun updateCentralTendencyDistanceDisplay() {
+        val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
+        val milesValue = prefs.getFloat("simulated_peers_central_tendency", 1.0f)
+        
+        // Convert to display units
+        val displayValue = UnitManager.milesToDisplayDistance(milesValue.toDouble(), this)
+        
+        // Update the EditText
+        simulatedPeersCentralTendencyEditText.setText(String.format("%.1f", displayValue))
+        
+        // Update the hint
+        val unitSystem = UnitManager.getUnitSystem(this)
+        val hintText = when (unitSystem) {
+            UnitManager.UnitSystem.IMPERIAL -> getString(R.string.central_tendency_distance_imperial)
+            UnitManager.UnitSystem.METRIC -> getString(R.string.central_tendency_distance_metric)
+        }
+        simulatedPeersCentralTendencyLayout.hint = hintText
+    }
+    
+    private fun updateAntennaHeightDisplays() {
+        val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
+        val userAntennaHeightFeet = prefs.getInt("user_antenna_height_feet", 6)
+        val receivingAntennaHeightFeet = prefs.getInt("receiving_antenna_height_feet", 6)
+        
+        // Convert to display units
+        val userDisplayHeight = UnitManager.feetToDisplayHeight(userAntennaHeightFeet.toDouble(), this)
+        val receivingDisplayHeight = UnitManager.feetToDisplayHeight(receivingAntennaHeightFeet.toDouble(), this)
+        
+        // Update the EditTexts
+        userAntennaHeightEditText.setText(userDisplayHeight.toInt().toString())
+        receivingAntennaHeightEditText.setText(receivingDisplayHeight.toInt().toString())
+        
+        // Update the hints
+        val unitSystem = UnitManager.getUnitSystem(this)
+        val userHintText = when (unitSystem) {
+            UnitManager.UnitSystem.IMPERIAL -> getString(R.string.user_antenna_height_imperial)
+            UnitManager.UnitSystem.METRIC -> getString(R.string.user_antenna_height_metric)
+        }
+        val receivingHintText = when (unitSystem) {
+            UnitManager.UnitSystem.IMPERIAL -> getString(R.string.receiving_antenna_height_imperial)
+            UnitManager.UnitSystem.METRIC -> getString(R.string.receiving_antenna_height_metric)
+        }
+        userAntennaHeightLayout.hint = userHintText
+        receivingAntennaHeightLayout.hint = receivingHintText
     }
 
     private fun showAppropriateDialog() {

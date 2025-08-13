@@ -16,6 +16,7 @@ import android.view.View
 import com.tak.lite.data.model.ConfidenceCone
 import com.tak.lite.data.model.LocationPrediction
 import com.tak.lite.model.PeerLocationEntry
+import com.tak.lite.util.UnitManager
 import org.maplibre.android.maps.Projection
 import java.util.concurrent.TimeUnit
 
@@ -319,8 +320,7 @@ class PredictionOverlayView @JvmOverloads constructor(
                 // Draw prediction info (speed)
                 val velocity = prediction.velocity
                 if (velocity != null) {
-                    val speedMph = (velocity.speed * 2.23694)
-                    val speedText = "${String.format("%.2f", speedMph)} mph"
+                    val speedText = UnitManager.metersPerSecondToSpeed(velocity.speed, context)
                     val speedTextBounds = Rect()
                     confidenceTextPaint.getTextBounds(speedText, 0, speedText.length, speedTextBounds)
                     // Draw speed above dot

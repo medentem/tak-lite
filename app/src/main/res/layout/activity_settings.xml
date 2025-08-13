@@ -449,7 +449,7 @@
                         android:id="@+id/userAntennaHeightLayout"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="Your antenna height (feet)"
+                        android:hint="@string/user_antenna_height_imperial"
                         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                         app:boxBackgroundMode="outline"
                         app:helperText="Height of your transmitting antenna above ground level">
@@ -468,7 +468,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:hint="Receiving antenna height (feet)"
+                        android:hint="@string/receiving_antenna_height_imperial"
                         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                         app:boxBackgroundMode="outline"
                         app:helperText="Height of receiving radio antenna above ground level">
@@ -577,6 +577,7 @@
                     android:padding="16dp">
 
                     <TextView
+                        android:id="@+id/minLineSegmentDistLabel"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/min_line_segment_dist"
@@ -584,9 +585,10 @@
                         android:paddingBottom="8dp" />
 
                     <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/minLineSegmentDistLayout"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="Enter minimum distance in miles"
+                        android:hint="@string/min_line_segment_dist_hint_imperial"
                         app:boxBackgroundMode="outline">
 
                         <com.google.android.material.textfield.TextInputEditText
@@ -677,7 +679,7 @@
                         android:id="@+id/simulatedPeersCentralTendencyLayout"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="Central Tendency Distance (miles)"
+                        android:hint="@string/central_tendency_distance_imperial"
                         android:layout_marginTop="8dp"
                         app:boxBackgroundMode="outline">
                         <com.google.android.material.textfield.TextInputEditText
@@ -794,6 +796,49 @@
                         android:textAppearance="@style/TextAppearance.Material3.BodySmall"
                         android:textColor="?android:attr/textColorSecondary"
                         android:layout_marginTop="8dp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Unit System Settings Card -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardElevation="2dp"
+                app:cardCornerRadius="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/unit_system_settings"
+                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                        android:paddingBottom="8dp" />
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="@string/unit_system"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                        app:boxBackgroundMode="outline">
+
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                            android:id="@+id/unitSystemSpinner"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="none"
+                            android:focusable="false"
+                            android:clickable="true"
+                            android:importantForAccessibility="yes"
+                            android:dropDownHeight="wrap_content"
+                            android:dropDownWidth="match_parent"
+                            android:background="@android:color/transparent" />
+                    </com.google.android.material.textfield.TextInputLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
         </LinearLayout>
