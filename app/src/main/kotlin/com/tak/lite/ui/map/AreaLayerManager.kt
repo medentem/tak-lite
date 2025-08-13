@@ -4,16 +4,22 @@ import android.graphics.Color
 import android.util.Log
 import com.tak.lite.model.AnnotationColor
 import com.tak.lite.model.MapAnnotation
+import com.tak.lite.util.CoordinateUtils
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.expressions.Expression
-import org.maplibre.android.style.layers.CircleLayer
+import org.maplibre.android.style.layers.FillLayer
+import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.Point
-import kotlin.math.pow
+import org.maplibre.geojson.Polygon
+import kotlin.math.asin
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
 
 /**
  * Manages area annotations in MapLibre GL layers for improved performance.
@@ -23,19 +29,20 @@ class AreaLayerManager(private val mapLibreMap: MapLibreMap) {
     companion object {
         private const val TAG = "AreaLayerManager"
         const val AREA_SOURCE = "annotation-areas-source"
-        const val AREA_FILL_LAYER = "annotation-areas-circle-layer"
-        const val AREA_HIT_AREA_LAYER = "annotation-areas-hit-area-layer"
+        const val AREA_FILL_LAYER = "annotation-areas-fill-layer" // Changed
+        const val AREA_STROKE_LAYER = "annotation-areas-stroke-layer" // New
+        const val AREA_HIT_AREA_LAYER = "annotation-areas-hit-layer" // Updated
         const val AREA_LABEL_SOURCE = "annotation-areas-label-source"
         const val AREA_LABEL_LAYER = "annotation-areas-label-layer"
+        const val AREA_HIT_SOURCE = "annotation-areas-hit-source"
     }
 
     private var isInitialized = false
-    private var isCameraListenerAdded = false
-    private var cameraMoveListener: MapLibreMap.OnCameraMoveListener? = null
     private val areaFeatureConverter = AreaFeatureConverter(mapLibreMap)
     private var lastAreas: List<MapAnnotation.Area> = emptyList()
-    private var lastZoomForAreas: Double = -1.0
-    private var lastAreaUpdateMs: Long = 0L
+
+    fun Double.toRadians() = this * Math.PI / 180.0
+    fun Double.toDegrees() = this * 180.0 / Math.PI
 
     /**
      * Setup area layers in the map style
@@ -59,32 +66,53 @@ class AreaLayerManager(private val mapLibreMap: MapLibreMap) {
                 Log.d(TAG, "Added area source: $AREA_SOURCE")
             }
 
-            // Create circle layer for areas using precomputed pixel radius
-            if (style.getLayer(AREA_FILL_LAYER) == null) {
-                val circleLayer = CircleLayer(AREA_FILL_LAYER, AREA_SOURCE)
-                    .withProperties(
-                        PropertyFactory.circleColor(Expression.get("fillColor")),
-                        PropertyFactory.circleOpacity(Expression.get("fillOpacity")),
-                        PropertyFactory.circleRadius(Expression.get("radius")),
-                        PropertyFactory.circleStrokeColor(Expression.get("strokeColor")),
-                        PropertyFactory.circleStrokeWidth(Expression.get("strokeWidth"))
+            // Add this for hit source
+            val hitSourceCheck = style.getSource(AREA_HIT_SOURCE)
+            if (hitSourceCheck == null) {
+                style.addSource(
+                    GeoJsonSource(
+                        AREA_HIT_SOURCE,
+                        FeatureCollection.fromFeatures(arrayOf())
                     )
-                    .withFilter(Expression.gte(Expression.zoom(), Expression.literal(7f)))
-                style.addLayer(circleLayer)
-                Log.d(TAG, "Added area circle layer: $AREA_FILL_LAYER")
+                )
+                Log.d(TAG, "Added area hit source: $AREA_HIT_SOURCE")
             }
 
-            // Create hit area layer (invisible, larger for easier tapping)
-            if (style.getLayer(AREA_HIT_AREA_LAYER) == null) {
-                val hitAreaLayer = CircleLayer(AREA_HIT_AREA_LAYER, AREA_SOURCE)
+            // Create fill layer for areas
+            if (style.getLayer(AREA_FILL_LAYER) == null) {
+                val fillLayer = FillLayer(AREA_FILL_LAYER, AREA_SOURCE)
                     .withProperties(
-                        PropertyFactory.circleColor(Expression.literal("#FFFFFF")),
-                        PropertyFactory.circleOpacity(Expression.literal(0.0f)),
-                        PropertyFactory.circleRadius(Expression.get("hitRadius"))
+                        PropertyFactory.fillColor(Expression.get("fillColor")),
+                        PropertyFactory.fillOpacity(Expression.get("fillOpacity"))
                     )
                     .withFilter(Expression.gte(Expression.zoom(), Expression.literal(7f)))
-                style.addLayer(hitAreaLayer)
-                Log.d(TAG, "Added area hit area layer: $AREA_HIT_AREA_LAYER")
+                style.addLayer(fillLayer)
+                Log.d(TAG, "Added area fill layer: $AREA_FILL_LAYER")
+            }
+
+            // Create stroke layer
+            if (style.getLayer(AREA_STROKE_LAYER) == null) {
+                val strokeLayer = LineLayer(AREA_STROKE_LAYER, AREA_SOURCE)
+                    .withProperties(
+                        PropertyFactory.lineColor(Expression.get("strokeColor")),
+                        PropertyFactory.lineWidth(Expression.get("strokeWidth")),
+                        PropertyFactory.lineOpacity(1f)
+                    )
+                    .withFilter(Expression.gte(Expression.zoom(), Expression.literal(7f)))
+                style.addLayerAbove(strokeLayer, AREA_FILL_LAYER)
+                Log.d(TAG, "Added area stroke layer: $AREA_STROKE_LAYER")
+            }
+
+            // Create hit area layer (transparent fill with larger polygon)
+            if (style.getLayer(AREA_HIT_AREA_LAYER) == null) {
+                val hitLayer = FillLayer(AREA_HIT_AREA_LAYER, AREA_HIT_SOURCE) // Use hit source
+                    .withProperties(
+                        PropertyFactory.fillColor(Expression.literal("#FFFFFF")),
+                        PropertyFactory.fillOpacity(Expression.literal(0.0f))
+                    )
+                    .withFilter(Expression.gte(Expression.zoom(), Expression.literal(7f)))
+                style.addLayer(hitLayer)
+                Log.d(TAG, "Added area hit layer: $AREA_HIT_AREA_LAYER")
             }
 
             // Create separate source and layer for area labels
@@ -111,22 +139,6 @@ class AreaLayerManager(private val mapLibreMap: MapLibreMap) {
             isInitialized = true
             Log.d(TAG, "Area layers setup completed successfully")
 
-            // Add camera move listener only once to prevent multiple listeners
-            if (!isCameraListenerAdded) {
-                cameraMoveListener = MapLibreMap.OnCameraMoveListener {
-                    val zoom = mapLibreMap.cameraPosition?.zoom?.toDouble() ?: return@OnCameraMoveListener
-                    val now = System.currentTimeMillis()
-                    if (lastAreas.isEmpty()) return@OnCameraMoveListener
-                    if (kotlin.math.abs(zoom - lastZoomForAreas) < 0.01 && (now - lastAreaUpdateMs) < 50) return@OnCameraMoveListener
-                    lastZoomForAreas = zoom
-                    lastAreaUpdateMs = now
-                    updateFeatures(lastAreas)
-                }
-                mapLibreMap.addOnCameraMoveListener(cameraMoveListener!!)
-                isCameraListenerAdded = true
-                Log.d(TAG, "Camera move listener added")
-            }
-
         } catch (e: Exception) {
             Log.e(TAG, "Error setting up area layers", e)
         }
@@ -143,32 +155,36 @@ class AreaLayerManager(private val mapLibreMap: MapLibreMap) {
 
         try {
             lastAreas = areas
-            val features = areas.map { area ->
-                areaFeatureConverter.convertToGeoJsonFeature(area)
+            val fillFeatures = areas.map { area ->
+                areaFeatureConverter.convertToGeoJsonFeature(area) // Returns fill polygon feature
             }
-            
-            // Create label features for areas with labels
+            val hitFeatures = areas.map { area ->
+                areaFeatureConverter.convertToHitFeature(area) // New method for larger polygon
+            }
             val labelFeatures = areas.filter { it.label != null }.map { area ->
                 areaFeatureConverter.convertToLabelFeature(area)
             }
-
+            
             mapLibreMap.getStyle { style ->
+                // Set fill source (new source for fill?)
+                // To separate, add AREA_FILL_SOURCE = "annotation-areas-fill-source"
+                // But to minimize changes, use main source for fill/stroke, add separate source for hit.
+
+                // Add in setup: style.addSource(GeoJsonSource(AREA_HIT_SOURCE, FeatureCollection.fromFeatures(arrayOf())))
+
                 val source = style.getSourceAs<GeoJsonSource>(AREA_SOURCE)
                 if (source != null) {
-                    val featureCollection = FeatureCollection.fromFeatures(features.toTypedArray())
-                    source.setGeoJson(featureCollection)
-                    Log.d(TAG, "Updated area features: ${features.size} areas (using CircleLayer - much more efficient than polygon conversion)")
-                } else {
-                    Log.e(TAG, "Area source not found: $AREA_SOURCE")
+                    source.setGeoJson(FeatureCollection.fromFeatures(fillFeatures.toTypedArray()))
+                }
+                
+                val hitSource = style.getSourceAs<GeoJsonSource>(AREA_HIT_SOURCE)
+                if (hitSource != null) {
+                    hitSource.setGeoJson(FeatureCollection.fromFeatures(hitFeatures.toTypedArray()))
                 }
                 
                 val labelSource = style.getSourceAs<GeoJsonSource>(AREA_LABEL_SOURCE)
                 if (labelSource != null) {
-                    val labelFeatureCollection = FeatureCollection.fromFeatures(labelFeatures.toTypedArray())
-                    labelSource.setGeoJson(labelFeatureCollection)
-                    Log.d(TAG, "Updated area label features: ${labelFeatures.size} labels")
-                } else {
-                    Log.e(TAG, "Area label source not found: $AREA_LABEL_SOURCE")
+                    labelSource.setGeoJson(FeatureCollection.fromFeatures(labelFeatures.toTypedArray()))
                 }
             }
         } catch (e: Exception) {
@@ -180,19 +196,7 @@ class AreaLayerManager(private val mapLibreMap: MapLibreMap) {
      * Clean up resources
      */
     fun cleanup() {
-        // Remove camera move listener if it exists
-        cameraMoveListener?.let { listener ->
-            try {
-                mapLibreMap.removeOnCameraMoveListener(listener)
-                Log.d(TAG, "Camera move listener removed")
-            } catch (e: Exception) {
-                Log.w(TAG, "Error removing camera move listener", e)
-            }
-        }
-        
         isInitialized = false
-        isCameraListenerAdded = false
-        cameraMoveListener = null
         Log.d(TAG, "Area layer manager cleaned up")
     }
 }
@@ -202,31 +206,40 @@ class AreaLayerManager(private val mapLibreMap: MapLibreMap) {
  */
 class AreaFeatureConverter(private val mapLibreMap: MapLibreMap) {
 
+    private fun generateCirclePoints(center: org.maplibre.geojson.Point, radiusMeters: Double, numPoints: Int = 32, expansion: Double = 1.0): List<org.maplibre.geojson.Point> {
+        val points = mutableListOf<org.maplibre.geojson.Point>()
+        val earthRadius = 6371000.0 // meters
+        val angularDistance = (radiusMeters * expansion) / earthRadius
+        val centerLatRad = CoordinateUtils.toRadians(center.latitude())
+        val centerLonRad = CoordinateUtils.toRadians(center.longitude())
+
+        for (i in 0 until numPoints) {
+            val bearingRad = CoordinateUtils.toRadians((i * 360.0 / numPoints))
+            val latRad = asin(sin(centerLatRad) * cos(angularDistance) + cos(centerLatRad) * sin(angularDistance) * cos(bearingRad))
+            val lonRad = centerLonRad + atan2(sin(bearingRad) * sin(angularDistance) * cos(centerLatRad), cos(angularDistance) - sin(centerLatRad) * sin(latRad))
+            points.add(org.maplibre.geojson.Point.fromLngLat(CoordinateUtils.toDegrees(lonRad), CoordinateUtils.toDegrees(latRad)))
+        }
+        points.add(points.first()) // Close the polygon
+        return points
+    }
+
     /**
      * Convert area annotation to GeoJSON feature for circle rendering
      */
     fun convertToGeoJsonFeature(area: MapAnnotation.Area): Feature {
-        // Use Point geometry for CircleLayer (much more efficient than polygon conversion)
-        val point = Point.fromLngLat(area.center.lng, area.center.lt)
-        val feature = Feature.fromGeometry(point)
-
-        // Provide precomputed pixel radius for CircleLayer (performance + compatibility)
-        Log.d("AreaFeatureConverter", "  - Center: (${area.center.lt}, ${area.center.lng})")
-        Log.d("AreaFeatureConverter", "  - Scale factor: 1f")
-
-        // Add properties for CircleLayer
+        val center = org.maplibre.geojson.Point.fromLngLat(area.center.lng, area.center.lt)
+        
+        // Generate polygon points for fill/stroke
+        val points = generateCirclePoints(center, area.radius)
+        val polygon = Polygon.fromLngLats(listOf(points))
+        val feature = Feature.fromGeometry(polygon)
+        
+        // Add properties
         feature.addStringProperty("areaId", area.id)
         feature.addStringProperty("fillColor", area.color.toHexString())
         feature.addStringProperty("strokeColor", area.color.toHexString())
-        feature.addNumberProperty("fillOpacity", 0.3f) // Semi-transparent fill
-        feature.addNumberProperty("strokeWidth", 3f) // Solid stroke
-        val currentZoom = mapLibreMap.cameraPosition?.zoom?.toDouble() ?: 0.0
-        val radiusInPixels = convertMetersToPixels(area.radius, area.center.lt, area.center.lng, currentZoom)
-        val hitRadiusInPixels = radiusInPixels + 20f
-        feature.addNumberProperty("radius", radiusInPixels)
-        feature.addNumberProperty("hitRadius", hitRadiusInPixels)
-        feature.addNumberProperty("centerLat", area.center.lt)
-        feature.addNumberProperty("centerLng", area.center.lng)
+        feature.addNumberProperty("fillOpacity", 0.3f)
+        feature.addNumberProperty("strokeWidth", 3f)
         
         // Add label property
         area.label?.let { label ->
@@ -260,32 +273,28 @@ class AreaFeatureConverter(private val mapLibreMap: MapLibreMap) {
     }
 
     /**
-     * Convert meters to pixels for CircleLayer radius
-     * Uses a simple conversion that works well across different zoom levels
+     * Convert area annotation to GeoJSON feature for hit area (larger polygon)
      */
-    private fun convertMetersToPixels(meters: Double, latitude: Double, longitude: Double, zoom: Double): Float {
-        // Web Mercator ground resolution using 512px tiles as used by MapLibre GL Native
-        val earthCircumferenceMeters = 40075016.68557849
-        val tileSize = 512.0
-        val metersPerPixel = (kotlin.math.cos(Math.toRadians(latitude)) * earthCircumferenceMeters) / (tileSize * 2.0.pow(zoom))
-        val pixelRadius = meters / metersPerPixel
+    fun convertToHitFeature(area: MapAnnotation.Area): Feature {
+        val center = org.maplibre.geojson.Point.fromLngLat(area.center.lng, area.center.lt)
+        val hitPoints = generateCirclePoints(center, area.radius, expansion = 1.1) // 10% larger
+        val hitPolygon = Polygon.fromLngLats(listOf(hitPoints))
+        val feature = Feature.fromGeometry(hitPolygon)
 
-        // Sanity check via screen projection: compute how many pixels correspond to 'meters' eastward
-        try {
-            val proj = mapLibreMap.projection
-            val centerLatLng = org.maplibre.android.geometry.LatLng(latitude, longitude)
-            val centerScreen = proj.toScreenLocation(centerLatLng)
-            val metersPerDegreeLon = 111320.0 * kotlin.math.cos(Math.toRadians(latitude))
-            val deltaLon = meters / metersPerDegreeLon
-            val edgeLatLng = org.maplibre.android.geometry.LatLng(latitude, longitude + deltaLon)
-            val edgeScreen = proj.toScreenLocation(edgeLatLng)
-            val dx = kotlin.math.abs(edgeScreen.x - centerScreen.x)
-            Log.d("AreaFeatureConverter", "Radius conversion: ${meters}m -> ${pixelRadius}px | sanity(dx)=${dx} px (lat=$latitude, lon=$longitude, zoom=$zoom, m/px=$metersPerPixel)")
-        } catch (t: Throwable) {
-            Log.w("AreaFeatureConverter", "Projection sanity check failed: ${t.message}")
+        // Add properties
+        feature.addStringProperty("areaId", area.id)
+        feature.addStringProperty("label", area.label)
+        feature.addNumberProperty("centerLat", area.center.lt)
+        feature.addNumberProperty("centerLng", area.center.lng)
+
+        // Add timer properties if needed
+        area.expirationTime?.let { expiration ->
+            feature.addNumberProperty("expirationTime", expiration)
+            val secondsRemaining = (expiration - System.currentTimeMillis()) / 1000
+            feature.addNumberProperty("secondsRemaining", secondsRemaining)
         }
 
-        return pixelRadius.toFloat()
+        return feature
     }
 }
 
