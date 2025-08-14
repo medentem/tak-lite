@@ -456,7 +456,9 @@
     <string name="terrain_data_warning">Aviso: Alguns dados do terreno não estão disponíveis. Usando elevações estimadas.</string>
     <string name="processing_elevation_data">Processando dados de elevação...</string>
     <string name="no_terrain_data">Nenhum dado do terreno disponível para esta área. Mostrando perfil estimado.</string>
-    <string name="elevation_summary_format">Distância Total: %.2f mi | Faixa de Elevação: %.0f ft | Elevação Média: %.0f ft | Amostragem: %.0f m intervalos</string>
+    <string name="elevation_summary_format">Distância Total: %1$s | Faixa de Elevação: %2$s | Elevação Média: %3$s | Amostragem: %4$s intervalos</string>
+    <string name="interval_format_imperial">%.0f ft</string>
+    <string name="interval_format_metric">%.0f m</string>
     <string name="speed_format">%.2f mph</string>
     <string name="compass_quality_format">Qualidade da Bússola: %1$s</string>
     <string name="figure_8_detected">Figura-8 detectada! Continue...</string>

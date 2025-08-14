@@ -456,7 +456,9 @@
     <string name="terrain_data_warning">Avertiment: Tschertas datas dal terren n\'èn betg disponiblas. Utilisar autezzas stimadas.</string>
     <string name="processing_elevation_data">Elavurar datas d\'autezza...</string>
     <string name="no_terrain_data">Naginas datas dal terren disponiblas per questa zona. Mussar profil stimà.</string>
-    <string name="elevation_summary_format">Distanza Totala: %.2f mi | Range d\'Autezza: %.0f ft | Autezza Media: %.0f ft | Sampling: %.0f m intervals</string>
+    <string name="elevation_summary_format">Distanza Totala: %1$s | Range d\'Autezza: %2$s | Autezza Media: %3$s | Sampling: %4$s intervals</string>
+    <string name="interval_format_imperial">%.0f ft</string>
+    <string name="interval_format_metric">%.0f m</string>
     <string name="speed_format">%.2f mph</string>
     <string name="compass_quality_format">Qualitad da Bussola: %1$s</string>
     <string name="figure_8_detected">Figura-8 detegnida! Cuntinuar...</string>

@@ -427,7 +427,9 @@
     <string name="terrain_data_warning">Warning: Some terrain data unavailable. Using estimated elevations.</string>
     <string name="processing_elevation_data">Processing elevation data...</string>
     <string name="no_terrain_data">No terrain data available for this area. Showing estimated profile.</string>
-    <string name="elevation_summary_format">Total Distance: %1$s | Elevation Range: %2$s | Avg Elevation: %3$s | Sampling: %.0f m intervals</string>
+    <string name="elevation_summary_format">Total Distance: %1$s | Elevation Range: %2$s | Avg Elevation: %3$s | Sampling: %4$s intervals</string>
+    <string name="interval_format_imperial">%.0f ft</string>
+    <string name="interval_format_metric">%.0f m</string>
     <string name="compass_quality_format">Compass Quality: %1$s</string>
     <string name="figure_8_detected">Figure-8 detected! Keep going...</string>
     <string name="packet_summary_format">Received %1$s from %2$s %3$s%4$d sec ago.</string>

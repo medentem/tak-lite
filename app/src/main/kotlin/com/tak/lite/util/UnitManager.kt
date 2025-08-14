@@ -288,4 +288,17 @@ object UnitManager {
             UnitSystem.METRIC -> displayHeight / 0.3048 // meters to feet
         }
     }
+
+    fun metersToInterval(meters: Double, context: Context): String {
+        val unitSystem = getUnitSystem(context)
+        return when (unitSystem) {
+            UnitSystem.IMPERIAL -> {
+                val feet = meters * METERS_TO_FEET
+                context.getString(R.string.interval_format_imperial, feet)
+            }
+            UnitSystem.METRIC -> {
+                context.getString(R.string.interval_format_metric, meters)
+            }
+        }
+    }
 }

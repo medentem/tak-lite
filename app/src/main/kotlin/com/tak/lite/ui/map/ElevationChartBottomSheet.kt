@@ -432,9 +432,9 @@ class ElevationChartBottomSheet(
             val totalDistance = UnitManager.metersToDistance(cumulativeDistance.toDouble(), context)
             val elevationRange = UnitManager.metersToElevation((maxElevation - minElevation).toDouble(), context)
             val avgElevation = UnitManager.metersToElevation(((minElevation + maxElevation) / 2).toDouble(), context)
-
+            val samplingStr = UnitManager.metersToInterval(samplingDistance, context)
             val summaryText = TextView(context)
-            summaryText.text = context.getString(R.string.elevation_summary_format, totalDistance, elevationRange, avgElevation, samplingDistance)
+            summaryText.text = context.getString(R.string.elevation_summary_format, totalDistance, elevationRange, avgElevation, samplingStr)
             summaryText.textSize = 12f
             summaryText.setTextColor(textColor)
             summaryText.typeface = android.graphics.Typeface.MONOSPACE

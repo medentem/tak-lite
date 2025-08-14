@@ -456,7 +456,9 @@
     <string name="terrain_data_warning">Warnung: Einige Geländedaten sind nicht verfügbar. Verwende geschätzte Höhen.</string>
     <string name="processing_elevation_data">Verarbeite Höhendaten...</string>
     <string name="no_terrain_data">Keine Geländedaten für diesen Bereich verfügbar. Zeige geschätztes Profil.</string>
-    <string name="elevation_summary_format">Gesamtdistanz: %.2f mi | Höhenbereich: %.0f ft | Durchschnittshöhe: %.0f ft | Abtastung: %.0f m Intervalle</string>
+    <string name="elevation_summary_format">Gesamtdistanz: %1$s | Höhenbereich: %2$s | Durchschnittshöhe: %3$s | Abtastung: %4$s Intervalle</string>
+    <string name="interval_format_imperial">%.0f ft</string>
+    <string name="interval_format_metric">%.0f m</string>
     <string name="speed_format">%.2f mph</string>
     <string name="compass_quality_format">Kompassqualität: %1$s</string>
     <string name="figure_8_detected">Acht erkannt! Weiter...</string>
