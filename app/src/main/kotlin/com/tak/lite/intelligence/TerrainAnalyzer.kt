@@ -151,7 +151,6 @@ class TerrainAnalyzer @Inject constructor(
         userLocation: LatLng,
         targetLocation: LatLng,
         userAntennaHeight: Double = DEFAULT_ANTENNA_HEIGHT,
-        targetAntennaHeight: Double = DEFAULT_ANTENNA_HEIGHT,
         zoomLevel: Int = DEFAULT_ZOOM_LEVEL
     ): SignalShadowResult = withContext(Dispatchers.IO) {
         // Create spatial cache key with reduced precision for better cache hits
@@ -173,11 +172,9 @@ class TerrainAnalyzer @Inject constructor(
         
         // Get user and target elevations
         val userElevation = terrainProfile.points.first().elevation
-        val targetElevation = terrainProfile.points.last().elevation
         
         // Calculate effective heights (terrain + antenna)
         val userEffectiveHeight = userElevation + userAntennaHeight
-        val targetEffectiveHeight = targetElevation + targetAntennaHeight
         
         // Calculate Fresnel zone radius
         val wavelength = SPEED_OF_LIGHT / FREQUENCY
@@ -634,11 +631,6 @@ class TerrainAnalyzer @Inject constructor(
         )
         
         if (lineOfSightClear) {
-            // Line of sight is clear, but check for minor Fresnel zone issues
-            val wavelength = SPEED_OF_LIGHT / FREQUENCY
-            val fresnelRadius = calculateFresnelRadius(distance, wavelength)
-            val requiredClearance = fresnelRadius * FRESNEL_CLEARANCE_PERCENTAGE
-            
             // Simplified Fresnel check - assume minor blockage if terrain is close to line of sight
             val minorBlockage = 0.1f // Assume 10% minor blockage for simplification
             
@@ -1020,8 +1012,8 @@ class TerrainAnalyzer @Inject constructor(
         android.util.Log.d("TerrainAnalyzer", "Grouped ${grid.size * grid[0].size} points into ${tileGroups.size} unique tiles")
         
         // Step 2: Initialize result array with fallback data
-        val elevations = Array(grid.size) { row ->
-            Array(grid[0].size) { col ->
+        val elevations = Array(grid.size) { _ ->
+            Array(grid[0].size) { _ ->
                 TerrainCellData(0.0, 0.0, 0.0, 0.0, "fallback")
             }
         }
@@ -1172,7 +1164,7 @@ class TerrainAnalyzer @Inject constructor(
             
             // ACTUALLY TRIGGER THE DOWNLOAD
             android.util.Log.d("TerrainAnalyzer", "Starting download for tile $tileKey for points")
-            val downloadResult = downloadSingleTerrainTile(zoom, x, y)
+            downloadSingleTerrainTile(zoom, x, y)
             
             val downloadSuccess = waitForTileDownload(tileKey, 30000L) // Increased timeout to 30 seconds
             unregisterActiveDownload(zoom, x, y)
@@ -1482,8 +1474,8 @@ class TerrainAnalyzer @Inject constructor(
         failedTiles: Set<String>,
         tileGroups: Map<String, List<PointIndex>>
     ): Array<Array<TerrainCellData>> {
-        val fallbackElevations = Array(grid.size) { row ->
-            Array(grid[0].size) { col ->
+        val fallbackElevations = Array(grid.size) { _ ->
+            Array(grid[0].size) { _ ->
                 TerrainCellData(0.0, 0.0, 0.0, 0.0, "fallback")
             }
         }
@@ -1498,7 +1490,7 @@ class TerrainAnalyzer @Inject constructor(
                 val batchJobs = tileBatch.map { key ->
                     async {
                         try {
-                            val (zoom, x, y) = key.split("/").map { it.toInt() }
+                            val (_, x, y) = key.split("/").map { it.toInt() }
                             val fallbackKey = "$fallbackZoom/$x/$y"
                             
                             android.util.Log.d("TerrainAnalyzer", "Attempting fallback download: $key -> $fallbackKey")

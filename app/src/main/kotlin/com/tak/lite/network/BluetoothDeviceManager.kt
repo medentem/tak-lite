@@ -25,8 +25,8 @@ fun longBLEUUID(hexFour: String): UUID = UUID.fromString("0000$hexFour-0000-1000
 
 class BluetoothDeviceManager(private val context: Context) {
     sealed class ConnectionState {
-        object Disconnected : ConnectionState()
-        object Connecting : ConnectionState()
+        data object Disconnected : ConnectionState()
+        data object Connecting : ConnectionState()
         data class Connected(val device: BluetoothDevice) : ConnectionState()
         data class Failed(val reason: String) : ConnectionState()
     }
@@ -109,11 +109,11 @@ class BluetoothDeviceManager(private val context: Context) {
 
     // Notification handler map
     private val notificationHandlers: MutableMap<UUID, (ByteArray) -> Unit> = mutableMapOf()
-    fun registerNotificationHandler(uuid: UUID, handler: (ByteArray) -> Unit) {
+    private fun registerNotificationHandler(uuid: UUID, handler: (ByteArray) -> Unit) {
         notificationHandlers[uuid] = handler
         Log.d("BluetoothDeviceManager", "Registered notification handler for $uuid")
     }
-    fun unregisterNotificationHandler(uuid: UUID) {
+    private fun unregisterNotificationHandler(uuid: UUID) {
         notificationHandlers.remove(uuid)
         Log.d("BluetoothDeviceManager", "Unregistered notification handler for $uuid")
     }
@@ -126,19 +126,6 @@ class BluetoothDeviceManager(private val context: Context) {
 
     private var userInitiatedDisconnect = false
 
-    // Add method to check if current disconnect was user-initiated
-    fun isUserInitiatedDisconnect(): Boolean {
-        val wasUserInitiated = userInitiatedDisconnect
-        // Reset the flag after checking
-        userInitiatedDisconnect = false
-        return wasUserInitiated
-    }
-    
-    // Methods to access cached characteristics
-    fun getCachedFromNumCharacteristic(): BluetoothGattCharacteristic? {
-        return cachedFromNumChar
-    }
-    
     fun getCachedFromRadioCharacteristic(): BluetoothGattCharacteristic? {
         return cachedFromRadioChar
     }
@@ -147,7 +134,7 @@ class BluetoothDeviceManager(private val context: Context) {
         return cachedToRadioChar
     }
     
-    fun clearCachedCharacteristics() {
+    private fun clearCachedCharacteristics() {
         Log.d("BluetoothDeviceManager", "Clearing cached characteristics")
         cachedFromNumChar = null
         cachedFromRadioChar = null
@@ -194,13 +181,13 @@ class BluetoothDeviceManager(private val context: Context) {
                         } catch (e: Exception) {
                             Log.e("BluetoothDeviceManager", "Exception during writeCharacteristic: ${e.message}")
                             completeCurrentOperation(Result.failure<Boolean>(e))
-                            op.onResult(Result.failure<Boolean>(e))
+                            op.onResult(Result.failure(e))
                             scheduleReconnect("Exception during writeCharacteristic")
                         }
                     } else {
                         Log.e("BluetoothDeviceManager", "[Queue] writeToRadio: GATT/service/char missing")
                         completeCurrentOperation(Result.failure<Boolean>(Exception("GATT/service/char missing")))
-                        op.onResult(Result.failure<Boolean>(Exception("GATT/service/char missing")))
+                        op.onResult(Result.failure(Exception("GATT/service/char missing")))
                     }
                 }
                 is BleOperation.Read -> {
@@ -215,13 +202,13 @@ class BluetoothDeviceManager(private val context: Context) {
                         } catch (e: Exception) {
                             Log.e("BluetoothDeviceManager", "Exception during readCharacteristic: ${e.message}")
                             completeCurrentOperation(Result.failure<ByteArray?>(e))
-                            op.onResult(Result.failure<ByteArray?>(e))
+                            op.onResult(Result.failure(e))
                             scheduleReconnect("Exception during readCharacteristic")
                         }
                     } else {
                         Log.e("BluetoothDeviceManager", "[Queue] readCharacteristic: GATT missing")
                         completeCurrentOperation(Result.failure<ByteArray?>(Exception("GATT missing")))
-                        op.onResult(Result.failure<ByteArray?>(Exception("GATT missing")))
+                        op.onResult(Result.failure(Exception("GATT missing")))
                     }
                 }
                 is BleOperation.SetNotify -> {
@@ -252,18 +239,18 @@ class BluetoothDeviceManager(private val context: Context) {
                             } else {
                                 Log.e("BluetoothDeviceManager", "[Queue] setNotify: Descriptor missing")
                                 completeCurrentOperation(Result.failure<Boolean>(Exception("Descriptor missing")))
-                                op.onResult(Result.failure<Boolean>(Exception("Descriptor missing")))
+                                op.onResult(Result.failure(Exception("Descriptor missing")))
                             }
                         } catch (e: Exception) {
                             Log.e("BluetoothDeviceManager", "Exception during setNotify: ${e.message}")
                             completeCurrentOperation(Result.failure<Boolean>(e))
-                            op.onResult(Result.failure<Boolean>(e))
+                            op.onResult(Result.failure(e))
                             scheduleReconnect("Exception during setNotify")
                         }
                     } else {
                         Log.e("BluetoothDeviceManager", "[Queue] setNotify: GATT missing")
                         completeCurrentOperation(Result.failure<Boolean>(Exception("GATT missing")))
-                        op.onResult(Result.failure<Boolean>(Exception("GATT missing")))
+                        op.onResult(Result.failure(Exception("GATT missing")))
                     }
                 }
                 is BleOperation.ReliableWrite -> {
@@ -282,22 +269,22 @@ class BluetoothDeviceManager(private val context: Context) {
                             }
                         } catch (e: Exception) {
                             Log.e("BluetoothDeviceManager", "Reliable write failed to start: ${e.message}")
-                            if ((op as? BleOperation.ReliableWrite)?.attempt ?: 1 < 3) {
+                            if (((op as? BleOperation.ReliableWrite)?.attempt ?: 1) < 3) {
                                 CoroutineScope(Dispatchers.Main).launch {
                                     delay(200)
-                                    enqueueBleOperation(BleOperation.ReliableWrite(charac, op.value, op.onResult, (op.attempt ?: 1) + 1))
+                                    enqueueBleOperation(BleOperation.ReliableWrite(charac, op.value, op.onResult, (op.attempt) + 1))
                                 }
                                 completeCurrentOperation(Result.failure<Boolean>(e))
                             } else {
                                 completeCurrentOperation(Result.failure<Boolean>(e))
-                                op.onResult(Result.failure<Boolean>(e))
+                                op.onResult(Result.failure(e))
                                 scheduleReconnect("Exception during reliableWrite")
                             }
                         }
                     } else {
                         Log.e("BluetoothDeviceManager", "[Queue] reliableWrite: GATT missing")
                         completeCurrentOperation(Result.failure<Boolean>(Exception("GATT missing")))
-                        op.onResult(Result.failure<Boolean>(Exception("GATT missing")))
+                        op.onResult(Result.failure(Exception("GATT missing")))
                     }
                 }
             }
@@ -318,10 +305,10 @@ class BluetoothDeviceManager(private val context: Context) {
         bleOperationFailedCallback?.invoke(timeoutException)
         
         when (op) {
-            is BleOperation.Write -> op.onResult(Result.failure<Boolean>(timeoutException))
-            is BleOperation.Read -> op.onResult(Result.failure<ByteArray?>(timeoutException))
-            is BleOperation.SetNotify -> op.onResult(Result.failure<Boolean>(timeoutException))
-            is BleOperation.ReliableWrite -> op.onResult(Result.failure<Boolean>(timeoutException))
+            is BleOperation.Write -> op.onResult(Result.failure(timeoutException))
+            is BleOperation.Read -> op.onResult(Result.failure(timeoutException))
+            is BleOperation.SetNotify -> op.onResult(Result.failure(timeoutException))
+            is BleOperation.ReliableWrite -> op.onResult(Result.failure(timeoutException))
             null -> {}
         }
         completeCurrentOperation(Result.failure<Any?>(timeoutException))
@@ -346,10 +333,10 @@ class BluetoothDeviceManager(private val context: Context) {
         while (true) {
             val op = bleQueue.poll() ?: break
             when (op) {
-                is BleOperation.Write -> op.onResult(Result.failure<Boolean>(error))
-                is BleOperation.Read -> op.onResult(Result.failure<ByteArray?>(error))
-                is BleOperation.SetNotify -> op.onResult(Result.failure<Boolean>(error))
-                is BleOperation.ReliableWrite -> op.onResult(Result.failure<Boolean>(error))
+                is BleOperation.Write -> op.onResult(Result.failure(error))
+                is BleOperation.Read -> op.onResult(Result.failure(error))
+                is BleOperation.SetNotify -> op.onResult(Result.failure(error))
+                is BleOperation.ReliableWrite -> op.onResult(Result.failure(error))
             }
         }
         completeCurrentOperation(Result.failure<Any?>(error))
@@ -412,13 +399,7 @@ class BluetoothDeviceManager(private val context: Context) {
                         }
                         
                         try {
-                            // Connect with autoConnect=false to avoid interfering with existing connection
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                                device.connectGatt(context, false, tempCallback, BluetoothDevice.TRANSPORT_LE)
-                            } else {
-                                device.connectGatt(context, false, tempCallback)
-                            }
-                            
+                            device.connectGatt(context, false, tempCallback, BluetoothDevice.TRANSPORT_LE)
                             // Wait a bit for the service check to complete
                             delay(1000)
                         } catch (e: Exception) {
@@ -645,7 +626,7 @@ class BluetoothDeviceManager(private val context: Context) {
                             initialDrainDone = false
                             CoroutineScope(Dispatchers.Main).launch {
                                 delay(200) // Short delay to let notifications settle
-                                aggressiveDrainFromRadio(gatt, fromRadioChar)
+                                aggressiveDrainFromRadio(fromRadioChar)
                                 // Notify initial drain complete after the drain finishes
                                 delay(200) // Give a bit more time for drain to finish
                                 initialDrainCompleteCallback?.invoke()
@@ -687,10 +668,10 @@ class BluetoothDeviceManager(private val context: Context) {
                     } else {
                         // Retry logic for read failures
                         val currentOp = currentOperation as? BleOperation.Read
-                        if (currentOp != null && (currentOp.attempt ?: 1) < MAX_READ_ATTEMPTS) {
-                            Log.w("BluetoothDeviceManager", "Read failed for ${characteristic.uuid}, retrying attempt ${(currentOp.attempt ?: 1) + 1}")
+                        if (currentOp != null && (currentOp.attempt) < MAX_READ_ATTEMPTS) {
+                            Log.w("BluetoothDeviceManager", "Read failed for ${characteristic.uuid}, retrying attempt ${(currentOp.attempt) + 1}")
                             // Re-enqueue with incremented attempt
-                            enqueueBleOperation(BleOperation.Read(currentOp.characteristic, currentOp.onResult, (currentOp.attempt ?: 1) + 1))
+                            enqueueBleOperation(BleOperation.Read(currentOp.characteristic, currentOp.onResult, (currentOp.attempt) + 1))
                         } else {
                             Log.e("BluetoothDeviceManager", "Characteristic read failed after $MAX_READ_ATTEMPTS attempts for ${characteristic.uuid}, triggering reconnect.")
                             try { pendingReadCallback?.invoke(Result.failure(Exception("Characteristic read failed after $MAX_READ_ATTEMPTS attempts"))) } catch (e: Exception) { Log.e("BluetoothDeviceManager", "Exception in read failure callback: ${e.message}") }
@@ -717,10 +698,10 @@ class BluetoothDeviceManager(private val context: Context) {
                     } else {
                         // Retry logic for read failures
                         val currentOp = currentOperation as? BleOperation.Read
-                        if (currentOp != null && (currentOp.attempt ?: 1) < MAX_READ_ATTEMPTS) {
-                            Log.w("BluetoothDeviceManager", "Read failed for ${characteristic.uuid}, retrying attempt ${(currentOp.attempt ?: 1) + 1}")
+                        if (currentOp != null && (currentOp.attempt) < MAX_READ_ATTEMPTS) {
+                            Log.w("BluetoothDeviceManager", "Read failed for ${characteristic.uuid}, retrying attempt ${(currentOp.attempt) + 1}")
                             // Re-enqueue with incremented attempt
-                            enqueueBleOperation(BleOperation.Read(currentOp.characteristic, currentOp.onResult, (currentOp.attempt ?: 1) + 1))
+                            enqueueBleOperation(BleOperation.Read(currentOp.characteristic, currentOp.onResult, (currentOp.attempt) + 1))
                         } else {
                             Log.e("BluetoothDeviceManager", "Characteristic read failed after $MAX_READ_ATTEMPTS attempts for ${characteristic.uuid}, triggering reconnect.")
                             try { pendingReadCallback?.invoke(Result.failure(Exception("Characteristic read failed after $MAX_READ_ATTEMPTS attempts"))) } catch (e: Exception) { Log.e("BluetoothDeviceManager", "Exception in read failure callback: ${e.message}") }
@@ -741,7 +722,7 @@ class BluetoothDeviceManager(private val context: Context) {
                 if (status == BluetoothGatt.GATT_SUCCESS) {
                     pendingSetNotifyCallback?.invoke(Result.success(true))
                 } else {
-                    pendingSetNotifyCallback?.invoke(Result.failure<Boolean>(Exception("Descriptor write failed with status $status")))
+                    pendingSetNotifyCallback?.invoke(Result.failure(Exception("Descriptor write failed with status $status")))
                 }
                 pendingSetNotifyCallback = null
             }
@@ -757,7 +738,7 @@ class BluetoothDeviceManager(private val context: Context) {
                     } else {
                         Log.e("BluetoothDeviceManager", "Reliable write failed or value mismatch, aborting.")
                         gatt.abortReliableWrite()
-                        pendingReliableWriteCallback?.invoke(Result.failure<Boolean>(Exception("Reliable write failed or value mismatch")))
+                        pendingReliableWriteCallback?.invoke(Result.failure(Exception("Reliable write failed or value mismatch")))
                         pendingReliableWriteCallback = null
                         currentReliableWriteValue = null
                         completeCurrentOperation(Result.failure<Boolean>(Exception("Reliable write failed or value mismatch")))
@@ -768,7 +749,7 @@ class BluetoothDeviceManager(private val context: Context) {
                     if (status == BluetoothGatt.GATT_SUCCESS) {
                         pendingWriteCallback?.invoke(Result.success(true))
                     } else {
-                        pendingWriteCallback?.invoke(Result.failure<Boolean>(Exception("Characteristic write failed with status $status")))
+                        pendingWriteCallback?.invoke(Result.failure(Exception("Characteristic write failed with status $status")))
                     }
                     pendingWriteCallback = null
                     // completeCurrentOperation is called in the callback
@@ -804,7 +785,7 @@ class BluetoothDeviceManager(private val context: Context) {
                         intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
                     } else {
                         @Suppress("DEPRECATION")
-                        intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
                     }
                     if (action == BluetoothDevice.ACTION_BOND_STATE_CHANGED && bondedDevice?.address == device.address) {
                         val bondState = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.ERROR)
@@ -1041,32 +1022,6 @@ class BluetoothDeviceManager(private val context: Context) {
     }
 
     /**
-     * Force the OS Bluetooth stack to release the connection without removing the bond
-     * This is necessary when the OS gets stuck in a connected state
-     */
-    private fun forceOsBluetoothReset(device: BluetoothDevice) {
-        Log.i("BluetoothDeviceManager", "Force OS Bluetooth reset for device: ${device.address}")
-        
-        try {
-            // Instead of removing the bond, try to force the OS to release the connection
-            // by creating a new GATT connection with autoConnect=false
-            Log.d("BluetoothDeviceManager", "Attempting to force OS connection release without unbonding")
-            
-            // First, ensure our current GATT is properly closed
-            forceCleanupGatt()
-            
-            // Wait a bit for the OS to process the cleanup
-            CoroutineScope(Dispatchers.Main).launch {
-                delay(2000) // Wait 2 seconds for OS cleanup
-                Log.d("BluetoothDeviceManager", "OS cleanup delay completed")
-            }
-            
-        } catch (e: Exception) {
-            Log.w("BluetoothDeviceManager", "Error during force OS reset: ${e.message}")
-        }
-    }
-
-    /**
      * Alternative approach: Force connection release by connecting with autoConnect=false
      * This can help when the OS is stuck in a connected state
      */
@@ -1090,12 +1045,7 @@ class BluetoothDeviceManager(private val context: Context) {
                 }
             }
             
-            // Connect with autoConnect=false to force a fresh connection
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                device.connectGatt(context, false, tempCallback, BluetoothDevice.TRANSPORT_LE)
-            } else {
-                device.connectGatt(context, false, tempCallback)
-            }
+            device.connectGatt(context, false, tempCallback, BluetoothDevice.TRANSPORT_LE)
             
             // Method 2: Also try to refresh the GATT connection if available
             CoroutineScope(Dispatchers.Main).launch {
@@ -1182,11 +1132,7 @@ class BluetoothDeviceManager(private val context: Context) {
                 }
                 
                 try {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        device.connectGatt(context, false, tempCallback, BluetoothDevice.TRANSPORT_LE)
-                    } else {
-                        device.connectGatt(context, false, tempCallback)
-                    }
+                    device.connectGatt(context, false, tempCallback, BluetoothDevice.TRANSPORT_LE)
                 } catch (e: Exception) {
                     Log.w("BluetoothDeviceManager", "Error checking device ${device.address}: ${e.message}")
                 }
@@ -1203,7 +1149,7 @@ class BluetoothDeviceManager(private val context: Context) {
      * Force cleanup when reconnection fails completely
      * This should be called when the user wants to start fresh
      */
-    fun forceCleanup() {
+    private fun forceCleanup() {
         Log.i("BluetoothDeviceManager", "Force cleanup requested")
         resetReconnectState()
         
@@ -1220,16 +1166,6 @@ class BluetoothDeviceManager(private val context: Context) {
             delay(1000) // Give some time for cleanup to complete
             Log.d("BluetoothDeviceManager", "Force cleanup completed")
         }
-    }
-
-    /**
-     * Manually force the release of a device connection without removing the bond
-     * This can be called when the OS appears stuck in a connected state
-     * @param device The device to force connection release for
-     */
-    fun forceDeviceConnectionRelease(device: BluetoothDevice) {
-        Log.i("BluetoothDeviceManager", "Manual force connection release requested for: ${device.address}")
-        forceConnectionRelease(device)
     }
 
     // Device-specific refresh logic
@@ -1249,60 +1185,24 @@ class BluetoothDeviceManager(private val context: Context) {
         return isNRF52 || isAmazon
     }
 
-    // FROMNUM write for packet recovery (API only)
-    /**
-     * Write a value to the FROMNUM characteristic to recover dropped packets.
-     * This should be called by higher layers if a packet is missed (see Meshtastic protocol docs).
-     * @param value The packet number to recover from.
-     * @return true if the write was initiated, false otherwise.
-     */
-    fun writeFromNum(value: Int): Boolean {
-        val gatt = bluetoothGatt ?: return false
-        val service = gatt.getService(MESHTASTIC_SERVICE_UUID) ?: return false
-        val fromNumChar = service.getCharacteristic(FROMNUM_CHARACTERISTIC_UUID) ?: return false
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val intBytes = ByteArray(4) { i -> ((value shr (i * 8)) and 0xFF).toByte() }
-            val result = gatt.writeCharacteristic(fromNumChar, intBytes, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
-            Log.d("BluetoothDeviceManager", "[PacketRecovery] Wrote $value to FROMNUM for packet recovery (API33+): success=$result")
-            return result == BluetoothGatt.GATT_SUCCESS
-        } else {
-            fromNumChar.setValue(value, BluetoothGattCharacteristic.FORMAT_UINT32, 0)
-            val result = gatt.writeCharacteristic(fromNumChar)
-            Log.d("BluetoothDeviceManager", "[PacketRecovery] Wrote $value to FROMNUM for packet recovery (legacy): result=$result")
-            return result
-        }
-    }
-
     // Use autoconnect in connectGatt
     private fun BluetoothDevice.connectGatt(context: Context, gattCallback: BluetoothGattCallback): BluetoothGatt {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            this.connectGatt(context, true, gattCallback, BluetoothDevice.TRANSPORT_LE)
-        } else {
-            this.connectGatt(context, true, gattCallback)
-        }
+        return this.connectGatt(context, true, gattCallback, BluetoothDevice.TRANSPORT_LE)
     }
 
     // Updated connection strategy: start with autoConnect=false, fallback to autoConnect=true
     private fun BluetoothDevice.connectGattImmediate(context: Context, gattCallback: BluetoothGattCallback): BluetoothGatt {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            this.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE) // autoConnect=false for immediate feedback
-        } else {
-            this.connectGatt(context, false, gattCallback) // autoConnect=false for immediate feedback
-        }
+        return this.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE) // autoConnect=false for immediate feedback
     }
 
     private fun BluetoothDevice.connectGattBackground(context: Context, gattCallback: BluetoothGattCallback): BluetoothGatt {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            this.connectGatt(context, true, gattCallback, BluetoothDevice.TRANSPORT_LE) // autoConnect=true for background connection
-        } else {
-            this.connectGatt(context, true, gattCallback) // autoConnect=true for background connection
-        }
+        return this.connectGatt(context, true, gattCallback, BluetoothDevice.TRANSPORT_LE) // autoConnect=true for background connection
     }
 
     // Aggressive drain logic and isDrainingFromRadio flag
     @Volatile private var isDrainingFromRadio = false
     @Volatile private var isStackSettling = false
-    fun aggressiveDrainFromRadio(gatt: BluetoothGatt, fromRadioChar: BluetoothGattCharacteristic) {
+    fun aggressiveDrainFromRadio(fromRadioChar: BluetoothGattCharacteristic) {
         if (isDrainingFromRadio) return
         isDrainingFromRadio = true
 
@@ -1313,14 +1213,14 @@ class BluetoothDeviceManager(private val context: Context) {
                         if (data != null && data.isNotEmpty()) {
                             packetListener?.invoke(data)
                             // Add a 200ms delay before next read
-                            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
-                                kotlinx.coroutines.delay(200)
+                            CoroutineScope(Dispatchers.Main).launch {
+                                delay(200)
                                 drainNext()
                             }
                         } else {
                             isDrainingFromRadio = false
                         }
-                    }.onFailure { error ->
+                    }.onFailure { _ ->
                         isDrainingFromRadio = false
                     }
                 })
@@ -1387,12 +1287,12 @@ class BluetoothDeviceManager(private val context: Context) {
         }
         registerNotificationHandler(FROMNUM_CHARACTERISTIC_UUID) { _ ->
             Log.d("BluetoothDeviceManager", "FROMNUM notification received")
-            val gatt = bluetoothGatt
-            val service = gatt?.getService(MESHTASTIC_SERVICE_UUID)
-            val fromRadioChar = service?.getCharacteristic(FROMRADIO_CHARACTERISTIC_UUID)
-            if (gatt != null && fromRadioChar != null) {
+            val lclGatt = bluetoothGatt
+            val lclService = lclGatt?.getService(MESHTASTIC_SERVICE_UUID)
+            val fromRadioChar = lclService?.getCharacteristic(FROMRADIO_CHARACTERISTIC_UUID)
+            if (lclGatt != null && fromRadioChar != null) {
                 Log.d("BluetoothDeviceManager", "FROMNUM notification triggering aggressiveDrainFromRadio")
-                aggressiveDrainFromRadio(gatt, fromRadioChar)
+                aggressiveDrainFromRadio(fromRadioChar)
             } else {
                 Log.e("BluetoothDeviceManager", "FROMRADIO characteristic not found when handling FROMNUM notify!")
             }
@@ -1422,21 +1322,6 @@ class BluetoothDeviceManager(private val context: Context) {
     }
 
     /**
-     * Get the current reconnection status for debugging
-     * @return Map containing reconnection state information
-     */
-    fun getReconnectionStatus(): Map<String, Any> {
-        return mapOf(
-            "reconnectAttempts" to reconnectAttempts,
-            "pendingReconnect" to pendingReconnect,
-            "isReconnectionAttempt" to isReconnectionAttempt,
-            "reconnectStartTime" to reconnectStartTime,
-            "maxReconnectTimeMs" to MAX_RECONNECT_TIME_MS,
-            "maxReconnectAttempts" to MAX_RECONNECT_ATTEMPTS
-        )
-    }
-
-    /**
      * Check if the system is in a clean state and ready for new connections
      * @return true if ready for new connections, false otherwise
      */
@@ -1447,19 +1332,6 @@ class BluetoothDeviceManager(private val context: Context) {
                bleQueue.isEmpty() && 
                !bleOperationInProgress &&
                _connectionState.value is ConnectionState.Disconnected
-    }
-
-    /**
-     * Get a summary of the current connection state for debugging
-     * @return String describing the current state
-     */
-    fun getConnectionStateSummary(): String {
-        return "Connection State: ${_connectionState.value}, " +
-               "GATT: ${if (bluetoothGatt != null) "Active" else "None"}, " +
-               "Pending Reconnect: $pendingReconnect, " +
-               "Reconnect Attempts: $reconnectAttempts, " +
-               "Queue Size: ${bleQueue.size}, " +
-               "Operation In Progress: $bleOperationInProgress"
     }
 
     /**
@@ -1488,7 +1360,4 @@ class BluetoothDeviceManager(private val context: Context) {
             "Error getting OS connection info: ${e.message}"
         }
     }
-
-    // Add public getter for reconnection attempt status
-    fun isReconnectionAttempt(): Boolean = isReconnectionAttempt
 } 

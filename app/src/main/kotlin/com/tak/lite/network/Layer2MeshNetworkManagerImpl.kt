@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.util.Log
 import com.tak.lite.audio.AudioCodecManager
 import com.tak.lite.data.model.Layer2Channel
+import com.tak.lite.rtc.RtcEngine
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -15,17 +16,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import org.webrtc.DataChannel
-import org.webrtc.PeerConnection
-import org.webrtc.PeerConnectionFactory
-import org.webrtc.AudioSource
-import org.webrtc.AudioTrack
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class Layer2MeshNetworkManagerImpl @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val rtcEngine: RtcEngine
 ) : Layer2MeshNetworkManager {
     private val TAG = "Layer2MeshNetworkManager"
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -40,11 +37,7 @@ class Layer2MeshNetworkManagerImpl @Inject constructor(
         ERROR
     }
 
-    private var peerConnectionFactory: PeerConnectionFactory? = null
-    private var audioSource: AudioSource? = null
-    private var audioTrack: AudioTrack? = null
-    private val peerConnections = mutableMapOf<String, PeerConnection>()
-    private val dataChannels = mutableMapOf<String, DataChannel>()
+    private val dataChannels = mutableMapOf<String, Any>()
     val audioBuffers = mutableMapOf<String, MutableList<ByteArray>>()
 
     private val _channels = MutableStateFlow(
@@ -70,7 +63,7 @@ class Layer2MeshNetworkManagerImpl @Inject constructor(
     val receivingAudioFlow: StateFlow<Boolean> = _isReceivingAudio.asStateFlow()
 
     init {
-        initializeWebRTC()
+        initializeRtc()
         // Load channels from SharedPreferences
         val saved = prefs.getString("channels_json", null)
         if (saved != null) {
@@ -97,31 +90,10 @@ class Layer2MeshNetworkManagerImpl @Inject constructor(
         }
     }
 
-    private fun initializeWebRTC() {
+    private fun initializeRtc() {
         scope.launch {
             try {
-                PeerConnectionFactory.initialize(
-                    PeerConnectionFactory.InitializationOptions.builder(context)
-                        .setEnableInternalTracer(true)
-                        .createInitializationOptions()
-                )
-
-                val options = PeerConnectionFactory.Options()
-                options.disableNetworkMonitor = false  // Enable network monitoring
-                
-                peerConnectionFactory = PeerConnectionFactory.builder()
-                    .setOptions(options)
-                    .createPeerConnectionFactory()
-                
-                // Initialize audio source and track
-                peerConnectionFactory?.let { factory ->
-                    audioSource = audioCodecManager.configureAudioSource(factory)
-                    audioTrack = audioSource?.let { source ->
-                        audioCodecManager.createAudioTrack(factory, source)
-                    }
-                }
-                    
-                // Start monitoring network quality
+                rtcEngine.initialize()
                 startNetworkQualityMonitoring()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to initialize WebRTC", e)
@@ -137,21 +109,9 @@ class Layer2MeshNetworkManagerImpl @Inject constructor(
                 protocol.connectionMetrics.collect { metrics ->
                     audioCodecManager.updateCodecConfiguration(
                         networkQuality = metrics.networkQuality,
-                        packetLoss = metrics.packetLoss,
-                        latency = metrics.latency
+                        packetLoss = metrics.packetLoss
                     )
-                    
-                    // Reconfigure audio source with new settings if needed
-                    val currentConfig = audioCodecManager.getCurrentConfiguration()
-                    if (currentConfig.bitrate != audioCodecManager.getCurrentConfiguration().bitrate ||
-                        currentConfig.frameSize != audioCodecManager.getCurrentConfiguration().frameSize) {
-                        peerConnectionFactory?.let { factory ->
-                            audioSource = audioCodecManager.configureAudioSource(factory)
-                            audioTrack = audioSource?.let { source ->
-                                audioCodecManager.createAudioTrack(factory, source)
-                            }
-                        }
-                    }
+                    rtcEngine.applyAudioConfiguration(audioCodecManager.getCurrentConfiguration())
                 }
             }
         }
@@ -164,6 +124,7 @@ class Layer2MeshNetworkManagerImpl @Inject constructor(
                 _connectionState.value = ConnectionState.CONNECTING
                 
                 // Simulate connection for now
+                rtcEngine.start()
                 _connectionState.value = ConnectionState.CONNECTED
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to connect", e)
@@ -176,10 +137,7 @@ class Layer2MeshNetworkManagerImpl @Inject constructor(
     override fun disconnect() {
         scope.launch {
             try {
-                audioTrack?.dispose()
-                audioSource?.dispose()
-                peerConnections.values.forEach { it.close() }
-                peerConnections.clear()
+                rtcEngine.stop()
                 dataChannels.clear()
                 _connectionState.value = ConnectionState.DISCONNECTED
             } catch (e: Exception) {

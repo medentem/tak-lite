@@ -1,10 +1,7 @@
 package com.tak.lite.intelligence
 
-import com.tak.lite.model.FresnelZone
 import com.tak.lite.model.TerrainPoint
 import com.tak.lite.model.TerrainProfile
-import com.tak.lite.util.haversine
-import org.maplibre.android.geometry.LatLng
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.log10
@@ -70,37 +67,6 @@ class FresnelZoneAnalyzer @Inject constructor() {
                 TerrainPoint(0.0, 0.0, 0.0, distance), distance, SPEED_OF_LIGHT / FREQUENCY
             )
         }
-    }
-    
-    /**
-     * Calculates the Fresnel zone for a signal path between two points
-     */
-    fun calculateFresnelZone(
-        startPoint: LatLng,
-        endPoint: LatLng,
-        terrainProfile: TerrainProfile
-    ): FresnelZone {
-        val wavelength = SPEED_OF_LIGHT / FREQUENCY
-        val totalDistance = haversine(
-            startPoint.latitude, startPoint.longitude,
-            endPoint.latitude, endPoint.longitude
-        )
-        
-        // Calculate Fresnel zone radius at each point along the path using lookup table
-        val fresnelRadii = terrainProfile.points.map { point ->
-            getFresnelRadius(point.distanceFromStart)
-        }
-        
-        // Calculate blockage percentage based on terrain interference
-        val blockagePercentage = calculateBlockagePercentage(terrainProfile, fresnelRadii)
-        
-        return FresnelZone(
-            centerLine = terrainProfile.points.map { LatLng(it.latitude, it.longitude) },
-            radius = fresnelRadii.average(),
-            blockagePercentage = blockagePercentage,
-            terrainProfile = terrainProfile,
-            frequency = FREQUENCY
-        )
     }
     
     /**

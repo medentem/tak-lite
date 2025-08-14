@@ -1418,8 +1418,8 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
         gpsAccuracy: Double?,
         historySize: Int
     ): Int {
-        var particleCount = BASE_PARTICLES
-        
+        var particleCount: Int
+
         // Factor 1: Data Quality (30% weight)
         val dataQualityFactor = when (dataSource) {
             "device_velocity" -> 1.0 // High quality - can use fewer particles

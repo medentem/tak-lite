@@ -14,7 +14,10 @@ import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.Button
+import android.widget.RadioButton
+import android.widget.RadioGroup
 import android.widget.TextView
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -22,21 +25,17 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.switchmaterial.SwitchMaterial
-import com.google.android.material.slider.Slider
-import android.widget.RadioGroup
-import android.widget.RadioButton
 import com.tak.lite.di.ConfigDownloadStep
 import com.tak.lite.di.MeshConnectionState
 import com.tak.lite.di.MeshProtocol
+import com.tak.lite.repository.WeatherRepository
 import com.tak.lite.service.MeshForegroundService
 import com.tak.lite.ui.map.MapController
 import com.tak.lite.ui.settings.PredictionAdvancedSettingsDialog
 import com.tak.lite.util.BillingManager
 import com.tak.lite.util.LocaleManager
 import com.tak.lite.util.UnitManager
-import com.tak.lite.repository.WeatherRepository
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -91,6 +90,63 @@ class SettingsActivity : BaseActivity() {
         )
     }
     private val REQUEST_CODE_BLUETOOTH_PERMISSIONS = 1002
+    
+    // Activity result launchers
+    private val compassCalibrationLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        // Check if activity is still valid
+        if (isFinishing || isDestroyed) {
+            Log.w("SettingsActivity", "Activity is finishing or destroyed, skipping activity result handling")
+            return@registerForActivityResult
+        }
+        
+        if (result.resultCode == RESULT_OK) {
+            // User completed calibration - update the status immediately
+            updateCompassStatus()
+            
+            // Show success message
+            val prefs = getSharedPreferences("compass_calibration", MODE_PRIVATE)
+            val calibrationQuality = prefs.getFloat("calibration_quality", 0f)
+            val osCalibrationTriggered = prefs.getBoolean("os_calibration_triggered", false)
+            
+            val qualityText = when {
+                calibrationQuality >= 0.8f -> getString(R.string.compass_calibration_excellent)
+                calibrationQuality >= 0.6f -> getString(R.string.compass_calibration_good)
+                calibrationQuality >= 0.4f -> getString(R.string.compass_calibration_fair)
+                else -> getString(R.string.compass_calibration_poor)
+            }
+            
+            val message = getString(R.string.compass_calibration_completed, qualityText)
+            try {
+                if (osCalibrationTriggered) {
+                    android.widget.Toast.makeText(this, "$message ${getString(R.string.compass_calibration_os_applied)}", android.widget.Toast.LENGTH_LONG).show()
+                } else {
+                    android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
+                }
+            } catch (e: Exception) {
+                Log.e("SettingsActivity", "Error showing compass calibration success toast: ${e.message}", e)
+            }
+        } else if (result.resultCode == RESULT_CANCELED) {
+            try {
+                android.widget.Toast.makeText(this, getString(R.string.compass_calibration_cancelled), android.widget.Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Log.e("SettingsActivity", "Error showing compass calibration cancelled toast: ${e.message}", e)
+            }
+        }
+    }
+    
+    private val bluetoothEnableLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { _ ->
+        if (isBluetoothEnabled()) {
+            // Optionally, retry connection or inform user
+            bluetoothStatusText.text = "Bluetooth enabled. You can now connect."
+        } else {
+            bluetoothStatusText.text = "Bluetooth must be enabled to connect."
+        }
+    }
+    
     private lateinit var configProgressBar: android.widget.ProgressBar
     private lateinit var configProgressText: TextView
     private lateinit var backgroundProcessingSwitch: SwitchMaterial
@@ -121,7 +177,6 @@ class SettingsActivity : BaseActivity() {
     private val REQUEST_CODE_FOREGROUND_SERVICE_CONNECTED_DEVICE = 2003
     private val REQUEST_CODE_NOTIFICATION_PERMISSION = 3001
     private val REQUEST_CODE_ALL_PERMISSIONS = 4001
-    private val REQUEST_CODE_COMPASS_CALIBRATION = 5001
     
     // Protocol observation jobs
     private var protocolJob: kotlinx.coroutines.Job? = null
@@ -771,7 +826,7 @@ class SettingsActivity : BaseActivity() {
             currentQuality,
             needsCalibration
         )
-        startActivityForResult(intent, REQUEST_CODE_COMPASS_CALIBRATION)
+        compassCalibrationLauncher.launch(intent)
     }
 
     override fun onPause() {
@@ -913,61 +968,7 @@ class SettingsActivity : BaseActivity() {
         }
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        
-        // Check if activity is still valid
-        if (isFinishing || isDestroyed) {
-            Log.w("SettingsActivity", "Activity is finishing or destroyed, skipping activity result handling")
-            return
-        }
-        
-        when (requestCode) {
-            REQUEST_CODE_COMPASS_CALIBRATION -> {
-                if (resultCode == RESULT_OK) {
-                    // User completed calibration - update the status immediately
-                    updateCompassStatus()
-                    
-                    // Show success message
-                    val prefs = getSharedPreferences("compass_calibration", MODE_PRIVATE)
-                    val calibrationQuality = prefs.getFloat("calibration_quality", 0f)
-                    val osCalibrationTriggered = prefs.getBoolean("os_calibration_triggered", false)
-                    
-                    val qualityText = when {
-                        calibrationQuality >= 0.8f -> getString(R.string.compass_calibration_excellent)
-                        calibrationQuality >= 0.6f -> getString(R.string.compass_calibration_good)
-                        calibrationQuality >= 0.4f -> getString(R.string.compass_calibration_fair)
-                        else -> getString(R.string.compass_calibration_poor)
-                    }
-                    
-                    val message = getString(R.string.compass_calibration_completed, qualityText)
-                    try {
-                        if (osCalibrationTriggered) {
-                            android.widget.Toast.makeText(this, "$message ${getString(R.string.compass_calibration_os_applied)}", android.widget.Toast.LENGTH_LONG).show()
-                        } else {
-                            android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
-                        }
-                    } catch (e: Exception) {
-                        Log.e("SettingsActivity", "Error showing compass calibration success toast: ${e.message}", e)
-                    }
-                } else if (resultCode == RESULT_CANCELED) {
-                    try {
-                        android.widget.Toast.makeText(this, getString(R.string.compass_calibration_cancelled), android.widget.Toast.LENGTH_SHORT).show()
-                    } catch (e: Exception) {
-                        Log.e("SettingsActivity", "Error showing compass calibration cancelled toast: ${e.message}", e)
-                    }
-                }
-            }
-            2001 -> { // Bluetooth enable request
-                if (isBluetoothEnabled()) {
-                    // Optionally, retry connection or inform user
-                    bluetoothStatusText.text = "Bluetooth enabled. You can now connect."
-                } else {
-                    bluetoothStatusText.text = "Bluetooth must be enabled to connect."
-                }
-            }
-        }
-    }
+
 
     private fun applyDarkMode(mode: String) {
         val nightMode = when (mode) {
@@ -1030,7 +1031,7 @@ class SettingsActivity : BaseActivity() {
 
     private fun promptEnableBluetooth() {
         val enableBtIntent = Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_ENABLE)
-        startActivityForResult(enableBtIntent, 2001)
+        bluetoothEnableLauncher.launch(enableBtIntent)
     }
 
     private fun promptEnableLocation() {
@@ -1168,10 +1169,10 @@ class SettingsActivity : BaseActivity() {
         // Setup language selection listener
         languageSpinner.setOnItemClickListener { _, _, position, _ ->
             val selectedLanguage = availableLanguages[position].first
-            val currentLanguage = LocaleManager.getLanguage(this)
+            val clickCurrentLanguage = LocaleManager.getLanguage(this)
             
             // Only apply if language actually changed
-            if (selectedLanguage != currentLanguage) {
+            if (selectedLanguage != clickCurrentLanguage) {
                 LocaleManager.setLanguage(this, selectedLanguage)
                 
                 // For system language, we need to force a complete recreation
@@ -1182,7 +1183,7 @@ class SettingsActivity : BaseActivity() {
                     val intent = intent
                     finish()
                     startActivity(intent)
-                    overridePendingTransition(0, 0) // No animation
+                    overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, 0, 0) // No animation
                 } else {
                     // Apply locale immediately and recreate activity
                     LocaleManager.applyLocaleAndRecreate(this)
@@ -1208,7 +1209,6 @@ class SettingsActivity : BaseActivity() {
         val currentUnitSystemIndex = when (currentUnitSystem) {
             UnitManager.UnitSystem.IMPERIAL -> 1
             UnitManager.UnitSystem.METRIC -> 2
-            else -> 0 // System default
         }
         
         // Set current selection
@@ -1223,27 +1223,27 @@ class SettingsActivity : BaseActivity() {
                 else -> null
             }
             
-            val currentUnitSystem = UnitManager.getUnitSystem(this)
+            val clickCurrentUnitSystem = UnitManager.getUnitSystem(this)
             
-                            // Only apply if unit system actually changed
-                if (selectedUnitSystem != currentUnitSystem) {
-                    if (selectedUnitSystem != null) {
-                        UnitManager.setUnitSystem(this, selectedUnitSystem)
-                    } else {
-                        // Clear preference to use system default
-                        val prefs = getSharedPreferences("unit_prefs", Context.MODE_PRIVATE)
-                        prefs.edit().remove("unit_system").apply()
-                    }
-                    
-                    // Update the minimum line segment distance display
-                    updateMinLineSegmentDistanceDisplay()
-                    // Update the central tendency distance display
-                    updateCentralTendencyDistanceDisplay()
-                    // Update the antenna height displays
-                    updateAntennaHeightDisplays()
-                    // Refresh weather data with new units
-                    weatherRepository.refreshWeatherDataForUnitChange()
+            // Only apply if unit system actually changed
+            if (selectedUnitSystem != clickCurrentUnitSystem) {
+                if (selectedUnitSystem != null) {
+                    UnitManager.setUnitSystem(this, selectedUnitSystem)
+                } else {
+                    // Clear preference to use system default
+                    val prefs = getSharedPreferences("unit_prefs", Context.MODE_PRIVATE)
+                    prefs.edit().remove("unit_system").apply()
                 }
+
+                // Update the minimum line segment distance display
+                updateMinLineSegmentDistanceDisplay()
+                // Update the central tendency distance display
+                updateCentralTendencyDistanceDisplay()
+                // Update the antenna height displays
+                updateAntennaHeightDisplays()
+                // Refresh weather data with new units
+                weatherRepository.refreshWeatherDataForUnitChange()
+            }
         }
     }
     
@@ -1413,11 +1413,11 @@ class SettingsActivity : BaseActivity() {
                 connectedDevice = null
                 val deviceName = state.deviceInfo?.name ?: "Unknown Device"
                 val connectionType = state.deviceInfo?.connectionType ?: "unknown"
-                val currentMeshType = currentProtocol.javaClass.simpleName
+                val currentMeshProtocol = currentProtocol.javaClass.simpleName
                 
                 Log.d("SettingsActivity", "ServiceConnected state - deviceName: $deviceName, connectionType: $connectionType, currentMeshType: $currentMeshType")
                 
-                if (connectionType == "aidl" || currentMeshType == "MeshtasticAidl") {
+                if (connectionType == "aidl" || currentMeshProtocol == "MeshtasticAidl") {
                     aidlStatusText.text = "Meshtastic App Connected: No Device Attached"
                     updateAidlButtonState()
                     Log.d("SettingsActivity", "Updated AIDL status: Meshtastic App Connected: No Device Attached")

@@ -2,6 +2,7 @@ package com.tak.lite.network
 
 import android.content.Context
 import android.util.Log
+import android.util.LruCache
 import com.tak.lite.data.model.IChannel
 import com.tak.lite.di.MeshConnectionState
 import com.tak.lite.di.MeshProtocol
@@ -20,11 +21,9 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.maplibre.android.geometry.LatLng
+import java.util.Collections
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.math.*
-import java.util.Collections
-import android.util.LruCache
 
 @Singleton
 class MeshNetworkService @Inject constructor(
@@ -394,7 +393,6 @@ class MeshNetworkService @Inject constructor(
         val currentDirection = synchronized(simulatedPeerCurrentDirections) { 
             simulatedPeerCurrentDirections[peerId] ?: 0.0 
         }
-        val maxDirectionChange = 30.0 // Fixed maximum of 30 degrees
         val straightBias = synchronized(simulatedPeerStraightBias) { 
             simulatedPeerStraightBias[peerId] ?: 0.8 
         }

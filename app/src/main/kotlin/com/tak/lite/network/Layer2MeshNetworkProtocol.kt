@@ -463,7 +463,7 @@ class Layer2MeshNetworkProtocol @Inject constructor(
             // Trigger state sync if needed
             if (discoveryInfo.lastStateVersion < currentStateVersion.version) {
                 sendStateSync(
-                    toIp = packet.address.hostAddress,
+                    toIp = packet.address.hostAddress ?: "N/A",
                     channels = emptyList(),
                     peerLocations = peerLocations,
                     annotations = annotationProvider?.invoke() ?: emptyList()

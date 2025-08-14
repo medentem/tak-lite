@@ -9,7 +9,7 @@ import kotlinx.coroutines.withContext
 import org.maplibre.android.geometry.LatLng
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.math.*
+import kotlin.math.log10
 
 /**
  * Analyzes peer network coverage and mesh routing for extended coverage
@@ -143,7 +143,6 @@ class PeerNetworkAnalyzer @Inject constructor() {
      */
     suspend fun calculateExtendedCoverage(
         userLocation: LatLng,
-        userElevation: Double,
         peerLocations: Map<String, PeerLocationEntry>,
         maxDistance: Double = MAX_PEER_DISTANCE
     ): List<NetworkPeer> = withContext(Dispatchers.Default) {
@@ -165,12 +164,12 @@ class PeerNetworkAnalyzer @Inject constructor() {
         val directPeerResults = if (directPeers.size > 10) { // Only parallelize for larger peer sets
             directPeers.map { (peerId, location) ->
                 async {
-                    processDirectPeer(userLocation, peerId, location, maxDistance)
+                    processDirectPeer(userLocation, peerId, location)
                 }
             }.awaitAll().filterNotNull()
         } else {
             directPeers.map { (peerId, location) ->
-                processDirectPeer(userLocation, peerId, location, maxDistance)
+                processDirectPeer(userLocation, peerId, location)
             }.filterNotNull()
         }
         
@@ -225,8 +224,7 @@ class PeerNetworkAnalyzer @Inject constructor() {
     private fun processDirectPeer(
         userLocation: LatLng,
         peerId: String,
-        location: PeerLocationEntry,
-        maxDistance: Double
+        location: PeerLocationEntry
     ): NetworkPeer? {
         val distance = getCachedDistance(userLocation, LatLng(location.latitude, location.longitude))
         
@@ -292,56 +290,6 @@ class PeerNetworkAnalyzer @Inject constructor() {
         }
         
         return newPeers
-    }
-    
-    /**
-     * Legacy method for backward compatibility
-     */
-    private fun processHopExtension(
-        existingPeer: NetworkPeer,
-        peerLocations: Map<String, PeerLocationEntry>,
-        visitedPeers: Set<String>,
-        maxDistance: Double
-    ): List<NetworkPeer> {
-        return processHopExtensionWithSpatialIndex(existingPeer, peerLocations, visitedPeers, maxDistance)
-    }
-    
-    /**
-     * Finds the best route to a target location through the peer network
-     */
-    fun findBestRoute(
-        startLocation: LatLng,
-        targetLocation: LatLng,
-        networkPeers: List<NetworkPeer>,
-        maxDistance: Double = MAX_PEER_DISTANCE
-    ): List<NetworkPeer>? {
-        // Find peers that can reach the target
-        val reachablePeers = networkPeers.filter { peer ->
-            val distance = getCachedDistance(peer.location, targetLocation)
-            distance <= maxDistance
-        }
-        
-        if (reachablePeers.isEmpty()) return null
-        
-        // Find the peer with the best signal strength
-        val bestPeer = reachablePeers.maxByOrNull { it.signalStrength }
-        
-        return if (bestPeer != null) {
-            // Reconstruct the route from start to target through this peer
-            val route = mutableListOf<NetworkPeer>()
-            
-            // Add intermediate peers in the route
-            for (peerId in bestPeer.route) {
-                val routePeer = networkPeers.find { it.id == peerId }
-                if (routePeer != null) {
-                    route.add(routePeer)
-                }
-            }
-            
-            route
-        } else {
-            null
-        }
     }
     
     /**

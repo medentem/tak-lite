@@ -242,7 +242,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                     startHandshakeTimeout()
                     
                     while (!handshakeComplete.get()) {
-                        deviceManager.aggressiveDrainFromRadio(gatt, fromRadioChar)
+                        deviceManager.aggressiveDrainFromRadio(fromRadioChar)
                         
                         // Wait a short time before next drain attempt to avoid tight loop
                         delay(100)

@@ -707,7 +707,7 @@ class CoverageCalculator @Inject constructor(
         // Use generic grid processing with spiral ordering
         val resultGrid = processGridWithSpiralOrder(
             grid = grid,
-            processor = { row, col, point, index, totalPoints ->
+            processor = { row, col, point, _, _ ->
                 computePointCoverage(
                     sourceLocation = userLocation,
                     sourceElevation = userElevation,
@@ -833,17 +833,16 @@ class CoverageCalculator @Inject constructor(
         }
         
         // Calculate peer network with adaptive terrain sampling
-        val userTerrainData = try {
+        try {
             val cellSize = params.resolution
             terrainAnalyzer.getAdaptiveElevationForPoint(userLocation, cellSize, params.zoomLevel)
         } catch (e: Exception) {
             android.util.Log.w("CoverageCalculator", "Failed to get user elevation for extended coverage: ${e.message}")
             com.tak.lite.model.TerrainCellData(0.0, 0.0, 0.0, 0.0, "fallback")
         }
-        val userElevation = userTerrainData.averageElevation
         val networkPeers = try {
             peerNetworkAnalyzer.calculateExtendedCoverage(
-                userLocation, userElevation, peerLocations, params.maxPeerDistance
+                userLocation, peerLocations, params.maxPeerDistance
             )
         } catch (e: Exception) {
             android.util.Log.w("CoverageCalculator", "Failed to calculate extended coverage peers: ${e.message}")
@@ -891,7 +890,7 @@ class CoverageCalculator @Inject constructor(
         // Use generic grid processing with spiral ordering
         val resultGrid = processGridWithSpiralOrder(
             grid = grid,
-            processor = { row, col, point, index, totalPoints ->
+            processor = { _, _, point, _, _ ->
                 val existingCoverage = point.coverageProbability
                 
                 // Skip peer coverage calculation if direct coverage is already good (>= 0.5)
@@ -936,11 +935,9 @@ class CoverageCalculator @Inject constructor(
                             val signalShadow = try {
                                 // Convert feet to meters (1 foot = 0.3048 meters)
                                 val userAntennaHeightMeters = params.userAntennaHeightFeet * 0.3048
-                                val receivingAntennaHeightMeters = params.receivingAntennaHeightFeet * 0.3048
                                 terrainAnalyzer.calculateSignalShadow(
                                     bestPeer.location, LatLng(point.latitude, point.longitude), 
                                     userAntennaHeight = userAntennaHeightMeters,
-                                    targetAntennaHeight = receivingAntennaHeightMeters,
                                     zoomLevel = params.zoomLevel
                                 )
                             } catch (e: Exception) {
@@ -1232,7 +1229,6 @@ class CoverageCalculator @Inject constructor(
         grid: Array<Array<CoveragePoint>>,
         onProgress: (Float, String) -> Unit
     ): Array<Array<CoveragePoint>> {
-        var totalPoints = 0
         var coveredPoints = 0
         var maxCoverage = 0f
         var minCoverage = 1f
@@ -1240,7 +1236,7 @@ class CoverageCalculator @Inject constructor(
         // Use generic grid processing with spiral ordering
         val filteredGrid = processGridWithSpiralOrder(
             grid = grid,
-            processor = { row, col, point, index, totalPoints ->
+            processor = { _, _, point, _, _ ->
                 if (point.coverageProbability > maxCoverage) {
                     maxCoverage = point.coverageProbability
                 }

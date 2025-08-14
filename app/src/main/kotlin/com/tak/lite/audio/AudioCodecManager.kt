@@ -1,10 +1,6 @@
 package com.tak.lite.audio
 
 import android.util.Log
-import org.webrtc.MediaConstraints
-import org.webrtc.PeerConnectionFactory
-import org.webrtc.AudioSource
-import org.webrtc.AudioTrack
 
 class AudioCodecManager {
     companion object {
@@ -24,29 +20,7 @@ class AudioCodecManager {
     private var currentBitrate = MEDIUM_QUALITY_BITRATE
     private var currentFrameSize = MEDIUM_QUALITY_FRAME_SIZE
     
-    fun configureAudioSource(factory: PeerConnectionFactory): AudioSource {
-        val audioConstraints = MediaConstraints().apply {
-            // Set audio constraints based on current configuration
-            mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("googAutoGainControl", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("googNoiseSuppression", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("googHighpassFilter", "true"))
-            
-            // Set bitrate constraint
-            mandatory.add(MediaConstraints.KeyValuePair("maxBitrate", currentBitrate.toString()))
-            
-            // Set frame size constraint
-            mandatory.add(MediaConstraints.KeyValuePair("maxFrameSize", currentFrameSize.toString()))
-        }
-        
-        return factory.createAudioSource(audioConstraints)
-    }
-    
-    fun createAudioTrack(factory: PeerConnectionFactory, source: AudioSource): AudioTrack {
-        return factory.createAudioTrack("audio_track", source)
-    }
-    
-    fun updateCodecConfiguration(networkQuality: Float, packetLoss: Float, latency: Long) {
+    fun updateCodecConfiguration(networkQuality: Float, packetLoss: Float) {
         val (newBitrate, newFrameSize) = when {
             networkQuality > 0.8f && packetLoss < 0.05f -> {
                 Pair(HIGH_QUALITY_BITRATE, HIGH_QUALITY_FRAME_SIZE)

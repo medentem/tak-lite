@@ -427,7 +427,7 @@ abstract class MeshtasticBaseProtocol(
             Log.d(TAG, "Checking for pending location requests. Current pending: ${pendingLocationRequests.keys}")
             
             // First, try to find a direct routing response by request ID
-            val directRequest = pendingLocationRequests.entries.find { (packetId, request) ->
+            val directRequest = pendingLocationRequests.entries.find { (_, request) ->
                 request.peerId == peerId && 
                 (meshPacket?.hasDecoded() == true && meshPacket.decoded.requestId == request.requestId)
             }
@@ -439,7 +439,7 @@ abstract class MeshtasticBaseProtocol(
             } else {
                 // Fallback: check for any recent requests to this peer (for broadcast updates)
                 val now = System.currentTimeMillis()
-                val pendingRequest = pendingLocationRequests.entries.find { (packetId, request) ->
+                val pendingRequest = pendingLocationRequests.entries.find { (_, request) ->
                     request.peerId == peerId && 
                     (now - request.timestamp) < 30000 &&  // Within 30 seconds of request
                     (now - request.timestamp) > 1000      // At least 1 second after request

@@ -120,7 +120,7 @@ class KalmanPeerLocationPredictor @Inject constructor() : BasePeerLocationPredic
             }
 
             // Calculate confidence based on Kalman covariance
-            val confidence = calculateKalmanConfidence(predictedState, config)
+            val confidence = calculateKalmanConfidence(predictedState)
 
             // Calculate heading uncertainty from velocity covariance
             val headingUncertainty = calculateHeadingUncertaintyFromCovariance(predictedState)
@@ -152,7 +152,6 @@ class KalmanPeerLocationPredictor @Inject constructor() : BasePeerLocationPredic
         config: PredictionConfig
     ): ConfidenceCone? {
         val kalmanState = prediction.kalmanState ?: return null
-        val latest = history.getLatestEntry() ?: return null
 
         Log.d(TAG, "KALMAN_CONE: Generating confidence cone using Kalman covariance (ENU)")
 
@@ -275,7 +274,7 @@ class KalmanPeerLocationPredictor @Inject constructor() : BasePeerLocationPredic
         return stdDeg.coerceIn(1.0, 45.0)
     }
 
-    private fun calculateKalmanConfidence(state: KalmanState, config: PredictionConfig): Double {
+    private fun calculateKalmanConfidence(state: KalmanState): Double {
         val posTrace = (state.P[0] + state.P[5]).coerceAtLeast(0.0)
         val velTrace = (state.P[10] + state.P[15]).coerceAtLeast(0.0)
         val positionUncertainty = sqrt(posTrace)

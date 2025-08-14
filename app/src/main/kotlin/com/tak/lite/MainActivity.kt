@@ -19,6 +19,7 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.ActivityCompat
@@ -129,10 +130,57 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
     private var isDeviceLocationStale: Boolean = true
 
     private val REQUEST_CODE_ALL_PERMISSIONS = 4001
-    private val REQUEST_CODE_COMPASS_CALIBRATION = 4002
 
     @Inject lateinit var meshProtocolProvider: com.tak.lite.network.MeshProtocolProvider
     @Inject lateinit var billingManager: com.tak.lite.util.BillingManager
+
+    // Activity result launcher for compass calibration
+    private val compassCalibrationLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            // User completed calibration - get the calibration quality from stored preferences
+            val prefs = getSharedPreferences("compass_calibration", MODE_PRIVATE)
+            val calibrationQuality = prefs.getFloat("calibration_quality", 0f)
+            val osCalibrationTriggered = prefs.getBoolean("os_calibration_triggered", false)
+            val initialAccuracy = prefs.getInt("initial_sensor_accuracy", SensorManager.SENSOR_STATUS_UNRELIABLE)
+            val finalAccuracy = prefs.getInt("final_sensor_accuracy", SensorManager.SENSOR_STATUS_UNRELIABLE)
+            val sampleCount = prefs.getInt("calibration_samples", 0)
+            
+            // Update the location controller with manual calibration results
+            locationController.updateManualCalibration(calibrationQuality)
+            
+            // Force a calibration check to update the UI immediately
+            locationController.forceCalibrationCheck()
+            
+            // Show detailed feedback to the user
+            val qualityText = when {
+                calibrationQuality >= 0.8f -> getString(R.string.compass_calibration_excellent)
+                calibrationQuality >= 0.6f -> getString(R.string.compass_calibration_good)
+                calibrationQuality >= 0.4f -> getString(R.string.compass_calibration_fair)
+                else -> getString(R.string.compass_calibration_poor)
+            }
+            
+            val accuracyImprovement = if (finalAccuracy > initialAccuracy) {
+                "Sensor accuracy improved from ${getAccuracyString(initialAccuracy)} to ${getAccuracyString(finalAccuracy)}"
+            } else {
+                "Sensor accuracy: ${getAccuracyString(finalAccuracy)}"
+            }
+            
+            val message = "Compass calibration completed!\n" +
+                         "Quality: $qualityText\n" +
+                         "Samples collected: $sampleCount\n" +
+                         "$accuracyImprovement" +
+                         if (osCalibrationTriggered) "\nOS-level calibration applied" else ""
+            
+            android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
+            
+            Log.d("MainActivity", "Calibration completed - Quality: $calibrationQuality, OS triggered: $osCalibrationTriggered, Samples: $sampleCount")
+        } else if (result.resultCode == RESULT_CANCELED) {
+            android.widget.Toast.makeText(this, getString(R.string.calibration_skipped), android.widget.Toast.LENGTH_SHORT).show()
+            Log.d("MainActivity", "Calibration was skipped by user")
+        }
+    }
 
     private lateinit var packetSummaryOverlay: FrameLayout
     private lateinit var packetSummaryList: LinearLayout
@@ -615,7 +663,6 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
         lifecycleScope.launch {
             repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
                 viewModel.packetSummaries.collectLatest { summaries ->
-                    val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
                     val showSummary = prefs.getBoolean("show_packet_summary", false)
                     if (!showSummary || summaries.isEmpty()) {
                         packetSummaryOverlay.visibility = View.GONE
@@ -849,9 +896,6 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
         
         // Calculate target margins (using hardcoded values since dimens don't exist)
         val density = resources.displayMetrics.density
-        val pttButtonHeight = (56 * density).toInt() // Standard FAB size in dp
-        val pttButtonMargin = (16 * density).toInt() // Standard margin in dp
-        val totalPTTSpace = pttButtonHeight + pttButtonMargin // 72dp total (button + bottom margin only)
         
         val targetLineToolMargin = if (showPTT) (170 * density).toInt() else ((170 - 72) * density).toInt()
         val targetStatusMargin = if (showPTT) (80 * density).toInt() else (16 * density).toInt() // Keep some margin from bottom
@@ -1307,7 +1351,6 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
             }
         } else {
             // Check if we have good calibration status to show
-            val currentData = locationController.directionOverlayData.value
             val comprehensiveStatus = locationController.getComprehensiveCalibrationStatus()
             
             if (comprehensiveStatus != CalibrationStatus.UNKNOWN) {
@@ -1380,57 +1423,10 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
             currentData.compassQuality,
             currentData.needsCalibration
         )
-        startActivityForResult(intent, REQUEST_CODE_COMPASS_CALIBRATION)
+        compassCalibrationLauncher.launch(intent)
     }
     
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        
-        if (requestCode == REQUEST_CODE_COMPASS_CALIBRATION) {
-            if (resultCode == RESULT_OK) {
-                // User completed calibration - get the calibration quality from stored preferences
-                val prefs = getSharedPreferences("compass_calibration", MODE_PRIVATE)
-                val calibrationQuality = prefs.getFloat("calibration_quality", 0f)
-                val osCalibrationTriggered = prefs.getBoolean("os_calibration_triggered", false)
-                val initialAccuracy = prefs.getInt("initial_sensor_accuracy", SensorManager.SENSOR_STATUS_UNRELIABLE)
-                val finalAccuracy = prefs.getInt("final_sensor_accuracy", SensorManager.SENSOR_STATUS_UNRELIABLE)
-                val sampleCount = prefs.getInt("calibration_samples", 0)
-                
-                // Update the location controller with manual calibration results
-                locationController.updateManualCalibration(calibrationQuality)
-                
-                // Force a calibration check to update the UI immediately
-                locationController.forceCalibrationCheck()
-                
-                // Show detailed feedback to the user
-                val qualityText = when {
-                    calibrationQuality >= 0.8f -> getString(R.string.compass_calibration_excellent)
-                    calibrationQuality >= 0.6f -> getString(R.string.compass_calibration_good)
-                    calibrationQuality >= 0.4f -> getString(R.string.compass_calibration_fair)
-                    else -> getString(R.string.compass_calibration_poor)
-                }
-                
-                val accuracyImprovement = if (finalAccuracy > initialAccuracy) {
-                    "Sensor accuracy improved from ${getAccuracyString(initialAccuracy)} to ${getAccuracyString(finalAccuracy)}"
-                } else {
-                    "Sensor accuracy: ${getAccuracyString(finalAccuracy)}"
-                }
-                
-                val message = "Compass calibration completed!\n" +
-                             "Quality: $qualityText\n" +
-                             "Samples collected: $sampleCount\n" +
-                             "$accuracyImprovement" +
-                             if (osCalibrationTriggered) "\nOS-level calibration applied" else ""
-                
-                android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
-                
-                Log.d("MainActivity", "Calibration completed - Quality: $calibrationQuality, OS triggered: $osCalibrationTriggered, Samples: $sampleCount")
-            } else if (resultCode == RESULT_CANCELED) {
-                android.widget.Toast.makeText(this, getString(R.string.calibration_skipped), android.widget.Toast.LENGTH_SHORT).show()
-                Log.d("MainActivity", "Calibration was skipped by user")
-            }
-        }
-    }
+
     
     private fun getAccuracyString(accuracy: Int): String {
         return when (accuracy) {
