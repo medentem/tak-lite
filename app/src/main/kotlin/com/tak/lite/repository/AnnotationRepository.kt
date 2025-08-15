@@ -19,7 +19,7 @@ import javax.inject.Singleton
 
 @Singleton
 class AnnotationRepository @Inject constructor(
-    meshProtocolProvider: MeshProtocolProvider,
+    private val meshProtocolProvider: MeshProtocolProvider,  // Change to private
     context: Context
 ) {
     private val TAG = "AnnotationRepository"
@@ -32,11 +32,14 @@ class AnnotationRepository @Inject constructor(
     // Create a coroutine scope for the repository
     private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
-    private var meshProtocol = meshProtocolProvider.protocol.value
-
     init {
-        meshProtocol.setAnnotationCallback { annotation ->
-            handleAnnotation(annotation)
+        // Observe protocol changes and set callback dynamically
+        repositoryScope.launch {
+            meshProtocolProvider.protocol.collect { currentProtocol ->
+                currentProtocol.setAnnotationCallback { annotation ->
+                    handleAnnotation(annotation)
+                }
+            }
         }
 
         // Load saved annotations
@@ -85,8 +88,8 @@ class AnnotationRepository @Inject constructor(
     fun addAnnotation(annotation: MapAnnotation) {
         // Update local state first
         _annotations.value = _annotations.value.filter { it.id != annotation.id } + annotation
-        // Send to mesh network
-        meshProtocol.sendAnnotation(annotation)
+        // Send to mesh network using current protocol
+        meshProtocolProvider.protocol.value.sendAnnotation(annotation)
         saveAnnotations() // Save after adding new annotation
     }
     
@@ -98,12 +101,12 @@ class AnnotationRepository @Inject constructor(
             id = annotationId,
             creatorId = "local" // TODO: Replace with actual user ID
         )
-        meshProtocol.sendAnnotation(deletion)
+        meshProtocolProvider.protocol.value.sendAnnotation(deletion)
         saveAnnotations() // Save after removing annotation
     }
     
     fun sendBulkAnnotationDeletions(ids: List<String>) {
-        meshProtocol.sendBulkAnnotationDeletions(ids)
+        meshProtocolProvider.protocol.value.sendBulkAnnotationDeletions(ids)
         // Remove from local state as well
         _annotations.value = _annotations.value.filter { it.id !in ids }
         saveAnnotations() // Save after bulk deletion
