@@ -38,11 +38,8 @@ class AreaLayerManager(private val mapLibreMap: MapLibreMap) {
     }
 
     private var isInitialized = false
-    private val areaFeatureConverter = AreaFeatureConverter(mapLibreMap)
+    private val areaFeatureConverter = AreaFeatureConverter()
     private var lastAreas: List<MapAnnotation.Area> = emptyList()
-
-    fun Double.toRadians() = this * Math.PI / 180.0
-    fun Double.toDegrees() = this * 180.0 / Math.PI
 
     /**
      * Setup area layers in the map style
@@ -204,10 +201,10 @@ class AreaLayerManager(private val mapLibreMap: MapLibreMap) {
 /**
  * Converts area annotations to GeoJSON features for CircleLayer rendering
  */
-class AreaFeatureConverter(private val mapLibreMap: MapLibreMap) {
+class AreaFeatureConverter {
 
-    private fun generateCirclePoints(center: org.maplibre.geojson.Point, radiusMeters: Double, numPoints: Int = 32, expansion: Double = 1.0): List<org.maplibre.geojson.Point> {
-        val points = mutableListOf<org.maplibre.geojson.Point>()
+    private fun generateCirclePoints(center: Point, radiusMeters: Double, numPoints: Int = 32, expansion: Double = 1.0): List<Point> {
+        val points = mutableListOf<Point>()
         val earthRadius = 6371000.0 // meters
         val angularDistance = (radiusMeters * expansion) / earthRadius
         val centerLatRad = CoordinateUtils.toRadians(center.latitude())
@@ -217,7 +214,7 @@ class AreaFeatureConverter(private val mapLibreMap: MapLibreMap) {
             val bearingRad = CoordinateUtils.toRadians((i * 360.0 / numPoints))
             val latRad = asin(sin(centerLatRad) * cos(angularDistance) + cos(centerLatRad) * sin(angularDistance) * cos(bearingRad))
             val lonRad = centerLonRad + atan2(sin(bearingRad) * sin(angularDistance) * cos(centerLatRad), cos(angularDistance) - sin(centerLatRad) * sin(latRad))
-            points.add(org.maplibre.geojson.Point.fromLngLat(CoordinateUtils.toDegrees(lonRad), CoordinateUtils.toDegrees(latRad)))
+            points.add(Point.fromLngLat(CoordinateUtils.toDegrees(lonRad), CoordinateUtils.toDegrees(latRad)))
         }
         points.add(points.first()) // Close the polygon
         return points
@@ -227,7 +224,7 @@ class AreaFeatureConverter(private val mapLibreMap: MapLibreMap) {
      * Convert area annotation to GeoJSON feature for circle rendering
      */
     fun convertToGeoJsonFeature(area: MapAnnotation.Area): Feature {
-        val center = org.maplibre.geojson.Point.fromLngLat(area.center.lng, area.center.lt)
+        val center = Point.fromLngLat(area.center.lng, area.center.lt)
         
         // Generate polygon points for fill/stroke
         val points = generateCirclePoints(center, area.radius)
@@ -276,7 +273,7 @@ class AreaFeatureConverter(private val mapLibreMap: MapLibreMap) {
      * Convert area annotation to GeoJSON feature for hit area (larger polygon)
      */
     fun convertToHitFeature(area: MapAnnotation.Area): Feature {
-        val center = org.maplibre.geojson.Point.fromLngLat(area.center.lng, area.center.lt)
+        val center = Point.fromLngLat(area.center.lng, area.center.lt)
         val hitPoints = generateCirclePoints(center, area.radius, expansion = 1.1) // 10% larger
         val hitPolygon = Polygon.fromLngLats(listOf(hitPoints))
         val feature = Feature.fromGeometry(hitPolygon)

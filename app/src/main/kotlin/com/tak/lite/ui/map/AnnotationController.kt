@@ -15,12 +15,11 @@ import com.tak.lite.model.AnnotationColor
 import com.tak.lite.model.LineStyle
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PointShape
+import com.tak.lite.util.haversine
 import com.tak.lite.viewmodel.AnnotationViewModel
 import com.tak.lite.viewmodel.MeshNetworkViewModel
 import com.tak.lite.viewmodel.MessageViewModel
 import kotlinx.coroutines.launch
-import org.maplibre.android.annotations.Marker
-import org.maplibre.android.annotations.Polygon
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.style.expressions.Expression
@@ -58,24 +57,19 @@ class AnnotationController(
     private lateinit var lineToolCancelButton: View
     private lateinit var lineToolButtonFrame: View
     private lateinit var lineToolLabel: View
-    private val poiMarkers = mutableMapOf<String, Marker>()
-    private val areaPolygons = mutableMapOf<String, Polygon>()
     private var lastOverlayProjection: org.maplibre.android.maps.Projection? = null
     private var lastOverlayAnnotations: List<MapAnnotation> = emptyList()
     private var lastPoiAnnotations: List<MapAnnotation.PointOfInterest> = emptyList()
     var mapController: MapController? = null
     
-    // Polygon auto-closure threshold
-    private val POLYGON_CLOSURE_THRESHOLD_PIXELS = 30f
-    
     // === NATIVE CLUSTERING SUPPORT ===
-    private var clusteredLayerManager: ClusteredLayerManager;
-    var clusteringConfig: ClusteringConfig
+    private var clusteredLayerManager: ClusteredLayerManager
+    var clusteringConfig: ClusteringConfig = ClusteringConfig.getDefault()
     private var lastPeerUpdate = 0L
     private val PEER_UPDATE_THROTTLE_MS = 100L
     
     // === HYBRID POPOVER SUPPORT ===
-    lateinit var popoverManager: HybridPopoverManager
+    var popoverManager: HybridPopoverManager
     private var lastPopoverUpdate = 0L
     private val POPOVER_UPDATE_THROTTLE_MS = 10L
     
@@ -125,7 +119,6 @@ class AnnotationController(
     }
 
     init {
-        clusteringConfig = ClusteringConfig.getDefault()
         clusteredLayerManager = ClusteredLayerManager(mapLibreMap, clusteringConfig)
         popoverManager = HybridPopoverManager(fragment.requireContext(), mapLibreMap, binding.root, meshNetworkViewModel)
         unifiedAnnotationManager = UnifiedAnnotationManager(mapLibreMap, fragment.requireContext())
@@ -326,7 +319,7 @@ class AnnotationController(
                 
                 // Draw white exclamation mark
                 val exMarkPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                    this.color = android.graphics.Color.WHITE
+                    this.color = Color.WHITE
                     style = android.graphics.Paint.Style.STROKE
                     strokeWidth = 4f
                     strokeCap = android.graphics.Paint.Cap.ROUND
@@ -339,7 +332,7 @@ class AnnotationController(
                 val dotRadius = 3f
                 val dotCenterY = exMarkBottom + dotRadius * 2f
                 val dotPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                    this.color = android.graphics.Color.WHITE
+                    this.color = Color.WHITE
                     style = android.graphics.Paint.Style.FILL
                 }
                 canvas.drawCircle(centerX, dotCenterY, dotRadius, dotPaint)
@@ -579,7 +572,7 @@ class AnnotationController(
     }
 
     // === DEVICE LOCATION UPDATE ===
-    fun updateDeviceLocation(location: org.maplibre.android.geometry.LatLng?, stale: Boolean) {
+    fun updateDeviceLocation(location: LatLng?, stale: Boolean) {
         deviceLocationManager?.updateDeviceLocation(location, stale)
     }
     
@@ -609,7 +602,7 @@ class AnnotationController(
                 // Create new source with data and clustering options
                 Log.d("PoiDebug", "Creating new POI clustered source")
                 try {
-                    clusteredLayerManager?.setupPoiClusteredLayer(featureCollection.toJson())
+                    clusteredLayerManager.setupPoiClusteredLayer(featureCollection.toJson())
                 } catch (e: Exception) {
                     Log.e("PeerDotDebug", "Failed to create clustered source: ${e.message}", e)
                 }
@@ -640,7 +633,7 @@ class AnnotationController(
         }
     }
     
-    fun handleMapLongPress(latLng: org.maplibre.android.geometry.LatLng, mapLibreMap: MapLibreMap): Boolean {
+    fun handleMapLongPress(latLng: LatLng, mapLibreMap: MapLibreMap): Boolean {
         val projection = mapLibreMap.projection
         val screenPoint = projection.toScreenLocation(latLng)
         
@@ -780,7 +773,7 @@ class AnnotationController(
                 if (it is org.maplibre.geojson.Point) it.coordinates()[0] else null 
             } ?: continue
             
-            val screenPt = mapLibreMap.projection.toScreenLocation(org.maplibre.android.geometry.LatLng(lat, lng))
+            val screenPt = mapLibreMap.projection.toScreenLocation(LatLng(lat, lng))
             val pointF = PointF(screenPt.x, screenPt.y)
             val contains = android.graphics.Region().apply {
                 val pathBounds = android.graphics.RectF()
@@ -891,7 +884,7 @@ class AnnotationController(
     }
 
     // POI/line/area editing
-    fun getPoiById(poiId: String): MapAnnotation.PointOfInterest? {
+    private fun getPoiById(poiId: String): MapAnnotation.PointOfInterest? {
         return annotationViewModel.uiState.value.annotations.filterIsInstance<MapAnnotation.PointOfInterest>().find { it.id == poiId }
     }
 
@@ -982,8 +975,6 @@ class AnnotationController(
 
     fun deletePoi(poiId: String) {
         Log.d("AnnotationController", "deletePoi: $poiId")
-        val marker = poiMarkers[poiId]
-        marker?.let { (annotationOverlayView.context as? MapLibreMap)?.removeAnnotation(it) }
         annotationViewModel.removeAnnotation(poiId)
         // Force map redraw to update POI layer
         onAnnotationChanged?.invoke()
@@ -1081,7 +1072,7 @@ class AnnotationController(
         // Restore layers button container position when exiting line mode
         try {
             val activity = fragment.activity as? android.app.Activity
-            val container = activity?.findViewById<android.widget.LinearLayout>(com.tak.lite.R.id.layersButtonContainer)
+            val container = activity?.findViewById<android.widget.LinearLayout>(R.id.layersButtonContainer)
             container?.animate()?.translationY(0f)?.setDuration(150)?.start()
         } catch (_: Exception) { }
     }
@@ -1093,12 +1084,6 @@ class AnnotationController(
 
     // Rendering overlays
     fun renderAllAnnotations(mapLibreMap: MapLibreMap?) {
-        // Remove all existing overlays
-        poiMarkers.values.forEach { mapLibreMap?.removeAnnotation(it) }
-        poiMarkers.clear()
-        areaPolygons.values.forEach { mapLibreMap?.removeAnnotation(it) }
-        areaPolygons.clear()
-        
         // Update the annotation overlay with current annotations (excluding POIs)
         val state = annotationViewModel.uiState.value
         val allAnnotations = state.annotations
@@ -1131,11 +1116,9 @@ class AnnotationController(
     fun syncAnnotationOverlayView(mapLibreMap: MapLibreMap?) {
         val currentProjection = mapLibreMap?.projection
         val currentAnnotations = annotationViewModel.uiState.value.annotations
-        var changed = false
         if (currentProjection != lastOverlayProjection) {
             annotationOverlayView.setProjection(currentProjection)
             lastOverlayProjection = currentProjection
-            changed = true
         }
         
         // Update overlay with non-POI annotations
@@ -1173,26 +1156,13 @@ class AnnotationController(
     }
 
     // Utility
-    fun annotationColorToAndroidColor(color: AnnotationColor): Int {
+    private fun annotationColorToAndroidColor(color: AnnotationColor): Int {
         return when (color) {
             AnnotationColor.GREEN -> Color.parseColor("#4CAF50")
             AnnotationColor.YELLOW -> Color.parseColor("#FBC02D")
             AnnotationColor.RED -> Color.parseColor("#F44336")
             AnnotationColor.BLACK -> Color.BLACK
             AnnotationColor.WHITE -> Color.WHITE
-        }
-    }
-    
-    /**
-     * Extension function to convert AnnotationColor to hex string
-     */
-    private fun AnnotationColor.toHexString(): String {
-        return when (this) {
-            AnnotationColor.GREEN -> "#4CAF50"
-            AnnotationColor.YELLOW -> "#FBC02D"
-            AnnotationColor.RED -> "#F44336"
-            AnnotationColor.BLACK -> "#000000"
-            AnnotationColor.WHITE -> "#FFFFFF"
         }
     }
 
@@ -1293,7 +1263,7 @@ class AnnotationController(
             // Move layers button container up to avoid overlap with confirm/cancel FABs
             try {
                 val activity = fragment.activity as? android.app.Activity
-                val container = activity?.findViewById<android.widget.LinearLayout>(com.tak.lite.R.id.layersButtonContainer)
+                val container = activity?.findViewById<android.widget.LinearLayout>(R.id.layersButtonContainer)
                 val density = fragment.resources.displayMetrics.density
                 container?.animate()?.translationY((-60f * density))?.setDuration(150)?.start()
             } catch (_: Exception) { }
@@ -1383,14 +1353,14 @@ class AnnotationController(
     // Stub for showing the elevation chart bottom sheet
     private fun showElevationChartBottomSheet(lineId: String) {
         Log.d("AnnotationController", "showElevationChartBottomSheet called for lineId=$lineId")
-        val line = annotationViewModel.uiState.value.annotations.filterIsInstance<com.tak.lite.model.MapAnnotation.Line>().find { it.id == lineId } ?: return
+        val line = annotationViewModel.uiState.value.annotations.filterIsInstance<MapAnnotation.Line>().find { it.id == lineId } ?: return
         val activity = fragment.requireActivity() as? androidx.fragment.app.FragmentActivity
         if (activity != null) {
             Log.d("AnnotationController", "Showing ElevationChartBottomSheet for lineId=$lineId")
             val sheet = ElevationChartBottomSheet(line)
             sheet.show(activity.supportFragmentManager, "ElevationChartBottomSheet")
         } else {
-            android.util.Log.e("AnnotationController", "Fragment's activity is not a FragmentActivity, cannot show bottom sheet")
+            Log.e("AnnotationController", "Fragment's activity is not a FragmentActivity, cannot show bottom sheet")
         }
     }
 
@@ -1536,7 +1506,7 @@ class AnnotationController(
         editText.requestFocus()
     }
 
-    fun showPolygonFanMenu(center: PointF, polygonId: String) {
+    private fun showPolygonFanMenu(center: PointF, polygonId: String) {
         Log.d("AnnotationController", "showPolygonFanMenu: center=$center, polygonId=$polygonId")
         val options = listOf(
             // Shape options for adding POIs within polygon
@@ -1689,13 +1659,6 @@ class AnnotationController(
         editText.requestFocus()
     }
 
-    // Helper method to calculate distance between two points
-    private fun PointF.distanceTo(other: PointF): Float {
-        val dx = this.x - other.x
-        val dy = this.y - other.y
-        return kotlin.math.sqrt(dx * dx + dy * dy)
-    }
-
     fun showPolygonColorMenu(center: PointF, shape: PointShape, polygonId: String) {
         val colorOptions = listOf(
             FanMenuView.Option.Color(AnnotationColor.GREEN),
@@ -1719,7 +1682,7 @@ class AnnotationController(
             override fun onOptionSelected(option: FanMenuView.Option): Boolean {
                 if (option is FanMenuView.Option.Color) {
                     annotationViewModel.setCurrentColor(option.color)
-                    addPoiFromPolygonFanMenu(shape, option.color, polygonId)
+                    addPoiFromPolygonFanMenu(shape, option.color)
                     return false // Dismiss menu after POI creation
                 }
                 return false
@@ -1732,7 +1695,7 @@ class AnnotationController(
         fanMenuView.visibility = View.VISIBLE
     }
 
-    fun addPoiFromPolygonFanMenu(shape: PointShape, color: AnnotationColor, polygonId: String) {
+    fun addPoiFromPolygonFanMenu(shape: PointShape, color: AnnotationColor) {
         // Use the stored touch location for POI placement
         val latLng = pendingPolygonTouchLatLng
         if (latLng != null) {
@@ -1765,8 +1728,8 @@ class AnnotationController(
             Log.e("AnnotationController", "Polygon not found: $polygonId")
         }
     }
-    
-    fun showAreaMenu(center: PointF, areaId: String) {
+
+    private fun showAreaMenu(center: PointF, areaId: String) {
         Log.d("AnnotationController", "showAreaMenu: center=$center, areaId=$areaId")
         val area = annotationViewModel.uiState.value.annotations.filterIsInstance<MapAnnotation.Area>().find { it.id == areaId } ?: return
         val options = listOf(
@@ -1953,14 +1916,6 @@ class AnnotationController(
         editText.requestFocus()
     }
 
-    // Start timer updates
-    fun startTimerUpdates() {
-        poiTimerManager?.startTimerUpdates()
-        lineTimerManager?.startTimerUpdates()
-        _areaTimerManager?.startTimerUpdates()
-        _polygonTimerManager?.startTimerUpdates()
-    }
-    
     private fun startAreaDrawing(center: PointF) {
         Log.d("AnnotationController", "startAreaDrawing: center=$center")
         val latLng = pendingPoiLatLng ?: return
@@ -1976,7 +1931,7 @@ class AnnotationController(
             val edgeScreen = PointF(centerScreen.x + tempAreaRadiusPixels, centerScreen.y)
             val edgeLatLng = projection.fromScreenLocation(edgeScreen)
             tempAreaRadius = calculateDistance(latLng, edgeLatLng)
-            Log.d("AnnotationController", "Initial area radius (from 300px): ${tempAreaRadius} m at latLng=$latLng")
+            Log.d("AnnotationController", "Initial area radius (from 300px): $tempAreaRadius m at latLng=$latLng")
         } else {
             // Fallback: rough conversion (1 pixel ≈ 1 meter at zoom level 15)
             tempAreaRadius = tempAreaRadiusPixels.toDouble()
@@ -2055,7 +2010,7 @@ class AnnotationController(
                 val edgeScreen = PointF(centerScreen.x + tempAreaRadiusPixels, centerScreen.y)
                 val edgeLatLng = projection.fromScreenLocation(edgeScreen)
                 val recomputed = calculateDistance(center, edgeLatLng)
-                Log.w("AnnotationController", "Recomputed area radius from pixels: ${recomputed} m (was ${tempAreaRadius})")
+                Log.w("AnnotationController", "Recomputed area radius from pixels: $recomputed m (was ${tempAreaRadius})")
                 recomputed
             } else {
                 Log.w("AnnotationController", "Projection null while recomputing; defaulting radius to 50m")
@@ -2092,16 +2047,8 @@ class AnnotationController(
         val lon1 = Math.toRadians(point1.longitude)
         val lat2 = Math.toRadians(point2.latitude)
         val lon2 = Math.toRadians(point2.longitude)
-        
-        val dLat = lat2 - lat1
-        val dLon = lon2 - lon1
-        
-        val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                Math.cos(lat1) * Math.cos(lat2) *
-                Math.sin(dLon / 2) * Math.sin(dLon / 2)
-        val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-        
-        return 6371000 * c // Earth radius in meters
+
+        return haversine(lat1, lon1, lat2, lon2)
     }
 
     fun showAreaLabel(areaId: String, screenPosition: PointF) {

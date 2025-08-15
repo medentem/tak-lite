@@ -21,6 +21,10 @@ import com.tak.lite.util.getOfflineElevation
 import com.tak.lite.util.haversine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.cos
+import kotlin.math.ln
+import kotlin.math.pow
+import kotlin.math.tan
 
 class ElevationChartBottomSheet(
     private val line: MapAnnotation.Line
@@ -29,7 +33,7 @@ class ElevationChartBottomSheet(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
-    ): View? {
+    ): View {
         android.util.Log.d("ElevationChartBottomSheet", "onCreateView called")
         val context = requireContext()
         val layout = LinearLayout(context)
@@ -199,11 +203,11 @@ class ElevationChartBottomSheet(
             }
 
             // --- Sample elevations for all dense points with progress updates ---
-            var cumulativeDistance: Float = 0f
+            var cumulativeDistance = 0f
             var prevLat: Double? = null
             var prevLon: Double? = null
             var tilesDownloaded = 0
-            var totalTilesNeeded = 0
+            val totalTilesNeeded: Int
             val tilesToDownload = mutableSetOf<Pair<Int, Int>>()
 
             // First pass: identify which tiles need to be downloaded
@@ -212,10 +216,10 @@ class ElevationChartBottomSheet(
                 val lon = pt.longitude
                 val elevation = getOfflineElevation(lat, lon, zoom, filesDir)
                 if (elevation == null) {
-                    val n = Math.pow(2.0, zoom.toDouble())
+                    val n = 2.0.pow(zoom.toDouble())
                     val x = ((lon + 180.0) / 360.0 * n).toInt()
                     val latRad = Math.toRadians(lat)
-                    val y = ((1.0 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2.0 * n).toInt()
+                    val y = ((1.0 - ln(tan(latRad) + 1 / cos(latRad)) / Math.PI) / 2.0 * n).toInt()
                     tilesToDownload.add(Pair(x, y))
                 }
             }
@@ -313,7 +317,7 @@ class ElevationChartBottomSheet(
             val marker = object : com.github.mikephil.charting.components.MarkerView(context, android.R.layout.simple_list_item_1) {
                 var distMi: Float? = null
                 var elevFt: Float? = null
-                override fun refreshContent(e: com.github.mikephil.charting.data.Entry?, highlight: com.github.mikephil.charting.highlight.Highlight?) {
+                override fun refreshContent(e: Entry?, highlight: com.github.mikephil.charting.highlight.Highlight?) {
                     if (e != null) {
                         distMi = e.x / 1609.344f
                         elevFt = e.y * 3.28084f
@@ -380,10 +384,10 @@ class ElevationChartBottomSheet(
             chart.marker = marker
 
             // --- Dynamic axis scaling ---
-            val xMin: Float = entries.map { it.x }.minOrNull() ?: 0.0f
-            val xMax: Float = entries.map { it.x }.maxOrNull() ?: 1.0f
-            val yMin: Float = entries.map { it.y }.minOrNull() ?: 0.0f
-            val yMax: Float = entries.map { it.y }.maxOrNull() ?: 1.0f
+            val xMin: Float = entries.minOfOrNull { it.x } ?: 0.0f
+            val xMax: Float = entries.maxOfOrNull { it.x } ?: 1.0f
+            val yMin: Float = entries.minOfOrNull { it.y } ?: 0.0f
+            val yMax: Float = entries.maxOfOrNull { it.y } ?: 1.0f
             val xRange = (xMax - xMin).coerceAtLeast(0.1f)
             val yRange = (yMax - yMin).coerceAtLeast(0.1f)
             // X Axis: miles

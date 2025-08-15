@@ -20,6 +20,8 @@ import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.Point
+import kotlin.math.abs
+import kotlin.math.cos
 
 class HybridPopoverManager(
     private val context: android.content.Context,
@@ -95,7 +97,7 @@ class HybridPopoverManager(
         // Use polygon center for positioning
         val centerLat = polygon.points.map { it.lt }.average()
         val centerLng = polygon.points.map { it.lng }.average()
-        val centerPosition = org.maplibre.android.geometry.LatLng(centerLat, centerLng)
+        val centerPosition = LatLng(centerLat, centerLng)
         
         showPopover(PopoverData(
             id = "polygon_$polygonId",
@@ -110,7 +112,7 @@ class HybridPopoverManager(
     fun showAreaPopover(areaId: String, area: MapAnnotation.Area) {
         val content = buildAreaPopoverContent(area)
         // Use area center for positioning
-        val centerPosition = org.maplibre.android.geometry.LatLng(area.center.lt, area.center.lng)
+        val centerPosition = LatLng(area.center.lt, area.center.lng)
         
         showPopover(PopoverData(
             id = "area_$areaId",
@@ -283,7 +285,6 @@ class HybridPopoverManager(
         
         // Get screen dimensions
         val screenWidth = rootView.width
-        val screenHeight = rootView.height
         
         // Use post to ensure view is measured
         popoverView!!.post {
@@ -473,7 +474,7 @@ class HybridPopoverManager(
         lines.add(title)
         
         // Calculate area in appropriate units
-        val areaSqMeters = calculateCircleArea(area.center.lt, area.radius) * 1609.344 * 1609.344 // Convert from sq miles to sq meters
+        val areaSqMeters = calculateCircleArea(area.radius) * 1609.344 * 1609.344 // Convert from sq miles to sq meters
         lines.add(UnitManager.squareMetersToArea(areaSqMeters, context))
         Log.d(TAG, "Area calculation: radius=${area.radius}m, area=${UnitManager.squareMetersToArea(areaSqMeters, context)}")
         
@@ -505,14 +506,14 @@ class HybridPopoverManager(
             area += points[i].lng * points[j].lt
             area -= points[j].lng * points[i].lt
         }
-        area = Math.abs(area) / 2.0
+        area = abs(area) / 2.0
         
         // Convert to square miles (approximate)
         // 1 degree latitude ≈ 69 miles
         // 1 degree longitude ≈ 69 * cos(latitude) miles
         val avgLat = points.map { it.lt }.average()
         val latMilesPerDegree = 69.0
-        val lngMilesPerDegree = 69.0 * Math.cos(Math.toRadians(avgLat))
+        val lngMilesPerDegree = 69.0 * cos(Math.toRadians(avgLat))
         
         val areaSqMiles = area * latMilesPerDegree * lngMilesPerDegree
         return areaSqMiles
@@ -520,11 +521,10 @@ class HybridPopoverManager(
 
     /**
      * Calculate the area of a circle in square miles
-     * @param centerLat Latitude of the circle center
      * @param radiusMeters Radius of the circle in meters
      * @return Area in square miles
      */
-    private fun calculateCircleArea(centerLat: Double, radiusMeters: Double): Double {
+    private fun calculateCircleArea(radiusMeters: Double): Double {
         // Convert radius from meters to miles
         val radiusMiles = radiusMeters / 1609.344
         

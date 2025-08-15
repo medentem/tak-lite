@@ -47,10 +47,6 @@ class MapController(
     fun setOnStyleChangedCallback(callback: (() -> Unit)?) {
         this.onStyleChanged = callback
     }
-
-    fun setOnMapTypeChangedCallback(callback: ((MapType) -> Unit)?) {
-        this.onMapTypeChanged = callback
-    }
     
     fun setOnMapReadyCallback(callback: ((MapLibreMap) -> Unit)?) {
         this.onMapReadyCallback = callback
@@ -108,7 +104,7 @@ class MapController(
         val hillshadingTileUrl = getHillshadingTileUrl()
         val mapTilerUrl = getMapTilerUrl()
         val mapTilerVectorJsonUrl = getVectorTileJsonUrl()
-        val glyphsUrl = getGlyphsUrl();
+        val glyphsUrl = getGlyphsUrl()
         val mapTilerAttribution = getMapTilerAttribution()
         val osmAttribution = getOsmAttribution()
         val osmAttributionLine = if (osmAttribution.isNotBlank()) ",\n          \"attribution\": \"$osmAttribution\"" else ""
@@ -838,7 +834,7 @@ class MapController(
                 val osmUrl = "https://tile.openstreetmap.org/$zoom/$x/$y.png"
                 android.util.Log.d("OfflineTiles", "Downloading OSM tile: $osmUrl")
                 try {
-                    val bytes = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val bytes = withContext(Dispatchers.IO) {
                         val connection = java.net.URL(osmUrl).openConnection() as java.net.HttpURLConnection
                         connection.setRequestProperty("User-Agent", "tak-lite/1.0 (https://github.com/developer)")
                         connection.connectTimeout = 10000
@@ -874,7 +870,7 @@ class MapController(
                     .replace("{y}", y.toString())
                 android.util.Log.d("OfflineTiles", "Downloading satellite tile: $satUrl")
                 try {
-                    val bytes = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val bytes = withContext(Dispatchers.IO) {
                         val connection = java.net.URL(satUrl).openConnection() as java.net.HttpURLConnection
                         connection.setRequestProperty("User-Agent", "tak-lite/1.0 (https://github.com/developer)")
                         connection.connectTimeout = 10000
@@ -911,7 +907,7 @@ class MapController(
                         .replace("{y}", y.toString())
                     android.util.Log.d("OfflineTiles", "Downloading terrain tile: $terrainUrl")
                     try {
-                        val bytes = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        val bytes = withContext(Dispatchers.IO) {
                             val connection = java.net.URL(terrainUrl).openConnection() as java.net.HttpURLConnection
                             connection.setRequestProperty("User-Agent", "tak-lite/1.0 (https://github.com/developer)")
                             connection.connectTimeout = 10000
@@ -951,7 +947,7 @@ class MapController(
                         .replace("{y}", y.toString())
                     android.util.Log.d("OfflineTiles", "Downloading vector tile: $vectorUrl")
                     try {
-                        val bytes = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        val bytes = withContext(Dispatchers.IO) {
                             val connection = java.net.URL(vectorUrl).openConnection() as java.net.HttpURLConnection
                             connection.setRequestProperty("User-Agent", "tak-lite/1.0 (https://github.com/developer)")
                             connection.connectTimeout = 10000
@@ -985,33 +981,6 @@ class MapController(
         
         android.util.Log.d("OfflineTiles", "Download complete - Success: $successCount, Failed: $failCount, Total: $totalTiles")
         return successCount to failCount
-    }
-
-    private fun setupLocationComponent(map: MapLibreMap) {
-        if (androidx.core.app.ActivityCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED ||
-            androidx.core.app.ActivityCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            val locationComponent = map.locationComponent
-            locationComponent.activateLocationComponent(
-                org.maplibre.android.location.LocationComponentActivationOptions.builder(context, map.style!!).build()
-            )
-            locationComponent.isLocationComponentEnabled = true
-            locationComponent.cameraMode = org.maplibre.android.location.modes.CameraMode.NONE
-            locationComponent.renderMode = org.maplibre.android.location.modes.RenderMode.COMPASS
-
-            isLocationComponentActivated = true
-            // Apply any pending location
-            pendingLocation?.let {
-                locationComponent.forceLocationUpdate(it)
-                pendingLocation = null
-            }
-
-            // Add camera move listener to disable tracking when user pans
-            map.addOnCameraMoveStartedListener { reason ->
-                if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) {
-                    locationComponent.cameraMode = org.maplibre.android.location.modes.CameraMode.NONE
-                }
-            }
-        }
     }
 
     fun set3DBuildingsEnabled(enabled: Boolean) {

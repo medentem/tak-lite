@@ -79,7 +79,7 @@ class LineTimerManager(
     /**
      * Stop the timer update system
      */
-    fun stopTimerUpdates() {
+    private fun stopTimerUpdates() {
         if (isTimerActive) {
             isTimerActive = false
             handler.removeCallbacks(timerRunnable)
@@ -121,7 +121,7 @@ class LineTimerManager(
                         lineId = line.id,
                         segmentIndex = segmentIndex,
                         position = Point.fromLngLat(midLng, midLat),
-                        expirationTime = line.expirationTime!!,
+                        expirationTime = line.expirationTime,
                         color = timerColor,
                         secondsRemaining = secondsRemaining,
                         isWarning = isWarning,
@@ -272,13 +272,6 @@ class LineTimerManager(
             com.tak.lite.model.AnnotationColor.BLACK -> "#000000"
             com.tak.lite.model.AnnotationColor.WHITE -> "#FFFFFF"
         }
-    }
-
-    /**
-     * Force update timer data (for testing)
-     */
-    fun forceUpdate() {
-        updateTimerData()
     }
     
     /**

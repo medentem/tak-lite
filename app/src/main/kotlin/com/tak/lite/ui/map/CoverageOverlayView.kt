@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.PointF
 import android.graphics.RectF
 import android.util.AttributeSet
 import android.util.Log
@@ -38,15 +37,6 @@ class CoverageOverlayView @JvmOverloads constructor(
         alpha = 30
     }
     
-    // Paint for coverage boundaries
-    private val boundaryPaint = Paint().apply {
-        isAntiAlias = true
-        style = Paint.Style.STROKE
-        strokeWidth = 2f
-        color = Color.BLACK
-        alpha = 64
-    }
-    
     // Paint for debug grid visualization
     private val debugGridPaint = Paint().apply {
         isAntiAlias = true
@@ -55,12 +45,8 @@ class CoverageOverlayView @JvmOverloads constructor(
         color = Color.RED
         alpha = 50
     }
-    
 
-    
     // Viewport optimization
-    private var lastViewportUpdate: Long = 0
-    private val VIEWPORT_UPDATE_THROTTLE_MS = 200L
     private var currentViewportBounds: RectF? = null
     
     companion object {
@@ -83,7 +69,7 @@ class CoverageOverlayView @JvmOverloads constructor(
      * Updates the coverage grid data
      */
     fun updateCoverage(coverageGrid: CoverageGrid?) {
-        android.util.Log.d("CoverageOverlayView", "updateCoverage called: grid=${coverageGrid != null}, size=${coverageGrid?.coverageData?.size}")
+        Log.d("CoverageOverlayView", "updateCoverage called: grid=${coverageGrid != null}, size=${coverageGrid?.coverageData?.size}")
         this.coverageGrid = coverageGrid
         invalidate()
     }
@@ -95,15 +81,7 @@ class CoverageOverlayView @JvmOverloads constructor(
         this.coverageGrid = null
         // Force immediate redraw to clear the overlay
         invalidate()
-        android.util.Log.d("CoverageOverlayView", "Coverage overlay cleared")
-    }
-    
-    /**
-     * Sets whether to show the coverage overlay
-     */
-    fun setShowCoverageOverlay(show: Boolean) {
-        this.showCoverageOverlay = show
-        invalidate()
+        Log.d("CoverageOverlayView", "Coverage overlay cleared")
     }
     
     /**
@@ -120,12 +98,12 @@ class CoverageOverlayView @JvmOverloads constructor(
         
         if (projection == null || !showCoverageOverlay || coverageGrid == null) {
             // Ensure we don't draw anything when coverage is cleared
-            android.util.Log.d("CoverageOverlayView", "onDraw: Skipping draw - projection=${projection != null}, showOverlay=$showCoverageOverlay, grid=${coverageGrid != null}")
+            Log.d("CoverageOverlayView", "onDraw: Skipping draw - projection=${projection != null}, showOverlay=$showCoverageOverlay, grid=${coverageGrid != null}")
             return
         }
         
         // Debug logging for draw cycle
-        android.util.Log.d("CoverageOverlayView", "Drawing coverage overlay: " +
+        Log.d("CoverageOverlayView", "Drawing coverage overlay: " +
             "currentZoom=$currentZoom, gridSize=${coverageGrid?.coverageData?.size}")
         
         try {
@@ -145,23 +123,22 @@ class CoverageOverlayView @JvmOverloads constructor(
      */
     private fun drawCoverageGrid(canvas: Canvas) {
         val grid = coverageGrid ?: return
-        val viewportBounds = getVisibleMapBounds() ?: return
         
         // Determine rendering detail based on zoom level and grid size
         val useDetailedRendering = currentZoom >= MIN_ZOOM_FOR_DETAILED_RENDERING &&
                 grid.coverageData.size <= MAX_GRID_CELLS_FOR_DETAILED_RENDERING
         
         if (useDetailedRendering) {
-            drawDetailedCoverageGrid(canvas, grid, viewportBounds)
+            drawDetailedCoverageGrid(canvas, grid)
         } else {
-            drawSimplifiedCoverageGrid(canvas, grid, viewportBounds)
+            drawSimplifiedCoverageGrid(canvas, grid)
         }
     }
     
     /**
      * Draws detailed coverage grid with perfect geographic alignment
      */
-    private fun drawDetailedCoverageGrid(canvas: Canvas, grid: CoverageGrid, viewportBounds: RectF) {
+    private fun drawDetailedCoverageGrid(canvas: Canvas, grid: CoverageGrid) {
         var totalPoints = 0
         var renderedPoints = 0
         var skippedPoints = 0
@@ -250,9 +227,8 @@ class CoverageOverlayView @JvmOverloads constructor(
                 val lat = gridBounds.southWest.latitude + (latSpacing * row)
                 val lon = gridBounds.southWest.longitude + (lonSpacing * col)
                 
-                val screenPoint = projection?.toScreenLocation(LatLng(lat, lon))
-                if (screenPoint == null) continue
-                
+                val screenPoint = projection?.toScreenLocation(LatLng(lat, lon)) ?: continue
+
                 // Draw grid cell outline
                 val rect = RectF(
                     screenPoint.x - cellSize / 2,
@@ -284,7 +260,7 @@ class CoverageOverlayView @JvmOverloads constructor(
         }
         
         // Debug logging for grid validation
-        android.util.Log.d("CoverageOverlayView", "Debug grid visualization: " +
+        Log.d("CoverageOverlayView", "Debug grid visualization: " +
             "gridSize=${gridRows}x${gridCols}, cellSize=$cellSize, " +
             "latSpacing=${latSpacing}°, lonSpacing=${lonSpacing}°")
     }
@@ -292,7 +268,7 @@ class CoverageOverlayView @JvmOverloads constructor(
     /**
      * Draws simplified coverage grid with perfect geographic alignment
      */
-    private fun drawSimplifiedCoverageGrid(canvas: Canvas, grid: CoverageGrid, viewportBounds: RectF) {
+    private fun drawSimplifiedCoverageGrid(canvas: Canvas, grid: CoverageGrid) {
         // Create a simplified heat map representation
         val coveragePoints = mutableListOf<Triple<Int, Int, Float>>()
         
@@ -353,7 +329,7 @@ class CoverageOverlayView @JvmOverloads constructor(
         }
         
         // Debug logging for simplified rendering
-        android.util.Log.d("CoverageOverlayView", "Simplified rendering results: " +
+        Log.d("CoverageOverlayView", "Simplified rendering results: " +
             "coveragePoints=${coveragePoints.size}, cellSize=$cellSize")
     }
 
@@ -368,7 +344,7 @@ class CoverageOverlayView @JvmOverloads constructor(
             coverageProbability >= 0.6f -> 0xFFFFEB3B.toInt() // Yellow
             coverageProbability >= 0.4f -> 0xFFFF9800.toInt() // Orange
             coverageProbability >= 0.2f -> 0xFFF44336.toInt() // Red
-            else -> 0x00000000.toInt() // Transparent - No coverage shown
+            else -> 0x00000000 // Transparent - No coverage shown
         }
     }
     
@@ -419,7 +395,7 @@ class CoverageOverlayView @JvmOverloads constructor(
             val calculatedCellSize = pixelDistance.coerceIn(5f, 5000f) // Increased upper bound for high zoom levels
             
             // Debug logging
-            android.util.Log.d("CoverageOverlayView", "Direct grid measurement calculation: " +
+            Log.d("CoverageOverlayView", "Direct grid measurement calculation: " +
                 "latSpacing=${latSpacing}°, lonSpacing=${lonSpacing}°, " +
                 "latPixelDistance=$latPixelDistance, lonPixelDistance=$lonPixelDistance, " +
                 "pixelDistance=$pixelDistance, calculatedCellSize=$calculatedCellSize")
@@ -470,50 +446,11 @@ class CoverageOverlayView @JvmOverloads constructor(
         val calculatedCellSize = adjustedCellSize.coerceIn(5f, 5000f) // Increased upper bound for high zoom levels
         
         // Debug logging
-        android.util.Log.d("CoverageOverlayView", "Fallback resolution-based calculation: " +
+        Log.d("CoverageOverlayView", "Fallback resolution-based calculation: " +
             "resolution=${resolution}m, metersPerPixel=$metersPerPixel, " +
             "cellSizeInPixels=$cellSizeInPixels, adjustedCellSize=$adjustedCellSize, " +
             "calculatedCellSize=$calculatedCellSize")
         
         return calculatedCellSize
-    }
-    
-
-    
-    /**
-     * Gets visible map bounds for viewport culling
-     */
-    private fun getVisibleMapBounds(): RectF? {
-        val now = System.currentTimeMillis()
-        
-        // Throttle viewport updates
-        if (now - lastViewportUpdate < VIEWPORT_UPDATE_THROTTLE_MS && currentViewportBounds != null) {
-            return currentViewportBounds
-        }
-        
-        if (projection == null || width == 0 || height == 0) {
-            return null
-        }
-        
-        // Get screen corners and convert to lat/lng
-        val topLeft = projection?.fromScreenLocation(PointF(0f, 0f))
-        val bottomRight = projection?.fromScreenLocation(PointF(width.toFloat(), height.toFloat()))
-        
-        if (topLeft == null || bottomRight == null) {
-            return null
-        }
-        
-        // Add margin for coverage partially off-screen
-        val margin = 0.1f
-        val bounds = RectF(
-            (topLeft.longitude - margin).toFloat(),
-            (topLeft.latitude + margin).toFloat(),
-            (bottomRight.longitude + margin).toFloat(),
-            (bottomRight.latitude - margin).toFloat()
-        )
-        
-        currentViewportBounds = bounds
-        lastViewportUpdate = now
-        return bounds
     }
 }

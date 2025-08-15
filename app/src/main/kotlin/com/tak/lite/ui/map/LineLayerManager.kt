@@ -1,6 +1,5 @@
 package com.tak.lite.ui.map
 
-import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -29,8 +28,7 @@ import kotlin.math.sin
  * Uses separate sources for different layer types to avoid MapLibre layer conflicts.
  */
 class LineLayerManager(
-    private val mapLibreMap: MapLibreMap,
-    private val context: Context
+    private val mapLibreMap: MapLibreMap
 ) {
     companion object {
         private const val TAG = "LineLayerManager"
@@ -41,7 +39,7 @@ class LineLayerManager(
         const val LINE_ARROW_LAYER = "annotation-line-arrows-layer"
     }
 
-    private val lineFeatureConverter = LineFeatureConverter(mapLibreMap, context)
+    private val lineFeatureConverter = LineFeatureConverter()
 
     /**
      * Setup line layers in the map style with separate sources
@@ -231,7 +229,7 @@ class LineLayerManager(
     /**
      * Generate arrow icons for different colors
      */
-    private fun generateArrowIcons(style: org.maplibre.android.maps.Style) {
+    private fun generateArrowIcons(style: Style) {
         val arrowSize = 64 // Reduced size for better proportions
         val colors = listOf(
             "#4CAF50", // GREEN
@@ -289,7 +287,7 @@ class LineLayerManager(
 /**
  * Converts line annotations to GeoJSON features
  */
-class LineFeatureConverter(private val mapLibreMap: MapLibreMap, private val context: Context) {
+class LineFeatureConverter {
     
     /**
      * Convert line annotation to GeoJSON line feature

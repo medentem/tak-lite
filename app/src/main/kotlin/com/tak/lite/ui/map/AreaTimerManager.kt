@@ -78,7 +78,7 @@ class AreaTimerManager(
     /**
      * Stop the timer update system
      */
-    fun stopTimerUpdates() {
+    private fun stopTimerUpdates() {
         if (isTimerActive) {
             isTimerActive = false
             handler.removeCallbacks(timerRunnable)
@@ -112,7 +112,7 @@ class AreaTimerManager(
                 TimerFeature(
                     areaId = area.id,
                     position = Point.fromLngLat(area.center.lng, area.center.lt),
-                    expirationTime = area.expirationTime!!,
+                    expirationTime = area.expirationTime,
                     color = timerColor,
                     secondsRemaining = secondsRemaining,
                     isWarning = isWarning,
@@ -226,14 +226,6 @@ class AreaTimerManager(
         } catch (e: Exception) {
             Log.e(TAG, "Error accessing map style for area timer layers", e)
         }
-    }
-
-    /**
-     * Retry setting up timer layers (called when layers might not be ready)
-     */
-    fun retrySetupTimerLayers() {
-        Log.d(TAG, "Retrying area timer layer setup")
-        setupTimerLayers()
     }
 
     /**

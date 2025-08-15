@@ -1,9 +1,5 @@
 package com.tak.lite.ui.map
 
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Paint
 import android.util.Log
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.style.expressions.Expression
@@ -137,16 +133,6 @@ class DeviceLocationLayerManager(private val mapLibreMap: MapLibreMap) {
      * Get current device location
      */
     fun getCurrentLocation(): org.maplibre.android.geometry.LatLng? = currentLocation
-
-    /**
-     * Get current staleness status
-     */
-    fun isLocationStale(): Boolean = isStale
-
-    /**
-     * Check if the manager is initialized
-     */
-    fun isReady(): Boolean = isInitialized
 
     /**
      * Clean up resources

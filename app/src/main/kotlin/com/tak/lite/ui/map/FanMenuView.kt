@@ -9,6 +9,7 @@ import android.util.AttributeSet
 import android.util.Log
 import android.view.MotionEvent
 import android.view.View
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.content.ContextCompat
 import com.tak.lite.R
 import com.tak.lite.model.AnnotationColor
@@ -68,11 +69,6 @@ class FanMenuView @JvmOverloads constructor(
         color = Color.argb(200, 0, 0, 0)
         style = Paint.Style.FILL
     }
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.WHITE
-        style = Paint.Style.STROKE
-        strokeWidth = 6f
-    }
     // Two-ring fan menu configuration
     private val ringSpacing = iconRadius * 1.3f
     private val iconMargin = 10f
@@ -85,7 +81,6 @@ class FanMenuView @JvmOverloads constructor(
     // Constants for sector angles
     private val minSectorAngle = Math.PI / 5 // 30 degrees
     private val maxSectorAngle = Math.PI / 4 // 60 degrees
-    private val fullCircle = 2 * Math.PI
 
     private var centerOffset: PointF = PointF(0f, 0f)
     private var menuCenterLatLng: org.maplibre.android.geometry.LatLng? = null
@@ -519,7 +514,7 @@ class FanMenuView @JvmOverloads constructor(
         
         // Draw the chat bubble icon from vector drawable
         val iconSize = iconRadius * 1.6f
-        val icon = context.getDrawable(R.drawable.ic_chat_bubble_outline)
+        val icon = AppCompatResources.getDrawable(context, R.drawable.ic_chat_bubble_outline)
         icon?.setBounds(
             (x - iconSize/2).toInt(),
             (y - iconSize/2).toInt(),
@@ -545,7 +540,7 @@ class FanMenuView @JvmOverloads constructor(
         
         // Draw the location icon from vector drawable
         val iconSize = iconRadius * 1.6f
-        val icon = context.getDrawable(R.drawable.ic_my_location)
+        val icon = AppCompatResources.getDrawable(context, R.drawable.ic_my_location)
         icon?.setBounds(
             (x - iconSize/2).toInt(),
             (y - iconSize/2).toInt(),
@@ -571,7 +566,7 @@ class FanMenuView @JvmOverloads constructor(
         
         // Draw the info icon from vector drawable
         val iconSize = iconRadius * 1.6f
-        val icon = context.getDrawable(R.drawable.ic_info_outline)
+        val icon = AppCompatResources.getDrawable(context, R.drawable.ic_info_outline)
         icon?.setBounds(
             (x - iconSize/2).toInt(),
             (y - iconSize/2).toInt(),
@@ -597,7 +592,7 @@ class FanMenuView @JvmOverloads constructor(
         
         // Draw the line drawing icon from vector drawable
         val iconSize = iconRadius * 1.6f
-        val icon = context.getDrawable(R.drawable.ic_draw_line)
+        val icon = AppCompatResources.getDrawable(context, R.drawable.ic_draw_line)
         icon?.setBounds(
             (x - iconSize/2).toInt(),
             (y - iconSize/2).toInt(),
@@ -645,7 +640,7 @@ class FanMenuView @JvmOverloads constructor(
         
         // Draw the edit polygon icon from vector drawable
         val iconSize = iconRadius * 1.6f
-        val icon = context.getDrawable(R.drawable.ic_edit_polygon)
+        val icon = AppCompatResources.getDrawable(context, R.drawable.ic_edit_polygon)
         icon?.setBounds(
             (x - iconSize/2).toInt(),
             (y - iconSize/2).toInt(),
@@ -725,7 +720,7 @@ class FanMenuView @JvmOverloads constructor(
         
         // Draw the edit area icon from vector drawable
         val iconSize = iconRadius * 1.6f
-        val icon = context.getDrawable(R.drawable.ic_edit_area)
+        val icon = AppCompatResources.getDrawable(context, R.drawable.ic_edit_area)
         icon?.setBounds(
             (x - iconSize/2).toInt(),
             (y - iconSize/2).toInt(),
@@ -745,8 +740,6 @@ class FanMenuView @JvmOverloads constructor(
         }
         throw IndexOutOfBoundsException()
     }
-
-    private fun getRingCount(): Int = rings.size
 
     private fun dismissMenu() {
         Log.d("FanMenuView", "dismissMenu called")

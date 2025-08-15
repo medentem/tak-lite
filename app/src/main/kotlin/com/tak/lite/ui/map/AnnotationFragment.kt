@@ -60,11 +60,6 @@ class AnnotationFragment : Fragment(), LayersTarget {
     private var weatherLayerManager: WeatherLayerManager? = null
     private var weatherSettingsListener: android.content.SharedPreferences.OnSharedPreferenceChangeListener? = null
     private var restoreAnnotationsDialog: AlertDialog? = null
-    
-    // POI tap detection state
-    private var poiTapDownTime: Long? = null
-    private var poiTapDownPos: PointF? = null
-    private var poiTapCandidate: String? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -164,7 +159,7 @@ class AnnotationFragment : Fragment(), LayersTarget {
                     }
                     
                     // Restore POI annotations after style change
-                    val currentPoiAnnotations = viewModel.uiState.value.annotations.filterIsInstance<com.tak.lite.model.MapAnnotation.PointOfInterest>()
+                    val currentPoiAnnotations = viewModel.uiState.value.annotations.filterIsInstance<MapAnnotation.PointOfInterest>()
                     if (currentPoiAnnotations.isNotEmpty()) {
                         Log.d("AnnotationFragment", "Restoring ${currentPoiAnnotations.size} POI annotations after style change")
                         annotationController.updatePoiAnnotationsOnMap(mapLibreMap, currentPoiAnnotations)
@@ -267,7 +262,7 @@ class AnnotationFragment : Fragment(), LayersTarget {
                                             } else {
                             // Native POI hit detection
                             val poiLayerId = if (annotationController.clusteringConfig.enablePoiClustering) {
-                                com.tak.lite.ui.map.ClusteredLayerManager.POI_DOTS_LAYER
+                                ClusteredLayerManager.POI_DOTS_LAYER
                             } else {
                                 "poi-layer"
                             }
@@ -477,7 +472,7 @@ class AnnotationFragment : Fragment(), LayersTarget {
             }
 
             annotationOverlayView.lassoSelectionListener = object : AnnotationOverlayView.LassoSelectionListener {
-                override fun onLassoSelectionLongPress(selected: List<com.tak.lite.model.MapAnnotation>, screenPosition: android.graphics.PointF) {
+                override fun onLassoSelectionLongPress(selected: List<MapAnnotation>, screenPosition: PointF) {
                     if (!::annotationController.isInitialized) {
                         return
                     }
@@ -500,8 +495,8 @@ class AnnotationFragment : Fragment(), LayersTarget {
                                 is BulkEditAction.ChangeColor -> {
                                     allSelected.forEach {
                                         when (it) {
-                                            is com.tak.lite.model.MapAnnotation.PointOfInterest -> viewModel.updatePointOfInterest(it.id, newColor = action.color)
-                                            is com.tak.lite.model.MapAnnotation.Line -> viewModel.updateLine(it.id, newColor = action.color)
+                                            is MapAnnotation.PointOfInterest -> viewModel.updatePointOfInterest(it.id, newColor = action.color)
+                                            is MapAnnotation.Line -> viewModel.updateLine(it.id, newColor = action.color)
                                             else -> {}
                                         }
                                     }
@@ -568,7 +563,7 @@ class AnnotationFragment : Fragment(), LayersTarget {
     }
 
     fun setLassoMode(active: Boolean) {
-        android.util.Log.d("AnnotationFragment", "setLassoMode($active)")
+        Log.d("AnnotationFragment", "setLassoMode($active)")
         if (active) {
             annotationOverlayView.activateLassoMode()
         } else {
@@ -645,11 +640,11 @@ class AnnotationFragment : Fragment(), LayersTarget {
     // Exposed to activity for toggling weather overlay from the Layers popup
     override fun setWeatherLayerEnabled(enabled: Boolean) {
         try {
-            Log.d("AnnotationFragment", "setWeatherLayerEnabled called: enabled=" + enabled)
+            Log.d("AnnotationFragment", "setWeatherLayerEnabled called: enabled=$enabled")
             weatherLayerManager?.setEnabled(enabled)
             weatherLayerManager?.restore()
         } catch (e: Exception) {
-            android.util.Log.w("AnnotationFragment", "Failed to toggle weather overlay: ${e.message}", e)
+            Log.w("AnnotationFragment", "Failed to toggle weather overlay: ${e.message}", e)
         }
     }
 
@@ -657,7 +652,7 @@ class AnnotationFragment : Fragment(), LayersTarget {
         try {
             predictionOverlayView.setShowPredictionOverlay(enabled)
         } catch (e: Exception) {
-            android.util.Log.w("AnnotationFragment", "Failed to toggle predictions overlay: ${e.message}", e)
+            Log.w("AnnotationFragment", "Failed to toggle predictions overlay: ${e.message}", e)
         }
     }
 } 

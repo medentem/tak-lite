@@ -90,7 +90,7 @@ class ClusterTextManager(private val mapLibreMap: MapLibreMap) {
     /**
      * Start cluster text updates
      */
-    fun startUpdates() {
+    private fun startUpdates() {
         if (!CLUSTER_TEXT_ENABLED) {
             return
         }
@@ -104,7 +104,7 @@ class ClusterTextManager(private val mapLibreMap: MapLibreMap) {
     /**
      * Stop cluster text updates
      */
-    fun stopUpdates() {
+    private fun stopUpdates() {
         if (!isActive) return
         isActive = false
         handler.removeCallbacks(updateRunnable)
@@ -124,7 +124,7 @@ class ClusterTextManager(private val mapLibreMap: MapLibreMap) {
         // Instead, optimize the query area and frequency
         
         try {
-            mapLibreMap.getStyle { style ->
+            mapLibreMap.getStyle { _ ->
                 // Get peer clusters with limit
                 val peerClusters = getClusterFeatures(
                     ClusteredLayerManager.PEER_CLUSTERS_LAYER,
@@ -173,7 +173,7 @@ class ClusterTextManager(private val mapLibreMap: MapLibreMap) {
                 )
             } else {
                 // Query full screen when stationary
-                android.graphics.RectF(0f, 0f, mapLibreMap.width.toFloat(), mapLibreMap.height.toFloat())
+                android.graphics.RectF(0f, 0f, mapLibreMap.width, mapLibreMap.height)
             }
 
             // Query features with the optimized area
@@ -201,13 +201,6 @@ class ClusterTextManager(private val mapLibreMap: MapLibreMap) {
         }
 
         return clusters
-    }
-
-    /**
-     * Force an immediate update (for external triggers)
-     */
-    fun forceUpdate() {
-        clusterTextOverlayView?.forceUpdate()
     }
 
     /**

@@ -18,9 +18,6 @@ import android.view.View
 import androidx.core.content.ContextCompat
 import com.tak.lite.BuildConfig
 import com.tak.lite.R
-import com.tak.lite.data.model.AnnotationCluster
-import com.tak.lite.data.model.PeerCluster
-import com.tak.lite.model.AnnotationColor
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PeerLocationEntry
 import org.maplibre.android.geometry.LatLng
@@ -30,7 +27,6 @@ import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
 import kotlin.math.tan
-import kotlin.math.pow
 
 class AnnotationOverlayView @JvmOverloads constructor(
     context: Context,
@@ -44,35 +40,15 @@ class AnnotationOverlayView @JvmOverloads constructor(
         strokeWidth = 8f
     }
 
-    private val fillPaint = Paint().apply {
-        isAntiAlias = true
-        style = Paint.Style.FILL
-    }
-
     private var projection: Projection? = null
     private var annotations: List<MapAnnotation> = emptyList()
-    var currentZoom: Float = 0f
+    private var currentZoom: Float = 0f
     private var tempLinePoints: List<LatLng>? = null
     private var tempAreaCenter: LatLng? = null
     private var tempAreaRadius: Double = 0.0
     private var isAreaRadiusAdjustmentActive: Boolean = false
     private var lastTimerUpdate: Long = 0
     private var timerAngle: Float = 0f
-    private var clusters: List<AnnotationCluster> = emptyList()
-    private var peerClusters: List<PeerCluster> = emptyList()
-    private val clusterThreshold = 100f // pixels
-    private val minZoomForClustering = 14f // zoom level below which clustering occurs
-    private val minZoomForPeerClustering = ClusteringConfig.getDefault().peerClusterMaxZoom // zoom level below which peer clustering occurs (more zoomed out)
-
-    // Dynamic clustering threshold that increases as you zoom out
-    private fun getDynamicClusterThreshold(): Float {
-        return when {
-            currentZoom < 8f -> clusterThreshold * 3f  // Very zoomed out: 300px threshold
-            currentZoom < 10f -> clusterThreshold * 2f // Moderately zoomed out: 200px threshold
-            currentZoom < 12f -> clusterThreshold * 1.5f // Slightly zoomed out: 150px threshold
-            else -> clusterThreshold // Normal: 100px threshold
-        }
-    }
 
     // --- PERFORMANCE OPTIMIZATION 1: Viewport Culling ---
     private var visibleBounds: RectF? = null
@@ -120,7 +96,6 @@ class AnnotationOverlayView @JvmOverloads constructor(
     private var longPressPeerCandidate: String? = null
     private var longPressPeerDownPos: PointF? = null
     private var peerTapDownTime: Long? = null
-    private var deviceDotTapDownTime: Long? = null
     private var isDeviceDotCandidate: Boolean = false
 
     // --- Peer Location Dot Support ---
@@ -151,15 +126,6 @@ class AnnotationOverlayView @JvmOverloads constructor(
     // Getter for current peer locations
     fun getCurrentPeerLocations(): Map<String, PeerLocationEntry> {
         return peerLocations
-    }
-
-    // Helper method to check if a peer location is stale
-    private fun isPeerLocationStale(entry: PeerLocationEntry): Boolean {
-        val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-        val stalenessThresholdMinutes = prefs.getInt("peer_staleness_threshold_minutes", 10)
-        val stalenessThresholdMs = stalenessThresholdMinutes * 60 * 1000L
-        val now = System.currentTimeMillis()
-        return (now - entry.timestamp) > stalenessThresholdMs
     }
 
     // Callback for peer dot taps
@@ -284,69 +250,16 @@ class AnnotationOverlayView @JvmOverloads constructor(
         )
 
         // Debug: verify bounds are correct
-        android.util.Log.d("AnnotationOverlayView", "Bounds verification: left=${bounds.left}, top=${bounds.top}, right=${bounds.right}, bottom=${bounds.bottom}")
-        android.util.Log.d("AnnotationOverlayView", "Expected: left=${topLeft.longitude - margin}, top=${topLeft.latitude + margin}, right=${bottomRight.longitude + margin}, bottom=${bottomRight.latitude - margin}")
+        Log.d("AnnotationOverlayView", "Bounds verification: left=${bounds.left}, top=${bounds.top}, right=${bounds.right}, bottom=${bounds.bottom}")
+        Log.d("AnnotationOverlayView", "Expected: left=${topLeft.longitude - margin}, top=${topLeft.latitude + margin}, right=${bottomRight.longitude + margin}, bottom=${bottomRight.latitude - margin}")
 
         // Debug logging for viewport bounds
-        android.util.Log.d("AnnotationOverlayView", "Viewport calculation: topLeft=$topLeft, bottomRight=$bottomRight")
-        android.util.Log.d("AnnotationOverlayView", "Calculated bounds: $bounds")
+        Log.d("AnnotationOverlayView", "Viewport calculation: topLeft=$topLeft, bottomRight=$bottomRight")
+        Log.d("AnnotationOverlayView", "Calculated bounds: $bounds")
 
         visibleBounds = bounds
         lastViewportUpdate = now
         return bounds
-    }
-
-    /**
-     * Get only annotations that are visible in the current viewport
-     */
-    private fun getVisibleAnnotations(): List<MapAnnotation> {
-        val bounds = getVisibleMapBounds()
-        val visible = annotations.filter { annotation ->
-            val latLng = annotation.toMapLibreLatLng()
-            val lat = latLng.latitude.toFloat()
-            val lon = latLng.longitude.toFloat()
-            // Explicit bounds checking instead of RectF.contains()
-            lat >= bounds.bottom && lat <= bounds.top && lon >= bounds.left && lon <= bounds.right
-        }
-
-        // Log performance metrics occasionally
-        if (annotations.size > 100 && visible.size < annotations.size / 2) {
-            android.util.Log.d("AnnotationOverlayView", "Viewport culling: ${annotations.size} total, ${visible.size} visible (${(visible.size * 100 / annotations.size)}%)")
-        }
-
-        return visible
-    }
-
-    /**
-     * Get only peer locations that are visible in the current viewport
-     */
-    private fun getVisiblePeerLocations(): Map<String, PeerLocationEntry> {
-        val bounds = getVisibleMapBounds()
-        val visible = peerLocations.filter { (_, entry) ->
-            // Explicit bounds checking instead of RectF.contains() which might have coordinate interpretation issues
-            val lat = entry.latitude.toFloat()
-            val lon = entry.longitude.toFloat()
-            val inBounds = lat >= bounds.bottom && lat <= bounds.top && lon >= bounds.left && lon <= bounds.right
-            inBounds
-        }
-
-        // Enhanced debug logging for peer visibility
-        if (peerLocations.isNotEmpty()) {
-            android.util.Log.d("AnnotationOverlayView", "=== PEER VIEWPORT CULLING DEBUG ===")
-            android.util.Log.d("AnnotationOverlayView", "Total peers: ${peerLocations.size}, Visible peers: ${visible.size}")
-            android.util.Log.d("AnnotationOverlayView", "Viewport bounds: left=${bounds.left}, top=${bounds.top}, right=${bounds.right}, bottom=${bounds.bottom}")
-
-            // Log the phone location for comparison
-            phoneLocation?.let { phone ->
-                val phoneLat = phone.latitude.toFloat()
-                val phoneLon = phone.longitude.toFloat()
-                val phoneInBounds = phoneLat >= bounds.bottom && phoneLat <= bounds.top && phoneLon >= bounds.left && phoneLon <= bounds.right
-                android.util.Log.d("AnnotationOverlayView", "Phone location: lat=${phone.latitude}, lon=${phone.longitude}, inBounds=$phoneInBounds")
-            }
-            android.util.Log.d("AnnotationOverlayView", "=== END PEER VIEWPORT CULLING DEBUG ===")
-        }
-
-        return visible
     }
 
     /**
@@ -376,7 +289,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
 
         // Log timer optimization metrics
         if (hasTimers != hasVisibleTimerAnnotations) {
-            android.util.Log.d("AnnotationOverlayView", "Timer optimization: ${if (hasTimers) "enabled" else "disabled"} timer invalidates")
+            Log.d("AnnotationOverlayView", "Timer optimization: ${if (hasTimers) "enabled" else "disabled"} timer invalidates")
         }
 
         return hasTimers
@@ -389,7 +302,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
         // --- PERFORMANCE OPTIMIZATION: Check for timer annotations ---
         checkForVisibleTimerAnnotations()
 
-        android.util.Log.d("AnnotationOverlayView", "onDraw: phoneLocation=$phoneLocation")
+        Log.d("AnnotationOverlayView", "onDraw: phoneLocation=$phoneLocation")
 
         // Device location is now handled by GL layers - only draw connection line if needed
         // Note: Device location is now managed by DeviceLocationLayerManager
@@ -399,7 +312,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
             if (deviceLocation != null) {
                 val devicePt = projection?.toScreenLocation(deviceLocation)
                 val phonePt = projection?.toScreenLocation(phoneLocation!!)
-                android.util.Log.d(
+                Log.d(
                     "AnnotationOverlayView",
                     "onDraw: devicePt=$devicePt, phonePt=$phonePt"
                 )
@@ -423,7 +336,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
                             val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                                 color =
                                     ContextCompat.getColor(context, R.color.interactive_color_light)
-                                style = Paint.Style.STROKE;
+                                style = Paint.Style.STROKE
                                 strokeWidth = 8f
                                 // Adjust dash pattern based on distance to prevent too many dashes
                                 val dashLength = if (distance > width) 48f else 24f
@@ -431,12 +344,12 @@ class AnnotationOverlayView @JvmOverloads constructor(
                                 pathEffect = DashPathEffect(floatArrayOf(dashLength, gapLength), 0f)
                             }
                             canvas.drawLine(devicePt.x, devicePt.y, phonePt.x, phonePt.y, linePaint)
-                            android.util.Log.d(
+                            Log.d(
                                 "AnnotationOverlayView",
                                 "onDraw: drew dotted line from $devicePt to $phonePt (distance: ${distance.toInt()}px)"
                             )
                         } else {
-                            android.util.Log.d(
+                            Log.d(
                                 "AnnotationOverlayView",
                                 "onDraw: both endpoints too far off-screen, skipping line"
                             )
@@ -556,10 +469,6 @@ class AnnotationOverlayView @JvmOverloads constructor(
             canvas.drawLine(arrowOutEndX, arrowOutEndY, arrowhead4X, arrowhead4Y, arrowPaint)
         }
 
-        val context = context
-        val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-        val minDistMiles = prefs.getFloat("min_line_segment_dist_miles", 1.0f)
-
         // Draw lasso path if active or menu is visible
         if ((isLassoMode || lassoMenuVisible) && lassoPath != null) {
             val lassoPaint = Paint().apply {
@@ -586,16 +495,6 @@ class AnnotationOverlayView @JvmOverloads constructor(
         }
 
         // Note: Popover drawing moved to HybridPopoverManager
-    }
-
-    private fun AnnotationColor.toColor(): Int {
-        return when (this) {
-            AnnotationColor.GREEN -> Color.GREEN
-            AnnotationColor.YELLOW -> Color.parseColor("#FBC02D")
-            AnnotationColor.RED -> Color.RED
-            AnnotationColor.BLACK -> Color.BLACK
-            AnnotationColor.WHITE -> Color.WHITE
-        }
     }
 
     private fun MapAnnotation.toMapLibreLatLng(): LatLng {
@@ -627,7 +526,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
     override fun onTouchEvent(event: MotionEvent): Boolean {
         // Only log in debug builds and reduce frequency
         if (BuildConfig.DEBUG && event.action == MotionEvent.ACTION_DOWN) {
-            android.util.Log.d("AnnotationOverlayView", "onTouchEvent: action=${event.action}, x=${event.x}, y=${event.y}, visible=$visibility, clickable=$isClickable")
+            Log.d("AnnotationOverlayView", "onTouchEvent: action=${event.action}, x=${event.x}, y=${event.y}, visible=$visibility, clickable=$isClickable")
         }
         
         if (isLassoMode) {
@@ -652,16 +551,16 @@ class AnnotationOverlayView @JvmOverloads constructor(
                 }
                 MotionEvent.ACTION_MOVE -> {
                     if (BuildConfig.DEBUG) {
-                        android.util.Log.d("AnnotationOverlayView", "ACTION_MOVE: event.x=${event.x}, event.y=${event.y}")
+                        Log.d("AnnotationOverlayView", "ACTION_MOVE: event.x=${event.x}, event.y=${event.y}")
                     }
                     longPressLineDownPos?.let { down ->
                         val dist = hypot((event.x - down.x).toDouble(), (event.y - down.y).toDouble())
                         if (BuildConfig.DEBUG) {
-                            android.util.Log.d("AnnotationOverlayView", "LINE move: dist=$dist, from=(${"%.2f".format(down.x)}, ${"%.2f".format(down.y)}) to=(${"%.2f".format(event.x)}, ${"%.2f".format(event.y)})")
+                            Log.d("AnnotationOverlayView", "LINE move: dist=$dist, from=(${"%.2f".format(down.x)}, ${"%.2f".format(down.y)}) to=(${"%.2f".format(event.x)}, ${"%.2f".format(event.y)})")
                         }
                         if (dist > 40) {
                             if (BuildConfig.DEBUG) {
-                                android.util.Log.d("AnnotationOverlayView", "Cancelling long-press handler (moved too far for LINE)")
+                                Log.d("AnnotationOverlayView", "Cancelling long-press handler (moved too far for LINE)")
                             }
                             longPressHandler?.removeCallbacks(longPressRunnable!!)
                             longPressLineCandidate = null
@@ -670,11 +569,11 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     longPressPeerDownPos?.let { down ->
                         val dist = hypot((event.x - down.x).toDouble(), (event.y - down.y).toDouble())
                         if (BuildConfig.DEBUG) {
-                            android.util.Log.d("AnnotationOverlayView", "PEER move: dist=$dist, from=(${"%.2f".format(down.x)}, ${"%.2f".format(down.y)}) to=(${"%.2f".format(event.x)}, ${"%.2f".format(event.y)})")
+                            Log.d("AnnotationOverlayView", "PEER move: dist=$dist, from=(${"%.2f".format(down.x)}, ${"%.2f".format(down.y)}) to=(${"%.2f".format(event.x)}, ${"%.2f".format(event.y)})")
                         }
                         if (dist > 40) {
                             if (BuildConfig.DEBUG) {
-                                android.util.Log.d("AnnotationOverlayView", "Cancelling long-press handler (moved too far for PEER)")
+                                Log.d("AnnotationOverlayView", "Cancelling long-press handler (moved too far for PEER)")
                             }
                             longPressHandler?.removeCallbacks(longPressRunnable!!)
                             longPressPeerCandidate = null
@@ -714,7 +613,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
                 MotionEvent.ACTION_DOWN -> {
                     // Only log in debug builds
                     if (BuildConfig.DEBUG) {
-                        android.util.Log.d("AnnotationOverlayView", "ACTION_DOWN: event.x=${event.x}, event.y=${event.y}")
+                        Log.d("AnnotationOverlayView", "ACTION_DOWN: event.x=${event.x}, event.y=${event.y}")
                     }
                     
                     // Check for area radius adjustment if in area drawing mode
@@ -750,12 +649,12 @@ class AnnotationOverlayView @JvmOverloads constructor(
                         longPressLineCandidate = lineHit.first
                         longPressLineDownPos = PointF(event.x, event.y)
                         if (BuildConfig.DEBUG) {
-                            android.util.Log.d("AnnotationOverlayView", "Set longPressLineDownPos: $longPressLineDownPos for LINE ${lineHit.first.id}")
+                            Log.d("AnnotationOverlayView", "Set longPressLineDownPos: $longPressLineDownPos for LINE ${lineHit.first.id}")
                         }
                         longPressHandler = Handler(Looper.getMainLooper())
                         longPressRunnable = Runnable {
                             if (BuildConfig.DEBUG) {
-                                android.util.Log.d("AnnotationOverlayView", "Long-press triggered for LINE ${lineHit.first.id} at $longPressLineDownPos")
+                                Log.d("AnnotationOverlayView", "Long-press triggered for LINE ${lineHit.first.id} at $longPressLineDownPos")
                             }
                             poiLongPressListener?.onLineLongPressed(lineHit.first.id, longPressLineDownPos!!)
                             longPressLineCandidate = null
@@ -819,7 +718,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     }
                     
                     // Handle line long press
-                    longPressLineCandidate?.let { line ->
+                    longPressLineCandidate?.let { _ ->
                         longPressLineDownPos?.let { downPos ->
                             val distance = PointF(event.x, event.y).distanceTo(downPos)
                             if (distance > 20f) {
@@ -832,7 +731,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     }
                     
                     // Handle peer long press
-                    longPressPeerCandidate?.let { peer ->
+                    longPressPeerCandidate?.let { _ ->
                         longPressPeerDownPos?.let { downPos ->
                             val distance = PointF(event.x, event.y).distanceTo(downPos)
                             if (distance > 20f) {
@@ -855,14 +754,14 @@ class AnnotationOverlayView @JvmOverloads constructor(
                     }
                     
                     // Handle line long press completion
-                    longPressLineCandidate?.let { line ->
+                    longPressLineCandidate?.let { _ ->
                         longPressHandler?.removeCallbacks(longPressRunnable!!)
                         longPressLineCandidate = null
                         longPressLineDownPos = null
                     }
                     
                     // Handle peer long press completion
-                    longPressPeerCandidate?.let { peer ->
+                    longPressPeerCandidate?.let { _ ->
                         longPressHandler?.removeCallbacks(longPressRunnable!!)
                         longPressPeerCandidate = null
                         longPressPeerDownPos = null
@@ -872,7 +771,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
                 }
             }
             if (BuildConfig.DEBUG) {
-                android.util.Log.d("AnnotationViewModel", "onTouchEvent: longPressLineCandidate=${longPressLineCandidate}")
+                Log.d("AnnotationViewModel", "onTouchEvent: longPressLineCandidate=${longPressLineCandidate}")
             }
             return longPressLineCandidate != null || longPressPeerCandidate != null // Consume if interacting with a line or peer
         }
@@ -914,7 +813,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
     private fun findAnnotationsInLasso(): List<MapAnnotation> {
         val points = lassoPoints ?: return emptyList()
         if (points.size < 3) return emptyList()
-        val path = android.graphics.Path()
+        val path = Path()
         path.moveTo(points[0].x, points[0].y)
         for (pt in points.drop(1)) path.lineTo(pt.x, pt.y)
         path.close()
@@ -926,7 +825,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
             val screenPt = projection?.toScreenLocation(latLng) ?: continue
             val pointF = PointF(screenPt.x, screenPt.y)
             val contains = android.graphics.Region().apply {
-                val bounds = android.graphics.RectF()
+                val bounds = RectF()
                 path.computeBounds(bounds, true)
                 setPath(path, android.graphics.Region(bounds.left.toInt(), bounds.top.toInt(), bounds.right.toInt(), bounds.bottom.toInt()))
             }.contains(pointF.x.toInt(), pointF.y.toInt())
@@ -964,7 +863,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
         invalidate()
     }
     fun deactivateLassoMode() {
-        android.util.Log.d("AnnotationOverlayView", "deactivateLassoMode() called")
+        Log.d("AnnotationOverlayView", "deactivateLassoMode() called")
         isLassoMode = false
         lassoPath = null
         lassoPoints = null
@@ -1019,7 +918,6 @@ class AnnotationOverlayView @JvmOverloads constructor(
         
         // Draw a small arrow at the edge of the screen pointing toward the device
         val arrowLength = 60f
-        val arrowWidth = 20f
         val margin = 40f // Distance from screen edge
         
         // Calculate arrow position at screen edge
@@ -1120,7 +1018,7 @@ class AnnotationOverlayView @JvmOverloads constructor(
         
         canvas.drawText(distanceText, clampedArrowX, clampedArrowY + textBounds.height()/2, textPaint)
         
-        android.util.Log.d("AnnotationOverlayView", "onDraw: drew direction indicator at ($clampedArrowX, $clampedArrowY) pointing toward device (distance: ${distance.toInt()}px)")
+        Log.d("AnnotationOverlayView", "onDraw: drew direction indicator at ($clampedArrowX, $clampedArrowY) pointing toward device (distance: ${distance.toInt()}px)")
     }
 
     // Interface for area drawing callbacks

@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.PointF
 import android.graphics.Rect
 import android.graphics.RectF
 import android.util.AttributeSet
@@ -186,7 +185,7 @@ class ClusterTextOverlayView @JvmOverloads constructor(
         for (cluster in clusters.take(MAX_VISIBLE_CLUSTERS)) {
             try {
                 val cachedCluster = createCachedCluster(cluster, clusterType)
-                if (cachedCluster != null && isInViewport(cachedCluster.screenX, cachedCluster.screenY)) {
+                if (isInViewport(cachedCluster.screenX, cachedCluster.screenY)) {
                     visibleClusters.add(cachedCluster)
                 }
             } catch (e: Exception) {
@@ -203,7 +202,7 @@ class ClusterTextOverlayView @JvmOverloads constructor(
     private fun createCachedCluster(
         cluster: ClusterFeature,
         clusterType: ClusterType
-    ): CachedCluster? {
+    ): CachedCluster {
         val latLng = org.maplibre.android.geometry.LatLng(
             cluster.position.coordinates()[1],
             cluster.position.coordinates()[0]
@@ -280,23 +279,5 @@ class ClusterTextOverlayView @JvmOverloads constructor(
                 Log.e(TAG, "Error drawing POI cluster text for ${cachedCluster.cluster.clusterId}", e)
             }
         }
-    }
-
-    /**
-     * Clear all clusters
-     */
-    fun clearClusters() {
-        peerClusters = emptyList()
-        poiClusters = emptyList()
-        clearCachedClusters()
-        invalidate()
-    }
-
-    /**
-     * Force update of visible clusters (for external triggers)
-     */
-    fun forceUpdate() {
-        lastUpdateTime = 0 // Reset throttle
-        updateVisibleClusters()
     }
 } 

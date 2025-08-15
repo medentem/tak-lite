@@ -4,7 +4,6 @@ import android.content.Context
 import android.util.Log
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.util.haversine
-import org.maplibre.android.maps.MapLibreMap
 
 /**
  * Manages distance labels for line annotations using hybrid overlay approach.
@@ -12,7 +11,6 @@ import org.maplibre.android.maps.MapLibreMap
  * and updates the overlay view with distance labels.
  */
 class LineDistanceManager(
-    private val mapLibreMap: MapLibreMap,
     private val context: Context
 ) {
     companion object {
@@ -56,7 +54,7 @@ class LineDistanceManager(
                         distanceFeatures.add(distanceFeature)
                         Log.d(TAG, "Added distance feature for line ${line.id} segment ${distanceLabel.segmentIndex}: ${distanceLabel.distanceMeters} m")
                     } else {
-                        Log.d(TAG, "Skipped distance feature for line ${line.id} segment ${distanceLabel.segmentIndex}: ${distanceLabel.distanceMeters} m < min: ${minDistMeters} m")
+                        Log.d(TAG, "Skipped distance feature for line ${line.id} segment ${distanceLabel.segmentIndex}: ${distanceLabel.distanceMeters} m < min: $minDistMeters m")
                     }
                 }
             }
