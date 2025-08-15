@@ -381,13 +381,17 @@ class MeshtasticAidlProtocol @Inject constructor(
         
         when (intent.action) {
             "com.geeksville.mesh.NODE_CHANGE" -> {
-                val nodeInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    intent.getParcelableExtra("com.geeksville.mesh.NodeInfo", NodeInfo::class.java)
-                } else {
-                    @Suppress("DEPRECATION")
-                    intent.getParcelableExtra("com.geeksville.mesh.NodeInfo")
+                try {
+                    val nodeInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        intent.getParcelableExtra("com.geeksville.mesh.NodeInfo", NodeInfo::class.java)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        intent.getParcelableExtra("com.geeksville.mesh.NodeInfo")
+                    }
+                    handleNodeChange(nodeInfo)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error unmarshalling NODE_CHANGE: ${e.message}", e)
                 }
-                handleNodeChange(nodeInfo)
             }
             "com.geeksville.mesh.RECEIVED.NODEINFO_APP" -> {
                 Log.d(TAG, "=== NODEINFO_APP Broadcast Debug ===")
@@ -397,14 +401,18 @@ class MeshtasticAidlProtocol @Inject constructor(
                     Log.d(TAG, "Extra key: $key, value: $value, type: ${value?.javaClass?.name}")
                 }
                 
-                val dataPacket = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    intent.getParcelableExtra("com.geeksville.mesh.Payload", DataPacket::class.java)
-                } else {
-                    @Suppress("DEPRECATION")
-                    intent.getParcelableExtra("com.geeksville.mesh.Payload")
+                try {
+                    val dataPacket = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        intent.getParcelableExtra("com.geeksville.mesh.Payload", DataPacket::class.java)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        intent.getParcelableExtra("com.geeksville.mesh.Payload")
+                    }
+                    Log.d(TAG, "Extracted DataPacket: $dataPacket")
+                    handleNodeInfoPacket(dataPacket)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error unmarshalling NODEINFO_APP: ${e.message}", e)
                 }
-                Log.d(TAG, "Extracted DataPacket: $dataPacket")
-                handleNodeInfoPacket(dataPacket)
             }
             "com.geeksville.mesh.RECEIVED.POSITION_APP" -> {
                 Log.d(TAG, "=== POSITION_APP Broadcast Debug ===")
@@ -414,41 +422,57 @@ class MeshtasticAidlProtocol @Inject constructor(
                     Log.d(TAG, "Extra key: $key, value: $value, type: ${value?.javaClass?.name}")
                 }
                 
-                val dataPacket = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    intent.getParcelableExtra("com.geeksville.mesh.Payload", DataPacket::class.java)
-                } else {
-                    @Suppress("DEPRECATION")
-                    intent.getParcelableExtra("com.geeksville.mesh.Payload")
+                try {
+                    val dataPacket = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        intent.getParcelableExtra("com.geeksville.mesh.Payload", DataPacket::class.java)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        intent.getParcelableExtra("com.geeksville.mesh.Payload")
+                    }
+                    Log.d(TAG, "Extracted DataPacket: $dataPacket")
+                    handlePositionPacket(dataPacket)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error unmarshalling POSITION_APP: ${e.message}", e)
                 }
-                Log.d(TAG, "Extracted DataPacket: $dataPacket")
-                handlePositionPacket(dataPacket)
             }
             "com.geeksville.mesh.RECEIVED.TEXT_MESSAGE_APP" -> {
-                val dataPacket = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    intent.getParcelableExtra("com.geeksville.mesh.Payload", DataPacket::class.java)
-                } else {
-                    @Suppress("DEPRECATION")
-                    intent.getParcelableExtra("com.geeksville.mesh.Payload")
+                try {
+                    val dataPacket = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        intent.getParcelableExtra("com.geeksville.mesh.Payload", DataPacket::class.java)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        intent.getParcelableExtra("com.geeksville.mesh.Payload")
+                    }
+                    handleTextMessage(dataPacket)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error unmarshalling TEXT_MESSAGE_APP: ${e.message}", e)
                 }
-                handleTextMessage(dataPacket)
             }
             "com.geeksville.mesh.RECEIVED.ATAK_PLUGIN" -> {
-                val dataPacket = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    intent.getParcelableExtra("com.geeksville.mesh.Payload", DataPacket::class.java)
-                } else {
-                    @Suppress("DEPRECATION")
-                    intent.getParcelableExtra("com.geeksville.mesh.Payload")
+                try {
+                    val dataPacket = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        intent.getParcelableExtra("com.geeksville.mesh.Payload", DataPacket::class.java)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        intent.getParcelableExtra("com.geeksville.mesh.Payload")
+                    }
+                    handleAnnotation(dataPacket)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error unmarshalling ATAK_PLUGIN: ${e.message}", e)
                 }
-                handleAnnotation(dataPacket)
             }
             "com.geeksville.mesh.RECEIVED.ROUTING_APP" -> {
-                val dataPacket = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    intent.getParcelableExtra("com.geeksville.mesh.Payload", DataPacket::class.java)
-                } else {
-                    @Suppress("DEPRECATION")
-                    intent.getParcelableExtra("com.geeksville.mesh.Payload")
+                try {
+                    val dataPacket = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        intent.getParcelableExtra("com.geeksville.mesh.Payload", DataPacket::class.java)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        intent.getParcelableExtra("com.geeksville.mesh.Payload")
+                    }
+                    handleRoutingApp(dataPacket)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error unmarshalling ROUTING_APP: ${e.message}", e)
                 }
-                handleRoutingApp(dataPacket)
             }
             "com.geeksville.mesh.MESH_CONNECTED" -> {
                 Log.i(TAG, "Received MESH_CONNECTED broadcast - Meshtastic app connected to mesh device")
@@ -459,14 +483,18 @@ class MeshtasticAidlProtocol @Inject constructor(
                 _connectionState.value = MeshConnectionState.Disconnected
             }
             "com.geeksville.mesh.MESSAGE_STATUS" -> {
-                val packetId = intent.getIntExtra("com.geeksville.mesh.PacketId", 0)
-                val status = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    intent.getParcelableExtra("com.geeksville.mesh.Status", MessageStatus::class.java)
-                } else {
-                    @Suppress("DEPRECATION")
-                    intent.getParcelableExtra("com.geeksville.mesh.Status")
+                try {
+                    val packetId = intent.getIntExtra("com.geeksville.mesh.PacketId", 0)
+                    val status = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        intent.getParcelableExtra("com.geeksville.mesh.Status", MessageStatus::class.java)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        intent.getParcelableExtra("com.geeksville.mesh.Status")
+                    }
+                    handleMessageStatus(packetId, status)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error unmarshalling MESSAGE_STATUS: ${e.message}", e)
                 }
-                handleMessageStatus(packetId, status)
             }
             "com.geeksville.mesh.TEST_BROADCAST" -> {
                 Log.d(TAG, "Test broadcast received - broadcast receiver is working!")

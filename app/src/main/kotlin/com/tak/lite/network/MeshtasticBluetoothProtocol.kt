@@ -94,13 +94,14 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                         // Only clear state if we were previously connected to avoid race condition
                         val wasPreviouslyConnected = _connectionState.value is MeshConnectionState.Connected
                         if (wasPreviouslyConnected) {
-                            Log.i(TAG, "Transitioning from previous connection - clearing state")
-                            cleanupState()
+                            Log.w(TAG, "Received redundant Connected state while already connected - ignoring to prevent state reset")
+                            // Keep current state without changes
+                            _connectionState.value
                         } else {
                             Log.i(TAG, "Fresh connection - preserving state for handshake")
+                            resetHandshakeState()
+                            MeshConnectionState.Connecting
                         }
-                        resetHandshakeState()
-                        MeshConnectionState.Connecting
                     }
                     is BluetoothDeviceManager.ConnectionState.Connecting -> {
                         stopPacketQueue()
