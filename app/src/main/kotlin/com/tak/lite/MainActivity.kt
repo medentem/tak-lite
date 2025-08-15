@@ -409,7 +409,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
             lifecycleScope = lifecycleScope,
             meshProtocolProvider = meshProtocolProvider
         )
-        channelController.setupChannelButton(peerIdToNickname)
+        channelController.setupChannelButton()
 
         observeMeshNetworkState()
         observeProtocolChanges()

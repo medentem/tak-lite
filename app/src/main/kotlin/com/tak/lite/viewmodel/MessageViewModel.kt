@@ -70,6 +70,6 @@ class MessageViewModel @Inject constructor(
     }
 
     fun getOrCreateDirectMessageChannel(peerId: String, peerLongName: String? = null): DirectMessageChannel? {
-        return messageRepository.getOrCreateDirectMessageChannel(peerId, peerLongName)
+        return messageRepository.getOrCreateDirectMessageChannel(peerId)
     }
 } 
