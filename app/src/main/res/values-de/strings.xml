@@ -86,6 +86,21 @@
     <string name="enable_simulated_peers">Simulierte Peers auf der Karte aktivieren</string>
     <string name="peers_tend_to_appear">Peers werden tendenziell in dieser Entfernung von Ihrem Standort mit natürlicher Variabilität erscheinen.</string>
     
+    <!-- Quick Messages -->
+    <string name="quick_messages">Schnelle Nachrichten</string>
+    <string name="quick_messages_settings">Einstellungen für schnelle Nachrichten</string>
+    <string name="quick_message_1">Schnelle Nachricht 1</string>
+    <string name="quick_message_2">Schnelle Nachricht 2</string>
+    <string name="quick_message_3">Schnelle Nachricht 3</string>
+    <string name="quick_message_4">Schnelle Nachricht 4</string>
+    <string name="quick_message_5">Schnelle Nachricht 5</string>
+    <string name="quick_message_6">Schnelle Nachricht 6</string>
+    <string name="quick_message_hint">Geben Sie Ihren schnellen Nachrichtentext ein</string>
+    <string name="reset_to_defaults">Auf Standard zurücksetzen</string>
+    <string name="quick_message_sent">Schnelle Nachricht gesendet</string>
+    <string name="no_channel_selected">Kein Kanal für das Senden von Nachrichten ausgewählt</string>
+    <string name="channel_not_ready">Ausgewählter Kanal ist nicht bereit zum Senden von Nachrichten</string>
+    
     <!-- Settings Dialogs -->
     <string name="meshtastic_app_not_running">Meshtastic-App läuft nicht</string>
     <string name="detail_level_warning">Detaillierungsgrad-Warnung</string>

@@ -86,6 +86,21 @@
     <string name="enable_simulated_peers">Activar peers simulads sin la carta</string>
     <string name="peers_tend_to_appear">Ils peers vegnan a comparair enturn questa distanza da tia posiziun cun variabilitad natirala.</string>
     
+    <!-- Quick Messages -->
+    <string name="quick_messages">Messadis Svelt</string>
+    <string name="quick_messages_settings">Configuraziun Messadis Svelt</string>
+    <string name="quick_message_1">Messadi Svelt 1</string>
+    <string name="quick_message_2">Messadi Svelt 2</string>
+    <string name="quick_message_3">Messadi Svelt 3</string>
+    <string name="quick_message_4">Messadi Svelt 4</string>
+    <string name="quick_message_5">Messadi Svelt 5</string>
+    <string name="quick_message_6">Messadi Svelt 6</string>
+    <string name="quick_message_hint">Endatescha il text da tes messadi svelt</string>
+    <string name="reset_to_defaults">Resettar a Standard</string>
+    <string name="quick_message_sent">Messadi svelt tramess</string>
+    <string name="no_channel_selected">Nagina chanal tschernida per trametter messadis</string>
+    <string name="channel_not_ready">La chanal tschernida n\'è betg pronta per trametter messadis</string>
+    
     <!-- Settings Dialogs -->
     <string name="meshtastic_app_not_running">App Meshtastic Betg en Execuziun</string>
     <string name="detail_level_warning">Avertiment da Nivel da Detagl</string>

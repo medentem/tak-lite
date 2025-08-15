@@ -174,6 +174,13 @@ class SettingsActivity : BaseActivity() {
     private lateinit var minLineSegmentDistLayout: com.google.android.material.textfield.TextInputLayout
     private lateinit var userAntennaHeightLayout: com.google.android.material.textfield.TextInputLayout
     private lateinit var receivingAntennaHeightLayout: com.google.android.material.textfield.TextInputLayout
+    private lateinit var quickMessage1EditText: com.google.android.material.textfield.TextInputEditText
+    private lateinit var quickMessage2EditText: com.google.android.material.textfield.TextInputEditText
+    private lateinit var quickMessage3EditText: com.google.android.material.textfield.TextInputEditText
+    private lateinit var quickMessage4EditText: com.google.android.material.textfield.TextInputEditText
+    private lateinit var quickMessage5EditText: com.google.android.material.textfield.TextInputEditText
+    private lateinit var quickMessage6EditText: com.google.android.material.textfield.TextInputEditText
+    private lateinit var resetQuickMessagesButton: com.google.android.material.button.MaterialButton
     private val REQUEST_CODE_FOREGROUND_SERVICE_CONNECTED_DEVICE = 2003
     private val REQUEST_CODE_NOTIFICATION_PERMISSION = 3001
     private val REQUEST_CODE_ALL_PERMISSIONS = 4001
@@ -258,6 +265,13 @@ class SettingsActivity : BaseActivity() {
         minLineSegmentDistLayout = findViewById(R.id.minLineSegmentDistLayout)
         userAntennaHeightLayout = findViewById(R.id.userAntennaHeightLayout)
         receivingAntennaHeightLayout = findViewById(R.id.receivingAntennaHeightLayout)
+        quickMessage1EditText = findViewById(R.id.quickMessage1EditText)
+        quickMessage2EditText = findViewById(R.id.quickMessage2EditText)
+        quickMessage3EditText = findViewById(R.id.quickMessage3EditText)
+        quickMessage4EditText = findViewById(R.id.quickMessage4EditText)
+        quickMessage5EditText = findViewById(R.id.quickMessage5EditText)
+        quickMessage6EditText = findViewById(R.id.quickMessage6EditText)
+        resetQuickMessagesButton = findViewById(R.id.resetQuickMessagesButton)
 
         // Check premium status and update UI accordingly
         lifecycleScope.launch {
@@ -647,6 +661,9 @@ class SettingsActivity : BaseActivity() {
         
         // Setup unit system selection
         setupUnitSystemSelection()
+
+        // Setup quick messages settings
+        setupQuickMessagesSettings()
 
         // Setup map dark mode spinner
         val darkModeAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, darkModeOptions)
@@ -1317,6 +1334,69 @@ class SettingsActivity : BaseActivity() {
         }
         userAntennaHeightLayout.hint = userHintText
         receivingAntennaHeightLayout.hint = receivingHintText
+    }
+
+    private fun setupQuickMessagesSettings() {
+        // Load current quick messages
+        val quickMessages = com.tak.lite.util.QuickMessageManager.getQuickMessages(this)
+        
+        // Set up EditText fields with current values
+        val editTexts = listOf(
+            quickMessage1EditText,
+            quickMessage2EditText,
+            quickMessage3EditText,
+            quickMessage4EditText,
+            quickMessage5EditText,
+            quickMessage6EditText
+        )
+        
+        quickMessages.forEachIndexed { index, message ->
+            if (index < editTexts.size) {
+                editTexts[index].setText(message.text)
+            }
+        }
+        
+        // Set up focus change listeners to save changes
+        editTexts.forEachIndexed { index, editText ->
+            editText.setOnFocusChangeListener { _, hasFocus ->
+                if (!hasFocus) {
+                    val newText = editText.text.toString().trim()
+                    if (newText.isNotEmpty()) {
+                        val updatedMessage = com.tak.lite.data.model.QuickMessage(
+                            id = index,
+                            text = newText,
+                            isDefault = false
+                        )
+                        com.tak.lite.util.QuickMessageManager.saveQuickMessage(this, updatedMessage)
+                    }
+                }
+            }
+        }
+        
+        // Set up reset button
+        resetQuickMessagesButton.setOnClickListener {
+            // Show confirmation dialog
+            android.app.AlertDialog.Builder(this)
+                .setTitle(getString(R.string.reset_to_defaults))
+                .setMessage("Are you sure you want to reset all quick messages to their default values?")
+                .setPositiveButton(getString(R.string.ok)) { _, _ ->
+                    // Reset to defaults
+                    com.tak.lite.util.QuickMessageManager.resetToDefaults(this)
+                    
+                    // Reload and update UI
+                    val defaultMessages = com.tak.lite.util.QuickMessageManager.getQuickMessages(this)
+                    defaultMessages.forEachIndexed { index, message ->
+                        if (index < editTexts.size) {
+                            editTexts[index].setText(message.text)
+                        }
+                    }
+                    
+                    // Show feedback
+                    android.widget.Toast.makeText(this, "Quick messages reset to defaults", android.widget.Toast.LENGTH_SHORT).show()
+                }
+                .setNegativeButton(getString(R.string.cancel), null)
+                .show()
+        }
     }
 
     private fun showAppropriateDialog() {

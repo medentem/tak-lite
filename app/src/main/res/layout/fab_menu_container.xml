@@ -70,4 +70,13 @@
         android:contentDescription="Toggle 3D Buildings"
         android:src="@drawable/baseline_3d_rotation_24"
         app:backgroundTint="@android:color/holo_blue_dark" />
+
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/quickMessagesButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:contentDescription="Quick Messages"
+        android:src="@drawable/ic_chat_bubble_outline"
+        app:backgroundTint="@android:color/holo_blue_dark" />
 </LinearLayout> 

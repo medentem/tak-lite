@@ -86,6 +86,21 @@
     <string name="enable_simulated_peers">Activer les pairs simulés sur la carte</string>
     <string name="peers_tend_to_appear">Les pairs tendront à apparaître autour de cette distance de votre localisation avec une variabilité naturelle.</string>
     
+    <!-- Quick Messages -->
+    <string name="quick_messages">Messages Rapides</string>
+    <string name="quick_messages_settings">Paramètres des Messages Rapides</string>
+    <string name="quick_message_1">Message Rapide 1</string>
+    <string name="quick_message_2">Message Rapide 2</string>
+    <string name="quick_message_3">Message Rapide 3</string>
+    <string name="quick_message_4">Message Rapide 4</string>
+    <string name="quick_message_5">Message Rapide 5</string>
+    <string name="quick_message_6">Message Rapide 6</string>
+    <string name="quick_message_hint">Entrez le texte de votre message rapide</string>
+    <string name="reset_to_defaults">Réinitialiser aux Valeurs par Défaut</string>
+    <string name="quick_message_sent">Message rapide envoyé</string>
+    <string name="no_channel_selected">Aucun canal sélectionné pour envoyer des messages</string>
+    <string name="channel_not_ready">Le canal sélectionné n\'est pas prêt à envoyer des messages</string>
+    
     <!-- Settings Dialogs -->
     <string name="meshtastic_app_not_running">L\'App Meshtastic Ne Fonctionne Pas</string>
     <string name="detail_level_warning">Avertissement de Niveau de Détail</string>

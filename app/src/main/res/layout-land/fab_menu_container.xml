@@ -7,18 +7,55 @@
     android:orientation="horizontal"
     android:gravity="center"
     android:layout_marginStart="72dp"
-    android:layout_marginBottom="16dp"
+    android:layout_marginBottom="32dp"
     android:visibility="gone"
     app:layout_constraintBottom_toBottomOf="parent"
     app:layout_constraintStart_toStartOf="parent">
 
+
     <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/settingsButton"
+        android:id="@+id/quickMessagesButton"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="8dp"
-        android:contentDescription="Settings"
-        android:src="@android:drawable/ic_menu_preferences"
+        android:contentDescription="Quick Messages"
+        android:src="@drawable/ic_chat_bubble_outline"
+        app:backgroundTint="@android:color/holo_blue_dark" />
+
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/toggle3dFab"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:contentDescription="Toggle 3D Buildings"
+        android:src="@drawable/baseline_3d_rotation_24"
+        app:backgroundTint="@android:color/holo_blue_dark" />
+
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/mapTypeToggleButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:contentDescription="Toggle Map Type"
+        android:src="@android:drawable/ic_menu_mapmode"
+        app:backgroundTint="@android:color/holo_blue_dark" />
+
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/downloadSectorButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:contentDescription="Download Visible Map Sector"
+        android:src="@android:drawable/ic_menu_save"
+        app:backgroundTint="@android:color/holo_blue_dark" />
+
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/lassoToolFab"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:contentDescription="Lasso Select"
+        android:src="@drawable/ic_lasso"
         app:backgroundTint="@android:color/holo_blue_dark" />
 
     <ImageButton
@@ -33,38 +70,11 @@
         android:src="@drawable/ic_group" />
 
     <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/lassoToolFab"
+        android:id="@+id/settingsButton"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="8dp"
-        android:contentDescription="Lasso Select"
-        android:src="@drawable/ic_lasso"
-        app:backgroundTint="@android:color/holo_blue_dark" />
-
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/downloadSectorButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="8dp"
-        android:contentDescription="Download Visible Map Sector"
-        android:src="@android:drawable/ic_menu_save"
-        app:backgroundTint="@android:color/holo_blue_dark" />
-
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/mapTypeToggleButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="8dp"
-        android:contentDescription="Toggle Map Type"
-        android:src="@android:drawable/ic_menu_mapmode"
-        app:backgroundTint="@android:color/holo_blue_dark" />
-
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/toggle3dFab"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="8dp"
-        android:contentDescription="Toggle 3D Buildings"
-        android:src="@drawable/baseline_3d_rotation_24"
+        android:contentDescription="Settings"
+        android:src="@android:drawable/ic_menu_preferences"
         app:backgroundTint="@android:color/holo_blue_dark" />
 </LinearLayout> 

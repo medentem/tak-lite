@@ -96,6 +96,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
     private lateinit var mapTypeToggleButton: View
     private lateinit var downloadSectorButton: View
     private lateinit var settingsButton: View
+    private lateinit var quickMessagesButton: com.google.android.material.floatingactionbutton.FloatingActionButton
     private lateinit var statusButton: com.google.android.material.floatingactionbutton.FloatingActionButton
     private lateinit var statusLabel: TextView
     private lateinit var layersButton: com.google.android.material.floatingactionbutton.FloatingActionButton
@@ -223,6 +224,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
         mapTypeToggleButton = findViewById(R.id.mapTypeToggleButton)
         downloadSectorButton = findViewById(R.id.downloadSectorButton)
         settingsButton = findViewById(R.id.settingsButton)
+        quickMessagesButton = findViewById(R.id.quickMessagesButton)
 
         // Initialize swipeable overlay
         swipeableOverlayContainer = findViewById(R.id.swipeableOverlayContainer)
@@ -448,6 +450,10 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
             startActivity(intent)
         }
         
+        // Setup quick messages button
+        quickMessagesButton.setOnClickListener {
+            showQuickMessagesDialog()
+        }
 
 
         // Setup status button
@@ -1436,6 +1442,43 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
             SensorManager.SENSOR_STATUS_UNRELIABLE -> getString(R.string.unreliable)
             else -> getString(R.string.unknown)
         }
+    }
+
+    private fun showQuickMessagesDialog() {
+        val dialog = com.tak.lite.ui.QuickMessagesDialog(
+            context = this,
+            onMessageSelected = { quickMessage ->
+                sendQuickMessage(quickMessage)
+            }
+        )
+        dialog.show(quickMessagesButton)
+    }
+
+    private fun sendQuickMessage(quickMessage: com.tak.lite.data.model.QuickMessage) {
+        // Get the currently selected channel
+        val selectedChannelId = channelViewModel.settings.value.selectedChannelId
+        
+        if (selectedChannelId.isNullOrEmpty()) {
+            Toast.makeText(this, getString(R.string.no_channel_selected), Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        // Check if the channel is ready to send
+        val channels = channelViewModel.channels.value
+        val selectedChannel = channels.find { it.id == selectedChannelId }
+        
+        if (selectedChannel == null || !selectedChannel.readyToSend) {
+            Toast.makeText(this, getString(R.string.channel_not_ready), Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        // Send the message
+        messageViewModel.sendMessage(selectedChannelId, quickMessage.text)
+        
+        // Show feedback
+        Toast.makeText(this, getString(R.string.quick_message_sent), Toast.LENGTH_SHORT).show()
+        
+        Log.d("MainActivity", "Sent quick message: ${quickMessage.text} to channel: $selectedChannelId")
     }
 
     private fun setupStatusButton() {

@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/overlay_bg"
+    android:padding="8dp"
+    android:elevation="8dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/quick_messages"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:textColor="@android:color/white"
+        android:layout_marginBottom="8dp"
+        android:gravity="center" />
+
+    <!-- Quick Message 1 -->
+    <TextView
+        android:id="@+id/quickMessage1"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:padding="12dp"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
+        android:textColor="@android:color/white"
+        android:textSize="14sp"
+        android:layout_marginBottom="4dp"
+        android:gravity="center" />
+
+    <!-- Quick Message 2 -->
+    <TextView
+        android:id="@+id/quickMessage2"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:padding="12dp"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
+        android:textColor="@android:color/white"
+        android:textSize="14sp"
+        android:layout_marginBottom="4dp"
+        android:gravity="center" />
+
+    <!-- Quick Message 3 -->
+    <TextView
+        android:id="@+id/quickMessage3"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:padding="12dp"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
+        android:textColor="@android:color/white"
+        android:textSize="14sp"
+        android:layout_marginBottom="4dp"
+        android:gravity="center" />
+
+    <!-- Quick Message 4 -->
+    <TextView
+        android:id="@+id/quickMessage4"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:padding="12dp"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
+        android:textColor="@android:color/white"
+        android:textSize="14sp"
+        android:layout_marginBottom="4dp"
+        android:gravity="center" />
+
+    <!-- Quick Message 5 -->
+    <TextView
+        android:id="@+id/quickMessage5"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:padding="12dp"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
+        android:textColor="@android:color/white"
+        android:textSize="14sp"
+        android:layout_marginBottom="4dp"
+        android:gravity="center" />
+
+    <!-- Quick Message 6 -->
+    <TextView
+        android:id="@+id/quickMessage6"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:padding="12dp"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
+        android:textColor="@android:color/white"
+        android:textSize="14sp"
+        android:gravity="center" />
+
+</LinearLayout>
