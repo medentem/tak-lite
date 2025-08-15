@@ -2043,12 +2043,7 @@ class AnnotationController(
     }
     
     private fun calculateDistance(point1: LatLng, point2: LatLng): Double {
-        val lat1 = Math.toRadians(point1.latitude)
-        val lon1 = Math.toRadians(point1.longitude)
-        val lat2 = Math.toRadians(point2.latitude)
-        val lon2 = Math.toRadians(point2.longitude)
-
-        return haversine(lat1, lon1, lat2, lon2)
+        return haversine(point1.latitude, point1.longitude, point2.latitude, point2.longitude)
     }
 
     fun showAreaLabel(areaId: String, screenPosition: PointF) {
