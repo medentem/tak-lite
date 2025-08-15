@@ -182,8 +182,7 @@ class PeerAdapter(
                 lifecycleScope.launch {
                     try {
                         // Get node info and create/get direct message channel
-                        val peerName = meshNetworkViewModel.getPeerName(peer.id)
-                        val channel = messageViewModel.getOrCreateDirectMessageChannel(peer.id, peerName)
+                        val channel = messageViewModel.getOrCreateDirectMessageChannel(peer.id)
                         Log.d("PeerAdapter", "Get or create direct message channel: ${channel?.id} for peerId: ${peer.id}")
 
                         if (channel != null) {

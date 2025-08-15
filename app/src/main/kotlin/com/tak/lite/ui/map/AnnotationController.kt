@@ -121,7 +121,7 @@ class AnnotationController(
     init {
         clusteredLayerManager = ClusteredLayerManager(mapLibreMap, clusteringConfig)
         popoverManager = HybridPopoverManager(fragment.requireContext(), mapLibreMap, binding.root, meshNetworkViewModel)
-        unifiedAnnotationManager = UnifiedAnnotationManager(mapLibreMap, fragment.requireContext())
+        unifiedAnnotationManager = UnifiedAnnotationManager(mapLibreMap)
         _deviceLocationManager = DeviceLocationLayerManager(mapLibreMap)
         _clusterTextManager = ClusterTextManager(mapLibreMap)
     }
@@ -353,7 +353,7 @@ class AnnotationController(
             Log.d("AnnotationController", "Line timer manager initialized")
         }
         if (_lineDistanceManager == null && mapLibreMap != null) {
-            _lineDistanceManager = LineDistanceManager(mapLibreMap, fragment.requireContext())
+            _lineDistanceManager = LineDistanceManager(fragment.requireContext())
             Log.d("AnnotationController", "Line distance manager initialized")
         }
         if (polygonTimerManager == null && mapLibreMap != null) {
@@ -1403,7 +1403,7 @@ class AnnotationController(
                 val peerName = meshNetworkViewModel.getPeerName(peerId)
                 
                 // Create or get the direct message channel
-                val channel = messageViewModel.getOrCreateDirectMessageChannel(peerId, peerName)
+                val channel = messageViewModel.getOrCreateDirectMessageChannel(peerId)
 
                 if (channel != null) {
                     // Launch the MessageActivity using the companion object method
