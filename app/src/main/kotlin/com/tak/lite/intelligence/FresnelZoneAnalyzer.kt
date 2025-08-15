@@ -30,7 +30,7 @@ class FresnelZoneAnalyzer @Inject constructor() {
         private fun generateFresnelRadiusLookup(): FloatArray {
             val maxDistance = 50000 // 50km
             val stepSize = 100 // 100m steps
-            val size = (maxDistance / stepSize).toInt() + 1
+            val size = (maxDistance / stepSize) + 1
 
             val lookup = FloatArray(size)
             val wavelength = SPEED_OF_LIGHT / FREQUENCY

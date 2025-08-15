@@ -21,18 +21,6 @@ enum class MovementPattern {
     UNKNOWN              // Conservative default when pattern can't be determined
 }
 
-/**
- * Extract movement features for ML prediction
- */
-data class MovementFeatures(
-    val avgSpeed: Double,
-    val speedVariance: Double,
-    val avgHeading: Double,
-    val headingVariance: Double,
-    val acceleration: Double,
-    val movementConsistency: Double
-)
-
 // Helper classes and methods
 @Serializable
 data class Particle(

@@ -2,7 +2,6 @@ package com.tak.lite.ui.channel
 
 import android.os.Bundle
 import android.view.View
-import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
@@ -17,9 +16,9 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.tak.lite.R
 import com.tak.lite.data.model.IChannel
 import com.tak.lite.viewmodel.ChannelViewModel
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class ChannelManagementActivity : AppCompatActivity() {

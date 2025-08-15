@@ -63,8 +63,6 @@ class BluetoothDeviceManager(private val context: Context) {
     private val FROMNUM_CHARACTERISTIC_UUID: UUID = UUID.fromString("ed9da18c-a800-4f66-a670-aa7547e34453")
 
     // Make reconnection persistent while service/feature is enabled
-    private val MAX_RECONNECT_ATTEMPTS = Int.MAX_VALUE
-    private val MAX_RECONNECT_TIME_MS = Long.MAX_VALUE
     private var reconnectStartTime: Long = 0
     private var reconnectAttempts = 0
     private var pendingReconnect: Boolean = false

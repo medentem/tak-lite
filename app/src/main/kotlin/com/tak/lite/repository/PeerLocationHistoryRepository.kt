@@ -1,6 +1,5 @@
 package com.tak.lite.repository
 
-import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
 import com.tak.lite.data.model.ConfidenceCone
@@ -16,14 +15,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.json.Json
-import org.maplibre.android.geometry.LatLng
 import java.util.Collections
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class PeerLocationHistoryRepository @Inject constructor(
-    private val context: Context,
     private val predictionFactory: PredictionFactory,
     private val json: Json,
     private val prefs: SharedPreferences
@@ -72,19 +69,6 @@ class PeerLocationHistoryRepository @Inject constructor(
 
     private fun isPredictionsEnabled(): Boolean =
         prefs.getBoolean("show_prediction_overlay", false)
-    
-    /**
-     * Add a new location entry for a peer
-     */
-    fun addLocationEntry(peerId: String, latLng: LatLng) {
-        val entry = PeerLocationEntry(
-            timestamp = System.currentTimeMillis(),
-            latitude = latLng.latitude,
-            longitude = latLng.longitude
-        )
-        
-        addLocationEntry(peerId, entry)
-    }
     
     /**
      * Add an enhanced location entry with additional position data
@@ -138,9 +122,9 @@ class PeerLocationHistoryRepository @Inject constructor(
             Log.e(TAG, "CRITICAL: Updated history for peer $peerId is not in chronological order!")
             // This should never happen with our fix, but log it if it does
         }
-        
-        peerHistories.put(peerId, updatedHistory)
-        
+
+        peerHistories[peerId] = updatedHistory
+
         // Update predictions only if predictions are enabled
         if (isPredictionsEnabled()) {
             updatePrediction(peerId, updatedHistory)
@@ -291,7 +275,7 @@ class PeerLocationHistoryRepository @Inject constructor(
     /**
      * Update predictions for all peers
      */
-    fun updateAllPredictions() {
+    private fun updateAllPredictions() {
         // Respect predictions enabled flag
         if (!isPredictionsEnabled()) {
             _predictions.value = emptyMap()
@@ -322,7 +306,7 @@ class PeerLocationHistoryRepository @Inject constructor(
      * This provides significant performance improvements by avoiding prediction calculations
      * for peers that are off-screen
      */
-    fun updateVisiblePredictions(viewportBounds: android.graphics.RectF?) {
+    private fun updateVisiblePredictions(viewportBounds: android.graphics.RectF?) {
         val startTime = System.currentTimeMillis()
         if (viewportBounds == null) {
             Log.d(TAG, "Viewport bounds null; skipping prediction recompute (predictions update only on new data)")
@@ -382,30 +366,6 @@ class PeerLocationHistoryRepository @Inject constructor(
         
         // Update predictions for the new viewport (only called from camera idle)
         updateVisiblePredictions(viewportBounds)
-    }
-    
-    /**
-     * Force full prediction update when needed (fallback method)
-     */
-    fun forceFullPredictionUpdate() {
-        Log.d(TAG, "Forcing full prediction update")
-        updateAllPredictions()
-    }
-    
-    /**
-     * Get location history for a specific peer
-     */
-    fun getPeerHistory(peerId: String): PeerLocationHistory? {
-        return peerHistories.get(peerId)
-    }
-    
-    /**
-     * Get all peer histories
-     */
-    fun getAllPeerHistories(): Map<String, PeerLocationHistory> {
-        return synchronized(peerHistories) {
-            peerHistories.toMap()
-        }
     }
     
     /**
@@ -479,9 +439,9 @@ class PeerLocationHistoryRepository @Inject constructor(
         peerHistoriesSnapshot.forEach { (peerId, history) ->
             val filteredEntries = history.entries.filter { it.timestamp >= cutoffTime }
             if (filteredEntries.size != history.entries.size) {
-                peerHistories.put(peerId, history.copy(entries = filteredEntries))
+                peerHistories[peerId] = history.copy(entries = filteredEntries)
                 if (isPredictionsEnabled()) {
-                    updatePrediction(peerId, peerHistories.get(peerId)!!, currentConfig, currentModel)
+                    updatePrediction(peerId, peerHistories[peerId]!!, currentConfig, currentModel)
                 }
             }
         }

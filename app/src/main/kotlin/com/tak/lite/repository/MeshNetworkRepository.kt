@@ -5,10 +5,6 @@ import com.tak.lite.model.PeerLocationEntry
 import com.tak.lite.network.MeshNetworkService
 import com.tak.lite.network.MeshNetworkState
 import com.tak.lite.network.MeshPeer
-import com.tak.lite.network.MeshProtocolProvider
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import org.maplibre.android.geometry.LatLng
@@ -17,11 +13,8 @@ import javax.inject.Singleton
 
 @Singleton
 class MeshNetworkRepository @Inject constructor(
-    private val meshNetworkService: MeshNetworkService,
-    private val meshProtocolProvider: MeshProtocolProvider
+    private val meshNetworkService: MeshNetworkService
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-
     val networkState: Flow<MeshNetworkState>
         get() = meshNetworkService.networkState
     

@@ -218,14 +218,6 @@ class CoverageRepository @Inject constructor(
     }
     
     /**
-     * Clears the coverage cache
-     */
-    fun clearCache() {
-        coverageCache.clear()
-        android.util.Log.d("CoverageRepository", "Coverage cache cleared")
-    }
-    
-    /**
      * Generates a cache key for coverage analysis parameters
      */
     private fun generateCacheKey(

@@ -14,7 +14,6 @@ import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
-import android.os.Build
 import android.os.IBinder
 import android.os.Process
 import android.util.Log
@@ -47,8 +46,8 @@ class AudioStreamingService : Service() {
             AUDIO_FORMAT
         )
         private const val DEFAULT_CHANNEL = "default"
-        private val NOTIFICATION_ID = 1001
-        private val CHANNEL_ID = "audio_streaming"
+        private const val NOTIFICATION_ID = 1001
+        private const val CHANNEL_ID = "audio_streaming"
         
         // Audio processing constants
         private const val SILENCE_THRESHOLD = 200  // Minimum amplitude to consider as speech
@@ -101,15 +100,13 @@ class AudioStreamingService : Service() {
     }
 
     private fun startForegroundServiceNotification() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Audio Streaming",
-                NotificationManager.IMPORTANCE_LOW
-            )
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
-        }
+        val channel = NotificationChannel(
+            CHANNEL_ID,
+            "Audio Streaming",
+            NotificationManager.IMPORTANCE_LOW
+        )
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(channel)
         val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.tak_lite_audio_streaming))
             .setContentText(getString(R.string.voice_chat_active))
@@ -320,12 +317,7 @@ class AudioStreamingService : Service() {
             Log.d("Waveform", "Audio focus abandoned")
         }
         // Stop foreground notification
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-        } else {
-            @Suppress("DEPRECATION")
-            stopForeground(true)
-        }
+        stopForeground(STOP_FOREGROUND_REMOVE)
         Log.d("Waveform", "Service stopped foreground")
     }
 
@@ -359,7 +351,6 @@ class AudioStreamingService : Service() {
         
         // Abandon audio focus
         if (audioFocusRequested) {
-            val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
             audioFocusRequest?.let { request ->
                 audioManager.abandonAudioFocusRequest(request)
             }

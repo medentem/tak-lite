@@ -31,10 +31,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlin.math.atan2
 import kotlin.math.cos
-import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlin.math.sin
-import kotlin.math.sqrt
 
 // Enhanced data class for overlay with compass quality
 data class DirectionOverlayData(
@@ -103,8 +101,6 @@ class LocationController(
     private var erraticReadings = 0
     private val maxErraticReadings = 5
     private var lastReadings = mutableListOf<Float>()
-    private val maxLastReadings = 20
-    private val calibrationThreshold = 8f
 
     private val compassBuffer = mutableListOf<Float>()
     private val movementBuffer = mutableListOf<Location>()
@@ -216,47 +212,6 @@ class LocationController(
         return lastRawHeading * 0.8f + newValue * 0.2f
     }
     
-    /**
-     * Check for calibration needs using raw compass readings for variance calculation
-     * @param normalized The normalized raw compass reading (0-360°)
-     */
-    private fun checkCalibrationNeeds(normalized: Float) {
-        // Add to last readings (using raw readings for variance calculation)
-        lastReadings.add(normalized)
-        if (lastReadings.size > maxLastReadings) {
-            lastReadings.removeAt(0)
-        }
-        
-        // Check for erratic readings if we have enough data
-        if (lastReadings.size >= 10) {
-            val variance = calculateVariance(lastReadings)
-            if (variance > calibrationThreshold) {
-                erraticReadings++
-            } else {
-                erraticReadings = max(0, erraticReadings - 1)
-            }
-            
-            val wasNeedingCalibration = needsCalibration
-            needsCalibration = erraticReadings >= maxErraticReadings || 
-                              currentAccuracy == SensorManager.SENSOR_STATUS_UNRELIABLE ||
-                              currentAccuracy == SensorManager.SENSOR_STATUS_ACCURACY_LOW
-            
-            if (needsCalibration != wasNeedingCalibration) {
-                Log.d("CompassDebug", "Calibration need changed: ${wasNeedingCalibration} -> ${needsCalibration}")
-                Log.d("CompassDebug", "  Erratic readings: ${erraticReadings}/${maxErraticReadings}")
-                Log.d("CompassDebug", "  Sensor accuracy: ${getAccuracyString(currentAccuracy)}")
-            }
-        }
-    }
-    
-    private fun calculateVariance(readings: List<Float>): Float {
-        if (readings.size < 2) return 0f
-        
-        val mean = readings.average().toFloat()
-        val squaredDiffs = readings.map { (it - mean) * (it - mean) }
-        return sqrt(squaredDiffs.average().toFloat())
-    }
-    
     private fun checkCalibrationNeeded(): Boolean {
         return currentAccuracy == SensorManager.SENSOR_STATUS_UNRELIABLE ||
                currentAccuracy == SensorManager.SENSOR_STATUS_ACCURACY_LOW ||
@@ -270,16 +225,6 @@ class LocationController(
             SensorManager.SENSOR_STATUS_ACCURACY_LOW -> CalibrationStatus.POOR
             SensorManager.SENSOR_STATUS_UNRELIABLE -> CalibrationStatus.UNKNOWN
             else -> CalibrationStatus.UNKNOWN
-        }
-    }
-    
-    private fun getAccuracyString(accuracy: Int): String {
-        return when (accuracy) {
-            SensorManager.SENSOR_STATUS_ACCURACY_HIGH -> "HIGH"
-            SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM -> "MEDIUM"
-            SensorManager.SENSOR_STATUS_ACCURACY_LOW -> "LOW"
-            SensorManager.SENSOR_STATUS_UNRELIABLE -> "UNRELIABLE"
-            else -> "UNKNOWN"
         }
     }
     
@@ -304,7 +249,7 @@ class LocationController(
     }
 
     // Add a flag or callback to indicate if device location is active
-    var isDeviceLocationActive: Boolean = false
+    private var isDeviceLocationActive: Boolean = false
 
     fun checkAndRequestPermissions(requestCode: Int) {
         val permissions = arrayOf(
@@ -408,7 +353,7 @@ class LocationController(
             headingDegrees = headingDegrees,
             cardinal = cardinal,
             speedMps = location.speed.toDouble(),
-            altitudeMeters = location.altitude.toDouble(),
+            altitudeMeters = location.altitude,
             latitude = location.latitude,
             longitude = location.longitude,
             headingSource = headingSource
@@ -530,30 +475,6 @@ class LocationController(
     }
 
     /**
-     * Check if OS-level calibration is available and supported
-     */
-    fun isOSLevelCalibrationSupported(): Boolean {
-        val rotationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
-        val magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
-        val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-        
-        return rotationSensor != null && magnetometer != null && accelerometer != null
-    }
-
-    /**
-     * Get the current calibration status from OS sensors
-     */
-    fun getOSCalibrationStatus(): CalibrationStatus {
-        return when (currentAccuracy) {
-            SensorManager.SENSOR_STATUS_ACCURACY_HIGH -> CalibrationStatus.EXCELLENT
-            SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM -> CalibrationStatus.GOOD
-            SensorManager.SENSOR_STATUS_ACCURACY_LOW -> CalibrationStatus.POOR
-            SensorManager.SENSOR_STATUS_UNRELIABLE -> CalibrationStatus.UNKNOWN
-            else -> CalibrationStatus.UNKNOWN
-        }
-    }
-
-    /**
      * Force a sensor accuracy check and update calibration status
      */
     fun forceCalibrationCheck() {
@@ -576,7 +497,7 @@ class LocationController(
     /**
      * Check if stored calibration has expired (24 hours)
      */
-    fun isCalibrationExpired(): Boolean {
+    private fun isCalibrationExpired(): Boolean {
         val prefs = activity.getSharedPreferences("compass_calibration", Context.MODE_PRIVATE)
         val calibrationTimestamp = prefs.getLong("calibration_timestamp", 0L)
         val currentTime = System.currentTimeMillis()
@@ -589,7 +510,7 @@ class LocationController(
     /**
      * Get the last calibration quality from stored preferences
      */
-    fun getLastCalibrationQuality(): Float {
+    private fun getLastCalibrationQuality(): Float {
         val prefs = activity.getSharedPreferences("compass_calibration", Context.MODE_PRIVATE)
         return prefs.getFloat("calibration_quality", 0f)
     }
@@ -636,35 +557,5 @@ class LocationController(
         } else {
             Log.d("LocationController", "No valid calibration data found, starting fresh")
         }
-    }
-
-    /**
-     * Force the system to use compass heading instead of GPS heading
-     * This can be useful for testing or when users want to override automatic switching
-     */
-    fun forceCompassHeading() {
-        Log.d("LocationController", "Forcing compass heading usage")
-        
-        _directionOverlayData.value = _directionOverlayData.value.copy(
-            headingDegrees = lastHeading,
-            cardinal = getCardinalDirection(lastHeading),
-            headingSource = HeadingSource.COMPASS
-        )
-        
-        Log.d("LocationController", "Forced compass heading: ${lastHeading}°, Cardinal: ${getCardinalDirection(lastHeading)}")
-    }
-
-    /**
-     * Get the current heading source being used
-     */
-    fun getCurrentHeadingSource(): HeadingSource {
-        return _directionOverlayData.value.headingSource
-    }
-
-    /**
-     * Check if GPS heading is currently being used
-     */
-    fun isUsingGPSHeading(): Boolean {
-        return _directionOverlayData.value.headingSource == HeadingSource.GPS
     }
 } 

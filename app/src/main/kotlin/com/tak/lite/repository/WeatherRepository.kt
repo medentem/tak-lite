@@ -24,7 +24,6 @@ class WeatherRepository @Inject constructor(
     private val context: Context
 ) {
     private val TAG = "WeatherRepository"
-    private val prefs = context.getSharedPreferences("weather_prefs", Context.MODE_PRIVATE)
     
     private val _weatherState = MutableStateFlow(WeatherUiState())
     val weatherState: StateFlow<WeatherUiState> = _weatherState.asStateFlow()
@@ -125,24 +124,6 @@ class WeatherRepository @Inject constructor(
         if (lastLocationLat != 0.0 && lastLocationLon != 0.0) {
             lastFetchTime = 0 // Force refresh with new units
             fetchWeatherData(lastLocationLat, lastLocationLon)
-        }
-    }
-    
-    fun clearWeatherData() {
-        _weatherState.value = WeatherUiState()
-        lastLocationLat = 0.0
-        lastLocationLon = 0.0
-        lastFetchTime = 0
-    }
-    
-    fun isWeatherEnabled(): Boolean {
-        return prefs.getBoolean("weather_enabled", false)
-    }
-    
-    fun setWeatherEnabled(enabled: Boolean) {
-        prefs.edit().putBoolean("weather_enabled", enabled).apply()
-        if (!enabled) {
-            clearWeatherData()
         }
     }
 }

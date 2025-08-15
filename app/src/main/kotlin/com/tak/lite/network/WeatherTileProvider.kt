@@ -11,12 +11,6 @@ interface WeatherTileProvider {
      * Return null if not available (e.g., no API key configured).
      */
     fun latestRadarUrlTemplate(weatherSource: String = "precipitation_new"): String?
-
-    /**
-     * Return a URL template for a time-specific radar frame, if supported by the provider.
-     * Return null if not supported.
-     */
-    fun timeboxedRadarUrlTemplate(epochMillis: Long, weatherSource: String = "precipitation_new"): String? = latestRadarUrlTemplate(weatherSource)
 }
 
 /**

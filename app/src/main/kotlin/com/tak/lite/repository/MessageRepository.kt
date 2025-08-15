@@ -139,7 +139,7 @@ class MessageRepository @Inject constructor(
         }
     }
 
-    fun getOrCreateDirectMessageChannel(peerId: String, peerLongName: String? = null): DirectMessageChannel? {
+    fun getOrCreateDirectMessageChannel(peerId: String): DirectMessageChannel? {
         // Regular channel message
         val protocol = meshProtocolProvider.protocol.value
         val newChannel = protocol.getOrCreateDirectMessageChannel(peerId)

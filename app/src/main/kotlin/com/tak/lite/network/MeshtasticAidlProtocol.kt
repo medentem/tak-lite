@@ -50,10 +50,6 @@ class MeshtasticAidlProtocol @Inject constructor(
 ) : MeshtasticBaseProtocol(context, coroutineContext) {
     private val TAG = "MeshtasticAidlProtocol"
     
-    // Deduplication cache to prevent processing the same node multiple times in quick succession
-    private val recentlyProcessedNodes = mutableMapOf<Int, Long>()
-    private val NODE_DEDUP_WINDOW_MS = 1000L // 1 second window
-    
     // AIDL Service binding
     private var meshService: IMeshService? = null
     private var isMeshServiceBound = false
@@ -186,7 +182,7 @@ class MeshtasticAidlProtocol @Inject constructor(
         while (!bindMeshService()) {
             try {
                 // Wait for the service to bind
-                Thread.sleep(1000);
+                Thread.sleep(1000)
             } catch (e: InterruptedException) {
                 Log.e(TAG, "Binding interrupted", e)
                 break
@@ -296,7 +292,6 @@ class MeshtasticAidlProtocol @Inject constructor(
             }
             isMeshServiceBound = false
             meshService = null
-            Log.d(TAG, "Service binding state reset: isMeshServiceBound=$isMeshServiceBound, meshService=${meshService != null}")
         } else {
             Log.d(TAG, "Service was not bound, nothing to unbind")
         }
@@ -347,7 +342,6 @@ class MeshtasticAidlProtocol @Inject constructor(
             
             // Track successful registration
             isReceiverRegistered = true
-            Log.d(TAG, "Broadcast receiver registration successful - isReceiverRegistered: $isReceiverRegistered")
             
         } catch (e: Exception) {
             Log.e(TAG, "Failed to register mesh receiver", e)
@@ -369,7 +363,6 @@ class MeshtasticAidlProtocol @Inject constructor(
             
             // Reset tracking state
             isReceiverRegistered = false
-            Log.d(TAG, "Broadcast receiver unregistration complete - isReceiverRegistered: $isReceiverRegistered")
             
         } catch (e: Exception) {
             Log.w(TAG, "Failed to unregister mesh receiver", e)
@@ -388,7 +381,7 @@ class MeshtasticAidlProtocol @Inject constructor(
         
         when (intent.action) {
             "com.geeksville.mesh.NODE_CHANGE" -> {
-                val nodeInfo = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                val nodeInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     intent.getParcelableExtra("com.geeksville.mesh.NodeInfo", NodeInfo::class.java)
                 } else {
                     @Suppress("DEPRECATION")
@@ -404,7 +397,7 @@ class MeshtasticAidlProtocol @Inject constructor(
                     Log.d(TAG, "Extra key: $key, value: $value, type: ${value?.javaClass?.name}")
                 }
                 
-                val dataPacket = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                val dataPacket = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     intent.getParcelableExtra("com.geeksville.mesh.Payload", DataPacket::class.java)
                 } else {
                     @Suppress("DEPRECATION")
@@ -421,7 +414,7 @@ class MeshtasticAidlProtocol @Inject constructor(
                     Log.d(TAG, "Extra key: $key, value: $value, type: ${value?.javaClass?.name}")
                 }
                 
-                val dataPacket = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                val dataPacket = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     intent.getParcelableExtra("com.geeksville.mesh.Payload", DataPacket::class.java)
                 } else {
                     @Suppress("DEPRECATION")
@@ -431,7 +424,7 @@ class MeshtasticAidlProtocol @Inject constructor(
                 handlePositionPacket(dataPacket)
             }
             "com.geeksville.mesh.RECEIVED.TEXT_MESSAGE_APP" -> {
-                val dataPacket = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                val dataPacket = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     intent.getParcelableExtra("com.geeksville.mesh.Payload", DataPacket::class.java)
                 } else {
                     @Suppress("DEPRECATION")
@@ -440,7 +433,7 @@ class MeshtasticAidlProtocol @Inject constructor(
                 handleTextMessage(dataPacket)
             }
             "com.geeksville.mesh.RECEIVED.ATAK_PLUGIN" -> {
-                val dataPacket = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                val dataPacket = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     intent.getParcelableExtra("com.geeksville.mesh.Payload", DataPacket::class.java)
                 } else {
                     @Suppress("DEPRECATION")
@@ -449,7 +442,7 @@ class MeshtasticAidlProtocol @Inject constructor(
                 handleAnnotation(dataPacket)
             }
             "com.geeksville.mesh.RECEIVED.ROUTING_APP" -> {
-                val dataPacket = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                val dataPacket = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     intent.getParcelableExtra("com.geeksville.mesh.Payload", DataPacket::class.java)
                 } else {
                     @Suppress("DEPRECATION")
@@ -467,7 +460,7 @@ class MeshtasticAidlProtocol @Inject constructor(
             }
             "com.geeksville.mesh.MESSAGE_STATUS" -> {
                 val packetId = intent.getIntExtra("com.geeksville.mesh.PacketId", 0)
-                val status = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                val status = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     intent.getParcelableExtra("com.geeksville.mesh.Status", MessageStatus::class.java)
                 } else {
                     @Suppress("DEPRECATION")
@@ -1027,9 +1020,9 @@ class MeshtasticAidlProtocol @Inject constructor(
     }
 
     // Data conversion utilities
-    private fun DataPacket.toMeshPacket(): MeshProtos.MeshPacket {
+    private fun DataPacket.toMeshPacket(): MeshPacket {
         try {
-        val builder = MeshProtos.MeshPacket.newBuilder()
+        val builder = MeshPacket.newBuilder()
             .setId(this.id)
             .setChannel(this.channel)
             .setWantAck(this.wantAck)
@@ -1074,7 +1067,7 @@ class MeshtasticAidlProtocol @Inject constructor(
         }
     }
     
-    private fun MeshProtos.MeshPacket.toDataPacket(): DataPacket {
+    private fun MeshPacket.toDataPacket(): DataPacket {
         try {
             // Extract decoded data
             val decodedData = this.decoded
@@ -1119,7 +1112,7 @@ class MeshtasticAidlProtocol @Inject constructor(
                 wantAck = this.wantAck
             )
 
-            Log.d(TAG, "DataPacket: ${dataPacket}")
+            Log.d(TAG, "DataPacket: $dataPacket")
             return dataPacket
             
         } catch (e: Exception) {
@@ -1330,24 +1323,29 @@ class MeshtasticAidlProtocol @Inject constructor(
             
             // Only remove packets from inFlightMessages for successful final statuses
             // This allows the timeout system to retry failed messages
-            if (baseStatus == BaseMessageStatus.DELIVERED || 
-                baseStatus == BaseMessageStatus.RECEIVED) {
-                
-                Log.d(TAG, "Message $packetId reached successful final status $baseStatus, removing from inFlightMessages")
-                inFlightMessages.remove(packetId)
-                messageRetryCount.remove(packetId)
-                timeoutJobManager.cancelTimeout(packetId)
-                Log.d(TAG, "Removed packet $packetId from tracking, remaining inFlightMessages: ${inFlightMessages.size}")
-            } else if (baseStatus == BaseMessageStatus.FAILED || 
-                       baseStatus == BaseMessageStatus.ERROR) {
-                // For failed statuses, don't remove from inFlightMessages yet
-                // Let the timeout system handle retries
-                Log.d(TAG, "Message $packetId reached failed status $baseStatus, keeping in inFlightMessages for potential retry")
-                // Don't remove from inFlightMessages - let timeout system handle retries
-            } else if (baseStatus == BaseMessageStatus.SENT) {
-                // For SENT status, we don't remove from inFlightMessages yet (waiting for delivery confirmation)
-                Log.d(TAG, "Message $packetId reached SENT status, waiting for delivery confirmation")
-                // Don't cancel timeout yet - let it wait for delivery confirmation
+            when (baseStatus) {
+                BaseMessageStatus.DELIVERED, BaseMessageStatus.RECEIVED -> {
+
+                    Log.d(TAG, "Message $packetId reached successful final status $baseStatus, removing from inFlightMessages")
+                    inFlightMessages.remove(packetId)
+                    messageRetryCount.remove(packetId)
+                    timeoutJobManager.cancelTimeout(packetId)
+                    Log.d(TAG, "Removed packet $packetId from tracking, remaining inFlightMessages: ${inFlightMessages.size}")
+                }
+                BaseMessageStatus.FAILED, BaseMessageStatus.ERROR -> {
+                    // For failed statuses, don't remove from inFlightMessages yet
+                    // Let the timeout system handle retries
+                    Log.d(TAG, "Message $packetId reached failed status $baseStatus, keeping in inFlightMessages for potential retry")
+                    // Don't remove from inFlightMessages - let timeout system handle retries
+                }
+                BaseMessageStatus.SENT -> {
+                    // For SENT status, we don't remove from inFlightMessages yet (waiting for delivery confirmation)
+                    Log.d(TAG, "Message $packetId reached SENT status, waiting for delivery confirmation")
+                    // Don't cancel timeout yet - let it wait for delivery confirmation
+                }
+                BaseMessageStatus.SENDING -> {
+                    Log.d(TAG, "Message $packetId reached SENDING status")
+                }
             }
         } else {
             Log.w(TAG, "Could not find packet $packetId in flight messages")

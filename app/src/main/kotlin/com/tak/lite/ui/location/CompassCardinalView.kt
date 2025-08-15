@@ -8,8 +8,6 @@ import android.graphics.Typeface
 import android.util.AttributeSet
 import android.view.View
 import kotlin.math.abs
-import kotlin.math.cos
-import kotlin.math.sin
 import kotlin.math.pow
 
 /**
@@ -98,7 +96,6 @@ class CompassCardinalView @JvmOverloads constructor(
         val centerX = width / 2f
         val centerY = height / 2f
         val fontMetrics = paint.fontMetrics
-        val textHeight = fontMetrics.descent - fontMetrics.ascent
         val textBaseline = centerY - (fontMetrics.ascent + fontMetrics.descent) / 2
 
         // Find the primary direction (the one closest to current heading)

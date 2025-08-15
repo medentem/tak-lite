@@ -5,7 +5,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.RemoteInput
@@ -28,7 +27,6 @@ class MessageNotificationManager @Inject constructor(
 ) {
     companion object {
         private const val CHANNEL_ID = "taklite_messages"
-        private const val NOTIFICATION_ID = 3001
         private const val KEY_TEXT_REPLY = "key_text_reply"
         private const val ACTION_REPLY = "com.tak.lite.ACTION_REPLY"
     }
@@ -41,27 +39,23 @@ class MessageNotificationManager @Inject constructor(
     }
 
     private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                context.getString(R.string.notification_channel_messages),
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = context.getString(R.string.notification_channel_description)
-                enableVibration(true)
-            }
-            val notificationManager = context.getSystemService(NotificationManager::class.java)
-            notificationManager.createNotificationChannel(channel)
+        val channel = NotificationChannel(
+            CHANNEL_ID,
+            context.getString(R.string.notification_channel_messages),
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = context.getString(R.string.notification_channel_description)
+            enableVibration(true)
         }
+        val notificationManager = context.getSystemService(NotificationManager::class.java)
+        notificationManager.createNotificationChannel(channel)
     }
 
     fun showMessageNotification(channelId: String, channelName: String, message: String, fromShortName: String) {
         Log.d("MessageNotificationManager", "Creating notification for channel: $channelName, message: $message")
 
-        val fromShortNameDefaulted = if (fromShortName.isEmpty()) {
+        val fromShortNameDefaulted = fromShortName.ifEmpty {
             context.getString(R.string.notification_unknown_sender)
-        } else {
-            fromShortName
         }
 
         // Create conversation history for smart reply
@@ -101,7 +95,7 @@ class MessageNotificationManager @Inject constructor(
             context,
             channelId.hashCode(),
             intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+            PendingIntent.FLAG_UPDATE_CURRENT or (PendingIntent.FLAG_IMMUTABLE)
         )
 
         // Create reply action
@@ -178,7 +172,7 @@ class MessageNotificationManager @Inject constructor(
             context,
             channelId.hashCode(),
             intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+            PendingIntent.FLAG_UPDATE_CURRENT or (PendingIntent.FLAG_IMMUTABLE)
         )
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)

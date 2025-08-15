@@ -17,7 +17,7 @@ enum class MessageStatus {
      * Returns the ordinal value representing the progression of this status.
      * Higher values represent more advanced states in the message lifecycle.
      */
-    fun getProgressionValue(): Int = when (this) {
+    private fun getProgressionValue(): Int = when (this) {
         SENDING -> 0
         SENT -> 1
         DELIVERED -> 2
@@ -44,11 +44,6 @@ enum class MessageStatus {
         // For non-terminal states, only allow progression forward
         return this.getProgressionValue() >= currentStatus.getProgressionValue()
     }
-
-    /**
-     * Checks if this status represents a terminal state that cannot be overridden.
-     */
-    fun isTerminal(): Boolean = this == FAILED || this == ERROR
 }
 
 /**
@@ -64,19 +59,6 @@ data class ChannelMessage(
     var status: MessageStatus = MessageStatus.SENDING,
     val channelId: String  // Make channelId non-null
 ) {
-    /**
-     * Safely updates the message status, preventing backward transitions.
-     * Returns true if the status was updated, false if the update was rejected.
-     */
-    fun updateStatus(newStatus: MessageStatus): Boolean {
-        return if (newStatus.canTransitionFrom(status)) {
-            status = newStatus
-            true
-        } else {
-            false
-        }
-    }
-
     /**
      * Creates a copy of this message with the new status, but only if the transition is valid.
      * Returns null if the status transition is not allowed.
@@ -156,7 +138,7 @@ data class MeshtasticChannel(
     override val allowDelete: Boolean = false,
     override val readyToSend: Boolean = true
 ) : IChannel {
-    override val precision: Int?
+    override val precision: Int
         get() = positionPrecision
 
     enum class ChannelRole {

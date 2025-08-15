@@ -12,15 +12,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class AnnotationRepository @Inject constructor(
-    private val meshProtocolProvider: MeshProtocolProvider,
-    private val context: Context
+    meshProtocolProvider: MeshProtocolProvider,
+    context: Context
 ) {
     private val TAG = "AnnotationRepository"
     private val prefs = context.getSharedPreferences("annotation_prefs", Context.MODE_PRIVATE)
@@ -33,17 +33,7 @@ class AnnotationRepository @Inject constructor(
     private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
     private var meshProtocol = meshProtocolProvider.protocol.value
-    private var protocolJob = repositoryScope.launch {
-        meshProtocolProvider.protocol.collect { newProtocol ->
-            if (meshProtocol !== newProtocol) {
-                meshProtocol = newProtocol
-                meshProtocol.setAnnotationCallback { annotation ->
-                    handleAnnotation(annotation)
-                }
-            }
-        }
-    }
-    
+
     init {
         meshProtocol.setAnnotationCallback { annotation ->
             handleAnnotation(annotation)

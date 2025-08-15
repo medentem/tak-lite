@@ -1,6 +1,5 @@
 package com.tak.lite.di
 
-import android.content.SharedPreferences
 import com.tak.lite.data.model.PredictionModel
 import com.tak.lite.intelligence.KalmanPeerLocationPredictor
 import com.tak.lite.intelligence.LinearPeerLocationPredictor

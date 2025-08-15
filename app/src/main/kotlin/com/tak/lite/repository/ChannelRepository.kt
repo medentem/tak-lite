@@ -16,7 +16,7 @@ import javax.inject.Singleton
 @Singleton
 class ChannelRepository @Inject constructor(
     private val meshNetworkService: MeshNetworkService,
-    private val context: Context
+    context: Context
 ) {
     private val TAG = "ChannelRepository"
     private val prefs = context.getSharedPreferences("channel_prefs", Context.MODE_PRIVATE)

@@ -33,7 +33,7 @@ class MeshNetworkService @Inject constructor(
 ) {
     private val scope = CoroutineScope(Dispatchers.Main)
     private var protocolJob: Job? = null
-    private var meshProtocol: com.tak.lite.di.MeshProtocol = meshProtocolProvider.protocol.value
+    private var meshProtocol: MeshProtocol = meshProtocolProvider.protocol.value
     private val _networkState = MutableStateFlow<MeshNetworkState>(MeshNetworkState.Disconnected)
     val networkState: StateFlow<MeshNetworkState> = _networkState
     private val _peerLocations = MutableStateFlow<Map<String, PeerLocationEntry>>(emptyMap())
@@ -617,56 +617,6 @@ class MeshNetworkService @Inject constructor(
     }
     
     /**
-     * Get current directional bias settings for simulated peers
-     * Useful for debugging and monitoring peer movement patterns
-     */
-    fun getSimulatedPeerBiasSettings(): Map<String, Pair<Double, Double>> {
-        return synchronized(simulatedPeers) {
-            simulatedPeers.keys.associate { peerId ->
-                peerId to Pair(
-                    simulatedPeerCurrentDirections[peerId] ?: 0.0,
-                    simulatedPeerStraightBias[peerId] ?: 0.8
-                )
-            }
-        }
-    }
-    
-    /**
-     * Get movement type distribution for simulated peers
-     */
-    fun getSimulatedPeerMovementDistribution(): Map<MovementType, Int> {
-        return synchronized(simulatedPeerMovementTypes) {
-            simulatedPeerMovementTypes.values.groupingBy { it }.eachCount()
-        }
-    }
-    
-    /**
-     * Get detailed information about all simulated peers
-     */
-    fun getSimulatedPeerDetails(): Map<String, Map<String, Any>> {
-        return synchronized(simulatedPeers) {
-            simulatedPeers.keys.associate { peerId ->
-                val movementType = simulatedPeerMovementTypes[peerId] ?: MovementType.WALKING
-                val direction = simulatedPeerCurrentDirections[peerId] ?: 0.0
-                val bias = simulatedPeerStraightBias[peerId] ?: 0.8
-                val location = simulatedPeers[peerId]
-                
-                peerId to mapOf(
-                    "movementType" to movementType.displayName,
-                    "speedRangeMps" to "${movementType.speedRangeMps.start}-${movementType.speedRangeMps.endInclusive}",
-                    "currentDirection" to direction,
-                    "straightBias" to bias,
-                    "latitude" to (location?.latitude ?: 0.0),
-                    "longitude" to (location?.longitude ?: 0.0),
-                    "timestamp" to (location?.timestamp ?: 0L)
-                )
-            }
-        }
-    }
-    
-    // ===== PHASE 1 & 2 IMPROVEMENTS =====
-    
-    /**
      * Centralized cleanup method for simulated peer data
      * Prevents memory leaks by properly removing all related data
      */
@@ -744,12 +694,6 @@ class MeshNetworkService @Inject constructor(
      */
     private fun getSimulatedPeerCount(): Int = synchronized(simulatedPeers) { simulatedPeers.size }
     
-    private fun updateSimulatedPeer(peerId: String, entry: PeerLocationEntry) {
-        synchronized(simulatedPeers) {
-            simulatedPeers[peerId] = entry
-        }
-    }
-    
     /**
      * Generate a random movement type with realistic distribution
      * 30% stationary, 50% walking, 20% biking
@@ -799,22 +743,6 @@ class MeshNetworkService @Inject constructor(
             if (updateTimes.size > 100) updateTimes.removeAt(0)
         }
         lastUpdateTimestamp = System.currentTimeMillis()
-    }
-    
-    /**
-     * Get performance metrics
-     */
-    fun getPerformanceMetrics(): Map<String, Any> {
-        return synchronized(updateTimes) {
-            mapOf(
-                "averageUpdateTimeMs" to (if (updateTimes.isNotEmpty()) updateTimes.average() else 0.0),
-                "updateCount" to updateTimes.size,
-                "activePeerCount" to getSimulatedPeerCount(),
-                "lastUpdateTimestamp" to lastUpdateTimestamp,
-                "cacheSize" to distanceCache.size(),
-                "cacheHitRate" to (distanceCache.hitCount().toDouble() / (distanceCache.hitCount() + distanceCache.missCount()).toDouble())
-            )
-        }
     }
 }
 

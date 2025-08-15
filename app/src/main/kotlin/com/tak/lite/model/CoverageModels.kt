@@ -53,17 +53,6 @@ data class CoveragePoint(
 )
 
 /**
- * Represents Fresnel zone calculation results for a signal path
- */
-data class FresnelZone(
-    val centerLine: List<LatLng>,
-    val radius: Double, // meters at each point
-    val blockagePercentage: Float, // 0.0 to 1.0
-    val terrainProfile: TerrainProfile,
-    val frequency: Double = 915e6 // 915 MHz default
-)
-
-/**
  * Represents elevation profile along a path
  */
 data class TerrainProfile(
@@ -112,8 +101,8 @@ data class CoverageAnalysisParams(
  * Represents the state of coverage analysis
  */
 sealed class CoverageAnalysisState {
-    object Idle : CoverageAnalysisState()
-    object Calculating : CoverageAnalysisState()
+    data object Idle : CoverageAnalysisState()
+    data object Calculating : CoverageAnalysisState()
     data class Success(val coverageGrid: CoverageGrid) : CoverageAnalysisState()
     data class Error(val message: String) : CoverageAnalysisState()
     data class Progress(val progress: Float, val message: String) : CoverageAnalysisState()

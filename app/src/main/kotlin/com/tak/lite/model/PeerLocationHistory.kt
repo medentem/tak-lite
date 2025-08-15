@@ -2,7 +2,6 @@ package com.tak.lite.model
 
 import kotlinx.serialization.Serializable
 import org.maplibre.android.geometry.LatLng
-import java.util.UUID
 
 @Serializable
 data class PeerLocationEntry(
@@ -26,7 +25,7 @@ data class PeerLocationEntry(
     val altitudeSource: Int? = null, // How altitude was acquired
     val sequenceNumber: Int? = null, // Position sequence number
     val precisionBits: Int? = null, // Precision bits set by sending node
-    val userStatus: com.tak.lite.model.UserStatus? = null // User status color
+    val userStatus: UserStatus? = null // User status color
 ) {
     fun toLatLng(): LatLng = LatLng(latitude, longitude)
     
@@ -81,9 +80,6 @@ data class PeerLocationHistory(
     }
     
     fun getLatestEntry(): PeerLocationEntry? = entries.lastOrNull()
-    
-    fun getSecondLatestEntry(): PeerLocationEntry? = 
-        if (entries.size >= 2) entries[entries.size - 2] else null
         
     /**
      * Validate that entries are in chronological order
@@ -97,13 +93,5 @@ data class PeerLocationHistory(
             }
         }
         return true
-    }
-    
-    /**
-     * Get entries in guaranteed chronological order
-     * Use this when you need to be absolutely sure of the order
-     */
-    fun getChronologicalEntries(): List<PeerLocationEntry> {
-        return entries.sortedBy { it.timestamp }
     }
 }

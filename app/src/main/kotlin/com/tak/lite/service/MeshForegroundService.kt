@@ -3,29 +3,29 @@ package com.tak.lite.service
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
-import androidx.core.app.NotificationCompat
-import com.tak.lite.network.MeshProtocolProvider
-import com.tak.lite.R
-import com.tak.lite.repository.MessageRepository
-import dagger.hilt.android.AndroidEntryPoint
-import javax.inject.Inject
 import android.util.Log
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
-import android.content.Context
-import android.app.PendingIntent
+import androidx.core.app.NotificationCompat
 import com.tak.lite.MainActivity
+import com.tak.lite.R
 import com.tak.lite.di.MeshConnectionState
 import com.tak.lite.di.MeshProtocol
 import com.tak.lite.model.PacketSummary
+import com.tak.lite.network.MeshProtocolProvider
+import com.tak.lite.repository.MessageRepository
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MeshForegroundService : Service() {
@@ -127,7 +127,7 @@ class MeshForegroundService : Service() {
             this,
             0,
             intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+            PendingIntent.FLAG_UPDATE_CURRENT or (PendingIntent.FLAG_IMMUTABLE)
         )
     }
 
@@ -207,7 +207,7 @@ class MeshForegroundService : Service() {
                 // BLE watchdog: if BLE protocol is selected and remains disconnected/failed, nudge reconnection
                 if (protocol is com.tak.lite.network.MeshtasticBluetoothProtocol) {
                     val state = protocol.connectionState.value
-                    if (state is com.tak.lite.di.MeshConnectionState.Disconnected || state is com.tak.lite.di.MeshConnectionState.Error) {
+                    if (state is MeshConnectionState.Disconnected || state is MeshConnectionState.Error) {
                         Log.w("MeshForegroundService", "BLE protocol state ${state::class.java.simpleName}; attempting recovery")
                         try {
                             // Ask protocol to force reset which triggers reconnect logic
@@ -229,16 +229,14 @@ class MeshForegroundService : Service() {
 
     private fun startForegroundServiceNotification() {
         Log.d("MeshForegroundService", "startForegroundServiceNotification called")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Mesh Background Service",
-                NotificationManager.IMPORTANCE_LOW
-            )
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
-            Log.d("MeshForegroundService", "Notification channel created")
-        }
+        val channel = NotificationChannel(
+            CHANNEL_ID,
+            "Mesh Background Service",
+            NotificationManager.IMPORTANCE_LOW
+        )
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(channel)
+        Log.d("MeshForegroundService", "Notification channel created")
         val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("TAKLite Mesh Connection")
             .setContentText("Mesh networking is active in the background")

@@ -16,9 +16,11 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
+import kotlin.math.tan
 
 /**
  * Main coverage analysis engine that orchestrates terrain, Fresnel zone, and peer network analysis
@@ -67,7 +69,7 @@ class CoverageCalculator @Inject constructor(
         private fun calculateAdaptiveResolution(zoomLevel: Int): Double {
             // Logarithmic scaling: res = base * ln(zoom + 1)
             // This provides better performance at low zoom while maintaining detail at high zoom
-            val logZoom = kotlin.math.ln((zoomLevel + 1).toDouble())
+            val logZoom = ln((zoomLevel + 1).toDouble())
             val adaptiveResolution = BASE_RESOLUTION * logZoom
             
             // Apply bounds to prevent extreme values
@@ -432,7 +434,7 @@ class CoverageCalculator @Inject constructor(
             
             // Use the resolution passed from the repository, but apply adaptive scaling
             val baseResolution = params.resolution
-            val resolution = CoverageCalculator.calculateAdaptiveResolution(params.zoomLevel)
+            val resolution = calculateAdaptiveResolution(params.zoomLevel)
             
             android.util.Log.d("CoverageCalculator", "Using adaptive resolution: " +
                 "base=${baseResolution}m, adaptive=${resolution}m, zoomLevel=${params.zoomLevel}")
@@ -462,7 +464,7 @@ class CoverageCalculator @Inject constructor(
                     val timeSavings = estimatedOldTime - precomputeTime
                     
                     android.util.Log.d("CoverageCalculator", "Batched terrain pre-computation completed in ${precomputeTime}ms")
-                    android.util.Log.d("CoverageCalculator", "Performance metrics: ${totalGridPoints} points, ${avgTimePerPoint}ms/point avg, estimated ${timeSavings}ms saved")
+                    android.util.Log.d("CoverageCalculator", "Performance metrics: $totalGridPoints points, ${avgTimePerPoint}ms/point avg, estimated ${timeSavings}ms saved")
                     onProgress(0.28f, "Terrain data pre-computed (${precomputeTime}ms, ${String.format("%.1f", avgTimePerPoint)}ms/point)")
                 } catch (e: Exception) {
                     android.util.Log.w("CoverageCalculator", "Batched terrain pre-computation failed: ${e.message}, falling back to per-point terrain")
@@ -610,7 +612,7 @@ class CoverageCalculator @Inject constructor(
                 "adaptiveSampling=${adaptiveStats.totalSamples} samples " +
                 "(${String.format("%.1f", adaptiveStats.centerPointSamples.toDouble() / adaptiveStats.totalSamples * 100)}% center, " +
                 "${String.format("%.1f", adaptiveStats.detailedSamples.toDouble() / adaptiveStats.totalSamples * 100)}% detailed), " +
-                "incrementalRendering=every ${INCREMENTAL_UPDATE_FREQUENCY} points, " +
+                "incrementalRendering=every $INCREMENTAL_UPDATE_FREQUENCY points, " +
                 "finalGrid=${filteredCoverage.size}x${filteredCoverage[0].size}")
             
             // Final memory cleanup
@@ -738,83 +740,6 @@ class CoverageCalculator @Inject constructor(
         }
         
         resultGrid
-    }
-    
-    /**
-     * Processes a single quadrant of the grid
-     */
-    private suspend fun processGridQuadrant(
-        userLocation: LatLng,
-        userElevation: Double,
-        grid: Array<Array<CoveragePoint>>,
-        rowRange: Pair<Int, Int>,
-        colRange: Pair<Int, Int>,
-        params: CoverageAnalysisParams,
-        terrainAvailable: Boolean,
-        precomputedTerrain: Array<Array<com.tak.lite.model.TerrainCellData>>? = null
-    ): Array<Array<CoveragePoint>> {
-        val (startRow, endRow) = rowRange
-        val (startCol, endCol) = colRange
-        
-        android.util.Log.d("CoverageCalculator", "processGridQuadrant: Processing quadrant ${startRow}-${endRow} x ${startCol}-${endCol} (${(endRow-startRow)*(endCol-startCol)} points)")
-        
-        // Create a temporary grid for this quadrant
-        val quadrantGrid = Array(endRow - startRow) { row ->
-            Array(endCol - startCol) { col ->
-                val originalRow = startRow + row
-                val originalCol = startCol + col
-                val point = grid[originalRow][originalCol]
-                
-                // Initialize with empty coverage
-                point.copy(
-                    coverageProbability = 0f,
-                    signalStrength = -140f,
-                    contributingPeers = emptyList()
-                )
-            }
-        }
-        
-        // Generate center-outward processing order for this quadrant
-        val quadrantProcessingOrder = generateSpiralProcessingOrder(quadrantGrid)
-        
-        // Process quadrant points in center-outward order
-        for ((pointIndex, position) in quadrantProcessingOrder.withIndex()) {
-            val (row, col) = position
-            val originalRow = startRow + row
-            val originalCol = startCol + col
-            val point = grid[originalRow][originalCol]
-            
-            // Log progress every 50 points to track where processing gets stuck
-            if (pointIndex % 50 == 0) {
-                android.util.Log.d("CoverageCalculator", "processGridQuadrant: Processing point ${pointIndex}/${quadrantProcessingOrder.size} at (${originalRow},${originalCol})")
-            }
-                
-                try {
-                    // Calculate coverage for this point using extracted method
-                    val calculatedPoint = computePointCoverage(
-                        sourceLocation = userLocation,
-                        sourceElevation = userElevation,
-                        targetPoint = point,
-                        params = params,
-                        terrainAvailable = terrainAvailable,
-                        precomputedTerrain = precomputedTerrain,
-                        precomputedRow = originalRow,
-                        precomputedCol = originalCol,
-                        enableDetailedLogging = false
-                    )
-                    quadrantGrid[row][col] = calculatedPoint
-                } catch (e: Exception) {
-                    val errorPoint = point.copy(
-                        coverageProbability = 0f,
-                        signalStrength = -140f,
-                        contributingPeers = emptyList()
-                    )
-                    quadrantGrid[row][col] = errorPoint
-                }
-            }
-        
-        android.util.Log.d("CoverageCalculator", "processGridQuadrant: Completed quadrant ${startRow}-${endRow} x ${startCol}-${endCol}")
-        return quadrantGrid
     }
     
     /**
@@ -1179,8 +1104,11 @@ class CoverageCalculator @Inject constructor(
             params.center
         }
         val userTerrainData = try {
-            val cellSize = targetResolution
-            terrainAnalyzer.getAdaptiveElevationForPoint(userLocation, cellSize, params.zoomLevel)
+            terrainAnalyzer.getAdaptiveElevationForPoint(
+                userLocation,
+                targetResolution,
+                params.zoomLevel
+            )
         } catch (e: Exception) {
             android.util.Log.w("CoverageCalculator", "Failed to get user elevation for refinement: ${e.message}")
             com.tak.lite.model.TerrainCellData(0.0, 0.0, 0.0, 0.0, "fallback")
@@ -1375,7 +1303,7 @@ class CoverageCalculator @Inject constructor(
             
             // Download ALL missing tiles (no artificial limit for comprehensive coverage)
             val totalTiles = tilesToDownload.size
-            android.util.Log.d("CoverageCalculator", "Downloading ALL ${totalTiles} missing terrain tiles for comprehensive coverage analysis")
+            android.util.Log.d("CoverageCalculator", "Downloading ALL $totalTiles missing terrain tiles for comprehensive coverage analysis")
             
             var successCount = 0
             
@@ -1519,11 +1447,11 @@ class CoverageCalculator @Inject constructor(
     /**
      * Converts lat/lon to tile coordinates
      */
-    private fun latLonToTile(lat: Double, lon: Double, zoom: Int): Pair<Int, Int>? {
+    private fun latLonToTile(lat: Double, lon: Double, zoom: Int): Pair<Int, Int> {
         val n = 2.0.pow(zoom.toDouble())
         val x = ((lon + 180.0) / 360.0 * n).toInt()
         val latRad = Math.toRadians(lat)
-        val y = ((1.0 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2.0 * n).toInt()
+        val y = ((1.0 - ln(tan(latRad) + 1 / cos(latRad)) / Math.PI) / 2.0 * n).toInt()
         return Pair(x, y)
     }
     

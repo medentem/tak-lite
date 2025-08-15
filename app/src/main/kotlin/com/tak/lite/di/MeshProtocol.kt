@@ -7,29 +7,28 @@ import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PacketSummary
 import com.tak.lite.model.PeerLocationEntry
 import com.tak.lite.network.MeshPeer
-import com.tak.lite.network.MeshtasticBluetoothProtocol
 import kotlinx.coroutines.flow.StateFlow
 import org.maplibre.android.geometry.LatLng
 
 sealed class MeshConnectionState {
     data class Connected(val deviceInfo: DeviceInfo?) : MeshConnectionState()
     data class ServiceConnected(val deviceInfo: DeviceInfo?) : MeshConnectionState()
-    object Disconnected : MeshConnectionState()
-    object Connecting : MeshConnectionState()
+    data object Disconnected : MeshConnectionState()
+    data object Connecting : MeshConnectionState()
     data class Error(val message: String) : MeshConnectionState()
 }
 
 // Add config download progress reporting
 sealed class ConfigDownloadStep {
-    object NotStarted : ConfigDownloadStep()
-    object SendingHandshake : ConfigDownloadStep()
-    object WaitingForConfig : ConfigDownloadStep()
-    object DownloadingConfig : ConfigDownloadStep()
-    object DownloadingModuleConfig : ConfigDownloadStep()
-    object DownloadingChannel : ConfigDownloadStep()
-    object DownloadingNodeInfo : ConfigDownloadStep()
-    object DownloadingMyInfo : ConfigDownloadStep()
-    object Complete : ConfigDownloadStep()
+    data object NotStarted : ConfigDownloadStep()
+    data object SendingHandshake : ConfigDownloadStep()
+    data object WaitingForConfig : ConfigDownloadStep()
+    data object DownloadingConfig : ConfigDownloadStep()
+    data object DownloadingModuleConfig : ConfigDownloadStep()
+    data object DownloadingChannel : ConfigDownloadStep()
+    data object DownloadingNodeInfo : ConfigDownloadStep()
+    data object DownloadingMyInfo : ConfigDownloadStep()
+    data object Complete : ConfigDownloadStep()
     data class Error(val message: String) : ConfigDownloadStep()
 }
 
@@ -61,7 +60,7 @@ interface MeshProtocol {
     fun sendAnnotation(annotation: MapAnnotation)
     fun sendLocationUpdate(latitude: Double, longitude: Double)
     fun setAnnotationCallback(callback: (MapAnnotation) -> Unit)
-    fun setPeerLocationCallback(callback: (Map<String, com.tak.lite.model.PeerLocationEntry>) -> Unit)
+    fun setPeerLocationCallback(callback: (Map<String, PeerLocationEntry>) -> Unit)
     fun sendAudioData(audioData: ByteArray, channelId: String = "default")
     fun setLocalNickname(nickname: String)
     fun sendStateSync(

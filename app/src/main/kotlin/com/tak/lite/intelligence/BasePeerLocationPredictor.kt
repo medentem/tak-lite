@@ -43,7 +43,7 @@ abstract class BasePeerLocationPredictor : IPeerLocationPredictor {
     /**
      * Normalize longitude to [-180, 180] range to avoid dateline issues.
      */
-    internal fun normalizeLongitude(lonDeg: Double): Double {
+    private fun normalizeLongitude(lonDeg: Double): Double {
         if (lonDeg.isNaN() || lonDeg.isInfinite()) return lonDeg
         val r = ((lonDeg + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
         // Map -180 exclusive to 180 for consistency
@@ -247,7 +247,7 @@ abstract class BasePeerLocationPredictor : IPeerLocationPredictor {
     /**
      * Calculate confidence for position-calculated velocity based on data consistency
      */
-    internal fun calculatePositionVelocityConfidence(entries: List<PeerLocationEntry>): Double {
+    private fun calculatePositionVelocityConfidence(entries: List<PeerLocationEntry>): Double {
         if (entries.size < 3) return 0.6 // Lower confidence for insufficient data
 
         val speeds = mutableListOf<Double>()
@@ -302,7 +302,7 @@ abstract class BasePeerLocationPredictor : IPeerLocationPredictor {
     /**
      * Calculate velocity from position changes (fallback method)
      */
-    internal fun calculateVelocityFromPositionChanges(entries: List<PeerLocationEntry>): Triple<Double, Double, String> {
+    private fun calculateVelocityFromPositionChanges(entries: List<PeerLocationEntry>): Triple<Double, Double, String> {
         if (entries.size < 2) return Triple(0.0, 0.0, "insufficient_data")
 
         data class Segment(val speed: Double, val heading: Double, val dt: Double, val distance: Double)
@@ -341,7 +341,7 @@ abstract class BasePeerLocationPredictor : IPeerLocationPredictor {
         // Keep segments with sufficient duration to avoid tiny-dt noise
         val minDt = 5.0
         val filteredByDt = recent.filter { it.dt >= minDt }
-        val candidates = if (filteredByDt.isNotEmpty()) filteredByDt else recent
+        val candidates = filteredByDt.ifEmpty { recent }
 
         // Hard cap for position-derived speeds to avoid early outliers biasing init
         val hardSpeedCap = 100.0 // m/s (~224 mph) to allow driving/flying scenarios
@@ -411,7 +411,7 @@ abstract class BasePeerLocationPredictor : IPeerLocationPredictor {
     /**
      * Calculate confidence for device-provided velocity based on GPS quality data
      */
-    internal fun calculateDeviceVelocityConfidence(entry: PeerLocationEntry): Double {
+    private fun calculateDeviceVelocityConfidence(entry: PeerLocationEntry): Double {
         var confidence = 0.8 // Base confidence for device velocity data
 
         // Boost confidence based on GPS quality indicators

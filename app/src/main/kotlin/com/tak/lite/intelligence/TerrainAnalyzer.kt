@@ -44,7 +44,6 @@ class TerrainAnalyzer @Inject constructor(
     
     // Enhanced spatial cache with LRU eviction
     private val spatialCache = LinkedHashMap<String, Double>(cacheMaxSize, 0.75f, true)
-    private val spatialCacheMaxSize = 150 // Larger for better hit rates
     
     // Adaptive sampling statistics
     private var adaptiveSamplingStats = AdaptiveSamplingStats()
@@ -69,10 +68,6 @@ class TerrainAnalyzer @Inject constructor(
         
         // Spatial cache constants
         private const val SPATIAL_CACHE_PRECISION = 0.001 // ~100m precision for cache keys
-        private const val BATCH_SIZE = 10 // Further reduced for older devices
-        
-        // Enhanced spatial indexing constants
-        private const val SPATIAL_INDEX_PRECISION = 0.01 // ~1km precision for better cache hits
     }
     
     /**
@@ -90,7 +85,7 @@ class TerrainAnalyzer @Inject constructor(
     /**
      * Gets terrain profile along a path between two points with adaptive sampling
      */
-    suspend fun getTerrainProfile(
+    private suspend fun getTerrainProfile(
         startPoint: LatLng,
         endPoint: LatLng,
         sampleDistance: Double = DEFAULT_SAMPLE_DISTANCE,
@@ -405,8 +400,8 @@ class TerrainAnalyzer @Inject constructor(
         
         // Check each sample point for the specific zoom level
         var availablePoints = 0
-        var totalPoints = samplePoints.size
-        var missingTiles = mutableSetOf<String>()
+        val totalPoints = samplePoints.size
+        val missingTiles = mutableSetOf<String>()
         
         for (point in samplePoints) {
             val elevation = getOfflineElevation(point.latitude, point.longitude, zoomLevel, filesDir)
@@ -472,32 +467,13 @@ class TerrainAnalyzer @Inject constructor(
             "center=(${bounds.center.latitude}, ${bounds.center.longitude})")
         false
     }
-    
-    /**
-     * Data class for terrain profile analysis results
-     */
-    data class TerrainProfileAnalysis(
-        val terrainProfile: TerrainProfile,
-        val signalReceivingPeaks: List<TerrainPoint>,
-        val shadowBoundaries: List<ShadowBoundary>,
-        val userEffectiveHeight: Double
-    )
-    
-    /**
-     * Data class representing a shadow boundary
-     */
-    data class ShadowBoundary(
-        val startDistance: Double,
-        val endDistance: Double,
-        val shadowPoint: TerrainPoint
-    )
 
     /**
      * Fast line-of-sight check for coverage analysis - much faster than full terrain profiling
      * Returns true if line of sight is clear, false if blocked
      * Optimized with binary search to reduce samples from 10-20 to ~4-5
      */
-    suspend fun fastLineOfSightCheck(
+    private suspend fun fastLineOfSightCheck(
         startPoint: LatLng,
         endPoint: LatLng,
         startElevation: Double,
@@ -531,7 +507,7 @@ class TerrainAnalyzer @Inject constructor(
      * Binary search implementation for line-of-sight obstruction detection
      * Reduces terrain sampling from O(N) to O(log N) with <5% accuracy loss
      */
-    private suspend fun binarySearchLineOfSight(
+    private fun binarySearchLineOfSight(
         startPoint: LatLng,
         endPoint: LatLng,
         startHeight: Double,
@@ -668,32 +644,6 @@ class TerrainAnalyzer @Inject constructor(
             )
         }
     }
-
-    /**
-     * Gets cache statistics for performance monitoring
-     */
-    fun getCacheStatistics(): CacheStatistics {
-        return CacheStatistics(
-            elevationCacheSize = elevationCache.size,
-            elevationCacheMaxSize = cacheMaxSize,
-            terrainAnalysisCacheSize = terrainAnalysisCache.size,
-            terrainAnalysisCacheMaxSize = terrainCacheMaxSize,
-            spatialCacheSize = synchronized(spatialCache) { spatialCache.size },
-            spatialCacheMaxSize = spatialCacheMaxSize
-        )
-    }
-    
-    /**
-     * Data class for cache statistics
-     */
-    data class CacheStatistics(
-        val elevationCacheSize: Int,
-        val elevationCacheMaxSize: Int,
-        val terrainAnalysisCacheSize: Int,
-        val terrainAnalysisCacheMaxSize: Int,
-        val spatialCacheSize: Int,
-        val spatialCacheMaxSize: Int
-    )
     
     /**
      * Data class for adaptive sampling statistics
@@ -730,7 +680,7 @@ class TerrainAnalyzer @Inject constructor(
      * Smart terrain sampling with adaptive resolution and fallback support
      * Returns comprehensive terrain data for a grid cell with optimizations
      */
-    suspend fun getAdaptiveElevation(
+    private suspend fun getAdaptiveElevation(
         cellBounds: LatLngBounds,
         zoomLevel: Int = DEFAULT_ZOOM_LEVEL
     ): TerrainCellData = withContext(Dispatchers.IO) {
@@ -918,7 +868,7 @@ class TerrainAnalyzer @Inject constructor(
     /**
      * Clears all download tracking data
      */
-    fun clearDownloadTracking() {
+    private fun clearDownloadTracking() {
         activeDownloads.clear()
         downloadLocks.clear()
         android.util.Log.d("TerrainAnalyzer", "Cleared all download tracking data")

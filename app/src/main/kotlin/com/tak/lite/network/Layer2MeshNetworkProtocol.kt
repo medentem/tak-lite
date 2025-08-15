@@ -41,6 +41,7 @@ import java.net.InetAddress
 import java.nio.ByteBuffer
 import javax.inject.Inject
 import kotlin.coroutines.CoroutineContext
+import kotlin.math.abs
 
 class Layer2MeshNetworkProtocol @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -57,7 +58,6 @@ class Layer2MeshNetworkProtocol @Inject constructor(
     private val STATE_REBROADCAST_INTERVAL_MS = 10000L // 10 seconds
     private val MAX_RETRIES = 3
     private val RETRY_DELAY_MS = 1000L
-    private val PEER_CACHE_SIZE = 100
     private val PEER_CACHE_FILE = "peer_cache.json"
     
     private var discoveryJob: Job? = null
@@ -73,13 +73,12 @@ class Layer2MeshNetworkProtocol @Inject constructor(
     private var annotationCallback: ((MapAnnotation) -> Unit)? = null
     
     private val peerLocations = mutableMapOf<String, PeerLocationEntry>()
-    private var peerLocationCallback: ((Map<String, com.tak.lite.model.PeerLocationEntry>) -> Unit)? = null
+    private var peerLocationCallback: ((Map<String, PeerLocationEntry>) -> Unit)? = null
     
     private val json = Json { ignoreUnknownKeys = true }
     
-    var localNickname: String = ""
-        private set
-    
+    private var localNickname: String = ""
+
     private var annotationProvider: (() -> List<MapAnnotation>)? = null
     
     private var network: Network? = null
@@ -90,13 +89,11 @@ class Layer2MeshNetworkProtocol @Inject constructor(
     
     private val peerMetrics = mutableMapOf<String, ConnectionMetrics>()
     private val PING_INTERVAL_MS = 5000L
-    private val METRICS_WINDOW_SIZE = 10
     private val MIN_PEER_TIMEOUT_MS = 5000L
     private val MAX_PEER_TIMEOUT_MS = 30000L
     
     private var currentStateVersion = StateVersion(0, System.currentTimeMillis(), "")
     private val stateHistory = mutableMapOf<String, StateVersion>()
-    private val STATE_HISTORY_SIZE = 100
     
     private val peerCache = mutableMapOf<String, CachedPeer>()
     private var currentDiscoveryInterval = DISCOVERY_INTERVAL_MS
@@ -208,7 +205,7 @@ class Layer2MeshNetworkProtocol @Inject constructor(
         }
     }
     
-    fun startDiscovery(callback: (List<MeshPeer>) -> Unit) {
+    private fun startDiscovery(callback: (List<MeshPeer>) -> Unit) {
         peerUpdateCallback = callback
         loadPeerCache()
         
@@ -492,7 +489,7 @@ class Layer2MeshNetworkProtocol @Inject constructor(
             val peerId = loc.peerId
             
             // Create enhanced location entry
-            val locationEntry = com.tak.lite.model.PeerLocationEntry(
+            val locationEntry = PeerLocationEntry(
                 timestamp = loc.timestamp,
                 latitude = loc.latitude,
                 longitude = loc.longitude
@@ -522,11 +519,11 @@ class Layer2MeshNetworkProtocol @Inject constructor(
         annotationCallback = callback
     }
     
-    override fun setPeerLocationCallback(callback: (Map<String, com.tak.lite.model.PeerLocationEntry>) -> Unit) {
+    override fun setPeerLocationCallback(callback: (Map<String, PeerLocationEntry>) -> Unit) {
         peerLocationCallback = callback
     }
     
-    fun stopDiscovery() {
+    private fun stopDiscovery() {
         discoveryJob?.cancel()
         listenerJob?.cancel()
         annotationListenerJob?.cancel()
@@ -664,7 +661,7 @@ class Layer2MeshNetworkProtocol @Inject constructor(
     override fun sendStateSync(
         toIp: String,
         channels: List<IChannel>,
-        peerLocations: Map<String, com.tak.lite.model.PeerLocationEntry>,
+        peerLocations: Map<String, PeerLocationEntry>,
         annotations: List<MapAnnotation>,
         partialUpdate: Boolean,
         updateFields: Set<String>
@@ -813,7 +810,7 @@ class Layer2MeshNetworkProtocol @Inject constructor(
         val newLatency = (metrics.latency * (1 - alpha) + latency * alpha).toLong()
         
         // Calculate jitter (variation in latency)
-        val jitter = Math.abs(newLatency - metrics.latency)
+        val jitter = abs(newLatency - metrics.latency)
         val newJitter = (metrics.jitter * (1 - alpha) + jitter * alpha).toLong()
         
         // Update packet loss based on ACKs

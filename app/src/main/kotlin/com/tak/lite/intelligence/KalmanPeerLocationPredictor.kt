@@ -473,8 +473,8 @@ class KalmanPeerLocationPredictor @Inject constructor() : BasePeerLocationPredic
         val ImKH = subtract44(I, KH)
         val ImKH_P = mm44(ImKH, P)
         var newP = add44(mm44(ImKH_P, transpose44(ImKH)),
-            addOuterScaled4(doubleArrayOf(K00, K10, K20, K30), rv, doubleArrayOf(K00, K10, K20, K30))
-                .let { add44(it, addOuterScaled4(doubleArrayOf(K01, K11, K21, K31), rv, doubleArrayOf(K01, K11, K21, K31))) })
+            add44(addOuterScaled4(doubleArrayOf(K00, K10, K20, K30), rv, doubleArrayOf(K00, K10, K20, K30)), addOuterScaled4(doubleArrayOf(K01, K11, K21, K31), rv, doubleArrayOf(K01, K11, K21, K31)))
+        )
 
         newP = symmetrizeCovariance(newP)
         return KalmanState(state.originLat, state.originLon, updX, updY, updVx, updVy, newP, state.lastUpdateTime)

@@ -19,8 +19,8 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import com.tak.lite.R
-import com.tak.lite.ui.location.CompassQuality
-import kotlin.math.*
+import kotlin.math.abs
+import kotlin.math.sqrt
 
 class CompassCalibrationActivity : AppCompatActivity(), SensorEventListener {
     
@@ -44,7 +44,6 @@ class CompassCalibrationActivity : AppCompatActivity(), SensorEventListener {
     // Figure-8 detection
     private val motionBuffer = mutableListOf<MotionSample>()
     private val maxBufferSize = 100
-    private var lastMotionTime = 0L
     private var figure8Detected = false
     private var calibrationQuality = 0f
     

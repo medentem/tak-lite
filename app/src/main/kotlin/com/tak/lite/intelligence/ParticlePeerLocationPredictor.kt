@@ -40,7 +40,6 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
     }
     
     // Performance tracking
-    private var lastPredictionTimeMs = 0L
     private var averagePredictionTimeMs = 100L
     private var predictionCount = 0L
     
@@ -610,7 +609,7 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
             // PERFORMANCE TRACKING: Update performance metrics
             val predictionTimeMs = System.currentTimeMillis() - startTime
             updatePerformanceTracking(predictionTimeMs)
-            Log.d(TAG, "Particle filter: Prediction completed in ${predictionTimeMs}ms using ${adaptiveParticleCount} particles")
+            Log.d(TAG, "Particle filter: Prediction completed in ${predictionTimeMs}ms using $adaptiveParticleCount particles")
 
             return prediction // TODO: particles are used to generate a cone. predictedParticles
         } catch (e: Exception) {
@@ -712,10 +711,7 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
             return null
         }
 
-        val predLat = meanLat
-        val predLon = meanLon
-
-        Log.d(TAG, "Particle filter: Weighted mean position = ($predLat, $predLon)")
+        Log.d(TAG, "Particle filter: Weighted mean position = ($meanLat, $meanLon)")
 
 
         // FIXED: Calculate velocity from actual particle velocities (already in degrees/second)
@@ -774,10 +770,11 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
             }
 
             // Calculate fallback heading from current position to predicted position
-            val fallbackHeading = calculateBearing(latest.latitude, latest.longitude, predLat, predLon)
+            val fallbackHeading =
+                calculateBearing(latest.latitude, latest.longitude, meanLat, meanLon)
 
             Log.d(TAG, "Particle filter: Using median speed as fallback: ${String.format("%.2f", medianSpeed)}m/s, heading: ${fallbackHeading.toInt()}°")
-            return Quadruple(predLat, predLon, medianSpeed, (fallbackHeading + 360) % 360)
+            return Quadruple(meanLat, meanLon, medianSpeed, (fallbackHeading + 360) % 360)
         }
 
         // Calculate weighted average heading using circular mean
@@ -809,7 +806,7 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
             atan2(sinSum, cosSum) * RAD_TO_DEG
         } else {
             // Fallback: calculate heading from current position to predicted position
-            calculateBearing(latest.latitude, latest.longitude, predLat, predLon)
+            calculateBearing(latest.latitude, latest.longitude, meanLat, meanLon)
         }
         
         // COORDINATE SYSTEM ANALYSIS: Check if circular mean is reasonable
@@ -870,12 +867,13 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
         }
 
         // FIXED: Validate heading consistency with movement direction - less strict threshold
-        val predictedHeading = calculateBearing(latest.latitude, latest.longitude, predLat, predLon)
+        val predictedHeading = calculateBearing(latest.latitude, latest.longitude, meanLat, meanLon)
         val headingDifference = abs(normalizeAngle180(finalWeightedHeading - predictedHeading))
 
         // DEBUG: Add detailed logging for heading analysis
         Log.d(TAG, "Particle filter: HEADING_DEBUG - weightedHeading=${finalWeightedHeading.toInt()}°, predictedHeading=${predictedHeading.toInt()}°, difference=${headingDifference.toInt()}°")
-        Log.d(TAG, "Particle filter: HEADING_DEBUG - currentPos=(${latest.latitude}, ${latest.longitude}), predictedPos=(${predLat}, ${predLon})")
+        Log.d(TAG,
+            "Particle filter: HEADING_DEBUG - currentPos=(${latest.latitude}, ${latest.longitude}), predictedPos=($meanLat, $meanLon)")
 
         if (headingDifference > 90.0) { // FIXED: Reduced threshold from 120° to 90° since we fixed coordinate system
             Log.w(TAG, "Particle filter: Large heading difference detected: particle=${finalWeightedHeading.toInt()}°, predicted=${predictedHeading.toInt()}°, diff=${headingDifference.toInt()}°")
@@ -895,11 +893,16 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
                 predictedHeading
             }
 
-            return Quadruple(predLat, predLon, finalValidatedSpeed, normalizeAngle360(correctedHeading))
+            return Quadruple(
+                meanLat,
+                meanLon,
+                finalValidatedSpeed,
+                normalizeAngle360(correctedHeading)
+            )
         }
 
         // Log detailed information for debugging
-        val distanceFromCurrent = haversine(latest.latitude, latest.longitude, predLat, predLon)
+        val distanceFromCurrent = haversine(latest.latitude, latest.longitude, meanLat, meanLon)
         val expectedDistance = finalValidatedSpeed * predictionTimeSeconds
         Log.d(TAG, "Particle filter: Final prediction analysis:")
         Log.d(TAG, "  - Distance from current position: ${distanceFromCurrent.toInt()}m")
@@ -910,7 +913,12 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
         Log.d(TAG, "  - Distance ratio (actual/expected): ${if (expectedDistance > 0) distanceFromCurrent / expectedDistance else 0.0}")
         Log.d(TAG, "  - Speed validation: original=${String.format("%.2f", weightedSpeed)}m/s, final=${String.format("%.2f", finalValidatedSpeed)}m/s")
 
-        return Quadruple(predLat, predLon, finalValidatedSpeed, normalizeAngle360(finalWeightedHeading))
+        return Quadruple(
+            meanLat,
+            meanLon,
+            finalValidatedSpeed,
+            normalizeAngle360(finalWeightedHeading)
+        )
     }
 
     private fun resampleParticles(particles: MutableList<Particle>, movementPattern: MovementPattern) {
@@ -1064,7 +1072,7 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
         prediction: LocationPrediction,
         history: PeerLocationHistory,
         config: PredictionConfig
-    ): ConfidenceCone? {
+    ): ConfidenceCone {
         if (prediction.predictedParticles.isNullOrEmpty()) {
             Log.w(TAG, "Particle cone: No particles provided")
             return ConfidenceCone(
@@ -1505,7 +1513,7 @@ class ParticlePeerLocationPredictor @Inject constructor() : BasePeerLocationPred
      * Test coordinate system conversions to verify they are working correctly
      * This method can be called to validate the coordinate system implementation
      */
-    fun testCoordinateSystemConversions() {
+    private fun testCoordinateSystemConversions() {
         Log.d(TAG, "COORDINATE_ANALYSIS: Starting coordinate system validation")
         
         // Test 1: North direction (0°)

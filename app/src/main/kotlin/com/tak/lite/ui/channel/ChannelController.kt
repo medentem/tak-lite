@@ -8,18 +8,16 @@ import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.TextView
 import androidx.lifecycle.LifecycleCoroutineScope
-import androidx.lifecycle.LifecycleOwner
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.tak.lite.R
-import com.tak.lite.data.model.IChannel
 import com.tak.lite.di.MeshConnectionState
 import com.tak.lite.network.MeshPeer
 import com.tak.lite.network.MeshProtocolProvider
 import com.tak.lite.ui.peer.PeerAdapter
 import com.tak.lite.viewmodel.ChannelViewModel
-import com.tak.lite.viewmodel.MessageViewModel
 import com.tak.lite.viewmodel.MeshNetworkViewModel
+import com.tak.lite.viewmodel.MessageViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -44,7 +42,7 @@ class ChannelController @Inject constructor(
     private var peerAdapter: PeerAdapter? = null
     private var showOlderPeers = false
 
-    fun setupChannelButton(peerIdToNickname: Map<String, String?>) {
+    fun setupChannelButton() {
         val channelButton = activity.findViewById<ImageButton>(R.id.groupAudioButton)
         channelButton.setOnClickListener {
             val rootView = activity.findViewById<View>(android.R.id.content) as? FrameLayout ?: return@setOnClickListener
@@ -314,7 +312,8 @@ class ChannelController @Inject constructor(
 
     private fun updateChannelManagementButtons(overlay: View, allowsChannelManagement: Boolean) {
         if (allowsChannelManagement) {
-            overlay.findViewById<View>(R.id.channelManagementButtons)?.visibility = View.VISIBLE
+            val channelManagementButtons = overlay.findViewById<View>(R.id.channelManagementButtons)
+            channelManagementButtons?.visibility = View.VISIBLE
             overlay.findViewById<View>(R.id.addChannelButton)?.setOnClickListener {
                 showAddChannelDialog()
             }
@@ -332,7 +331,7 @@ class ChannelController @Inject constructor(
                 currentOverlay = null
                 val intent = Intent(activity, ChannelManagementActivity::class.java)
                 activity.startActivity(intent)
-                overlay.animate().translationX(overlay.findViewById<View>(R.id.channelManagementButtons)?.width?.toFloat() ?: 0f).setDuration(300).withEndAction {
+                overlay.animate().translationX(channelManagementButtons?.width?.toFloat() ?: 0f).setDuration(300).withEndAction {
                     (overlay.parent as? FrameLayout)?.removeView(overlay)
                 }.start()
             }

@@ -439,7 +439,7 @@ abstract class MeshtasticBaseProtocol(
             } else {
                 // Fallback: check for any recent requests to this peer (for broadcast updates)
                 val now = System.currentTimeMillis()
-                val pendingRequest = pendingLocationRequests.entries.find { (_, request) ->
+                val pendingRequest = pendingLocationRequests.entries.find { (_f, request) ->
                     request.peerId == peerId && 
                     (now - request.timestamp) < 30000 &&  // Within 30 seconds of request
                     (now - request.timestamp) > 1000      // At least 1 second after request
@@ -541,7 +541,7 @@ abstract class MeshtasticBaseProtocol(
         }
     }
 
-    internal fun handleRoutingPacket(routing: MeshProtos.Routing, fromId: String, requestId: Int) {
+    private fun handleRoutingPacket(routing: MeshProtos.Routing, fromId: String, requestId: Int) {
         // Check if this is a response to one of our messages
         val packet = inFlightMessages.remove(requestId)
         if (packet != null) {
@@ -689,7 +689,7 @@ abstract class MeshtasticBaseProtocol(
     }
 
     internal fun handleQueueStatus(queueStatus: MeshProtos.QueueStatus) {
-        Log.d(TAG, "Received QueueStatus: ${queueStatus}")
+        Log.d(TAG, "Received QueueStatus: $queueStatus")
         val (success, isFull, meshPacketId) = with(queueStatus) {
             Triple(res == 0, free == 0, meshPacketId)
         }
@@ -705,10 +705,10 @@ abstract class MeshtasticBaseProtocol(
 
         // Complete the future for this packet
         if (meshPacketId != 0) {
-            queueResponse.remove(meshPacketId.toInt())?.complete(success)
+            queueResponse.remove(meshPacketId)?.complete(success)
 
             // Update message status if this was a text message
-            val packet = inFlightMessages[meshPacketId.toInt()]
+            val packet = inFlightMessages[meshPacketId]
             if (packet != null) {
                 val newStatus = if (success) MessageStatus.SENT else MessageStatus.ERROR
                 updateMessageStatusForPacket(packet, newStatus)
@@ -768,9 +768,9 @@ abstract class MeshtasticBaseProtocol(
                 channelMessages[messageIndex] = updatedMessage
                 currentMessages[channelId] = channelMessages
                 _channelMessages.value = currentMessages
-                Log.d(TAG, "Updated message ${unsignedRequestId} status from ${currentMessage.status} to ${newStatus}")
+                Log.d(TAG, "Updated message $unsignedRequestId status from ${currentMessage.status} to $newStatus")
             } else {
-                Log.w(TAG, "Rejected status update for message ${unsignedRequestId}: cannot transition from ${currentMessage.status} to ${newStatus}")
+                Log.w(TAG, "Rejected status update for message ${unsignedRequestId}: cannot transition from ${currentMessage.status} to $newStatus")
             }
         } else {
             Log.e(TAG, "Could not find message with id $unsignedRequestId in channel $channelId")
@@ -782,7 +782,7 @@ abstract class MeshtasticBaseProtocol(
      * Queue a packet for sending. This is the main entry point for all packet queuing.
      * @param packet The MeshPacket to queue
      */
-    internal fun queuePacket(packet: MeshProtos.MeshPacket) {
+    private fun queuePacket(packet: MeshProtos.MeshPacket) {
         Log.d(TAG, "Queueing packet id=${packet.id}, type=${packet.decoded.portnum}")
         queuedPackets.offer(packet)
         startPacketQueue()

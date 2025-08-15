@@ -27,10 +27,6 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     private val TAG = "MeshtasticBluetoothProtocol"
     // Official Meshtastic Service UUIDs and Characteristics
     private val MESHTASTIC_SERVICE_UUID: UUID = UUID.fromString("6ba1b218-15a8-461f-9fa8-5dcae273eafd")
-    private val FROMRADIO_CHARACTERISTIC_UUID: UUID = UUID.fromString("2c55e69e-4993-11ed-b878-0242ac120002")
-    private val TORADIO_CHARACTERISTIC_UUID: UUID = UUID.fromString("f75c76d2-129e-4dad-a1dd-7866124401e7")
-    private val FROMNUM_CHARACTERISTIC_UUID: UUID = UUID.fromString("ed9da18c-a800-4f66-a670-aa7547e34453")
-
 
     /**
      * Generate a random nonce for handshake security
@@ -150,7 +146,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     /**
      * Send a packet to the Bluetooth device. This should only be called by the queue processor.
      * Handles both byte array and MeshPacket inputs.
-     * @param data Either a byte array containing a MeshPacket or a MeshPacket directly
+     * @param packet a MeshPacket
      * @return true if the packet was successfully queued, false otherwise
      */
     override fun sendPacket(packet: MeshProtos.MeshPacket): Boolean {
@@ -192,7 +188,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
         Log.i(TAG, "Starting Meshtastic config handshake with nonce=$nonce")
         _configDownloadStep.value = ConfigDownloadStep.SendingHandshake
         _configStepCounters.value = emptyMap()  // Reset counters before starting handshake
-        val toRadio = com.geeksville.mesh.MeshProtos.ToRadio.newBuilder()
+        val toRadio = ToRadio.newBuilder()
             .setWantConfigId(nonce)
             .build()
         val toRadioBytes = toRadio.toByteArray()
@@ -335,7 +331,7 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             Log.e(TAG, "handleIncomingPacket: Received packet size ${data.size} exceeds safe MTU payload (252 bytes)")
         }
         try {
-            val fromRadio = com.geeksville.mesh.MeshProtos.FromRadio.parseFrom(data)
+            val fromRadio = MeshProtos.FromRadio.parseFrom(data)
             Log.d(TAG, "Parsed FromRadio: $fromRadio")
             when (fromRadio.payloadVariantCase) {
                 com.geeksville.mesh.MeshProtos.FromRadio.PayloadVariantCase.CONFIG -> {
@@ -506,55 +502,5 @@ class MeshtasticBluetoothProtocol @Inject constructor(
     
     override fun getLocalUserInfo(): Pair<String, String>? {
         return super.getLocalUserInfoInternal()
-    }
-
-    /**
-     * Nuclear option: Force a complete Bluetooth adapter reset
-     * This should only be used when the OS Bluetooth stack is completely stuck
-     * WARNING: This will disconnect ALL Bluetooth devices and restart the Bluetooth stack
-     */
-    fun forceBluetoothAdapterReset() {
-        Log.w(TAG, "NUCLEAR OPTION: Force Bluetooth adapter reset requested")
-        deviceManager.forceBluetoothAdapterReset()
-
-        // Also cleanup protocol state
-        cleanupState()
-    }
-
-    /**
-     * Get detailed OS-level Bluetooth connection information for debugging
-     * @return String with detailed OS connection information
-     */
-    fun getOsConnectionInfo(): String {
-        return deviceManager.getOsConnectionInfo()
-    }
-
-
-
-    /**
-     * Get a list of all connected devices that support the Meshtastic service
-     * This can be useful for debugging and manual connection scenarios
-     * @return List of connected devices that support the Meshtastic service
-     */
-    fun getConnectedMeshtasticDevices(): List<com.tak.lite.di.DeviceInfo> {
-        val connectedDevices = deviceManager.getConnectedMeshtasticDevices(MESHTASTIC_SERVICE_UUID)
-        return connectedDevices.map { device ->
-            com.tak.lite.di.DeviceInfo.BluetoothDevice(device)
-        }
-    }
-
-    /**
-     * Check if a specific device is connected at the OS level
-     * @param deviceInfo The device to check
-     * @return true if the device is connected at OS level, false otherwise
-     */
-    fun isDeviceConnectedAtOsLevel(deviceInfo: com.tak.lite.di.DeviceInfo): Boolean {
-        return when (deviceInfo) {
-            is com.tak.lite.di.DeviceInfo.BluetoothDevice -> {
-                deviceManager.isDeviceConnectedAtOsLevel(deviceInfo.device)
-            }
-            is com.tak.lite.di.DeviceInfo.NetworkDevice -> false
-            is com.tak.lite.di.DeviceInfo.AidlDevice -> false
-        }
     }
 } 

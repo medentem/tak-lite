@@ -22,12 +22,10 @@ class PeerNetworkAnalyzer @Inject constructor() {
         private const val MAX_PEER_DISTANCE = 160934.0 // 100 miles in meters
         private const val MAX_HOPS = 3 // Maximum number of hops for mesh routing
         private const val PEER_RECEIVABILITY_THRESHOLD = 0.5f // Minimum coverage probability for peer to receive packets
-        private const val HIGH_COVERAGE_THRESHOLD = 0.8f // Early exit threshold for high coverage areas
         private const val EARLY_EXIT_COVERAGE = 0.8f // Stop searching if this coverage is found
         
         // Spatial indexing constants
         private const val SPATIAL_GRID_SIZE = 0.1 // Degrees (~11km grid cells)
-        private const val SPATIAL_QUERY_BUFFER = 0.05 // Degrees (~5.5km buffer for queries)
     }
     
     /**
@@ -213,7 +211,7 @@ class PeerNetworkAnalyzer @Inject constructor() {
         // Log detailed breakdown of peer network
         val directPeersCount = networkPeers.count { it.hopCount == 1 }
         val multiHopPeersCount = networkPeers.count { it.hopCount > 1 }
-        android.util.Log.d("PeerNetworkAnalyzer", "Peer network breakdown: ${directPeersCount} direct peers, ${multiHopPeersCount} multi-hop peers")
+        android.util.Log.d("PeerNetworkAnalyzer", "Peer network breakdown: $directPeersCount direct peers, $multiHopPeersCount multi-hop peers")
         
         networkPeers
     }
@@ -403,23 +401,5 @@ class PeerNetworkAnalyzer @Inject constructor() {
             signalStrength >= sensitivity -> 0.4f // Poor signal
             else -> 0.1f // Very poor signal
         }
-    }
-    
-    /**
-     * Optimizes peer network by removing redundant routes
-     */
-    fun optimizeNetwork(networkPeers: List<NetworkPeer>): List<NetworkPeer> {
-        val optimizedPeers = mutableListOf<NetworkPeer>()
-        val peerGroups = networkPeers.groupBy { it.id }
-        
-        // For each peer, keep only the route with the best signal strength
-        peerGroups.forEach { (_, peers) ->
-            val bestPeer = peers.maxByOrNull { it.signalStrength }
-            if (bestPeer != null) {
-                optimizedPeers.add(bestPeer)
-            }
-        }
-        
-        return optimizedPeers
     }
 } 

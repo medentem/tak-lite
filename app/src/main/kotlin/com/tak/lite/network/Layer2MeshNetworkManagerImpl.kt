@@ -12,7 +12,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -60,7 +59,6 @@ class Layer2MeshNetworkManagerImpl @Inject constructor(
     private var meshProtocol: Layer2MeshNetworkProtocol? = null
 
     private val _isReceivingAudio = MutableStateFlow(false)
-    val receivingAudioFlow: StateFlow<Boolean> = _isReceivingAudio.asStateFlow()
 
     init {
         initializeRtc()
@@ -213,21 +211,6 @@ class Layer2MeshNetworkManagerImpl @Inject constructor(
     fun selectChannel(channelId: String) {
         selectedChannelId = channelId
         Log.d(TAG, "Selected channel: $channelId")
-    }
-
-    fun setPTTState(isPressed: Boolean) {
-        // TODO: Implement PTT state handling
-        Log.d(TAG, "PTT state changed: $isPressed")
-    }
-
-    fun setVolume(volume: Int) {
-        // TODO: Implement volume control
-        Log.d(TAG, "Volume set to: $volume")
-    }
-
-    fun setMute(isMuted: Boolean) {
-        // TODO: Implement mute control
-        Log.d(TAG, "Mute state set to: $isMuted")
     }
 
     fun createChannel(name: String) {
