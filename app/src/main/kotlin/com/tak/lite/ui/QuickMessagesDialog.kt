@@ -25,13 +25,13 @@ class QuickMessagesDialog(
         val quickMessages = QuickMessageManager.getQuickMessages(context)
         
         // Set up click listeners for each message
-        val messageViews = listOf(
-            popupView.findViewById<TextView>(R.id.quickMessage1),
-            popupView.findViewById<TextView>(R.id.quickMessage2),
-            popupView.findViewById<TextView>(R.id.quickMessage3),
-            popupView.findViewById<TextView>(R.id.quickMessage4),
-            popupView.findViewById<TextView>(R.id.quickMessage5),
-            popupView.findViewById<TextView>(R.id.quickMessage6)
+        val messageViews = listOf<TextView>(
+            popupView.findViewById(R.id.quickMessage1),
+            popupView.findViewById(R.id.quickMessage2),
+            popupView.findViewById(R.id.quickMessage3),
+            popupView.findViewById(R.id.quickMessage4),
+            popupView.findViewById(R.id.quickMessage5),
+            popupView.findViewById(R.id.quickMessage6)
         )
         
         quickMessages.forEachIndexed { index, message ->
@@ -57,8 +57,8 @@ class QuickMessagesDialog(
 
         // Measure popup to get its dimensions
         popupView.measure(
-            android.view.View.MeasureSpec.makeMeasureSpec(0, android.view.View.MeasureSpec.UNSPECIFIED),
-            android.view.View.MeasureSpec.makeMeasureSpec(0, android.view.View.MeasureSpec.UNSPECIFIED)
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
         )
         val popupWidth = popupView.measuredWidth
         val popupHeight = popupView.measuredHeight
@@ -116,9 +116,5 @@ class QuickMessagesDialog(
 
     fun dismiss() {
         popupWindow?.dismiss()
-    }
-
-    fun isShowing(): Boolean {
-        return popupWindow?.isShowing == true
     }
 }

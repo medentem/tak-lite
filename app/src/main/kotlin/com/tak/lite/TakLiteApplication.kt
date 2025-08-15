@@ -13,8 +13,8 @@ class TakLiteApplication : Application() {
         LocaleManager.applyLocaleToResources(this)
         
         try {
-            java.lang.System.setProperty("java.net.preferIPv6Addresses", "false")
-            java.lang.System.setProperty("java.net.preferIPv4Stack", "true")
+            System.setProperty("java.net.preferIPv6Addresses", "false")
+            System.setProperty("java.net.preferIPv4Stack", "true")
         } catch (e: Exception) {
             e.printStackTrace()
         }

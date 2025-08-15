@@ -2,7 +2,6 @@ package com.tak.lite.util
 
 import android.content.Context
 import android.content.res.Configuration
-import android.os.Build
 import com.tak.lite.R
 import java.util.Locale
 
@@ -29,7 +28,7 @@ object LocaleManager {
         
         companion object {
             fun fromCode(code: String): Language {
-                return values().find { it.code == code } ?: SYSTEM
+                return entries.find { it.code == code } ?: SYSTEM
             }
         }
     }
@@ -57,39 +56,6 @@ object LocaleManager {
     }
     
     /**
-     * Clear language preference to use system default
-     */
-    fun clearLanguagePreference(context: Context) {
-        val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-        prefs.edit().remove(KEY_LANGUAGE).apply()
-    }
-    
-    /**
-     * Apply the current locale to the context
-     */
-    fun applyLocale(context: Context): Context {
-        val language = getLanguage(context)
-        return if (language == Language.SYSTEM) {
-            // Use system locale
-            context
-        } else {
-            // Apply specific locale
-            val locale = Locale(language.code)
-            Locale.setDefault(locale)
-            
-            val config = Configuration(context.resources.configuration)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                config.setLocale(locale)
-            } else {
-                @Suppress("DEPRECATION")
-                config.locale = locale
-            }
-            
-            context.createConfigurationContext(config)
-        }
-    }
-    
-    /**
      * Apply the current locale to the resources
      */
     fun applyLocaleToResources(context: Context) {
@@ -100,12 +66,7 @@ object LocaleManager {
             val config = Configuration(context.resources.configuration)
             // Use the default locale for system language
             val defaultLocale = Locale.getDefault()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                config.setLocale(defaultLocale)
-            } else {
-                @Suppress("DEPRECATION")
-                config.locale = defaultLocale
-            }
+            config.setLocale(defaultLocale)
             context.resources.updateConfiguration(config, context.resources.displayMetrics)
         } else {
             // Apply specific locale
@@ -113,26 +74,12 @@ object LocaleManager {
             Locale.setDefault(locale)
             
             val config = Configuration(context.resources.configuration)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                config.setLocale(locale)
-            } else {
-                @Suppress("DEPRECATION")
-                config.locale = locale
-            }
-            
+            config.setLocale(locale)
+
             context.resources.updateConfiguration(config, context.resources.displayMetrics)
         }
     }
-    
-    /**
-     * Get the original system locale (before any app modifications)
-     */
-    fun getOriginalSystemLocale(context: Context): Locale {
-        // For now, return the default locale
-        // This is a simplified approach
-        return Locale.getDefault()
-    }
-    
+
     /**
      * Apply locale and recreate activity for immediate language change
      */
@@ -142,19 +89,9 @@ object LocaleManager {
     }
     
     /**
-     * Apply locale to all activities in the app
-     * This should be called when the app is in the foreground
-     */
-    fun applyLocaleToAllActivities(context: Context) {
-        applyLocaleToResources(context)
-        // Note: This would require additional implementation to track all activities
-        // For now, we rely on individual activity recreation
-    }
-    
-    /**
      * Get the display name for a language in the current locale
      */
-    fun getLanguageDisplayName(context: Context, language: Language): String {
+    private fun getLanguageDisplayName(context: Context, language: Language): String {
         return when (language) {
             Language.SYSTEM -> context.getString(R.string.use_system_language)
             Language.ENGLISH -> context.getString(R.string.english)

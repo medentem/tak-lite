@@ -4,7 +4,11 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.*
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
+import android.widget.SeekBar
+import android.widget.Spinner
+import android.widget.TextView
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
@@ -58,7 +62,7 @@ class PredictionSettingsFragment : Fragment() {
         statsText = view.findViewById(R.id.statsText)
         
         // Setup model spinner
-        val models = PredictionModel.values()
+        val models = PredictionModel.entries.toTypedArray()
         val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, models)
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         modelSpinner.adapter = adapter
@@ -76,7 +80,7 @@ class PredictionSettingsFragment : Fragment() {
         
         viewLifecycleOwner.lifecycleScope.launch {
             viewModel.selectedModel.collect { model ->
-                val position = PredictionModel.values().indexOf(model)
+                val position = PredictionModel.entries.indexOf(model)
                 if (position >= 0) {
                     modelSpinner.setSelection(position)
                 }
@@ -129,7 +133,7 @@ class PredictionSettingsFragment : Fragment() {
         
         modelSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                val selectedModel = PredictionModel.values()[position]
+                val selectedModel = PredictionModel.entries[position]
                 viewModel.setPredictionModel(selectedModel)
                 modelExplanationText.text = getModelExplanation(selectedModel)
             }

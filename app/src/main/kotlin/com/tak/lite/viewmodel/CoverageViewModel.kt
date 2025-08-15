@@ -43,10 +43,6 @@ class CoverageViewModel @Inject constructor(
     private val _statistics = MutableStateFlow<CoverageStatistics?>(null)
     val statistics: StateFlow<CoverageStatistics?> = _statistics.asStateFlow()
     
-    // Settings
-    private val _includePeerExtension = MutableStateFlow(true)
-    val includePeerExtension: StateFlow<Boolean> = _includePeerExtension.asStateFlow()
-    
     init {
         // Observe repository state changes
         viewModelScope.launch {
@@ -161,140 +157,11 @@ class CoverageViewModel @Inject constructor(
     }
     
     /**
-     * Gets coverage probability at a specific location
-     */
-    fun getCoverageAtLocation(location: LatLng): Float {
-        return coverageRepository.getCoverageAtLocation(location)
-    }
-    
-    /**
-     * Updates the peer extension setting
-     */
-    fun setIncludePeerExtension(include: Boolean) {
-        _includePeerExtension.value = include
-    }
-    
-
-    
-    /**
-     * Gets a formatted string for the current analysis progress
-     */
-    fun getProgressText(): String {
-        return when (val state = _uiState.value) {
-            is CoverageAnalysisState.Idle -> "Ready to analyze coverage"
-            is CoverageAnalysisState.Calculating -> "Analyzing coverage..."
-            is CoverageAnalysisState.Progress -> state.message
-            is CoverageAnalysisState.Success -> "Coverage analysis complete"
-            is CoverageAnalysisState.Error -> "Error: ${state.message}"
-            else -> "Unknown"
-        }
-    }
-    
-    /**
-     * Gets progress percentage for progress bars
-     */
-    fun getProgressPercentage(): Float {
-        return when (val state = _uiState.value) {
-            is CoverageAnalysisState.Progress -> state.progress
-            is CoverageAnalysisState.Success -> 1.0f
-            else -> 0.0f
-        }
-    }
-    
-    /**
-     * Checks if analysis is currently running
-     */
-    fun isAnalysisRunning(): Boolean {
-        return _uiState.value is CoverageAnalysisState.Calculating || 
-               _uiState.value is CoverageAnalysisState.Progress
-    }
-    
-    /**
      * Checks if coverage analysis is in idle state (not running and no data)
      */
     fun isAnalysisIdle(): Boolean {
         return _uiState.value is CoverageAnalysisState.Idle && 
                _coverageGrid.value == null && 
                _partialCoverageGrid.value == null
-    }
-    
-    /**
-     * Checks if coverage data is available
-     */
-    fun hasCoverageData(): Boolean {
-        return _coverageGrid.value != null
-    }
-    
-    /**
-     * Checks if partial coverage data is available (for incremental rendering)
-     */
-    fun hasPartialCoverageData(): Boolean {
-        return _partialCoverageGrid.value != null
-    }
-    
-    /**
-     * Gets the current coverage grid (partial or final)
-     */
-    fun getCurrentCoverageGrid(): CoverageGrid? {
-        return _partialCoverageGrid.value ?: _coverageGrid.value
-    }
-    
-    /**
-     * Gets formatted statistics text
-     */
-    fun getStatisticsText(): String {
-        val stats = _statistics.value ?: return "No data available"
-        
-        return buildString {
-            appendLine("Coverage Statistics:")
-            appendLine("Total Area: ${stats.totalPoints} grid points")
-            appendLine("Covered Area: ${stats.coveredPoints} points (${String.format("%.1f", stats.coveragePercentage)}%)")
-            appendLine("Good Coverage: ${stats.goodCoveragePoints} points")
-            appendLine("Average Coverage: ${String.format("%.1f", stats.averageCoverage * 100)}%")
-            appendLine("Coverage Range: ${String.format("%.1f", stats.minCoverage * 100)}% - ${String.format("%.1f", stats.maxCoverage * 100)}%")
-        }
-    }
-    
-    /**
-     * Gets coverage quality description
-     */
-    fun getCoverageQualityDescription(): String {
-        val stats = _statistics.value ?: return "No data"
-        
-        return when {
-            stats.coveragePercentage >= 80 -> "Excellent Coverage"
-            stats.coveragePercentage >= 60 -> "Good Coverage"
-            stats.coveragePercentage >= 40 -> "Fair Coverage"
-            stats.coveragePercentage >= 20 -> "Poor Coverage"
-            else -> "Very Poor Coverage"
-        }
-    }
-    
-    /**
-     * Gets coverage quality color (for UI theming)
-     */
-    fun getCoverageQualityColor(): Int {
-        val stats = _statistics.value ?: return 0xFF808080.toInt() // Gray
-        
-        return when {
-            stats.coveragePercentage >= 80 -> 0xFF4CAF50.toInt() // Green
-            stats.coveragePercentage >= 60 -> 0xFF8BC34A.toInt() // Light Green
-            stats.coveragePercentage >= 40 -> 0xFFFFC107.toInt() // Amber
-            stats.coveragePercentage >= 20 -> 0xFFFF9800.toInt() // Orange
-            else -> 0xFFF44336.toInt() // Red
-        }
-    }
-    
-    /**
-     * Refreshes coverage analysis with current settings
-     */
-    fun refreshAnalysis(center: LatLng, zoomLevel: Int) {
-        clearCoverageAnalysis()
-        startCoverageAnalysis(center, zoomLevel)
-    }
-    
-    override fun onCleared() {
-        super.onCleared()
-        // Clean up any ongoing operations if needed
     }
 } 

@@ -65,8 +65,6 @@ class BillingManager @Inject constructor(
 
         // Test product IDs for emulator testing
         const val TEST_PRODUCT_ID_TIER_1 = "android.test.purchased" // $10
-        const val TEST_PRODUCT_ID_TIER_2 = "android.test.purchased" // $20
-        const val TEST_PRODUCT_ID_TIER_3 = "android.test.purchased" // $30
     }
 
     private val purchasesUpdatedListener = PurchasesUpdatedListener { billingResult, purchases ->

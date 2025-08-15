@@ -174,11 +174,11 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                          "$accuracyImprovement" +
                          if (osCalibrationTriggered) "\nOS-level calibration applied" else ""
             
-            android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
+            Toast.makeText(this, message, Toast.LENGTH_LONG).show()
             
             Log.d("MainActivity", "Calibration completed - Quality: $calibrationQuality, OS triggered: $osCalibrationTriggered, Samples: $sampleCount")
         } else if (result.resultCode == RESULT_CANCELED) {
-            android.widget.Toast.makeText(this, getString(R.string.calibration_skipped), android.widget.Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.calibration_skipped), Toast.LENGTH_SHORT).show()
             Log.d("MainActivity", "Calibration was skipped by user")
         }
     }
@@ -245,7 +245,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
         // Add AnnotationFragment if not already present
         if (savedInstanceState == null) {
             supportFragmentManager.beginTransaction()
-                .replace(R.id.mainFragmentContainer, com.tak.lite.ui.map.AnnotationFragment())
+                .replace(R.id.mainFragmentContainer, AnnotationFragment())
                 .commit()
         }
 
@@ -291,16 +291,16 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                 mapController.setMapType(initialMapMode)
                 // Center on last known location if available
                 lastLocation?.let { (lat, lon, zoom) ->
-                    val latLng = org.maplibre.android.geometry.LatLng(lat, lon)
+                    val latLng = LatLng(lat, lon)
                     map.moveCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(latLng, zoom.toDouble()))
                 }
                 // Only try to get location if we have permissions
-                if (androidx.core.app.ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED ||
-                    androidx.core.app.ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                    ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
                     // Try to get current location and zoom to it if available
                     locationController.getLastKnownLocation { location ->
                         if (location != null) {
-                            val latLng = org.maplibre.android.geometry.LatLng(location.latitude, location.longitude)
+                            val latLng = LatLng(location.latitude, location.longitude)
                             val currentZoom = map.cameraPosition.zoom
                             map.moveCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(latLng, currentZoom))
                             saveLastLocation(location.latitude, location.longitude, currentZoom.toFloat())
@@ -366,7 +366,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                     mapController.mapLibreMap?.locationComponent?.cameraMode = org.maplibre.android.location.modes.CameraMode.TRACKING
                 }
                 // --- NEW: propagate phone location to ViewModel ---
-                viewModel.setPhoneLocation(org.maplibre.android.geometry.LatLng(location.latitude, location.longitude))
+                viewModel.setPhoneLocation(LatLng(location.latitude, location.longitude))
                 // --- Update SwipeableOverlayManager with user location for relative positioning ---
                 swipeableOverlayManager.updateUserLocation(location.latitude, location.longitude)
             },
@@ -374,7 +374,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                 Toast.makeText(this, getString(R.string.location_permission_not_granted), Toast.LENGTH_SHORT).show()
             },
             onSourceChanged = { source: LocationSource ->
-                Log.d("MainActivity", "Location source changed to ${source}")
+                Log.d("MainActivity", "Location source changed to $source")
             },
             onCalibrationNeeded = {
                 runOnUiThread {
@@ -383,8 +383,8 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
             }
         )
         // FIX: Start location updates if permissions are already granted
-        if (androidx.core.app.ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED ||
-            androidx.core.app.ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+        if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             locationController.startLocationUpdates()
         }
         locationController.checkAndRequestPermissions(PERMISSIONS_REQUEST_CODE)
@@ -419,7 +419,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
         }
 
         downloadSectorButton.setOnClickListener {
-            android.util.Log.d("MainActivity", "Starting offline tile download")
+            Log.d("MainActivity", "Starting offline tile download")
             Toast.makeText(this, getString(R.string.downloading_offline_tiles), Toast.LENGTH_SHORT).show()
             binding.tileDownloadProgressBar.progress = 0
             binding.tileDownloadProgressBar.visibility = View.VISIBLE
@@ -430,15 +430,15 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                             if (total > 0) {
                                 val percent = (completed * 100) / total
                                 binding.tileDownloadProgressBar.progress = percent
-                                android.util.Log.d("MainActivity", "Download progress: $completed/$total ($percent%)")
+                                Log.d("MainActivity", "Download progress: $completed/$total ($percent%)")
                             }
                         }
                     }
                     binding.tileDownloadProgressBar.visibility = View.GONE
-                    android.util.Log.d("MainActivity", "Offline tile download completed - Success: $successCount, Failed: $failCount")
+                    Log.d("MainActivity", "Offline tile download completed - Success: $successCount, Failed: $failCount")
                     Toast.makeText(this@MainActivity, getString(R.string.offline_tile_download_complete, successCount, failCount), Toast.LENGTH_LONG).show()
                 } catch (e: Exception) {
-                    android.util.Log.e("MainActivity", "Exception during tile download: ${e.message}", e)
+                    Log.e("MainActivity", "Exception during tile download: ${e.message}", e)
                     binding.tileDownloadProgressBar.visibility = View.GONE
                     Toast.makeText(this@MainActivity, getString(R.string.download_failed, e.message), Toast.LENGTH_LONG).show()
                 }
@@ -446,7 +446,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
         }
 
         settingsButton.setOnClickListener {
-            val intent = android.content.Intent(this, SettingsActivity::class.java)
+            val intent = Intent(this, SettingsActivity::class.java)
             startActivity(intent)
         }
         
@@ -478,15 +478,15 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                 return@setOnClickListener
             }
             // Check permissions
-            if (androidx.core.app.ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != android.content.pm.PackageManager.PERMISSION_GRANTED &&
-                androidx.core.app.ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+                ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                 Toast.makeText(this, getString(R.string.location_permission_not_granted), Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             // Optionally recenter to last known location for instant feedback
             locationController.getLastKnownLocation { location ->
                 if (location != null) {
-                    val latLng = org.maplibre.android.geometry.LatLng(location.latitude, location.longitude)
+                    val latLng = LatLng(location.latitude, location.longitude)
                     val currentZoom = map.cameraPosition.zoom
                     val targetZoom = if (currentZoom > 16.0) currentZoom else 16.0
                     runOnUiThread {
@@ -569,22 +569,22 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
         lassoToolFab = findViewById(R.id.lassoToolFab)
         lassoToolFab.setOnClickListener {
             isLassoActive = !isLassoActive
-            val fragment = supportFragmentManager.findFragmentById(R.id.mainFragmentContainer) as? com.tak.lite.ui.map.AnnotationFragment
+            val fragment = supportFragmentManager.findFragmentById(R.id.mainFragmentContainer) as? AnnotationFragment
             if (isLassoActive) {
                 lassoToolFab.setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
-                lassoToolFab.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.RED)
+                lassoToolFab.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.RED)
                 fragment?.setLassoMode(true)
-                android.util.Log.d("MainActivity", "Lasso activated, fragment=$fragment")
-                android.widget.Toast.makeText(this, getString(R.string.lasso_activated), android.widget.Toast.LENGTH_SHORT).show()
+                Log.d("MainActivity", "Lasso activated, fragment=$fragment")
+                Toast.makeText(this, getString(R.string.lasso_activated), Toast.LENGTH_SHORT).show()
             } else {
                 lassoToolFab.setImageResource(R.drawable.ic_lasso)
-                lassoToolFab.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#1976D2"))
+                lassoToolFab.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#1976D2"))
                 fragment?.setLassoMode(false)
-                android.util.Log.d("MainActivity", "Lasso deactivated, fragment=$fragment")
-                android.widget.Toast.makeText(this, getString(R.string.lasso_deactivated), android.widget.Toast.LENGTH_SHORT).show()
+                Log.d("MainActivity", "Lasso deactivated, fragment=$fragment")
+                Toast.makeText(this, getString(R.string.lasso_deactivated), Toast.LENGTH_SHORT).show()
             }
             if (fragment == null) {
-                android.util.Log.w("MainActivity", "AnnotationFragment not found!")
+                Log.w("MainActivity", "AnnotationFragment not found!")
             }
         }
 
@@ -628,15 +628,15 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                 )
             }
             val neededPermissions = mutableListOf<String>()
-            if (BLUETOOTH_PERMISSIONS.any { ContextCompat.checkSelfPermission(this, it) != android.content.pm.PackageManager.PERMISSION_GRANTED }) {
+            if (BLUETOOTH_PERMISSIONS.any { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }) {
                 neededPermissions.addAll(BLUETOOTH_PERMISSIONS)
             }
             if (Build.VERSION.SDK_INT >= 34 &&
-                ContextCompat.checkSelfPermission(this, "android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE") != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                ContextCompat.checkSelfPermission(this, "android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE") != PackageManager.PERMISSION_GRANTED) {
                 neededPermissions.add("android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE")
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 neededPermissions.add(android.Manifest.permission.POST_NOTIFICATIONS)
             }
             if (neededPermissions.isNotEmpty()) {
@@ -649,10 +649,10 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                 return
             }
             val hasBluetoothPermissions = BLUETOOTH_PERMISSIONS.all {
-                ContextCompat.checkSelfPermission(this, it) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
             }
             val hasFgServicePermission = if (Build.VERSION.SDK_INT >= 34) {
-                ContextCompat.checkSelfPermission(this, "android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE") == android.content.pm.PackageManager.PERMISSION_GRANTED
+                ContextCompat.checkSelfPermission(this, "android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE") == PackageManager.PERMISSION_GRANTED
             } else true
             if (hasBluetoothPermissions && hasFgServicePermission) {
                 ContextCompat.startForegroundService(
@@ -724,7 +724,9 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                 isPredictionsEnabled = predictionEnabled,
                 showWeatherOption = billingManager.isPremium(),
                 onWeatherToggled = { next ->
-                    android.util.Log.d("MainActivity", "onWeatherToggled invoked from LayersSelectionDialog: next=" + next)
+                    Log.d("MainActivity",
+                        "onWeatherToggled invoked from LayersSelectionDialog: next=$next"
+                    )
                     prefs.edit().putBoolean("weather_enabled", next).apply()
                     (this as com.tak.lite.ui.map.MapControllerProvider)
                         .getLayersTarget()?.setWeatherLayerEnabled(next)
@@ -760,11 +762,6 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                 isCoverageActive = isCoverageActive
             ).also { it.show(layersButton) }
         }
-    }
-
-    private fun updateLayerToggleAppearance(button: com.google.android.material.floatingactionbutton.FloatingActionButton, enabled: Boolean) {
-        val color = if (enabled) android.graphics.Color.parseColor("#4CAF50") else android.graphics.Color.DKGRAY
-        button.backgroundTintList = android.content.res.ColorStateList.valueOf(color)
     }
 
     private fun toggleDeviceStatusBar(show: Boolean) {
@@ -999,7 +996,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                 Toast.makeText(this, getString(R.string.permissions_required), Toast.LENGTH_LONG).show()
             }
         } else if (requestCode == REQUEST_CODE_ALL_PERMISSIONS) {
-            if (grantResults.isNotEmpty() && grantResults.all { it == android.content.pm.PackageManager.PERMISSION_GRANTED }) {
+            if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
                 val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
                 val backgroundEnabled = prefs.getBoolean("background_processing_enabled", false)
                 if (backgroundEnabled) {
@@ -1016,10 +1013,10 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                         )
                     }
                     val hasBluetoothPermissions = BLUETOOTH_PERMISSIONS.all {
-                        ContextCompat.checkSelfPermission(this, it) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                        ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
                     }
                     val hasFgServicePermission = if (Build.VERSION.SDK_INT >= 34) {
-                        ContextCompat.checkSelfPermission(this, "android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE") == android.content.pm.PackageManager.PERMISSION_GRANTED
+                        ContextCompat.checkSelfPermission(this, "android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE") == PackageManager.PERMISSION_GRANTED
                     } else true
                     if (hasBluetoothPermissions && hasFgServicePermission) {
                         ContextCompat.startForegroundService(
@@ -1079,7 +1076,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
     }
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-        android.util.Log.d("MainActivity", "dispatchTouchEvent() called")
+        Log.d("MainActivity", "dispatchTouchEvent() called")
         // Try to find the AnnotationFragment
         val fragment = supportFragmentManager.findFragmentById(R.id.mainFragmentContainer) as? AnnotationFragment
         val fanMenuView = fragment?.view?.findViewById<FanMenuView>(R.id.fanMenuView)
@@ -1272,10 +1269,10 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
     fun resetLassoFab() {
         isLassoActive = false
         lassoToolFab.setImageResource(R.drawable.ic_lasso)
-        lassoToolFab.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#1976D2"))
+        lassoToolFab.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#1976D2"))
     }
 
-    override fun getMapController(): com.tak.lite.ui.map.MapController? = mapController
+    override fun getMapController(): com.tak.lite.ui.map.MapController = mapController
 
     // Provide a stable target for layer toggles without fragment lookup
     override fun getLayersTarget(): com.tak.lite.ui.map.LayersTarget? {
@@ -1297,13 +1294,6 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
             dialog.show(supportFragmentManager, "donation_dialog")
         }
     }
-
-    private fun showPurchaseDialog() {
-        val dialog = com.tak.lite.ui.PurchaseDialog()
-        dialog.show(supportFragmentManager, "purchase_dialog")
-    }
-
-
 
     private fun updateCompassQualityIndicator(quality: com.tak.lite.ui.location.CompassQuality) {
         // Check if views are initialized
@@ -1329,9 +1319,9 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
             }
             
             compassQualityIndicator.setImageResource(iconRes)
-            compassQualityIndicator.setColorFilter(android.graphics.Color.parseColor(color))
+            compassQualityIndicator.setColorFilter(Color.parseColor(color))
             compassQualityText.text = text
-            compassQualityText.setTextColor(android.graphics.Color.parseColor(color))
+            compassQualityText.setTextColor(Color.parseColor(color))
             
             // Show the indicator
             compassQualityIndicator.visibility = View.VISIBLE
@@ -1351,7 +1341,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
         
         if (needsCalibration) {
             calibrationIndicator.visibility = View.VISIBLE
-            calibrationIndicator.setColorFilter(android.graphics.Color.parseColor("#FF9800"))
+            calibrationIndicator.setColorFilter(Color.parseColor("#FF9800"))
             calibrationIndicator.setOnClickListener {
                 showCalibrationDialog()
             }
@@ -1370,7 +1360,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                     else -> Pair("#F44336", R.drawable.ic_cancel)
                 }
                 
-                calibrationIndicator.setColorFilter(android.graphics.Color.parseColor(color))
+                calibrationIndicator.setColorFilter(Color.parseColor(color))
                 calibrationIndicator.setImageResource(iconRes)
                 calibrationIndicator.setOnClickListener {
                     showCalibrationStatusDialog(comprehensiveStatus)
@@ -1382,7 +1372,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
         }
     }
     
-    private fun showCalibrationStatusDialog(status: com.tak.lite.ui.location.CalibrationStatus) {
+    private fun showCalibrationStatusDialog(status: CalibrationStatus) {
         val prefs = getSharedPreferences("compass_calibration", MODE_PRIVATE)
         val calibrationQuality = prefs.getFloat("calibration_quality", 0f)
         val calibrationTimestamp = prefs.getLong("calibration_timestamp", 0L)
@@ -1665,7 +1655,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
             
             // Get screen corners and convert to lat/lng
             val topLeft = projection.fromScreenLocation(PointF(0f, 0f))
-            val bottomRight = projection.fromScreenLocation(PointF(width.toFloat(), height.toFloat()))
+            val bottomRight = projection.fromScreenLocation(PointF(width, height))
             
             // Add margin for coverage partially off-screen
             val margin = 0.05f // 5% margin

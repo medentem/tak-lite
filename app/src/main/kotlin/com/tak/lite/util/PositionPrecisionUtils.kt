@@ -12,7 +12,7 @@ object PositionPrecisionUtils {
      * Converts a position precision value (0-32) to its corresponding distance in feet.
      * Returns null for 0 (no location data) and 32 (full precision).
      */
-    fun getPrecisionInFeet(precision: Int): Int? {
+    private fun getPrecisionInFeet(precision: Int): Int? {
         return when (precision) {
             0 -> null // Location data never sent
             32 -> 0 // Full precision

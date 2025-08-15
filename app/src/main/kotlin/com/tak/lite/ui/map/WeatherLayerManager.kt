@@ -29,7 +29,7 @@ class WeatherLayerManager(
     private var weatherSource: String = initialWeatherSource
 
     fun setEnabled(enabled: Boolean) {
-        android.util.Log.d(TAG, "setEnabled called with enabled=" + enabled)
+        Log.d(TAG, "setEnabled called with enabled=$enabled")
         isEnabled = enabled
         restore()
     }
@@ -53,7 +53,7 @@ class WeatherLayerManager(
      * Safe to call after style changes.
      */
     fun restore() {
-        android.util.Log.d(TAG, "restore() invoked; isEnabled=" + isEnabled + ", weatherSource=" + weatherSource)
+        Log.d(TAG, "restore() invoked; isEnabled=$isEnabled, weatherSource=$weatherSource")
         mapLibreMap.getStyle { style ->
             // Clean up any remnants
             try {

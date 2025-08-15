@@ -55,7 +55,7 @@ class MessageViewModel @Inject constructor(
         }
     }
 
-    fun getCurrentUserShortName(): String? {
+    fun getCurrentUserShortName(): String {
         return messageRepository.getCurrentUserShortName()
     }
 
@@ -69,7 +69,7 @@ class MessageViewModel @Inject constructor(
         }
     }
 
-    fun getOrCreateDirectMessageChannel(peerId: String, peerLongName: String? = null): DirectMessageChannel? {
+    fun getOrCreateDirectMessageChannel(peerId: String): DirectMessageChannel? {
         return messageRepository.getOrCreateDirectMessageChannel(peerId)
     }
 } 

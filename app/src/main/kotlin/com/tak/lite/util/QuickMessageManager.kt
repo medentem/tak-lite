@@ -1,7 +1,6 @@
 package com.tak.lite.util
 
 import android.content.Context
-import android.content.SharedPreferences
 import android.util.Log
 import com.tak.lite.data.model.QuickMessage
 import kotlinx.serialization.encodeToString
@@ -24,7 +23,7 @@ object QuickMessageManager {
         
         // Check if we need to initialize with defaults
         if (!prefs.getBoolean(KEY_INITIALIZED, false)) {
-            initializeWithDefaults(context, prefs)
+            initializeWithDefaults(context)
         }
         
         return (0..5).mapNotNull { id ->
@@ -61,7 +60,7 @@ object QuickMessageManager {
     /**
      * Save all quick messages at once
      */
-    fun saveQuickMessages(context: Context, messages: List<QuickMessage>) {
+    private fun saveQuickMessages(context: Context, messages: List<QuickMessage>) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val editor = prefs.edit()
         
@@ -82,7 +81,7 @@ object QuickMessageManager {
     /**
      * Initialize quick messages with default values
      */
-    private fun initializeWithDefaults(context: Context, prefs: SharedPreferences) {
+    private fun initializeWithDefaults(context: Context) {
         Log.d(TAG, "Initializing quick messages with defaults")
         saveQuickMessages(context, QuickMessage.DEFAULT_MESSAGES)
     }

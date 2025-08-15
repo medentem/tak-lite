@@ -1,6 +1,5 @@
 package com.tak.lite.ui.map
 
-import android.content.Context
 import android.util.Log
 import com.tak.lite.model.MapAnnotation
 import org.maplibre.android.maps.MapLibreMap
@@ -10,14 +9,13 @@ import org.maplibre.android.maps.MapLibreMap
  * Provides a single interface for managing all geometric annotations.
  */
 class UnifiedAnnotationManager(
-    private val mapLibreMap: MapLibreMap,
-    private val context: Context
+    private val mapLibreMap: MapLibreMap
 ) {
     companion object {
         private const val TAG = "UnifiedAnnotationManager"
     }
 
-    private val lineLayerManager = LineLayerManager(mapLibreMap, context)
+    private val lineLayerManager = LineLayerManager(mapLibreMap)
     private val areaLayerManager = AreaLayerManager(mapLibreMap)
     private val polygonLayerManager = PolygonLayerManager(mapLibreMap)
     private var isInitialized = false
@@ -57,14 +55,6 @@ class UnifiedAnnotationManager(
             Log.e(TAG, "Error initializing unified annotation manager", e)
         }
     }
-    
-    /**
-     * Retry line timer layer setup (called after line layers are created)
-     */
-    fun retryLineTimerSetup() {
-        // This will be called by the AnnotationController after line layers are set up
-        Log.d(TAG, "Line timer setup retry requested")
-    }
 
     /**
      * Update all annotations (lines, areas, and polygons)
@@ -96,45 +86,6 @@ class UnifiedAnnotationManager(
             Log.e(TAG, "Error updating annotations", e)
         }
     }
-
-    /**
-     * Update only line annotations
-     */
-    fun updateLines(lines: List<MapAnnotation.Line>) {
-        if (!isInitialized) {
-            Log.w(TAG, "Unified annotation manager not initialized, skipping line update")
-            return
-        }
-
-        try {
-            lineLayerManager.updateFeatures(lines)
-            Log.d(TAG, "Line update completed: ${lines.size} lines")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error updating lines", e)
-        }
-    }
-
-    /**
-     * Update only area annotations
-     */
-    fun updateAreas(areas: List<MapAnnotation.Area>) {
-        if (!isInitialized) {
-            Log.w(TAG, "Unified annotation manager not initialized, skipping area update")
-            return
-        }
-
-        try {
-            areaLayerManager.updateFeatures(areas)
-            Log.d(TAG, "Area update completed: ${areas.size} areas")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error updating areas", e)
-        }
-    }
-
-    /**
-     * Check if the manager is initialized
-     */
-    fun isReady(): Boolean = isInitialized
 
     /**
      * Clean up all resources

@@ -1,6 +1,10 @@
 package com.tak.lite.util
 
-import kotlin.math.*
+import kotlin.math.PI
+import kotlin.math.asin
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
 
 /**
  * Utility class for standardized coordinate calculations
@@ -49,13 +53,6 @@ object CoordinateUtils {
     }
     
     /**
-     * Calculate distance between two points using optimized haversine from MapUtils
-     */
-    fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-        return haversine(lat1, lon1, lat2, lon2)
-    }
-    
-    /**
      * Calculate bearing between two points
      */
     fun calculateBearing(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
@@ -71,21 +68,5 @@ object CoordinateUtils {
         
         val bearing = atan2(y, x)
         return (toDegrees(bearing) + 360.0) % 360.0
-    }
-    
-    /**
-     * Generate random position within radius of center point
-     * Uses square root of random for uniform distribution over area
-     */
-    fun randomPositionInRadius(
-        centerLat: Double, 
-        centerLon: Double, 
-        radiusMeters: Double
-    ): Pair<Double, Double> {
-        val rawRandom = kotlin.random.Random.nextDouble()
-        val distance = sqrt(rawRandom) * radiusMeters
-        val angle = kotlin.random.Random.nextDouble() * 2 * PI
-        
-        return calculateNewPosition(centerLat, centerLon, distance, angle)
     }
 }

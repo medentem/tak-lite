@@ -81,7 +81,7 @@ class MessageActivity : BaseActivity() {
         // Get current user's short name from the protocol
         val currentUserShortName = viewModel.getCurrentUserShortName()
         val currentUserId = viewModel.getCurrentUserId()
-        adapter = MessageAdapter(currentUserShortName, currentUserId)
+        adapter = MessageAdapter(currentUserId)
         messageList.layoutManager = LinearLayoutManager(this).apply {
             stackFromEnd = true
         }

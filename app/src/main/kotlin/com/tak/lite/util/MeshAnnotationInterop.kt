@@ -57,7 +57,7 @@ object MeshAnnotationInterop {
                     PointShape.TRIANGLE -> "t"
                 }
                 val pos = annotation.position
-                val map = mutableMapOf<String, Any>(
+                val map = mutableMapOf(
                     "t" to "poi",
                     "i" to annotation.id,
                     "c" to annotation.creatorId,
@@ -71,16 +71,16 @@ object MeshAnnotationInterop {
                 )
                 annotation.expirationTime?.let { map["e"] = it }
                 annotation.label?.let { map["l"] = it }
-                kotlinx.serialization.json.Json.encodeToString(kotlinx.serialization.json.JsonObject(map.mapValues { (k, v) ->
+                Json.encodeToString(JsonObject(map.mapValues { (k, v) ->
                     when (v) {
-                        is String -> kotlinx.serialization.json.JsonPrimitive(v)
-                        is Number -> kotlinx.serialization.json.JsonPrimitive(v)
+                        is String -> JsonPrimitive(v)
+                        is Number -> JsonPrimitive(v)
                         is Map<*, *> -> {
                             val m = v as Map<String, Any>
-                            kotlinx.serialization.json.JsonObject(m.mapValues { (_, vv) ->
+                            JsonObject(m.mapValues { (_, vv) ->
                                 when (vv) {
-                                    is String -> kotlinx.serialization.json.JsonPrimitive(vv)
-                                    is Number -> kotlinx.serialization.json.JsonPrimitive(vv)
+                                    is String -> JsonPrimitive(vv)
+                                    is Number -> JsonPrimitive(vv)
                                     else -> kotlinx.serialization.json.JsonNull
                                 }
                             })
@@ -120,7 +120,7 @@ object MeshAnnotationInterop {
                 } else {
                     emptyList()
                 }
-                val map = mutableMapOf<String, Any>(
+                val map = mutableMapOf(
                     "t" to "line",
                     "i" to annotation.id,
                     "c" to annotation.creatorId,
@@ -131,22 +131,22 @@ object MeshAnnotationInterop {
                     "ah" to if (annotation.arrowHead) 1 else 0
                 )
                 annotation.expirationTime?.let { map["e"] = it }
-                kotlinx.serialization.json.Json.encodeToString(kotlinx.serialization.json.JsonObject(map.mapValues { (k, v) ->
+                Json.encodeToString(JsonObject(map.mapValues { (k, v) ->
                     when (v) {
-                        is String -> kotlinx.serialization.json.JsonPrimitive(v)
-                        is Number -> kotlinx.serialization.json.JsonPrimitive(v)
-                        is List<*> -> kotlinx.serialization.json.JsonArray(v.map { pt ->
+                        is String -> JsonPrimitive(v)
+                        is Number -> JsonPrimitive(v)
+                        is List<*> -> JsonArray(v.map { pt ->
                             val arr = pt as List<Long>
-                            kotlinx.serialization.json.JsonArray(arr.map { n ->
-                                kotlinx.serialization.json.JsonPrimitive(n)
+                            JsonArray(arr.map { n ->
+                                JsonPrimitive(n)
                             })
                         })
                         is Map<*, *> -> {
                             val m = v as Map<String, Any>
-                            kotlinx.serialization.json.JsonObject(m.mapValues { (_, vv) ->
+                            JsonObject(m.mapValues { (_, vv) ->
                                 when (vv) {
-                                    is String -> kotlinx.serialization.json.JsonPrimitive(vv)
-                                    is Number -> kotlinx.serialization.json.JsonPrimitive(vv)
+                                    is String -> JsonPrimitive(vv)
+                                    is Number -> JsonPrimitive(vv)
                                     else -> kotlinx.serialization.json.JsonNull
                                 }
                             })
@@ -167,7 +167,7 @@ object MeshAnnotationInterop {
                 
                 // Optimize for bandwidth: use shorter field names and integer encoding
                 // Integer encoding with 5 decimal places (same precision, smaller size)
-                val map = mutableMapOf<String, Any>(
+                val map = mutableMapOf(
                     "t" to "area",
                     "i" to annotation.id,
                     "c" to annotation.creatorId,
@@ -187,16 +187,16 @@ object MeshAnnotationInterop {
                 // Log bandwidth optimization for areas
                 Log.d(TAG, "Area mesh serialization: radius=${annotation.radius}m -> ${(annotation.radius * 100).toLong()}cm (integer encoding)")
                 
-                kotlinx.serialization.json.Json.encodeToString(kotlinx.serialization.json.JsonObject(map.mapValues { (k, v) ->
+                Json.encodeToString(JsonObject(map.mapValues { (k, v) ->
                     when (v) {
-                        is String -> kotlinx.serialization.json.JsonPrimitive(v)
-                        is Number -> kotlinx.serialization.json.JsonPrimitive(v)
+                        is String -> JsonPrimitive(v)
+                        is Number -> JsonPrimitive(v)
                         is Map<*, *> -> {
                             val m = v as Map<String, Any>
-                            kotlinx.serialization.json.JsonObject(m.mapValues { (_, vv) ->
+                            JsonObject(m.mapValues { (_, vv) ->
                                 when (vv) {
-                                    is String -> kotlinx.serialization.json.JsonPrimitive(vv)
-                                    is Number -> kotlinx.serialization.json.JsonPrimitive(vv)
+                                    is String -> JsonPrimitive(vv)
+                                    is Number -> JsonPrimitive(vv)
                                     else -> kotlinx.serialization.json.JsonNull
                                 }
                             })
@@ -236,7 +236,7 @@ object MeshAnnotationInterop {
                 } else {
                     emptyList()
                 }
-                val map = mutableMapOf<String, Any>(
+                val map = mutableMapOf(
                     "t" to "polygon",
                     "i" to annotation.id,
                     "c" to annotation.creatorId,
@@ -248,22 +248,22 @@ object MeshAnnotationInterop {
                 )
                 annotation.expirationTime?.let { map["e"] = it }
                 annotation.label?.let { map["l"] = it }
-                kotlinx.serialization.json.Json.encodeToString(kotlinx.serialization.json.JsonObject(map.mapValues { (k, v) ->
+                Json.encodeToString(JsonObject(map.mapValues { (k, v) ->
                     when (v) {
-                        is String -> kotlinx.serialization.json.JsonPrimitive(v)
-                        is Number -> kotlinx.serialization.json.JsonPrimitive(v)
-                        is List<*> -> kotlinx.serialization.json.JsonArray(v.map { pt ->
+                        is String -> JsonPrimitive(v)
+                        is Number -> JsonPrimitive(v)
+                        is List<*> -> JsonArray(v.map { pt ->
                             val arr = pt as List<Long>
-                            kotlinx.serialization.json.JsonArray(arr.map { n ->
-                                kotlinx.serialization.json.JsonPrimitive(n)
+                            JsonArray(arr.map { n ->
+                                JsonPrimitive(n)
                             })
                         })
                         is Map<*, *> -> {
                             val m = v as Map<String, Any>
-                            kotlinx.serialization.json.JsonObject(m.mapValues { (_, vv) ->
+                            JsonObject(m.mapValues { (_, vv) ->
                                 when (vv) {
-                                    is String -> kotlinx.serialization.json.JsonPrimitive(vv)
-                                    is Number -> kotlinx.serialization.json.JsonPrimitive(vv)
+                                    is String -> JsonPrimitive(vv)
+                                    is Number -> JsonPrimitive(vv)
                                     else -> kotlinx.serialization.json.JsonNull
                                 }
                             })
@@ -281,10 +281,10 @@ object MeshAnnotationInterop {
                     "cl" to "r"
                 )
                 annotation.expirationTime?.let { map["e"] = it }
-                kotlinx.serialization.json.Json.encodeToString(kotlinx.serialization.json.JsonObject(map.mapValues { (k, v) ->
+                Json.encodeToString(JsonObject(map.mapValues { (k, v) ->
                     when (v) {
-                        is String -> kotlinx.serialization.json.JsonPrimitive(v)
-                        is Number -> kotlinx.serialization.json.JsonPrimitive(v)
+                        is String -> JsonPrimitive(v)
+                        is Number -> JsonPrimitive(v)
                         else -> kotlinx.serialization.json.JsonNull
                     }
                 }))
@@ -347,7 +347,7 @@ object MeshAnnotationInterop {
             Log.d(TAG, "Extracted JSON from TAKPacket: $jsonString")
             // Try to detect minified POI/Line/Area/Deletion
             val json = kotlinx.serialization.json.Json.parseToJsonElement(jsonString)
-            if (json is kotlinx.serialization.json.JsonObject) {
+            if (json is JsonObject) {
                 when (json["t"]?.jsonPrimitive?.contentOrNull) {
                     "poi" -> {
                         val id = json["i"]?.jsonPrimitive?.content ?: return null

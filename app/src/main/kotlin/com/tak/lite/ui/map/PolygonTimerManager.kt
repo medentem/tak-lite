@@ -78,7 +78,7 @@ class PolygonTimerManager(
     /**
      * Stop the timer update system
      */
-    fun stopTimerUpdates() {
+    private fun stopTimerUpdates() {
         if (isTimerActive) {
             isTimerActive = false
             handler.removeCallbacks(timerRunnable)
@@ -115,7 +115,7 @@ class PolygonTimerManager(
                 TimerFeature(
                     polygonId = polygon.id,
                     position = Point.fromLngLat(centerLng, centerLat),
-                    expirationTime = polygon.expirationTime!!,
+                    expirationTime = polygon.expirationTime,
                     color = timerColor,
                     secondsRemaining = secondsRemaining,
                     isWarning = isWarning,

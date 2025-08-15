@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.abs
 
 @Singleton
 class SwipeableOverlayManager @Inject constructor(
@@ -58,7 +59,7 @@ class SwipeableOverlayManager @Inject constructor(
     private lateinit var compassQualityIndicator: android.widget.ImageView
     private lateinit var compassQualityText: android.widget.TextView
     private lateinit var calibrationIndicator: android.widget.ImageView
-    private lateinit var detailsContainer: android.widget.LinearLayout
+    private lateinit var detailsContainer: LinearLayout
     
     // Weather overlay view
     private lateinit var weatherOverlayView: WeatherOverlayView
@@ -144,11 +145,11 @@ class SwipeableOverlayManager @Inject constructor(
                 val diffX = e2.x - e1.x
                 val diffY = e2.y - e1.y
                 
-                if (Math.abs(diffX) > Math.abs(diffY)) {
+                if (abs(diffX) > abs(diffY)) {
                     isHorizontalGesture = true
                     
                     // Attempt to switch page if threshold met
-                    if (Math.abs(diffX) > 60 && !switchedThisGesture) {
+                    if (abs(diffX) > 60 && !switchedThisGesture) {
                         if (diffX > 0 && currentPage > 0) {
                             showPage(currentPage - 1)
                             switchedThisGesture = true
@@ -167,7 +168,7 @@ class SwipeableOverlayManager @Inject constructor(
                 val diffX = e2.x - e1.x
                 val diffY = e2.y - e1.y
                 
-                if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 60) {
+                if (abs(diffX) > abs(diffY) && abs(diffX) > 60) {
                     if (diffX > 0) {
                         if (currentPage > 0) {
                             showPage(currentPage - 1)
@@ -250,14 +251,6 @@ class SwipeableOverlayManager @Inject constructor(
         }
     }
     
-    fun getOverlayView(): View {
-        return overlayContainer
-    }
-    
-    fun refreshWeatherData() {
-        weatherRepository.refreshWeatherData()
-    }
-    
     fun fetchWeatherData(latitude: Double, longitude: Double) {
         weatherRepository.fetchWeatherData(latitude, longitude)
     }
@@ -274,7 +267,7 @@ class SwipeableOverlayManager @Inject constructor(
     fun getCompassQualityIndicator(): android.widget.ImageView = compassQualityIndicator
     fun getCompassQualityText(): android.widget.TextView = compassQualityText
     fun getCalibrationIndicator(): android.widget.ImageView = calibrationIndicator
-    fun getDetailsContainer(): android.widget.LinearLayout = detailsContainer
+    fun getDetailsContainer(): LinearLayout = detailsContainer
     fun getDirectionOverlay(): View = directionOverlayView
     
     fun setOnViewsReadyCallback(callback: () -> Unit) {
@@ -505,7 +498,7 @@ class SwipeableOverlayManager @Inject constructor(
             if (lastUpdated > 0) {
                 val currentTime = System.currentTimeMillis()
                 val ageMinutes = (currentTime - lastUpdated) / (1000 * 60)
-                weatherAgeText.text = "from ${ageMinutes} min ago"
+                weatherAgeText.text = "from $ageMinutes min ago"
             } else {
                 weatherAgeText.text = context.getString(R.string.no_data_short)
             }
@@ -583,7 +576,6 @@ class SwipeableOverlayManager @Inject constructor(
                 minuteText.text = "${minutes}m"
                 
                 // Set precipitation bar height based on precipitation value
-                val maxHeight = 50 // Maximum height in dp
                 val height = (minutely.precipitation * 80).toInt().coerceAtLeast(3)
                 val layoutParams = precipitationBar.layoutParams
                 layoutParams.height = (height * context.resources.displayMetrics.density).toInt()
@@ -731,7 +723,7 @@ class SwipeableOverlayManager @Inject constructor(
         private fun formatPressure(pressure: Int): String {
             // API provides pressure in hPa (metric) regardless of unit system
             // For imperial users, we could convert to inHg, but hPa is standard in meteorology
-            return "${pressure} hPa"
+            return "$pressure hPa"
         }
         
         private fun formatPrecipitation(precipitation: Double): String {
@@ -753,7 +745,7 @@ class SwipeableOverlayManager @Inject constructor(
             val tz = java.util.TimeZone.getTimeZone("GMT")
             val df = java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault())
             df.timeZone = tz
-            val adjusted = (epochSeconds + offsetSeconds).coerceAtLeast(0).toLong() * 1000
+            val adjusted = (epochSeconds + offsetSeconds).coerceAtLeast(0) * 1000
             return df.format(java.util.Date(adjusted))
         }
 
@@ -761,7 +753,7 @@ class SwipeableOverlayManager @Inject constructor(
             val df = java.text.SimpleDateFormat("h a", java.util.Locale.getDefault())
             val tz = java.util.TimeZone.getTimeZone("GMT")
             df.timeZone = tz
-            val adjusted = ((epochSeconds + (offsetSeconds ?: 0)).coerceAtLeast(0)).toLong() * 1000
+            val adjusted = ((epochSeconds + (offsetSeconds ?: 0)).coerceAtLeast(0)) * 1000
             return df.format(java.util.Date(adjusted))
         }
 
@@ -769,7 +761,7 @@ class SwipeableOverlayManager @Inject constructor(
             val df = java.text.SimpleDateFormat("EEE", java.util.Locale.getDefault())
             val tz = java.util.TimeZone.getTimeZone("GMT")
             df.timeZone = tz
-            val adjusted = ((epochSeconds + (offsetSeconds ?: 0)).coerceAtLeast(0)).toLong() * 1000
+            val adjusted = ((epochSeconds + (offsetSeconds ?: 0)).coerceAtLeast(0)) * 1000
             return df.format(java.util.Date(adjusted))
         }
 
@@ -777,7 +769,7 @@ class SwipeableOverlayManager @Inject constructor(
             val df = java.text.SimpleDateFormat("MMM dd, h:mm a", java.util.Locale.getDefault())
             val tz = java.util.TimeZone.getTimeZone("GMT")
             df.timeZone = tz
-            val adjusted = ((epochSeconds + (offsetSeconds ?: 0)).coerceAtLeast(0)).toLong() * 1000
+            val adjusted = ((epochSeconds + (offsetSeconds ?: 0)).coerceAtLeast(0)) * 1000
             return df.format(java.util.Date(adjusted))
         }
     }

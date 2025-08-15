@@ -1,9 +1,6 @@
 package com.tak.lite.util
 
 import android.content.Context
-import android.content.res.Configuration
-import java.util.Locale
-import android.os.Build
 import com.tak.lite.R
 
 /**
@@ -52,13 +49,9 @@ object UnitManager {
      * Get default unit system based on locale
      */
     private fun getDefaultUnitSystemForLocale(context: Context): UnitSystem {
-        val locale = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+        val locale =
             context.resources.configuration.locales[0]
-        } else {
-            @Suppress("DEPRECATION")
-            context.resources.configuration.locale
-        }
-        
+
         return when (locale.country) {
             "US" -> UnitSystem.IMPERIAL
             else -> UnitSystem.METRIC
@@ -179,47 +172,6 @@ object UnitManager {
         return when (unitSystem) {
             UnitSystem.IMPERIAL -> context.getString(R.string.unit_feet)
             UnitSystem.METRIC -> context.getString(R.string.unit_meters)
-        }
-    }
-    
-    /**
-     * Get area unit label
-     */
-    fun getAreaUnitLabel(context: Context): String {
-        val unitSystem = getUnitSystem(context)
-        return when (unitSystem) {
-            UnitSystem.IMPERIAL -> context.getString(R.string.unit_sq_miles)
-            UnitSystem.METRIC -> context.getString(R.string.unit_sq_kilometers)
-        }
-    }
-    
-    /**
-     * Convert distance to meters (for internal calculations)
-     */
-    fun distanceToMeters(distance: Double, unitSystem: UnitSystem): Double {
-        return when (unitSystem) {
-            UnitSystem.IMPERIAL -> distance * METERS_TO_MILES
-            UnitSystem.METRIC -> distance * 1000.0
-        }
-    }
-    
-    /**
-     * Convert speed to meters per second (for internal calculations)
-     */
-    fun speedToMetersPerSecond(speed: Double, unitSystem: UnitSystem): Double {
-        return when (unitSystem) {
-            UnitSystem.IMPERIAL -> speed / MPS_TO_MPH
-            UnitSystem.METRIC -> speed / MPS_TO_KMH
-        }
-    }
-    
-    /**
-     * Convert elevation to meters (for internal calculations)
-     */
-    fun elevationToMeters(elevation: Double, unitSystem: UnitSystem): Double {
-        return when (unitSystem) {
-            UnitSystem.IMPERIAL -> elevation / METERS_TO_FEET
-            UnitSystem.METRIC -> elevation
         }
     }
     

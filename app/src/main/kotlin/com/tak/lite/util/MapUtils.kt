@@ -6,9 +6,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.ln
 import kotlin.math.pow
+import kotlin.math.sin
+import kotlin.math.sqrt
 import kotlin.math.tan
 
 // Track missing tile logging to reduce spam
@@ -85,22 +88,14 @@ fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
     if (distance > 100000) {
         val dLat = Math.toRadians(lat2 - lat1)
         val dLon = Math.toRadians(lon2 - lon1)
-        val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
-                Math.sin(dLon / 2) * Math.sin(dLon / 2)
-        val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+        val a = sin(dLat / 2) * sin(dLat / 2) +
+                cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) *
+                sin(dLon / 2) * sin(dLon / 2)
+        val c = 2 * atan2(sqrt(a), sqrt(1 - a))
         return R * c
     }
     
     return distance
-}
-
-fun haversineMiles(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-    return haversine(lat1, lon1, lat2, lon2) / 1609.344
-}
-
-fun haversineKilometers(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-    return haversine(lat1, lon1, lat2, lon2) / 1000.0
 }
 
 /**
@@ -113,10 +108,10 @@ private fun haversineFast(lat1: Double, lon1: Double, lat2: Double, lon2: Double
     val avgLat = Math.toRadians((lat1 + lat2) / 2)
     
     // Equirectangular projection: dx = dLon * cos(avgLat), dy = dLat
-    val dx = dLon * Math.cos(avgLat)
+    val dx = dLon * cos(avgLat)
     val dy = dLat
     
-    return R * Math.sqrt(dx * dx + dy * dy)
+    return R * sqrt(dx * dx + dy * dy)
 }
 
 /**

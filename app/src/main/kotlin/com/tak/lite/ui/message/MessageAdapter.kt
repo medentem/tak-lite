@@ -20,14 +20,13 @@ import java.util.Date
 import java.util.Locale
 
 class MessageAdapter(
-    private val currentUserShortName: String?,
     private val currentUserId: String?
 ) : ListAdapter<ChannelMessage, MessageAdapter.MessageViewHolder>(MessageDiffCallback()) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): MessageViewHolder {
         val view = LayoutInflater.from(parent.context)
             .inflate(R.layout.item_message, parent, false)
-        return MessageViewHolder(view, currentUserShortName, currentUserId)
+        return MessageViewHolder(view, currentUserId)
     }
 
     override fun onBindViewHolder(holder: MessageViewHolder, position: Int) {
@@ -36,7 +35,6 @@ class MessageAdapter(
 
     class MessageViewHolder(
         itemView: View,
-        private val currentUserShortName: String?,
         private val currentUserId: String?
     ) : RecyclerView.ViewHolder(itemView) {
         private val senderName: TextView = itemView.findViewById(R.id.senderName)
@@ -86,9 +84,9 @@ class MessageAdapter(
                 statusCheck1.setImageResource(R.drawable.ic_check_circle_outline)
                 statusCheck2.setImageResource(R.drawable.ic_check_circle_outline)
                 statusCheck3.setImageResource(R.drawable.ic_check_circle_outline)
-                statusCheck1.setColorFilter(null)
-                statusCheck2.setColorFilter(null)
-                statusCheck3.setColorFilter(null)
+                statusCheck1.colorFilter = null
+                statusCheck2.colorFilter = null
+                statusCheck3.colorFilter = null
 
                 // Fill icons based on status
                 when (message.status) {
@@ -143,7 +141,7 @@ class MessageAdapter(
         }
 
         private fun showStatusPopover(view: View, isDirectMessage: Boolean, status: MessageStatus) {
-            var text = "";
+            var text = ""
             when (status) {
                 MessageStatus.SENT -> {
                     text = view.context.getString(R.string.message_sent_to_network)

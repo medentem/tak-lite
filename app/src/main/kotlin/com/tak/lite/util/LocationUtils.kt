@@ -17,7 +17,7 @@ object LocationUtils {
     /**
      * Convert bearing degrees to cardinal direction (N, NE, E, SE, S, SW, W, NW)
      */
-    fun bearingToCardinalDirection(bearing: Double): String {
+    private fun bearingToCardinalDirection(bearing: Double): String {
         return when {
             bearing >= 337.5 || bearing < 22.5 -> "N"
             bearing >= 22.5 && bearing < 67.5 -> "NE"

@@ -77,7 +77,7 @@ class PoiTimerManager(
     /**
      * Stop the timer update system
      */
-    fun stopTimerUpdates() {
+    private fun stopTimerUpdates() {
         if (isTimerActive) {
             isTimerActive = false
             handler.removeCallbacks(timerRunnable)
@@ -110,7 +110,7 @@ class PoiTimerManager(
                 TimerFeature(
                     poiId = poi.id,
                     position = Point.fromLngLat(poi.position.lng, poi.position.lt),
-                    expirationTime = poi.expirationTime!!,
+                    expirationTime = poi.expirationTime,
                     color = timerColor,
                     secondsRemaining = secondsRemaining,
                     isWarning = isWarning,
@@ -265,13 +265,6 @@ class PoiTimerManager(
             com.tak.lite.model.AnnotationColor.BLACK -> "#000000"
             com.tak.lite.model.AnnotationColor.WHITE -> "#FFFFFF"
         }
-    }
-
-    /**
-     * Force update timer data (for testing)
-     */
-    fun forceUpdate() {
-        updateTimerData()
     }
     
     /**

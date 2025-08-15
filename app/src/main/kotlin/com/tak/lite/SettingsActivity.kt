@@ -164,13 +164,13 @@ class SettingsActivity : BaseActivity() {
     private lateinit var userAntennaHeightEditText: com.google.android.material.textfield.TextInputEditText
     private lateinit var receivingAntennaHeightEditText: com.google.android.material.textfield.TextInputEditText
     private lateinit var weatherSettingsCard: com.google.android.material.card.MaterialCardView
-    private lateinit var weatherEnabledSwitch: com.google.android.material.switchmaterial.SwitchMaterial
+    private lateinit var weatherEnabledSwitch: SwitchMaterial
     private lateinit var weatherSourceSpinner: com.google.android.material.textfield.MaterialAutoCompleteTextView
     private lateinit var weatherOpacitySlider: com.google.android.material.slider.Slider
     private lateinit var weatherOpacityValue: TextView
     private lateinit var languageSpinner: com.google.android.material.textfield.MaterialAutoCompleteTextView
     private lateinit var unitSystemSpinner: com.google.android.material.textfield.MaterialAutoCompleteTextView
-    private lateinit var minLineSegmentDistLabel: android.widget.TextView
+    private lateinit var minLineSegmentDistLabel: TextView
     private lateinit var minLineSegmentDistLayout: com.google.android.material.textfield.TextInputLayout
     private lateinit var userAntennaHeightLayout: com.google.android.material.textfield.TextInputLayout
     private lateinit var receivingAntennaHeightLayout: com.google.android.material.textfield.TextInputLayout
@@ -182,7 +182,6 @@ class SettingsActivity : BaseActivity() {
     private lateinit var quickMessage6EditText: com.google.android.material.textfield.TextInputEditText
     private lateinit var resetQuickMessagesButton: com.google.android.material.button.MaterialButton
     private val REQUEST_CODE_FOREGROUND_SERVICE_CONNECTED_DEVICE = 2003
-    private val REQUEST_CODE_NOTIFICATION_PERMISSION = 3001
     private val REQUEST_CODE_ALL_PERMISSIONS = 4001
     
     // Protocol observation jobs
@@ -1200,7 +1199,9 @@ class SettingsActivity : BaseActivity() {
                     val intent = intent
                     finish()
                     startActivity(intent)
-                    overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, 0, 0) // No animation
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                        overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, 0, 0)
+                    } // No animation
                 } else {
                     // Apply locale immediately and recreate activity
                     LocaleManager.applyLocaleAndRecreate(this)
@@ -1413,13 +1414,6 @@ class SettingsActivity : BaseActivity() {
             dialog.show(supportFragmentManager, "donation_dialog")
         }
     }
-
-    private fun showPurchaseDialog() {
-        val dialog = com.tak.lite.ui.PurchaseDialog()
-        dialog.show(supportFragmentManager, "purchase_dialog")
-    }
-
-
 
     private fun showPredictionAdvancedSettings() {
         val dialog = PredictionAdvancedSettingsDialog()

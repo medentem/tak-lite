@@ -6,7 +6,6 @@ import android.view.LayoutInflater
 import android.view.View
 import android.widget.ImageView
 import android.widget.PopupWindow
-import android.widget.TextView
 import com.tak.lite.R
 
 class LayersSelectionDialog(
@@ -34,7 +33,6 @@ class LayersSelectionDialog(
         val weatherState = popupView.findViewById<ImageView>(R.id.layerWeatherState)
         val predictionsState = popupView.findViewById<ImageView>(R.id.layerPredictionsState)
         val coverageState = popupView.findViewById<ImageView>(R.id.layerCoverageState)
-        val title = popupView.findViewById<TextView>(R.id.layersTitle)
 
         // Weather row visibility based on premium status
         weatherRow.visibility = if (showWeatherOption) View.VISIBLE else View.GONE
