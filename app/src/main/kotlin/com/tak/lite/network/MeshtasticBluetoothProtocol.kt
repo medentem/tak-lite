@@ -407,7 +407,9 @@ class MeshtasticBluetoothProtocol @Inject constructor(
                     handlePacket(fromRadio.packet, fromRadio.payloadVariantCase)
                 }
                 com.geeksville.mesh.MeshProtos.FromRadio.PayloadVariantCase.QUEUESTATUS -> {
-                    handleQueueStatus(fromRadio.queueStatus)
+                    CoroutineScope(coroutineContext).launch {
+                        handleQueueStatus(fromRadio.queueStatus)
+                    }
                 }
                 else -> {
                     Log.d(TAG, "Ignored packet with payloadVariantCase: ${fromRadio.payloadVariantCase}")

@@ -7,6 +7,7 @@ import com.tak.lite.data.model.IChannel
 import com.tak.lite.di.ConfigDownloadStep
 import com.tak.lite.di.MeshConnectionState
 import com.tak.lite.di.MeshProtocol
+import com.tak.lite.model.AnnotationStatus
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PacketSummary
 import com.tak.lite.model.PeerLocationEntry
@@ -37,12 +38,15 @@ class DisabledMeshProtocol(private val context: Context) : MeshProtocol {
     private val _configStepCounters = MutableStateFlow<Map<ConfigDownloadStep, Int>>(emptyMap())
     override val configStepCounters: StateFlow<Map<ConfigDownloadStep, Int>> = _configStepCounters.asStateFlow()
 
+    private val _annotationStatusUpdates = MutableStateFlow<Map<String, AnnotationStatus>>(emptyMap())
+    override val annotationStatusUpdates: StateFlow<Map<String, AnnotationStatus>> = _annotationStatusUpdates.asStateFlow()
+
     override val requiresAppLocationSend: Boolean = false
     override val allowsChannelManagement: Boolean = false
     override val supportsAudio: Boolean = false
     override val requiresConnection: Boolean = true
 
-    override suspend fun createChannel(name: String) {
+    override fun createChannel(name: String) {
         // No-op
     }
 
@@ -50,7 +54,7 @@ class DisabledMeshProtocol(private val context: Context) : MeshProtocol {
         // No-op
     }
 
-    override suspend fun selectChannel(channelId: String) {
+    override fun selectChannel(channelId: String) {
         // No-op
     }
 

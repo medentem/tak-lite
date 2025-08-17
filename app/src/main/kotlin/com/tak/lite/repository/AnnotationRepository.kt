@@ -3,6 +3,7 @@ package com.tak.lite.repository
 import android.content.Context
 import android.util.Log
 import com.tak.lite.model.MapAnnotation
+import com.tak.lite.model.AnnotationStatus
 import com.tak.lite.network.MeshProtocolProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -28,7 +29,15 @@ class AnnotationRepository @Inject constructor(
     
     private val _annotations = MutableStateFlow<List<MapAnnotation>>(emptyList())
     val annotations: StateFlow<List<MapAnnotation>> = _annotations.asStateFlow()
+
+    // Internal mutable map for annotation statuses
+    private val internalAnnotationStatuses = mutableMapOf<String, AnnotationStatus>()
     
+    // Expose annotation statuses as StateFlow for ViewModels
+    private val _annotationStatuses = MutableStateFlow<Map<String, AnnotationStatus>>(emptyMap())
+    val annotationStatuses: StateFlow<Map<String, AnnotationStatus>> = _annotationStatuses.asStateFlow()
+
+
     // Create a coroutine scope for the repository
     private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
@@ -38,6 +47,19 @@ class AnnotationRepository @Inject constructor(
             meshProtocolProvider.protocol.collect { currentProtocol ->
                 currentProtocol.setAnnotationCallback { annotation ->
                     handleAnnotation(annotation)
+                }
+            }
+        }
+
+        // Observe annotation status updates from protocol
+        repositoryScope.launch {
+            meshProtocolProvider.protocol.collect { currentProtocol ->
+                currentProtocol.annotationStatusUpdates.collect { statusUpdates ->
+                    statusUpdates.forEach { (annotationId, status) ->
+                        internalAnnotationStatuses[annotationId] = status
+                        _annotationStatuses.value = internalAnnotationStatuses.toMap()
+                        Log.d(TAG, "Updated annotation $annotationId status from protocol: $status")
+                    }
                 }
             }
         }
@@ -85,9 +107,11 @@ class AnnotationRepository @Inject constructor(
         saveAnnotations() // Save after any annotation change
     }
     
-    fun addAnnotation(annotation: MapAnnotation) {
+    suspend fun addAnnotation(annotation: MapAnnotation) {
         // Update local state first
         _annotations.value = _annotations.value.filter { it.id != annotation.id } + annotation
+        internalAnnotationStatuses[annotation.id] = AnnotationStatus.PENDING
+        _annotationStatuses.value = internalAnnotationStatuses.toMap()
         // Send to mesh network using current protocol
         meshProtocolProvider.protocol.value.sendAnnotation(annotation)
         saveAnnotations() // Save after adding new annotation
@@ -140,5 +164,10 @@ class AnnotationRepository @Inject constructor(
 
     fun hasSavedAnnotations(): Boolean {
         return prefs.contains("saved_annotations")
+    }
+
+    // Add method to get annotation status
+    fun getAnnotationStatus(annotationId: String): AnnotationStatus? {
+        return internalAnnotationStatuses[annotationId]
     }
 } 

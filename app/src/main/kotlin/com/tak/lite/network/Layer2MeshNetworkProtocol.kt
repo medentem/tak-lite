@@ -9,6 +9,7 @@ import com.tak.lite.data.model.IChannel
 import com.tak.lite.di.ConfigDownloadStep
 import com.tak.lite.di.MeshConnectionState
 import com.tak.lite.di.MeshProtocol
+import com.tak.lite.model.AnnotationStatus
 import com.tak.lite.model.ConnectionMetrics
 import com.tak.lite.model.DiscoveryPacket
 import com.tak.lite.model.Layer2AnnotationPacket
@@ -121,6 +122,9 @@ class Layer2MeshNetworkProtocol @Inject constructor(
 
     private val _configStepCounters = MutableStateFlow<Map<ConfigDownloadStep, Int>>(emptyMap())
     override val configStepCounters: StateFlow<Map<ConfigDownloadStep, Int>> = _configStepCounters.asStateFlow()
+
+    private val _annotationStatusUpdates = MutableStateFlow<Map<String, AnnotationStatus>>(emptyMap())
+    override val annotationStatusUpdates: StateFlow<Map<String, AnnotationStatus>> = _annotationStatusUpdates.asStateFlow()
 
     private val _connectionState = MutableStateFlow<MeshConnectionState>(MeshConnectionState.Disconnected)
     override val connectionState: StateFlow<MeshConnectionState> = _connectionState.asStateFlow()
@@ -556,11 +560,16 @@ class Layer2MeshNetworkProtocol @Inject constructor(
     
     override fun sendAnnotation(annotation: MapAnnotation) {
         CoroutineScope(Dispatchers.IO).launch {
+            // Emit PENDING status
+            val currentStatuses = _annotationStatusUpdates.value.toMutableMap()
+            currentStatuses[annotation.id] = AnnotationStatus.PENDING
+            _annotationStatusUpdates.value = currentStatuses
+            
             val packet = Layer2AnnotationPacket(
                 annotation = annotation
             )
             val jsonString = json.encodeToString(Layer2AnnotationPacket.serializer(), packet)
-            sendToAllPeers(jsonString.toByteArray(), ANNOTATION_PORT, PacketType.ANNOTATION)
+            sendToAllPeers(jsonString.toByteArray(), ANNOTATION_PORT, PacketType.ANNOTATION, requireAck = true)
             // Also broadcast
             val socket = createBoundSocket()
             val packetData = DatagramPacket(
@@ -572,6 +581,10 @@ class Layer2MeshNetworkProtocol @Inject constructor(
             socket.broadcast = true
             socket.send(packetData)
             socket.close()
+            
+            // Emit SENT status
+            currentStatuses[annotation.id] = AnnotationStatus.SENT
+            _annotationStatusUpdates.value = currentStatuses
         }
     }
     
@@ -1069,7 +1082,7 @@ class Layer2MeshNetworkProtocol @Inject constructor(
     override val supportsAudio: Boolean = true
     override val requiresConnection: Boolean = false
 
-    override suspend fun createChannel(name: String) {
+    override fun createChannel(name: String) {
         // No-op for Layer 2
     }
 
@@ -1077,7 +1090,7 @@ class Layer2MeshNetworkProtocol @Inject constructor(
         // No-op for Layer 2
     }
 
-    override suspend fun selectChannel(channelId: String) {
+    override fun selectChannel(channelId: String) {
         // No-op for Layer 2
     }
 

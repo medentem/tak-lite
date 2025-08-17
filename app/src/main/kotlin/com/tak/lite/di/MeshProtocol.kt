@@ -6,6 +6,7 @@ import com.tak.lite.data.model.IChannel
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PacketSummary
 import com.tak.lite.model.PeerLocationEntry
+import com.tak.lite.model.AnnotationStatus
 import com.tak.lite.network.MeshPeer
 import kotlinx.coroutines.flow.StateFlow
 import org.maplibre.android.geometry.LatLng
@@ -41,6 +42,7 @@ interface MeshProtocol {
     val packetSummaries: StateFlow<List<PacketSummary>>
     val configDownloadStep: StateFlow<ConfigDownloadStep>? get() = null
     val configStepCounters: StateFlow<Map<ConfigDownloadStep, Int>>
+    val annotationStatusUpdates: StateFlow<Map<String, AnnotationStatus>>
 
     val requiresAppLocationSend: Boolean
     val allowsChannelManagement: Boolean
@@ -53,9 +55,9 @@ interface MeshProtocol {
     fun disconnectFromDevice()
     
     // Channel operations
-    suspend fun createChannel(name: String)
+    fun createChannel(name: String)
     fun deleteChannel(channelId: String)
-    suspend fun selectChannel(channelId: String)
+    fun selectChannel(channelId: String)
     
     fun sendAnnotation(annotation: MapAnnotation)
     fun sendLocationUpdate(latitude: Double, longitude: Double)

@@ -697,4 +697,20 @@ object MeshAnnotationInterop {
             null
         }
     }
+
+    fun parseAnnotationIdFromData(data: MeshProtos.Data): String? {
+        if (data.portnum != com.geeksville.mesh.Portnums.PortNum.ATAK_PLUGIN) {
+            Log.w(TAG, "Portnum does not match ATAK_PLUGIN, returning null")
+            return null
+        }
+        return try {
+            val takPacket = ATAKProtos.TAKPacket.parseFrom(data.payload)
+            val jsonString = takPacket.detail.toStringUtf8()
+            val json = kotlinx.serialization.json.Json.parseToJsonElement(jsonString) as? JsonObject
+            json?.get("i")?.jsonPrimitive?.content
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to parse annotation ID from data", e)
+            null
+        }
+    }
 } 

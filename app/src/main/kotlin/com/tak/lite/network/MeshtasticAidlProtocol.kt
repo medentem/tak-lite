@@ -1344,10 +1344,10 @@ class MeshtasticAidlProtocol @Inject constructor(
         Log.d(TAG, "Converted status $status to base status $baseStatus")
         
         // Find the packet in flight messages and update its status
-        val packet = inFlightMessages[packetId]
+        val packet = inFlightPackets[packetId]
         if (packet != null) {
-            Log.d(TAG, "Found packet $packetId in inFlightMessages, current count: ${inFlightMessages.size}")
-            updateMessageStatusForPacket(packet, baseStatus)
+            Log.d(TAG, "Found packet $packetId in inFlightMessages, current count: ${inFlightPackets.size}")
+            updatePacketStatusForPacket(packet, baseStatus)
             
             // Only remove packets from inFlightMessages for successful final statuses
             // This allows the timeout system to retry failed messages
@@ -1355,10 +1355,10 @@ class MeshtasticAidlProtocol @Inject constructor(
                 BaseMessageStatus.DELIVERED, BaseMessageStatus.RECEIVED -> {
 
                     Log.d(TAG, "Message $packetId reached successful final status $baseStatus, removing from inFlightMessages")
-                    inFlightMessages.remove(packetId)
-                    messageRetryCount.remove(packetId)
+                    inFlightPackets.remove(packetId)
+                    packetRetryCount.remove(packetId)
                     timeoutJobManager.cancelTimeout(packetId)
-                    Log.d(TAG, "Removed packet $packetId from tracking, remaining inFlightMessages: ${inFlightMessages.size}")
+                    Log.d(TAG, "Removed packet $packetId from tracking, remaining inFlightMessages: ${inFlightPackets.size}")
                 }
                 BaseMessageStatus.FAILED, BaseMessageStatus.ERROR -> {
                     // For failed statuses, don't remove from inFlightMessages yet

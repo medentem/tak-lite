@@ -16,6 +16,7 @@ import com.tak.lite.data.model.MessageStatus
 import com.tak.lite.di.ConfigDownloadStep
 import com.tak.lite.di.MeshConnectionState
 import com.tak.lite.di.MeshProtocol
+import com.tak.lite.model.AnnotationStatus
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PacketSummary
 import com.tak.lite.model.PeerLocationEntry
@@ -32,6 +33,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 import org.maplibre.android.geometry.LatLng
 import java.util.concurrent.ConcurrentHashMap
@@ -79,9 +82,9 @@ abstract class MeshtasticBaseProtocol(
     var connectedNodeId: String? = null
         internal set
 
-    internal val inFlightMessages = ConcurrentHashMap<Int, MeshProtos.MeshPacket>()
+    internal val inFlightPackets = ConcurrentHashMap<Int, MeshProtos.MeshPacket>()
     // Add message retry tracking
-    internal val messageRetryCount = ConcurrentHashMap<Int, Int>()
+    internal val packetRetryCount = ConcurrentHashMap<Int, Int>()
 
     internal val peerLocations = ConcurrentHashMap<String, PeerLocationEntry>()
 
@@ -112,6 +115,10 @@ abstract class MeshtasticBaseProtocol(
 
     private val _channelMessages = MutableStateFlow<Map<String, List<ChannelMessage>>>(emptyMap())
     override val channelMessages: StateFlow<Map<String, List<ChannelMessage>>> = _channelMessages.asStateFlow()
+
+    // Add annotation status flow
+    private val _annotationStatusUpdates = MutableStateFlow<Map<String, AnnotationStatus>>(emptyMap())
+    override val annotationStatusUpdates: StateFlow<Map<String, AnnotationStatus>> = _annotationStatusUpdates.asStateFlow()
 
     private val channelLastMessages = ConcurrentHashMap<String, ChannelMessage>()
 
@@ -162,6 +169,10 @@ abstract class MeshtasticBaseProtocol(
 
     internal val timeoutJobManager = TimeoutJobManager()
 
+    // Add mutex instances
+    private val inFlightMutex = Mutex()
+    private val queueMutex = Mutex()
+
     /**
      * Generate a unique packet ID (if we know enough to do so - otherwise return 0 so the device will do it)
      */
@@ -201,7 +212,7 @@ abstract class MeshtasticBaseProtocol(
             val requestId = decoded.requestId
             val unsignedRequestId = (requestId.toLong() and 0xFFFFFFFFL).toInt()
             if (unsignedRequestId != 0) {  // 0 means no requestId
-                val existingPacket = inFlightMessages[unsignedRequestId]
+                val existingPacket = inFlightPackets[unsignedRequestId]
                 if (existingPacket != null) {
                     // This is a message we sent, don't add it again
                     Log.d(TAG, "Received our own message back with requestId $requestId, not adding to channel messages")
@@ -543,11 +554,11 @@ abstract class MeshtasticBaseProtocol(
 
     private fun handleRoutingPacket(routing: MeshProtos.Routing, fromId: String, requestId: Int) {
         // Check if this is a response to one of our messages
-        val packet = inFlightMessages.remove(requestId)
+        val packet = inFlightPackets.remove(requestId)
         if (packet != null) {
             // Cancel the timeout job since we got a response
             timeoutJobManager.cancelTimeout(requestId)
-            messageRetryCount.remove(requestId)
+            packetRetryCount.remove(requestId)
 
             val isAck = routing.errorReason == MeshProtos.Routing.Error.NONE
             val packetTo = (packet.to.toLong() and 0xFFFFFFFFL).toString()
@@ -567,7 +578,7 @@ abstract class MeshtasticBaseProtocol(
                 isAck -> MessageStatus.DELIVERED
                 else -> MessageStatus.FAILED
             }
-            updateMessageStatusForPacket(packet, newStatus)
+            updatePacketStatusForPacket(packet, newStatus)
             Log.d(TAG, "Updated packet ${packet.id} status to $newStatus (fromId: $fromId, isAck: $isAck)")
 
             // Complete the queue response if it exists
@@ -688,7 +699,7 @@ abstract class MeshtasticBaseProtocol(
         }
     }
 
-    internal fun handleQueueStatus(queueStatus: MeshProtos.QueueStatus) {
+    internal suspend fun handleQueueStatus(queueStatus: MeshProtos.QueueStatus) {
         Log.d(TAG, "Received QueueStatus: $queueStatus")
         val (success, isFull, meshPacketId) = with(queueStatus) {
             Triple(res == 0, free == 0, meshPacketId)
@@ -705,13 +716,15 @@ abstract class MeshtasticBaseProtocol(
 
         // Complete the future for this packet
         if (meshPacketId != 0) {
-            queueResponse.remove(meshPacketId)?.complete(success)
+            queueMutex.withLock {
+                queueResponse.remove(meshPacketId)?.complete(success)
+            }
 
             // Update message status if this was a text message
-            val packet = inFlightMessages[meshPacketId]
+            val packet = inFlightPackets[meshPacketId]
             if (packet != null) {
                 val newStatus = if (success) MessageStatus.SENT else MessageStatus.ERROR
-                updateMessageStatusForPacket(packet, newStatus)
+                updatePacketStatusForPacket(packet, newStatus)
             }
         } else {
             // If no specific packet ID, complete the last pending response
@@ -719,71 +732,73 @@ abstract class MeshtasticBaseProtocol(
         }
     }
 
-    internal fun updateMessageStatusForPacket(packet: MeshProtos.MeshPacket, newStatus: MessageStatus) {
-        Log.d(TAG, "=== updateMessageStatusForPacket Debug ===")
+    internal fun updatePacketStatusForPacket(packet: MeshProtos.MeshPacket, newStatus: MessageStatus) {  // Note: Reuse MessageStatus for now; consider generalizing enum later
+        Log.d(TAG, "=== updatePacketStatusForPacket Debug ===")
         Log.d(TAG, "Packet ID: ${packet.id}")
         Log.d(TAG, "New status: $newStatus")
-        Log.d(TAG, "Has decoded: ${packet.hasDecoded()}")
-        
-        if (!packet.hasDecoded() || packet.decoded.portnum != PortNum.TEXT_MESSAGE_APP) {
-            Log.d(TAG, "Not a text message, skipping status update")
-            return // Only update status for text messages
-        }
-        Log.d(TAG, "Port number: ${packet.decoded.portnum}")
 
-        val requestId = packet.id
-        val unsignedRequestId = (requestId.toLong() and 0xFFFFFFFFL).toInt()
-        val toId = (packet.to.toLong() and 0xFFFFFFFFL)
-        Log.d(TAG, "Request ID: $requestId, unsigned: $unsignedRequestId")
-        Log.d(TAG, "To ID: $toId")
-        
-        val channelId = if (toId != 0xFFFFFFFFL) {
-            // This is a direct message
-            Log.d(TAG, "Direct message status update: ${packet.channel}")
-            DirectMessageChannel.createId(toId.toString())
-        } else {
-            // This is a channel message
-            val channel = _channels.value.find { it.index == packet.channel }
-            if (channel == null) {
-                Log.e(TAG, "Could not find channel with index ${packet.channel}")
-                return
+        if (!packet.hasDecoded()) {
+            Log.w(TAG, "Packet has no decoded data, skipping status update")
+            return
+        }
+
+        when (packet.decoded.portnum) {
+            PortNum.TEXT_MESSAGE_APP -> {
+                // Existing text message logic
+                val requestId = packet.id
+                val channelId = getChannelIdForPacket(packet) ?: return
+                val channelMessages = _channelMessages.value[channelId]?.toMutableList() ?: return
+
+                val messageIndex = channelMessages.indexOfFirst { it.requestId == requestId }
+                if (messageIndex != -1) {
+                    val updatedMessage = channelMessages[messageIndex].copy(status = newStatus)
+                    channelMessages[messageIndex] = updatedMessage
+                    val currentMessages = _channelMessages.value.toMutableMap()
+                    currentMessages[channelId] = channelMessages
+                    _channelMessages.value = currentMessages
+                    Log.d(TAG, "Updated message status for requestId $requestId in channel $channelId to $newStatus")
+                } else {
+                    Log.w(TAG, "Message with requestId $requestId not found in channel $channelId")
+                }
             }
-            "${channel.index}_${channel.name}"
-        }
-        Log.d(TAG, "Channel ID for status update: $channelId")
-
-        val currentMessages = _channelMessages.value.toMutableMap()
-        val channelMessages = currentMessages[channelId]?.toMutableList() ?: mutableListOf()
-        Log.d(TAG, "Current messages in channel $channelId: ${channelMessages.size}")
-        
-        val messageIndex = channelMessages.indexOfFirst { it.requestId == unsignedRequestId }
-        Log.d(TAG, "Message index for request ID $unsignedRequestId: $messageIndex")
-
-        if (messageIndex != -1) {
-            val currentMessage = channelMessages[messageIndex]
-            Log.d(TAG, "Found message: $currentMessage")
-            val updatedMessage = currentMessage.copyWithStatus(newStatus)
-            
-            if (updatedMessage != null) {
-                channelMessages[messageIndex] = updatedMessage
-                currentMessages[channelId] = channelMessages
-                _channelMessages.value = currentMessages
-                Log.d(TAG, "Updated message $unsignedRequestId status from ${currentMessage.status} to $newStatus")
-            } else {
-                Log.w(TAG, "Rejected status update for message ${unsignedRequestId}: cannot transition from ${currentMessage.status} to $newStatus")
+            PortNum.ATAK_PLUGIN -> {
+                val annotationId = MeshAnnotationInterop.parseAnnotationIdFromData(packet.decoded) ?: return
+                val annotationStatus = when (newStatus) {
+                    MessageStatus.SENDING -> AnnotationStatus.PENDING
+                    MessageStatus.SENT -> AnnotationStatus.SENT
+                    MessageStatus.DELIVERED -> AnnotationStatus.DELIVERED
+                    MessageStatus.FAILED -> AnnotationStatus.FAILED
+                    else -> AnnotationStatus.PENDING  // Default
+                }
+                
+                // Emit to flow instead of calling repository directly
+                val currentStatuses = _annotationStatusUpdates.value.toMutableMap()
+                currentStatuses[annotationId] = annotationStatus
+                _annotationStatusUpdates.value = currentStatuses
+                
+                Log.d(TAG, "Emitted annotation $annotationId status update to $annotationStatus")
             }
-        } else {
-            Log.e(TAG, "Could not find message with id $unsignedRequestId in channel $channelId")
-            Log.e(TAG, "Available messages in channel: ${channelMessages.map { "${it.requestId} (${it.status})" }}")
+            else -> {
+                Log.w(TAG, "Unsupported portnum ${packet.decoded.portnum} for status update")
+            }
         }
-        Log.d(TAG, "=== updateMessageStatusForPacket Complete ===")
+
+        Log.d(TAG, "=== updatePacketStatusForPacket Complete ===")
     }
     /**
      * Queue a packet for sending. This is the main entry point for all packet queuing.
      * @param packet The MeshPacket to queue
      */
-    private fun queuePacket(packet: MeshProtos.MeshPacket) {
-        Log.d(TAG, "Queueing packet id=${packet.id}, type=${packet.decoded.portnum}")
+    internal fun queuePacket(packet: MeshProtos.MeshPacket) {
+        val unsignedId = (packet.id.toLong() and 0xFFFFFFFFL).toInt()
+        kotlinx.coroutines.runBlocking {
+            inFlightMutex.withLock {
+                if (packet.wantAck && !inFlightPackets.containsKey(unsignedId)) {
+                    inFlightPackets[unsignedId] = packet
+                    startPacketTimeout(packet)
+                }
+            }
+        }
         queuedPackets.offer(packet)
         startPacketQueue()
     }
@@ -804,7 +819,9 @@ abstract class MeshtasticBaseProtocol(
 
                     // Send packet to radio and wait for response
                     val future = CompletableDeferred<Boolean>()
-                    queueResponse[packet.id] = future
+                    queueMutex.withLock {
+                        queueResponse[packet.id] = future
+                    }
 
                     try {
                         sendPacket(packet)
@@ -815,27 +832,32 @@ abstract class MeshtasticBaseProtocol(
                                 // If packet failed in queue, don't wait for message timeout
                                 if (packet.hasDecoded() && packet.decoded.portnum == PortNum.TEXT_MESSAGE_APP) {
                                     timeoutJobManager.cancelTimeout(packet.id)
-                                    updateMessageStatusForPacket(packet, MessageStatus.FAILED)
+                                    updatePacketStatusForPacket(packet, MessageStatus.FAILED)
                                 }
                             }
                         }
                     } catch (e: TimeoutCancellationException) {
                         Log.w(TAG, "Packet id=${packet.id} timed out in queue")
-                        queueResponse.remove(packet.id)?.complete(false)
+                        queueMutex.withLock {
+                            queueResponse.remove(packet.id)?.complete(false)
+                        }
                         // Don't update message status here - let message timeout handle it
                     } catch (e: Exception) {
                         Log.e(TAG, "Error processing packet id=${packet.id}", e)
-                        queueResponse.remove(packet.id)?.complete(false)
+                        queueMutex.withLock {
+                            queueResponse.remove(packet.id)?.complete(false)
+                        }
                         // Don't update message status here - let message timeout handle it
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Error in packet queue job", e)
                 }
             }
+            Log.d(TAG, "Packet queue empty, job complete")
         }
     }
 
-    override suspend fun selectChannel(channelId: String) {
+    override fun selectChannel(channelId: String) {
         Log.d(TAG, "Selecting channel: $channelId")
         selectedChannelId = channelId
 
@@ -1049,6 +1071,7 @@ abstract class MeshtasticBaseProtocol(
             .setDecoded(data)
             .setChannel(selectedChannelIndex)
             .setId(generatePacketId())
+            .setWantAck(true)
             .build()
         Log.d(TAG, "Sending annotation: $annotation as packet bytes: "+
                 packet.toByteArray().joinToString(", ", limit = 16))
@@ -1121,7 +1144,6 @@ abstract class MeshtasticBaseProtocol(
         ) {
             portnum = PortNum.TEXT_MESSAGE_APP
             payload = ByteString.copyFromUtf8(content)
-            requestId = textMessagePacketId
         }
 
         // Get the sender's short name from node info
@@ -1143,21 +1165,15 @@ abstract class MeshtasticBaseProtocol(
 
         // Store this message as the last sent message
         lastSentMessage = message
-        inFlightMessages[textMessagePacketId] = packet
-        Log.d(TAG, "Added to inFlightMessages, count: ${inFlightMessages.size}")
 
         // Add to channel messages immediately
         val currentMessages = _channelMessages.value.toMutableMap()
         val channelMessages = currentMessages[channelId]?.toMutableList() ?: mutableListOf()
-        Log.d(TAG, "Current messages for channel $channelId: ${channelMessages.size}")
         channelMessages.add(message)
         currentMessages[channelId] = channelMessages
         _channelMessages.value = currentMessages
         Log.d(TAG, "Updated channel messages, new count for channel $channelId: ${channelMessages.size}")
         Log.d(TAG, "Total channels with messages: ${_channelMessages.value.size}")
-
-        // Start message timeout
-        startMessageTimeout(packet)
 
         // Queue the packet
         queuePacket(packet)
@@ -1212,7 +1228,6 @@ abstract class MeshtasticBaseProtocol(
         ) {
             portnum = PortNum.TEXT_MESSAGE_APP
             payload = ByteString.copyFromUtf8(content)
-            requestId = textMessagePacketId
         }
 
         // Get the sender's short name from node info
@@ -1232,7 +1247,6 @@ abstract class MeshtasticBaseProtocol(
 
         // Store this message as the last sent message
         lastSentMessage = message
-        inFlightMessages[textMessagePacketId] = packet
 
         // Add to channel messages immediately
         val currentMessages = _channelMessages.value.toMutableMap()
@@ -1241,9 +1255,6 @@ abstract class MeshtasticBaseProtocol(
         channelMessages.add(message)
         currentMessages[channelId] = channelMessages
         _channelMessages.value = currentMessages
-
-        // Start message timeout
-        startMessageTimeout(packet)
 
         // Queue the packet
         queuePacket(packet)
@@ -1310,7 +1321,7 @@ abstract class MeshtasticBaseProtocol(
         return newChannel
     }
 
-    override suspend fun createChannel(name: String) {
+    override fun createChannel(name: String) {
         TODO("Not yet implemented")
     }
 
@@ -1380,46 +1391,31 @@ abstract class MeshtasticBaseProtocol(
         }
     }
 
-    private fun startMessageTimeout(packet: MeshProtos.MeshPacket) {
-        // Only start message timeout for text messages
-        if (!packet.hasDecoded() || packet.decoded.portnum != PortNum.TEXT_MESSAGE_APP) {
-            return
-        }
+    private fun startPacketTimeout(packet: MeshProtos.MeshPacket) {
+        if (!packet.wantAck) return
 
         timeoutJobManager.startTimeout(packet, MESSAGE_TIMEOUT_MS) { timedOutPacket ->
             val unsignedPacketId = (timedOutPacket.id.toLong() and 0xFFFFFFFFL).toInt()
-            var retryCount = messageRetryCount.getOrDefault(unsignedPacketId, 0)
+            var retryCount = packetRetryCount.getOrDefault(unsignedPacketId, 0)
 
-            // Check if packet is still in flight (hasn't been acknowledged)
-            if (inFlightMessages.containsKey(unsignedPacketId)) {
-                // Check if the packet is still in the queue (BLE level retry)
+            if (inFlightPackets.containsKey(unsignedPacketId)) {
                 val isInQueue = queueResponse.containsKey(unsignedPacketId)
 
                 if (retryCount < MAX_RETRY_COUNT && !isInQueue) {
-                    // Only retry if not already being retried at BLE level
                     retryCount += 1
-
-                    Log.w(TAG, "Packet $unsignedPacketId timed out, retry $retryCount of $MAX_RETRY_COUNT")
-
-                    messageRetryCount[unsignedPacketId] = retryCount
-
-                    // Start a new timeout for the retry attempt
-                    startMessageTimeout(timedOutPacket)
-
-                    // Queue the retry packet
+                    packetRetryCount[unsignedPacketId] = retryCount
+                    startPacketTimeout(timedOutPacket)
                     queuePacket(timedOutPacket)
                 } else if (retryCount >= MAX_RETRY_COUNT) {
-                    // Max retries reached, mark as failed
-                    inFlightMessages.remove(unsignedPacketId)
-                    messageRetryCount.remove(unsignedPacketId)
-                    updateMessageStatusForPacket(timedOutPacket, MessageStatus.FAILED)
+                    inFlightPackets.remove(unsignedPacketId)
+                    packetRetryCount.remove(unsignedPacketId)
+                    updatePacketStatusForPacket(timedOutPacket, MessageStatus.FAILED)
                     Log.w(TAG, "Packet $unsignedPacketId failed after $MAX_RETRY_COUNT retries")
                 } else {
                     Log.d(TAG, "Packet $unsignedPacketId is being retried at BLE level, skipping packet-level retry")
                 }
             } else {
-                // Packet was already handled by queue or routing response
-                Log.d(TAG, "Packet $unsignedPacketId already handled, ignoring timeout")
+                Log.d(TAG, "Ignoring timeout for packet $unsignedPacketId - no longer in flight")
             }
         }
     }
@@ -1597,8 +1593,8 @@ abstract class MeshtasticBaseProtocol(
         _configDownloadStep.value = ConfigDownloadStep.NotStarted
         _configStepCounters.value = emptyMap()  // Reset counters
         nodeInfoMap.clear()
-        inFlightMessages.clear()
-        messageRetryCount.clear()
+        inFlightPackets.clear()
+        packetRetryCount.clear()
         timeoutJobManager.cancelAll()
         lastSentMessage = null
         queuedPackets.clear()
@@ -1670,5 +1666,35 @@ abstract class MeshtasticBaseProtocol(
         Log.d(TAG, "  - Updated connectedNodeId: $connectedNodeId")
         Log.d(TAG, "  - Updated _localNodeIdOrNickname: ${_localNodeIdOrNickname.value}")
         Log.d(TAG, "=== Base Protocol handleMyInfo() Complete ===")
+    }
+
+    // Add helper to parse annotation ID (implement based on MeshAnnotationInterop)
+    private fun parseAnnotationIdFromPacket(packet: MeshProtos.MeshPacket): String? {
+        // Logic to extract ID from packet.decoded.payload (e.g., parse JSON from ATAKPacket)
+        // Example stub:
+        try {
+            // Assuming ATAKProtos is available and imported
+            // val takPacket = ATAKProtos.TAKPacket.parseFrom(packet.decoded.payload)
+            // val jsonString = takPacket.detail.toStringUtf8()
+            // val json = kotlinx.serialization.json.Json.parseToJsonElement(jsonString) as? JsonObject
+            // return json?.get("i")?.jsonPrimitive?.content
+            return null // Placeholder for actual implementation
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to parse annotation ID", e)
+            return null
+        }
+    }
+
+    // Helper to get channel ID for different packet types
+    private fun getChannelIdForPacket(packet: MeshProtos.MeshPacket): String? {
+        if (packet.hasDecoded()) {
+            val decoded = packet.decoded
+            if (decoded.portnum == PortNum.TEXT_MESSAGE_APP) {
+                return DirectMessageChannel.createId(packet.to.toString())
+            } else if (decoded.portnum == PortNum.ATAK_PLUGIN) {
+                return MeshAnnotationInterop.parseAnnotationIdFromData(packet.decoded)
+            }
+        }
+        return null
     }
 }
