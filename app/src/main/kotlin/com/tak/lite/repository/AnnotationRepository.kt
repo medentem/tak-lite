@@ -107,7 +107,7 @@ class AnnotationRepository @Inject constructor(
         saveAnnotations() // Save after any annotation change
     }
     
-    suspend fun addAnnotation(annotation: MapAnnotation) {
+    fun addAnnotation(annotation: MapAnnotation) {
         // Update local state first
         _annotations.value = _annotations.value.filter { it.id != annotation.id } + annotation
         internalAnnotationStatuses[annotation.id] = AnnotationStatus.SENDING
