@@ -1668,23 +1668,6 @@ abstract class MeshtasticBaseProtocol(
         Log.d(TAG, "=== Base Protocol handleMyInfo() Complete ===")
     }
 
-    // Add helper to parse annotation ID (implement based on MeshAnnotationInterop)
-    private fun parseAnnotationIdFromPacket(packet: MeshProtos.MeshPacket): String? {
-        // Logic to extract ID from packet.decoded.payload (e.g., parse JSON from ATAKPacket)
-        // Example stub:
-        try {
-            // Assuming ATAKProtos is available and imported
-            // val takPacket = ATAKProtos.TAKPacket.parseFrom(packet.decoded.payload)
-            // val jsonString = takPacket.detail.toStringUtf8()
-            // val json = kotlinx.serialization.json.Json.parseToJsonElement(jsonString) as? JsonObject
-            // return json?.get("i")?.jsonPrimitive?.content
-            return null // Placeholder for actual implementation
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to parse annotation ID", e)
-            return null
-        }
-    }
-
     // Helper to get channel ID for different packet types
     private fun getChannelIdForPacket(packet: MeshProtos.MeshPacket): String? {
         if (packet.hasDecoded()) {
