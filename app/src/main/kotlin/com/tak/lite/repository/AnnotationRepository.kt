@@ -2,8 +2,8 @@ package com.tak.lite.repository
 
 import android.content.Context
 import android.util.Log
-import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.AnnotationStatus
+import com.tak.lite.model.MapAnnotation
 import com.tak.lite.network.MeshProtocolProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -110,7 +110,7 @@ class AnnotationRepository @Inject constructor(
     suspend fun addAnnotation(annotation: MapAnnotation) {
         // Update local state first
         _annotations.value = _annotations.value.filter { it.id != annotation.id } + annotation
-        internalAnnotationStatuses[annotation.id] = AnnotationStatus.PENDING
+        internalAnnotationStatuses[annotation.id] = AnnotationStatus.SENDING
         _annotationStatuses.value = internalAnnotationStatuses.toMap()
         // Send to mesh network using current protocol
         meshProtocolProvider.protocol.value.sendAnnotation(annotation)

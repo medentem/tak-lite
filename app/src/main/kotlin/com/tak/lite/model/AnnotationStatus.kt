@@ -1,7 +1,7 @@
 package com.tak.lite.model
 
 enum class AnnotationStatus {
-    PENDING,
+    SENDING,
     SENT,
     DELIVERED,
     FAILED,

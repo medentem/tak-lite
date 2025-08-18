@@ -562,7 +562,7 @@ class Layer2MeshNetworkProtocol @Inject constructor(
         CoroutineScope(Dispatchers.IO).launch {
             // Emit PENDING status
             val currentStatuses = _annotationStatusUpdates.value.toMutableMap()
-            currentStatuses[annotation.id] = AnnotationStatus.PENDING
+            currentStatuses[annotation.id] = AnnotationStatus.SENDING
             _annotationStatusUpdates.value = currentStatuses
             
             val packet = Layer2AnnotationPacket(

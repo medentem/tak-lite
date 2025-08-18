@@ -764,11 +764,11 @@ abstract class MeshtasticBaseProtocol(
             PortNum.ATAK_PLUGIN -> {
                 val annotationId = MeshAnnotationInterop.parseAnnotationIdFromData(packet.decoded) ?: return
                 val annotationStatus = when (newStatus) {
-                    MessageStatus.SENDING -> AnnotationStatus.PENDING
+                    MessageStatus.SENDING -> AnnotationStatus.SENDING
                     MessageStatus.SENT -> AnnotationStatus.SENT
                     MessageStatus.DELIVERED -> AnnotationStatus.DELIVERED
                     MessageStatus.FAILED -> AnnotationStatus.FAILED
-                    else -> AnnotationStatus.PENDING  // Default
+                    else -> AnnotationStatus.SENDING  // Default
                 }
                 
                 // Emit to flow instead of calling repository directly
