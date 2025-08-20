@@ -59,7 +59,11 @@ class DisabledMeshProtocol(private val context: Context) : MeshProtocol {
     }
 
     override fun sendAnnotation(annotation: MapAnnotation) {
-        // No-op
+        // Since this is a disabled protocol, immediately mark the annotation as failed
+        // to prevent the status from hanging on SENDING
+        val currentStatuses = _annotationStatusUpdates.value.toMutableMap()
+        currentStatuses[annotation.id] = AnnotationStatus.FAILED
+        _annotationStatusUpdates.value = currentStatuses
     }
 
     override fun sendLocationUpdate(latitude: Double, longitude: Double) {
@@ -98,7 +102,13 @@ class DisabledMeshProtocol(private val context: Context) : MeshProtocol {
     }
 
     override fun sendBulkAnnotationDeletions(ids: List<String>) {
-        // No-op
+        // Since this is a disabled protocol, immediately mark all annotations as failed
+        // to prevent the status from hanging on SENDING
+        val currentStatuses = _annotationStatusUpdates.value.toMutableMap()
+        ids.forEach { annotationId ->
+            currentStatuses[annotationId] = AnnotationStatus.FAILED
+        }
+        _annotationStatusUpdates.value = currentStatuses
     }
 
     override fun sendTextMessage(channelId: String, content: String) {

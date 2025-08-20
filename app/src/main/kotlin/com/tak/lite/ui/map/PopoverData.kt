@@ -8,9 +8,10 @@ data class PopoverData(
     val position: LatLng,
     val content: String,
     val timestamp: Long,
-    val autoDismissTime: Long
+    val autoDismissTime: Long,
+    val status: com.tak.lite.model.AnnotationStatus? = null
 )
 
 enum class PopoverType {
-    PEER, POI, POLYGON, AREA
+    PEER, POI, LINE, POLYGON, AREA
 } 

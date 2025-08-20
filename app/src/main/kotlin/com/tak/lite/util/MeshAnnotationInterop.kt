@@ -131,6 +131,7 @@ object MeshAnnotationInterop {
                     "ah" to if (annotation.arrowHead) 1 else 0
                 )
                 annotation.expirationTime?.let { map["e"] = it }
+                annotation.label?.let { map["l"] = it }
                 Json.encodeToString(JsonObject(map.mapValues { (k, v) ->
                     when (v) {
                         is String -> JsonPrimitive(v)
@@ -431,6 +432,7 @@ object MeshAnnotationInterop {
                         }
                         val arrowHead = json["ah"]?.jsonPrimitive?.intOrNull == 1
                         val expirationTime = json["e"]?.jsonPrimitive?.longOrNull
+                        val label = json["l"]?.jsonPrimitive?.content
                         MapAnnotation.Line(
                             id = id,
                             creatorId = creatorId,
@@ -439,6 +441,7 @@ object MeshAnnotationInterop {
                             points = pointsArr,
                             style = style,
                             arrowHead = arrowHead,
+                            label = label,
                             expirationTime = expirationTime
                         )
                     }

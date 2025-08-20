@@ -38,6 +38,7 @@ class AnnotationController(
     private val messageViewModel: MessageViewModel,
     private val fanMenuView: FanMenuView,
     private val annotationOverlayView: AnnotationOverlayView,
+    private val annotationStatusOverlayView: AnnotationStatusOverlayView,
     private val onAnnotationChanged: (() -> Unit)? = null,
     mapLibreMap: MapLibreMap
 ) {
@@ -120,7 +121,7 @@ class AnnotationController(
 
     init {
         clusteredLayerManager = ClusteredLayerManager(mapLibreMap, clusteringConfig)
-        popoverManager = HybridPopoverManager(fragment.requireContext(), mapLibreMap, binding.root, meshNetworkViewModel)
+        popoverManager = HybridPopoverManager(fragment.requireContext(), mapLibreMap, binding.root, meshNetworkViewModel, annotationViewModel)
         unifiedAnnotationManager = UnifiedAnnotationManager(mapLibreMap)
         _deviceLocationManager = DeviceLocationLayerManager(mapLibreMap)
         _clusterTextManager = ClusterTextManager(mapLibreMap)
@@ -613,6 +614,26 @@ class AnnotationController(
                 polygonTimerManager?.retrySetupTimerLayers()
             }
         }
+        
+        // Update status overlay with current POIs
+        updateAnnotationStatusOverlay(pois)
+    }
+    
+    // === ANNOTATION STATUS OVERLAY MANAGEMENT ===
+    fun updateAnnotationStatusOverlay(pois: List<MapAnnotation.PointOfInterest>) {
+        // Get current annotation statuses from the view model
+        val statuses = annotationViewModel.annotationStatuses.value
+        
+        // Get areas, polygons, and lines from the current annotations
+        val areas = annotationViewModel.uiState.value.annotations.filterIsInstance<MapAnnotation.Area>()
+        val polygons = annotationViewModel.uiState.value.annotations.filterIsInstance<MapAnnotation.Polygon>()
+        val lines = annotationViewModel.uiState.value.annotations.filterIsInstance<MapAnnotation.Line>()
+        
+        annotationStatusOverlayView.updateAnnotationStatuses(pois, areas, polygons, lines, statuses)
+    }
+    
+    fun setAnnotationStatusOverlayProjection(projection: org.maplibre.android.maps.Projection?) {
+        annotationStatusOverlayView.setProjection(projection)
     }
 
     fun setupPoiLongPressListener() {
@@ -991,6 +1012,7 @@ class AnnotationController(
             FanMenuView.Option.Color(AnnotationColor.YELLOW),
             FanMenuView.Option.Color(AnnotationColor.RED),
             FanMenuView.Option.Color(AnnotationColor.BLACK),
+            FanMenuView.Option.Label(lineId),
             FanMenuView.Option.Timer(lineId),
             FanMenuView.Option.Delete(lineId),
             FanMenuView.Option.ElevationChart(lineId)
@@ -1003,6 +1025,7 @@ class AnnotationController(
                 when (option) {
                     is FanMenuView.Option.LineStyle -> updateLineStyle(line, option.style)
                     is FanMenuView.Option.Color -> updateLineColor(line, option.color)
+                    is FanMenuView.Option.Label -> showLineLabelEditDialog(lineId, line.label)
                     is FanMenuView.Option.Timer -> setAnnotationExpiration(lineId)
                     is FanMenuView.Option.Delete -> deletePoi(option.id)
                     is FanMenuView.Option.ElevationChart -> showElevationChartBottomSheet(lineId)
@@ -1904,6 +1927,47 @@ class AnnotationController(
         
         val dialog = androidx.appcompat.app.AlertDialog.Builder(context)
             .setTitle(fragment.getString(R.string.edit_area_label))
+            .setView(editText)
+            .setPositiveButton(fragment.getString(R.string.ok)) { _, _ ->
+                submitLabel()
+            }
+            .setNegativeButton(fragment.getString(R.string.cancel), null)
+            .create()
+        
+        // Show the dialog and request focus for the EditText
+        dialog.show()
+        editText.requestFocus()
+    }
+
+    private fun showLineLabelEditDialog(lineId: String, currentLabel: String?) {
+        val context = fragment.requireContext()
+        val editText = android.widget.EditText(context).apply {
+            setText(currentLabel)
+            filters = arrayOf(android.text.InputFilter.LengthFilter(50)) // Limit label length
+            // Set input type to prevent newlines
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        }
+        
+        // Helper function to handle label submission
+        fun submitLabel() {
+            val newLabel = editText.text.toString().takeIf { it.isNotBlank() }
+            annotationViewModel.updateLine(lineId, newLabel = newLabel)
+            // Force map redraw to update line layer with new label
+            onAnnotationChanged?.invoke()
+        }
+        
+        // Add editor action listener to handle Enter key
+        editText.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
+                submitLabel()
+                true // Consume the event
+            } else {
+                false // Don't consume other events
+            }
+        }
+        
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(context)
+            .setTitle(fragment.getString(R.string.edit_label))
             .setView(editText)
             .setPositiveButton(fragment.getString(R.string.ok)) { _, _ ->
                 submitLabel()

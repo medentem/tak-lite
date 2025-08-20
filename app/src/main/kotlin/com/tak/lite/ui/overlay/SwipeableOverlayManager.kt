@@ -73,6 +73,9 @@ class SwipeableOverlayManager @Inject constructor(
     // Callback for when weather page is opened
     private var onWeatherPageOpenedCallback: (() -> Unit)? = null
     
+    // Callback for refreshing radar tiles
+    private var onRefreshRadarTilesCallback: (() -> Unit)? = null
+    
     /**
      * Update the user's current location for relative positioning
      */
@@ -282,6 +285,13 @@ class SwipeableOverlayManager @Inject constructor(
         onWeatherPageOpenedCallback = callback
     }
     
+    /**
+     * Set callback to refresh radar tiles when weather refresh button is pressed
+     */
+    fun setOnRefreshRadarTilesCallback(callback: () -> Unit) {
+        onRefreshRadarTilesCallback = callback
+    }
+    
     private inner class WeatherOverlayView(context: Context) : LinearLayout(context) {
         
         // Header views
@@ -390,7 +400,10 @@ class SwipeableOverlayManager @Inject constructor(
         
         private fun setupRefreshButton() {
             refreshButton.setOnClickListener {
+                // Refresh weather data
                 weatherRepository.refreshWeatherData()
+                // Also refresh radar tiles if callback is set
+                onRefreshRadarTilesCallback?.invoke()
             }
         }
         

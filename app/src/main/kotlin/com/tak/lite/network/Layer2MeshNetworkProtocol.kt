@@ -560,6 +560,16 @@ class Layer2MeshNetworkProtocol @Inject constructor(
     
     override fun sendAnnotation(annotation: MapAnnotation) {
         CoroutineScope(Dispatchers.IO).launch {
+            // Check connection state - if not connected, immediately mark as failed
+            val currentConnectionState = _connectionState.value
+            if (currentConnectionState !is MeshConnectionState.Connected) {
+                Log.w(TAG, "Cannot send annotation - not connected. Current state: $currentConnectionState")
+                val currentStatuses = _annotationStatusUpdates.value.toMutableMap()
+                currentStatuses[annotation.id] = AnnotationStatus.FAILED
+                _annotationStatusUpdates.value = currentStatuses
+                return@launch
+            }
+            
             // Emit PENDING status
             val currentStatuses = _annotationStatusUpdates.value.toMutableMap()
             currentStatuses[annotation.id] = AnnotationStatus.SENDING
@@ -1039,7 +1049,47 @@ class Layer2MeshNetworkProtocol @Inject constructor(
     }
 
     override fun sendBulkAnnotationDeletions(ids: List<String>) {
-        TODO("Not yet implemented")
+        if (ids.isEmpty()) return
+        
+        CoroutineScope(Dispatchers.IO).launch {
+            // Check connection state - if not connected, immediately mark all as failed
+            val currentConnectionState = _connectionState.value
+            if (currentConnectionState !is MeshConnectionState.Connected) {
+                Log.w(TAG, "Cannot send bulk annotation deletions - not connected. Current state: $currentConnectionState")
+                val currentStatuses = _annotationStatusUpdates.value.toMutableMap()
+                ids.forEach { annotationId ->
+                    currentStatuses[annotationId] = AnnotationStatus.FAILED
+                }
+                _annotationStatusUpdates.value = currentStatuses
+                return@launch
+            }
+            
+            // For Layer 2, we'll send individual deletion packets for each ID
+            // since bulk deletion is not yet implemented in the Layer 2 protocol
+            ids.forEach { annotationId ->
+                val deletion = MapAnnotation.Deletion(
+                    id = annotationId,
+                    creatorId = "local"
+                )
+                val packet = Layer2AnnotationPacket(
+                    annotation = deletion
+                )
+                val jsonString = json.encodeToString(Layer2AnnotationPacket.serializer(), packet)
+                sendToAllPeers(jsonString.toByteArray(), ANNOTATION_PORT, PacketType.ANNOTATION, requireAck = true)
+                
+                // Also broadcast
+                val socket = createBoundSocket()
+                val packetData = DatagramPacket(
+                    jsonString.toByteArray(),
+                    jsonString.toByteArray().size,
+                    InetAddress.getByName("255.255.255.255"),
+                    ANNOTATION_PORT
+                )
+                socket.broadcast = true
+                socket.send(packetData)
+                socket.close()
+            }
+        }
     }
 
     override fun sendTextMessage(channelId: String, content: String) {

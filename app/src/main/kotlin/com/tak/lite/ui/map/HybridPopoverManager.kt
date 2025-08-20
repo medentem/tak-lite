@@ -27,7 +27,8 @@ class HybridPopoverManager(
     private val context: android.content.Context,
     private val mapLibreMap: MapLibreMap,
     private val rootView: ViewGroup,
-    private val meshNetworkViewModel: MeshNetworkViewModel
+    private val meshNetworkViewModel: MeshNetworkViewModel,
+    private val annotationViewModel: com.tak.lite.viewmodel.AnnotationViewModel
 ) {
     companion object {
         private const val TAG = "HybridPopoverManager"
@@ -82,18 +83,40 @@ class HybridPopoverManager(
 
     fun showPoiPopover(poiId: String, poi: MapAnnotation.PointOfInterest) {
         val content = buildPoiPopoverContent(poi)
+        val status = annotationViewModel.annotationStatuses.value[poi.id]
         showPopover(PopoverData(
             id = "poi_$poiId",
             type = PopoverType.POI,
             position = poi.position.toMapLibreLatLng(),
             content = content,
             timestamp = System.currentTimeMillis(),
-            autoDismissTime = System.currentTimeMillis() + 8000L
+            autoDismissTime = System.currentTimeMillis() + 8000L,
+            status = status
+        ))
+    }
+
+    fun showLinePopover(lineId: String, line: MapAnnotation.Line) {
+        val content = buildLinePopoverContent(line)
+        val status = annotationViewModel.annotationStatuses.value[line.id]
+        // Use line center for positioning
+        val centerLat = line.points.map { it.lt }.average()
+        val centerLng = line.points.map { it.lng }.average()
+        val centerPosition = LatLng(centerLat, centerLng)
+        
+        showPopover(PopoverData(
+            id = "line_$lineId",
+            type = PopoverType.LINE,
+            position = centerPosition,
+            content = content,
+            timestamp = System.currentTimeMillis(),
+            autoDismissTime = System.currentTimeMillis() + 8000L,
+            status = status
         ))
     }
 
     fun showPolygonPopover(polygonId: String, polygon: MapAnnotation.Polygon) {
         val content = buildPolygonPopoverContent(polygon)
+        val status = annotationViewModel.annotationStatuses.value[polygon.id]
         // Use polygon center for positioning
         val centerLat = polygon.points.map { it.lt }.average()
         val centerLng = polygon.points.map { it.lng }.average()
@@ -105,12 +128,14 @@ class HybridPopoverManager(
             position = centerPosition,
             content = content,
             timestamp = System.currentTimeMillis(),
-            autoDismissTime = System.currentTimeMillis() + 8000L
+            autoDismissTime = System.currentTimeMillis() + 8000L,
+            status = status
         ))
     }
     
     fun showAreaPopover(areaId: String, area: MapAnnotation.Area) {
         val content = buildAreaPopoverContent(area)
+        val status = annotationViewModel.annotationStatuses.value[area.id]
         // Use area center for positioning
         val centerPosition = LatLng(area.center.lt, area.center.lng)
         
@@ -120,7 +145,8 @@ class HybridPopoverManager(
             position = centerPosition,
             content = content,
             timestamp = System.currentTimeMillis(),
-            autoDismissTime = System.currentTimeMillis() + 8000L
+            autoDismissTime = System.currentTimeMillis() + 8000L,
+            status = status
         ))
     }
 
@@ -185,6 +211,7 @@ class HybridPopoverManager(
         when (popoverData.type) {
             PopoverType.PEER -> setupPeerPopoverContent(popoverView!!, popoverData)
             PopoverType.POI -> setupPoiPopoverContent(popoverView!!, popoverData)
+            PopoverType.LINE -> setupLinePopoverContent(popoverView!!, popoverData)
             PopoverType.POLYGON -> setupPolygonPopoverContent(popoverView!!, popoverData)
             PopoverType.AREA -> setupAreaPopoverContent(popoverView!!, popoverData)
         }
@@ -236,6 +263,7 @@ class HybridPopoverManager(
     private fun setupPoiPopoverContent(view: View, data: PopoverData) {
         val titleView = view.findViewById<TextView>(R.id.popoverTitle)
         val contentView = view.findViewById<TextView>(R.id.popoverContent)
+        val statusView = view.findViewById<TextView>(R.id.popoverStatus)
 
         // Parse content
         val lines = data.content.split("|")
@@ -244,12 +272,22 @@ class HybridPopoverManager(
             if (lines.size > 1) {
                 contentView.text = lines.drop(1).joinToString("\n")
             }
+        }
+        
+        // Handle status separately
+        val status = data.status
+        if (status != null) {
+            statusView.text = getStatusDescription(status)
+            statusView.visibility = View.VISIBLE
+        } else {
+            statusView.visibility = View.GONE
         }
     }
 
     private fun setupPolygonPopoverContent(view: View, data: PopoverData) {
         val titleView = view.findViewById<TextView>(R.id.popoverTitle)
         val contentView = view.findViewById<TextView>(R.id.popoverContent)
+        val statusView = view.findViewById<TextView>(R.id.popoverStatus)
 
         // Parse content
         val lines = data.content.split("|")
@@ -259,11 +297,21 @@ class HybridPopoverManager(
                 contentView.text = lines.drop(1).joinToString("\n")
             }
         }
+        
+        // Handle status separately
+        val status = data.status
+        if (status != null) {
+            statusView.text = getStatusDescription(status)
+            statusView.visibility = View.VISIBLE
+        } else {
+            statusView.visibility = View.GONE
+        }
     }
 
     private fun setupAreaPopoverContent(view: View, data: PopoverData) {
         val titleView = view.findViewById<TextView>(R.id.popoverTitle)
         val contentView = view.findViewById<TextView>(R.id.popoverContent)
+        val statusView = view.findViewById<TextView>(R.id.popoverStatus)
 
         // Parse content
         val lines = data.content.split("|")
@@ -272,6 +320,39 @@ class HybridPopoverManager(
             if (lines.size > 1) {
                 contentView.text = lines.drop(1).joinToString("\n")
             }
+        }
+        
+        // Handle status separately
+        val status = data.status
+        if (status != null) {
+            statusView.text = getStatusDescription(status)
+            statusView.visibility = View.VISIBLE
+        } else {
+            statusView.visibility = View.GONE
+        }
+    }
+
+    private fun setupLinePopoverContent(view: View, data: PopoverData) {
+        val titleView = view.findViewById<TextView>(R.id.popoverTitle)
+        val contentView = view.findViewById<TextView>(R.id.popoverContent)
+        val statusView = view.findViewById<TextView>(R.id.popoverStatus)
+
+        // Parse content
+        val lines = data.content.split("|")
+        if (lines.isNotEmpty()) {
+            titleView.text = lines[0]
+            if (lines.size > 1) {
+                contentView.text = lines.drop(1).joinToString("\n")
+            }
+        }
+        
+        // Handle status separately
+        val status = data.status
+        if (status != null) {
+            statusView.text = getStatusDescription(status)
+            statusView.visibility = View.VISIBLE
+        } else {
+            statusView.visibility = View.GONE
         }
     }
 
@@ -419,7 +500,7 @@ class HybridPopoverManager(
         // Title line - only add if label exists
         poi.label?.let { lines.add(it) }
         
-        // Content lines
+        // Content lines (status will be handled separately)
         val ageSec = (System.currentTimeMillis() - poi.timestamp) / 1000
         val ageStr = if (ageSec > 60) "${ageSec / 60}m old" else "${ageSec}s old"
         lines.add(ageStr)
@@ -437,6 +518,48 @@ class HybridPopoverManager(
         return lines.joinToString("|")
     }
 
+    private fun buildLinePopoverContent(line: MapAnnotation.Line): String {
+        val lines = mutableListOf<String>()
+        
+        // Title line - line label or default name
+        val title = line.label ?: "Line"
+        lines.add(title)
+        
+        // Calculate length in appropriate units
+        val lengthMeters = calculateLineLength(line.points)
+        lines.add(UnitManager.metersToDistanceShort(lengthMeters, context))
+        
+        // Content lines (status will be handled separately)
+        val ageSec = (System.currentTimeMillis() - line.timestamp) / 1000
+        val ageStr = if (ageSec > 60) "${ageSec / 60}m old" else "${ageSec}s old"
+        lines.add(ageStr)
+        
+        val coords = String.format("%.5f, %.5f", line.points.map { it.lt }.average(), line.points.map { it.lng }.average())
+        lines.add(coords)
+        
+        // Add distance if user location available
+        val userLocation = meshNetworkViewModel.bestLocation.value
+        if (userLocation != null) {
+            val distMeters = haversine(line.points.map { it.lt }.average(), line.points.map { it.lng }.average(), userLocation.latitude, userLocation.longitude)
+            lines.add("${UnitManager.metersToDistanceShort(distMeters, context)} away")
+        }
+        
+        return lines.joinToString("|")
+    }
+
+    /**
+     * Get a user-friendly description of the annotation status
+     */
+    private fun getStatusDescription(status: com.tak.lite.model.AnnotationStatus): String {
+        return when (status) {
+            com.tak.lite.model.AnnotationStatus.SENDING -> context.getString(R.string.status_sending)
+            com.tak.lite.model.AnnotationStatus.SENT -> context.getString(R.string.status_sent)
+            com.tak.lite.model.AnnotationStatus.DELIVERED -> context.getString(R.string.status_delivered)
+            com.tak.lite.model.AnnotationStatus.FAILED -> context.getString(R.string.status_failed)
+            com.tak.lite.model.AnnotationStatus.RETRYING -> context.getString(R.string.status_retrying)
+        }
+    }
+
     private fun buildPolygonPopoverContent(polygon: MapAnnotation.Polygon): String {
         val lines = mutableListOf<String>()
         
@@ -448,7 +571,7 @@ class HybridPopoverManager(
         val areaSqMeters = calculatePolygonArea(polygon.points) * 1609.344 * 1609.344 // Convert from sq miles to sq meters
         lines.add(UnitManager.squareMetersToArea(areaSqMeters, context))
         
-        // Content lines
+        // Content lines (status will be handled separately)
         val ageSec = (System.currentTimeMillis() - polygon.timestamp) / 1000
         val ageStr = if (ageSec > 60) "${ageSec / 60}m old" else "${ageSec}s old"
         lines.add(ageStr)
@@ -478,7 +601,7 @@ class HybridPopoverManager(
         lines.add(UnitManager.squareMetersToArea(areaSqMeters, context))
         Log.d(TAG, "Area calculation: radius=${area.radius}m, area=${UnitManager.squareMetersToArea(areaSqMeters, context)}")
         
-        // Content lines
+        // Content lines (status will be handled separately)
         val ageSec = (System.currentTimeMillis() - area.timestamp) / 1000
         val ageStr = if (ageSec > 60) "${ageSec / 60}m old" else "${ageSec}s old"
         lines.add(ageStr)
@@ -532,5 +655,22 @@ class HybridPopoverManager(
         val areaSqMiles = Math.PI * radiusMiles * radiusMiles
         
         return areaSqMiles
+    }
+
+    /**
+     * Calculate the length of a line in meters
+     * @param points List of points defining the line
+     * @return Length in meters
+     */
+    private fun calculateLineLength(points: List<com.tak.lite.model.LatLngSerializable>): Double {
+        if (points.size < 2) return 0.0
+        
+        var totalLength = 0.0
+        for (i in 0 until points.size - 1) {
+            val distMeters = haversine(points[i].lt, points[i].lng, points[i + 1].lt, points[i + 1].lng)
+            totalLength += distMeters
+        }
+        
+        return totalLength
     }
 } 

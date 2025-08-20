@@ -35,6 +35,7 @@ sealed class MapAnnotation {
         val points: List<LatLngSerializable>,
         val style: LineStyle = LineStyle.SOLID,
         val arrowHead: Boolean = true,
+        val label: String? = null, // Optional label for the line
         override val expirationTime: Long? = null
     ) : MapAnnotation()
     

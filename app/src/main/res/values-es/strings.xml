@@ -2,8 +2,8 @@
 <resources>
     <string name="app_name">TAK Lite</string>
     <string name="location_source">Fuente de Ubicación</string>
-    <string name="status_sent">Enviado</string>
-    <string name="status_delivered">Entregado</string>
+    <string name="status_sent_simple">Enviado</string>
+    <string name="status_delivered_simple">Entregado</string>
     <string name="status_received">Recibido</string>
     
     <!-- General UI -->
@@ -533,4 +533,12 @@
     <string name="section_device_calibration">Dispositivo &amp; Calibración</string>
     <string name="section_localization_personalization">Localización &amp; Personalización</string>
     <string name="section_advanced_testing">Avanzado/Pruebas</string>
+    
+    <!-- Annotation Status Messages -->
+    <string name="status_sending">Enviando al dispositivo mesh...</string>
+    <string name="status_sent">Enviado a la red mesh. Esperando confirmación...</string>
+    <string name="status_delivered">Recibido por la red mesh.</string>
+    <string name="status_failed">Error al enviar a la red.</string>
+    <string name="status_retrying">Reintentando envío a la red...</string>
+    <string name="toast_annotation_sent">Anotación enviada exitosamente.</string>
 </resources>

@@ -34,9 +34,11 @@ class LineLayerManager(
         private const val TAG = "LineLayerManager"
         const val LINE_SOURCE = "annotation-lines-source"
         const val LINE_ARROW_SOURCE = "annotation-line-arrows-source"
+        const val LINE_LABEL_SOURCE = "annotation-lines-label-source"
         const val LINE_LAYER = "annotation-lines-layer"
         const val LINE_HIT_AREA_LAYER = "annotation-lines-hit-area-layer"
         const val LINE_ARROW_LAYER = "annotation-line-arrows-layer"
+        const val LINE_LABEL_LAYER = "annotation-lines-label-layer"
     }
 
     private val lineFeatureConverter = LineFeatureConverter()
@@ -163,6 +165,32 @@ class LineLayerManager(
                 style.addLayer(arrowLayer)
                 Log.d(TAG, "Added arrow layer: $LINE_ARROW_LAYER with min zoom filter")
             }
+
+            // Create separate source and layer for line labels
+            val labelSource = style.getSource(LINE_LABEL_SOURCE)
+            if (labelSource == null) {
+                style.addSource(
+                    GeoJsonSource(
+                        LINE_LABEL_SOURCE,
+                        FeatureCollection.fromFeatures(arrayOf())
+                    )
+                )
+            }
+
+            if (style.getLayer(LINE_LABEL_LAYER) == null) {
+                val labelLayer = org.maplibre.android.style.layers.SymbolLayer(LINE_LABEL_LAYER, LINE_LABEL_SOURCE)
+                    .withProperties(
+                        PropertyFactory.textField(Expression.get("label")),
+                        PropertyFactory.textColor(Expression.color(Color.WHITE)),
+                        PropertyFactory.textSize(12f),
+                        PropertyFactory.textOffset(arrayOf(0f, 0f)),
+                        PropertyFactory.textAllowOverlap(true),
+                        PropertyFactory.textIgnorePlacement(false)
+                    )
+                    .withFilter(Expression.gte(Expression.zoom(), Expression.literal(7f)))
+                style.addLayer(labelLayer)
+            }
+
             Log.d(TAG, "Line layers setup completed successfully with separate sources")
 
         } catch (e: Exception) {
@@ -178,6 +206,7 @@ class LineLayerManager(
             // Convert lines to separate feature collections
             val lineFeatures = mutableListOf<Feature>()
             val arrowFeatures = mutableListOf<Feature>()
+            val labelFeatures = mutableListOf<Feature>()
 
             lines.forEach { line ->
                 // Main line feature
@@ -192,6 +221,13 @@ class LineLayerManager(
                     Log.d(TAG, "Added arrow feature for line: ${line.id} at position: (${line.points.last().lng}, ${line.points.last().lt})")
                 } else {
                     Log.d(TAG, "Skipping arrow feature for line: ${line.id} (arrowHead: ${line.arrowHead})")
+                }
+
+                // Label features (if label exists)
+                line.label?.let { label ->
+                    val labelFeature = lineFeatureConverter.convertToLabelFeature(line)
+                    labelFeatures.add(labelFeature)
+                    Log.d(TAG, "Added label feature for line: ${line.id} with label: $label")
                 }
             }
             
@@ -219,6 +255,16 @@ class LineLayerManager(
                     }
                 } else {
                     Log.e(TAG, "Arrow source not found: $LINE_ARROW_SOURCE")
+                }
+
+                // Update label source
+                val labelSource = style.getSourceAs<GeoJsonSource>(LINE_LABEL_SOURCE)
+                if (labelSource != null) {
+                    val labelCollection = FeatureCollection.fromFeatures(labelFeatures.toTypedArray())
+                    labelSource.setGeoJson(labelCollection)
+                    Log.d(TAG, "Updated label features: ${labelFeatures.size} labels")
+                } else {
+                    Log.e(TAG, "Line label source not found: $LINE_LABEL_SOURCE")
                 }
             }
         } catch (e: Exception) {
@@ -360,6 +406,24 @@ class LineFeatureConverter {
         Log.d("LineFeatureConverter", "Created arrow feature: id=${feature.getStringProperty("id")}, " +
                    "position=(${arrowLng}, ${arrowLat}), bearing=${bearing}°, rotation=${rotation}°, " +
                    "color=${feature.getStringProperty("color")}")
+        
+        return feature
+    }
+
+    /**
+     * Convert line to label feature (point at center with label)
+     */
+    fun convertToLabelFeature(line: MapAnnotation.Line): Feature {
+        // Calculate center point of line
+        val centerLat = line.points.map { it.lt }.average()
+        val centerLng = line.points.map { it.lng }.average()
+        
+        val centerPoint = org.maplibre.geojson.Point.fromLngLat(centerLng, centerLat)
+        val feature = Feature.fromGeometry(centerPoint)
+        
+        // Add label property
+        feature.addStringProperty("label", line.label!!)
+        feature.addStringProperty("lineId", line.id)
         
         return feature
     }

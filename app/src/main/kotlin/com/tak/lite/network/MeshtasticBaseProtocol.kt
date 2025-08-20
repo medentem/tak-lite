@@ -768,6 +768,7 @@ abstract class MeshtasticBaseProtocol(
                     MessageStatus.SENT -> AnnotationStatus.SENT
                     MessageStatus.DELIVERED -> AnnotationStatus.DELIVERED
                     MessageStatus.FAILED -> AnnotationStatus.FAILED
+                    MessageStatus.ERROR -> AnnotationStatus.FAILED
                     else -> AnnotationStatus.SENDING  // Default
                 }
                 
@@ -888,6 +889,19 @@ abstract class MeshtasticBaseProtocol(
      */
     override fun sendBulkAnnotationDeletions(ids: List<String>) {
         if (ids.isEmpty()) return
+        
+        // Check connection state - if not connected, immediately mark all as failed
+        val currentConnectionState = _connectionState.value
+        if (currentConnectionState !is MeshConnectionState.Connected) {
+            Log.w(TAG, "Cannot send bulk annotation deletions - not connected. Current state: $currentConnectionState")
+            val currentStatuses = _annotationStatusUpdates.value.toMutableMap()
+            ids.forEach { annotationId ->
+                currentStatuses[annotationId] = AnnotationStatus.FAILED
+            }
+            _annotationStatusUpdates.value = currentStatuses
+            return
+        }
+        
         val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
         val nickname = prefs.getString("nickname", null)
         val battery = DeviceController.batteryLevel.value
@@ -1058,6 +1072,17 @@ abstract class MeshtasticBaseProtocol(
 
     override fun sendAnnotation(annotation: MapAnnotation) {
         Log.d(TAG, "Preparing to send annotation: $annotation")
+        
+        // Check connection state - if not connected, immediately mark as failed
+        val currentConnectionState = _connectionState.value
+        if (currentConnectionState !is MeshConnectionState.Connected) {
+            Log.w(TAG, "Cannot send annotation - not connected. Current state: $currentConnectionState")
+            val currentStatuses = _annotationStatusUpdates.value.toMutableMap()
+            currentStatuses[annotation.id] = AnnotationStatus.FAILED
+            _annotationStatusUpdates.value = currentStatuses
+            return
+        }
+        
         val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
         val nickname = prefs.getString("nickname", null)
         val battery = DeviceController.batteryLevel.value
@@ -1404,6 +1429,18 @@ abstract class MeshtasticBaseProtocol(
                 if (retryCount < MAX_RETRY_COUNT && !isInQueue) {
                     retryCount += 1
                     packetRetryCount[unsignedPacketId] = retryCount
+                    
+                    // Set RETRYING status for annotation packets
+                    if (timedOutPacket.hasDecoded() && timedOutPacket.decoded.portnum == PortNum.ATAK_PLUGIN) {
+                        val annotationId = MeshAnnotationInterop.parseAnnotationIdFromData(timedOutPacket.decoded)
+                        if (annotationId != null) {
+                            val currentStatuses = _annotationStatusUpdates.value.toMutableMap()
+                            currentStatuses[annotationId] = AnnotationStatus.RETRYING
+                            _annotationStatusUpdates.value = currentStatuses
+                            Log.d(TAG, "Set annotation $annotationId status to RETRYING (attempt $retryCount)")
+                        }
+                    }
+                    
                     startPacketTimeout(timedOutPacket)
                     queuePacket(timedOutPacket)
                 } else if (retryCount >= MAX_RETRY_COUNT) {

@@ -106,6 +106,10 @@ class AnnotationFragment : Fragment(), LayersTarget {
         val clusterTextOverlayView = mainActivity?.findViewById<ClusterTextOverlayView>(R.id.clusterTextOverlayView) ?: 
             view.findViewById(R.id.clusterTextOverlayView)
         
+        // Initialize annotation status overlay
+        val annotationStatusOverlayView = mainActivity?.findViewById<AnnotationStatusOverlayView>(R.id.annotationStatusOverlayView) ?:
+            view.findViewById(R.id.annotationStatusOverlayView)
+        
         // Set initial prediction overlay visibility based on user preference
         val prefs = requireContext().getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
         val showPredictionOverlay = prefs.getBoolean("show_prediction_overlay", false)
@@ -122,6 +126,7 @@ class AnnotationFragment : Fragment(), LayersTarget {
                 messageViewModel = messageViewModel,
                 fanMenuView = fanMenuView,
                 annotationOverlayView = annotationOverlayView,
+                annotationStatusOverlayView = annotationStatusOverlayView,
                 onAnnotationChanged = { annotationController.renderAllAnnotations(mapLibreMap) },
                 mapLibreMap
             )
@@ -195,6 +200,9 @@ class AnnotationFragment : Fragment(), LayersTarget {
             // Set up cluster text overlay
             clusterTextOverlayView.setProjection(mapLibreMap.projection)
             annotationController.setClusterTextOverlayView(clusterTextOverlayView)
+            
+            // Set up annotation status overlay
+            annotationController.setAnnotationStatusOverlayProjection(mapLibreMap.projection)
             
             // Set up custom touch listener for POI tap detection
             mapLibreMap.addOnMapClickListener { latLng ->
@@ -436,6 +444,14 @@ class AnnotationFragment : Fragment(), LayersTarget {
                     annotationController.syncAnnotationOverlayView(mapController?.mapLibreMap)
                 }
             }
+            
+            // Observe annotation status updates
+            viewLifecycleOwner.lifecycleScope.launch {
+                viewModel.annotationStatuses.collectLatest { statuses ->
+                    val pois = viewModel.uiState.value.annotations.filterIsInstance<MapAnnotation.PointOfInterest>()
+                    annotationController.updateAnnotationStatusOverlay(pois)
+                }
+            }
             viewLifecycleOwner.lifecycleScope.launch {
                 meshNetworkViewModel.userLocation.collectLatest { location ->
                     annotationOverlayView.setUserLocation(location)
@@ -645,6 +661,19 @@ class AnnotationFragment : Fragment(), LayersTarget {
             weatherLayerManager?.restore()
         } catch (e: Exception) {
             Log.w("AnnotationFragment", "Failed to toggle weather overlay: ${e.message}", e)
+        }
+    }
+
+    /**
+     * Refresh the weather radar tiles to get the latest data.
+     * This can be called from MainActivity to force a cache-bust and reload.
+     */
+    fun refreshWeatherRadarTiles() {
+        try {
+            Log.d("AnnotationFragment", "refreshWeatherRadarTiles called")
+            weatherLayerManager?.refresh()
+        } catch (e: Exception) {
+            Log.w("AnnotationFragment", "Failed to refresh weather radar tiles: ${e.message}", e)
         }
     }
 

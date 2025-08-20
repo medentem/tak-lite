@@ -165,9 +165,4 @@ class AnnotationRepository @Inject constructor(
     fun hasSavedAnnotations(): Boolean {
         return prefs.contains("saved_annotations")
     }
-
-    // Add method to get annotation status
-    fun getAnnotationStatus(annotationId: String): AnnotationStatus? {
-        return internalAnnotationStatuses[annotationId]
-    }
 } 

@@ -239,6 +239,12 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
         swipeableOverlayManager.setOnWeatherPageOpenedCallback {
             refreshWeatherIfNeeded()
         }
+        
+        // Set up callback for refreshing radar tiles when weather refresh button is pressed
+        swipeableOverlayManager.setOnRefreshRadarTilesCallback {
+            val fragment = supportFragmentManager.findFragmentById(R.id.mainFragmentContainer) as? AnnotationFragment
+            fragment?.refreshWeatherRadarTiles()
+        }
 
         updateSwipeableOverlayPosition(resources.configuration.orientation)
 

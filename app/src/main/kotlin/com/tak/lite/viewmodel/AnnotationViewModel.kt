@@ -24,6 +24,9 @@ class AnnotationViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(AnnotationUiState())
     val uiState: StateFlow<AnnotationUiState> = _uiState.asStateFlow()
     
+    // Expose annotation statuses from repository
+    val annotationStatuses: StateFlow<Map<String, com.tak.lite.model.AnnotationStatus>> = annotationRepository.annotationStatuses
+    
     private var currentColor: AnnotationColor = AnnotationColor.RED
     private var currentShape: PointShape = PointShape.CIRCLE
     private var currentLineStyle: LineStyle = LineStyle.SOLID
@@ -132,12 +135,13 @@ class AnnotationViewModel @Inject constructor(
         }
     }
     
-    fun updateLine(id: String, newStyle: LineStyle? = null, newColor: AnnotationColor? = null) {
+    fun updateLine(id: String, newStyle: LineStyle? = null, newColor: AnnotationColor? = null, newLabel: String? = null) {
         viewModelScope.launch {
             val current = annotationRepository.annotations.value.filterIsInstance<MapAnnotation.Line>().find { it.id == id } ?: return@launch
             val updated = current.copy(
                 style = newStyle ?: current.style,
                 color = newColor ?: current.color,
+                label = newLabel,
                 timestamp = System.currentTimeMillis()
             )
             annotationRepository.addAnnotation(updated)
