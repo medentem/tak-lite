@@ -720,7 +720,7 @@ abstract class MeshtasticBaseProtocol(
                 queueResponse.remove(meshPacketId)?.complete(success)
             }
 
-            // Update message status if this was a text message
+            // Update packet status
             val packet = inFlightPackets[meshPacketId]
             if (packet != null) {
                 val newStatus = if (success) MessageStatus.SENT else MessageStatus.ERROR
@@ -775,7 +775,11 @@ abstract class MeshtasticBaseProtocol(
                 }
             }
             PortNum.ATAK_PLUGIN -> {
-                val annotationId = MeshAnnotationInterop.parseAnnotationIdFromData(packet.decoded) ?: return
+                val annotationId = MeshAnnotationInterop.parseAnnotationIdFromData(packet.decoded)
+                if (annotationId == null) {
+                    Log.w(TAG, "Annotation ID couldn't be parsed")
+                    return
+                }
                 val annotationStatus = when (newStatus) {
                     MessageStatus.SENDING -> AnnotationStatus.SENDING
                     MessageStatus.SENT -> AnnotationStatus.SENT
