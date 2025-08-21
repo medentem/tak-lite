@@ -744,21 +744,34 @@ abstract class MeshtasticBaseProtocol(
 
         when (packet.decoded.portnum) {
             PortNum.TEXT_MESSAGE_APP -> {
-                // Existing text message logic
-                val requestId = packet.id
+                // Use the actual requestId from the packet's decoded data
+                val requestId = packet.decoded.requestId
+                val unsignedRequestId = (requestId.toLong() and 0xFFFFFFFFL).toInt()
+                Log.d(TAG, "Looking for message with requestId: $unsignedRequestId (original: $requestId)")
+                
+                // Skip if requestId is 0 (no request ID)
+                if (unsignedRequestId == 0) {
+                    Log.d(TAG, "Skipping status update for packet with no requestId")
+                    return
+                }
+                
                 val channelId = getChannelIdForPacket(packet) ?: return
+                Log.d(TAG, "Channel ID for packet: $channelId")
+                
                 val channelMessages = _channelMessages.value[channelId]?.toMutableList() ?: return
+                Log.d(TAG, "Channel messages count: ${channelMessages.size}")
+                Log.d(TAG, "Available requestIds in channel: ${channelMessages.map { it.requestId }}")
 
-                val messageIndex = channelMessages.indexOfFirst { it.requestId == requestId }
+                val messageIndex = channelMessages.indexOfFirst { it.requestId == unsignedRequestId }
                 if (messageIndex != -1) {
                     val updatedMessage = channelMessages[messageIndex].copy(status = newStatus)
                     channelMessages[messageIndex] = updatedMessage
                     val currentMessages = _channelMessages.value.toMutableMap()
                     currentMessages[channelId] = channelMessages
                     _channelMessages.value = currentMessages
-                    Log.d(TAG, "Updated message status for requestId $requestId in channel $channelId to $newStatus")
+                    Log.d(TAG, "Updated message status for requestId $unsignedRequestId in channel $channelId to $newStatus")
                 } else {
-                    Log.w(TAG, "Message with requestId $requestId not found in channel $channelId")
+                    Log.w(TAG, "Message with requestId $unsignedRequestId not found in channel $channelId")
                 }
             }
             PortNum.ATAK_PLUGIN -> {
@@ -1169,6 +1182,7 @@ abstract class MeshtasticBaseProtocol(
         ) {
             portnum = PortNum.TEXT_MESSAGE_APP
             payload = ByteString.copyFromUtf8(content)
+            requestId = textMessagePacketId
         }
 
         // Get the sender's short name from node info
@@ -1253,6 +1267,7 @@ abstract class MeshtasticBaseProtocol(
         ) {
             portnum = PortNum.TEXT_MESSAGE_APP
             payload = ByteString.copyFromUtf8(content)
+            requestId = textMessagePacketId
         }
 
         // Get the sender's short name from node info
@@ -1710,7 +1725,21 @@ abstract class MeshtasticBaseProtocol(
         if (packet.hasDecoded()) {
             val decoded = packet.decoded
             if (decoded.portnum == PortNum.TEXT_MESSAGE_APP) {
-                return DirectMessageChannel.createId(packet.to.toString())
+                // Check if this is a direct message (to a specific peer) or broadcast
+                val toId = (packet.to.toLong() and 0xFFFFFFFFL)
+                return if (toId.toString() == connectedNodeId) {
+                    // This is a direct message to us, but we need to find the sender
+                    // For now, return null as this case is handled differently
+                    null
+                } else if (toId == 0xffffffffL) {
+                    // This is a broadcast message, use the channel index
+                    val channelIndex = packet.channel
+                    val channel = _channels.value.find { it.index == channelIndex }
+                    channel?.id
+                } else {
+                    // This is a direct message to a specific peer
+                    DirectMessageChannel.createId(toId.toString())
+                }
             } else if (decoded.portnum == PortNum.ATAK_PLUGIN) {
                 return MeshAnnotationInterop.parseAnnotationIdFromData(packet.decoded)
             }
