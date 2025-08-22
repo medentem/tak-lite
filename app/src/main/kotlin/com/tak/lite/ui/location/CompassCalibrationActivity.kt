@@ -15,9 +15,8 @@ import android.view.animation.LinearInterpolator
 import android.widget.Button
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
+import com.tak.lite.ui.util.EdgeToEdgeHelper
 import com.tak.lite.R
 import kotlin.math.abs
 import kotlin.math.sqrt
@@ -89,13 +88,10 @@ class CompassCalibrationActivity : AppCompatActivity(), SensorEventListener {
         
         setContentView(R.layout.activity_compass_calibration)
         
-        // Apply top inset to root layout
+        // Apply edge-to-edge insets as needed
         val rootView = findViewById<View>(android.R.id.content)
-        ViewCompat.setOnApplyWindowInsetsListener(rootView) { view, windowInsets ->
-            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
-            view.setPadding(insets.left, insets.top, insets.right, 0)
-            WindowInsetsCompat.CONSUMED
-        }
+        EdgeToEdgeHelper.applySidesInsets(rootView)
+        // No toolbar; the layout has its own top padding. If a header is added later, applyTopInsets to it.
         
         calibrationView = findViewById(R.id.calibrationView)
         instructionText = findViewById(R.id.instructionText)

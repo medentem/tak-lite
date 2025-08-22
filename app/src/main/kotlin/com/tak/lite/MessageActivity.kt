@@ -21,6 +21,7 @@ import com.google.mlkit.nl.smartreply.SmartReplySuggestionResult
 import com.google.mlkit.nl.smartreply.TextMessage
 import com.tak.lite.data.model.ChannelMessage
 import com.tak.lite.ui.message.MessageAdapter
+import com.tak.lite.ui.util.EdgeToEdgeHelper
 import com.tak.lite.viewmodel.MessageViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
@@ -76,6 +77,12 @@ class MessageActivity : BaseActivity() {
         smartReplyContainer = findViewById(R.id.smartReplyContainer)
         smartReplyChipGroup = findViewById(R.id.smartReplyChipGroup)
         disabledOverlay = findViewById(R.id.disabledOverlay)
+
+        // Apply precise edge-to-edge insets: top on toolbar, bottom on input container
+        EdgeToEdgeHelper.applyTopInsets(toolbar)
+        val inputContainer = findViewById<View>(R.id.messageInputLayout)
+        EdgeToEdgeHelper.applySidesInsets(inputContainer)
+        EdgeToEdgeHelper.applyBottomInsets(inputContainer)
 
         // Setup RecyclerView
         // Get current user's short name from the protocol

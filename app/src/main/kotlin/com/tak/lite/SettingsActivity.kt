@@ -32,6 +32,7 @@ import com.tak.lite.repository.WeatherRepository
 import com.tak.lite.service.MeshForegroundService
 import com.tak.lite.ui.map.MapController
 import com.tak.lite.ui.settings.PredictionAdvancedSettingsDialog
+import com.tak.lite.ui.util.EdgeToEdgeHelper
 import com.tak.lite.util.BillingManager
 import com.tak.lite.util.LocaleManager
 import com.tak.lite.util.UnitManager
@@ -220,6 +221,8 @@ class SettingsActivity : BaseActivity() {
         setSupportActionBar(toolbar)
         toolbar.setNavigationOnClickListener { finish() }
         title = getString(R.string.settings)
+        // Apply top insets to toolbar for edge-to-edge
+        EdgeToEdgeHelper.applyTopInsets(toolbar)
 
         mapModeSpinner = findViewById(R.id.mapModeSpinner)
         endBeepSwitch = findViewById(R.id.endBeepSwitch)

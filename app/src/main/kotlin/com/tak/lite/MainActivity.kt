@@ -38,6 +38,7 @@ import com.tak.lite.ui.channel.ChannelController
 import com.tak.lite.ui.location.CalibrationStatus
 import com.tak.lite.ui.location.LocationController
 import com.tak.lite.ui.location.LocationSource
+import com.tak.lite.ui.util.EdgeToEdgeHelper
 import com.tak.lite.ui.map.AnnotationFragment
 import com.tak.lite.ui.map.CoverageOverlayView
 import com.tak.lite.ui.map.FanMenuView
@@ -203,6 +204,18 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
 
         // Show the connection status bar immediately
         toggleDeviceStatusBar(true)
+
+        // Apply edge-to-edge insets to bottom overlays and sides to avoid gesture/nav overlap
+        val bottomContainers = listOf(
+            R.id.lineToolButtonContainer,
+            R.id.statusButtonContainer,
+            R.id.layersOptionsContainer,
+            R.id.fabMenuContainer,
+            R.id.zoomToLocationButton
+        )
+        bottomContainers.forEach { id ->
+            findViewById<View?>(id)?.let { EdgeToEdgeHelper.applyBottomInsets(it) }
+        }
 
         // Check trial status and show appropriate dialog if needed
         lifecycleScope.launch {
