@@ -208,8 +208,8 @@ class BillingManager @Inject constructor(
             val microGInstalled = try {
                 val packageInfo = packageManager.getPackageInfo("com.google.android.gms", 0)
                 // Check if it's actually MicroG by looking for specific MicroG components
-                val microGSignature = packageInfo.applicationInfo.sourceDir
-                val isMicroG = microGSignature.contains("microg") || microGSignature.contains("microG")
+                val microGSignature = packageInfo.applicationInfo?.sourceDir
+                val isMicroG = microGSignature?.contains("microg")!! || microGSignature.contains("microG")
                 if (DEBUG_MODE && isMicroG) {
                     Log.d(TAG, "MicroG detected: $microGSignature")
                 }
@@ -560,9 +560,8 @@ class BillingManager @Inject constructor(
      * This ensures all checks are complete before making decisions
      */
     suspend fun waitForInitialization() {
-        if (!_isInitialized.value) {
-            // Wait for initialization to complete
-            kotlinx.coroutines.flow.first { it }
+        while (!_isInitialized.value) {
+            kotlinx.coroutines.delay(100) // Wait 100ms before checking again
         }
     }
 
@@ -603,8 +602,8 @@ class BillingManager @Inject constructor(
                 sb.appendLine("Play Services: Found (v${playServicesInfo.versionName})")
                 
                 // Check for MicroG
-                val sourceDir = playServicesInfo.applicationInfo.sourceDir
-                if (sourceDir.contains("microg") || sourceDir.contains("microG")) {
+                val sourceDir = playServicesInfo.applicationInfo?.sourceDir
+                if (sourceDir?.contains("microg")!! || sourceDir.contains("microG")) {
                     sb.appendLine("MicroG: Detected")
                 } else {
                     sb.appendLine("MicroG: Not detected")

@@ -51,6 +51,7 @@ class DonationDialog : DialogFragment() {
         setupDonationButtons(view)
         setupCryptocurrencyButtons(view)
         setupManualActivation(view)
+        setupBackToPurchaseButton(view)
     }
 
     private fun setupDonationButtons(view: View) {
@@ -121,6 +122,43 @@ class DonationDialog : DialogFragment() {
             billingManager.refreshPremiumStatus()
             Toast.makeText(context, context?.getString(R.string.premium_activated), Toast.LENGTH_LONG).show()
             dismiss()
+        }
+    }
+
+    private fun setupBackToPurchaseButton(view: View) {
+        val backToPurchaseButton = view.findViewById<Button>(R.id.backToPurchaseButton)
+        if (backToPurchaseButton == null) {
+            Log.e("DonationDialog", "Back to purchase button not found!")
+            return
+        }
+
+        // Only show the back to purchase button if billing is functional
+        val isBillingFunctional = billingManager.isBillingFunctional()
+        Log.d("DonationDialog", "Setting up back to purchase button, billing functional: $isBillingFunctional")
+        
+        if (isBillingFunctional) {
+            backToPurchaseButton.visibility = View.VISIBLE
+            backToPurchaseButton.setOnClickListener {
+                try {
+                    Log.d("DonationDialog", "Back to purchase button clicked")
+                    
+                    // Dismiss current dialog
+                    dismiss()
+                    
+                    // Show purchase dialog
+                    val purchaseDialog = com.tak.lite.ui.PurchaseDialog()
+                    purchaseDialog.show(parentFragmentManager, "purchase_dialog_from_donation")
+                    
+                    Log.d("DonationDialog", "Successfully switched to purchase dialog")
+                } catch (e: Exception) {
+                    Log.e("DonationDialog", "Failed to show purchase dialog: ${e.message}")
+                    Toast.makeText(context, "Failed to open purchase options. Please try again.", Toast.LENGTH_LONG).show()
+                }
+            }
+        } else {
+            // Hide the button if billing is not functional
+            backToPurchaseButton.visibility = View.GONE
+            Log.d("DonationDialog", "Hiding back to purchase button - billing not functional")
         }
     }
 

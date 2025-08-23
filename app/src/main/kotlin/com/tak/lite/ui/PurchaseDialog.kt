@@ -53,6 +53,9 @@ class PurchaseDialog : DialogFragment() {
                 updateProductDetails(view, productDetails)
             }
         }
+
+        // Setup donation options button
+        setupDonationOptionsButton(view)
     }
 
     private fun isEmulator(): Boolean {
@@ -174,6 +177,26 @@ class PurchaseDialog : DialogFragment() {
                     // Show error message and don't dismiss dialog
                     Toast.makeText(context, "Billing not available. Please use donation options instead.", Toast.LENGTH_LONG).show()
                 }
+            }
+        }
+    }
+
+    private fun setupDonationOptionsButton(view: View) {
+        view.findViewById<Button>(R.id.donationOptionsButton)?.setOnClickListener {
+            try {
+                Log.d("PurchaseDialog", "Donation options button clicked")
+                
+                // Dismiss current dialog
+                dismiss()
+                
+                // Show donation dialog
+                val donationDialog = com.tak.lite.ui.DonationDialog()
+                donationDialog.show(parentFragmentManager, "donation_dialog_from_purchase")
+                
+                Log.d("PurchaseDialog", "Successfully switched to donation dialog")
+            } catch (e: Exception) {
+                Log.e("PurchaseDialog", "Failed to show donation dialog: ${e.message}")
+                Toast.makeText(context, "Failed to open donation options. Please try again.", Toast.LENGTH_LONG).show()
             }
         }
     }

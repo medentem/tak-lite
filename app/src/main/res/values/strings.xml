@@ -183,6 +183,12 @@
     <string name="address_copied_to_clipboard">%1$s address copied to clipboard</string>
     <string name="label_copied_to_clipboard">%1$s copied to clipboard</string>
     
+    <!-- Alternative Support Options -->
+    <string name="alternative_support_options">Alternative Support Options</string>
+    <string name="alternative_support_description">If you prefer not to use Google Play billing or are having issues, you can support us through alternative methods.</string>
+    <string name="view_donation_options">View Donation Options</string>
+    <string name="back_to_purchase_options">Back to Purchase Options</string>
+    
     <!-- Channels and Peers -->
     <string name="add_channel">Add Channel</string>
     <string name="edit_channel">Edit Channel</string>

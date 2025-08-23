@@ -110,5 +110,22 @@
             android:textSize="12sp"
             android:textColor="?attr/colorOnSurfaceVariant" />
 
+        <!-- Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="16dp"
+            android:background="?attr/colorOutline" />
+
+        <!-- Back to Purchase Options -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/backToPurchaseButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/back_to_purchase_options"
+            android:textSize="14sp"
+            style="@style/Widget.MaterialComponents.Button.TextButton" />
+
     </LinearLayout>
 </ScrollView> 
