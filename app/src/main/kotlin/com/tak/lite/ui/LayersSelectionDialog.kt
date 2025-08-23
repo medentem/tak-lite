@@ -12,10 +12,11 @@ class LayersSelectionDialog(
     private val context: Context,
     isWeatherEnabled: Boolean,
     isPredictionsEnabled: Boolean,
-    private val showWeatherOption: Boolean,
+    private val isPremium: Boolean,
     private val onWeatherToggled: (Boolean) -> Unit,
     private val onPredictionsToggled: (Boolean) -> Unit,
     private val onCoverageToggled: (Boolean) -> Unit,
+    private val onWeatherPremiumRequired: () -> Unit,
     isCoverageActive: Boolean
 ) {
     private var popupWindow: PopupWindow? = null
@@ -34,8 +35,8 @@ class LayersSelectionDialog(
         val predictionsState = popupView.findViewById<ImageView>(R.id.layerPredictionsState)
         val coverageState = popupView.findViewById<ImageView>(R.id.layerCoverageState)
 
-        // Weather row visibility based on premium status
-        weatherRow.visibility = if (showWeatherOption) View.VISIBLE else View.GONE
+        // Always show weather row, but handle premium status in click handler
+        weatherRow.visibility = View.VISIBLE
 
         updateIndicator(weatherState, weatherEnabledInternal)
         updateIndicator(predictionsState, predictionsEnabledInternal)
@@ -43,10 +44,17 @@ class LayersSelectionDialog(
 
         weatherRow.setOnClickListener {
             val next = !weatherEnabledInternal
-            android.util.Log.d("LayersSelectionDialog", "Weather row clicked. next=" + next)
-            onWeatherToggled(next)
-            weatherEnabledInternal = next
-            updateIndicator(weatherState, weatherEnabledInternal)
+            android.util.Log.d("LayersSelectionDialog", "Weather row clicked. next=$next, isPremium=$isPremium")
+            
+            if (next && !isPremium) {
+                // User is trying to enable weather but isn't premium
+                onWeatherPremiumRequired()
+            } else {
+                // User is either disabling weather or is premium and enabling it
+                onWeatherToggled(next)
+                weatherEnabledInternal = next
+                updateIndicator(weatherState, weatherEnabledInternal)
+            }
         }
         predictionsRow.setOnClickListener {
             val next = !predictionsEnabledInternal

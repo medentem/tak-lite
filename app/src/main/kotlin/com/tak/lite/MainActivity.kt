@@ -741,7 +741,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                 context = this,
                 isWeatherEnabled = weatherEnabled,
                 isPredictionsEnabled = predictionEnabled,
-                showWeatherOption = billingManager.isPremium(),
+                isPremium = billingManager.isPremium(),
                 onWeatherToggled = { next ->
                     Log.d("MainActivity",
                         "onWeatherToggled invoked from LayersSelectionDialog: next=$next"
@@ -777,6 +777,10 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                         coverageOverlayView.clearCoverage()
                         coverageViewModel.clearCoverageAnalysis()
                     }
+                },
+                onWeatherPremiumRequired = {
+                    // Show appropriate dialog for premium feature
+                    showAppropriateDialog()
                 },
                 isCoverageActive = isCoverageActive
             ).also { it.show(layersButton) }
