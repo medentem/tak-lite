@@ -39,6 +39,7 @@ import com.tak.lite.util.UnitManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import android.widget.Toast
 
 @AndroidEntryPoint
 class SettingsActivity : BaseActivity() {
@@ -1404,17 +1405,47 @@ class SettingsActivity : BaseActivity() {
     }
 
     private fun showAppropriateDialog() {
-        // Check if Google Play Services are available
-        val isGooglePlayAvailable = billingManager.isGooglePlayAvailable.value
-        
-        if (isGooglePlayAvailable) {
-            // Show regular purchase dialog for Google Play users
-            val dialog = com.tak.lite.ui.PurchaseDialog()
-            dialog.show(supportFragmentManager, "purchase_dialog")
-        } else {
-            // Show donation dialog for de-googled users
+        // Wait for BillingManager to be fully initialized before making decisions
+        lifecycleScope.launch {
+            try {
+                billingManager.waitForInitialization()
+                
+                // Check if Google Play Services are available and billing is functional
+                val isGooglePlayAvailable = billingManager.isGooglePlayAvailable.value
+                val isBillingFunctional = billingManager.isBillingFunctional()
+                
+                Log.d("SettingsActivity", "showAppropriateDialog: GooglePlay=$isGooglePlayAvailable, BillingFunctional=$isBillingFunctional")
+                
+                if (isGooglePlayAvailable && isBillingFunctional) {
+                    // Show regular purchase dialog for Google Play users with functional billing
+                    try {
+                        val dialog = com.tak.lite.ui.PurchaseDialog()
+                        dialog.show(supportFragmentManager, "purchase_dialog")
+                    } catch (e: Exception) {
+                        Log.e("SettingsActivity", "Failed to show purchase dialog: ${e.message}")
+                        // Fallback to donation dialog
+                        showDonationDialogFallback()
+                    }
+                } else {
+                    // Show donation dialog for de-googled users or when billing is not functional
+                    showDonationDialogFallback()
+                }
+            } catch (e: Exception) {
+                Log.e("SettingsActivity", "Error in showAppropriateDialog: ${e.message}")
+                // Fallback to donation dialog on any error
+                showDonationDialogFallback()
+            }
+        }
+    }
+
+    private fun showDonationDialogFallback() {
+        try {
             val dialog = com.tak.lite.ui.DonationDialog()
             dialog.show(supportFragmentManager, "donation_dialog")
+        } catch (e: Exception) {
+            Log.e("SettingsActivity", "Failed to show donation dialog: ${e.message}")
+            // Show a simple toast as last resort
+            Toast.makeText(this, "Premium features require Google Play Services or donation support", Toast.LENGTH_LONG).show()
         }
     }
 

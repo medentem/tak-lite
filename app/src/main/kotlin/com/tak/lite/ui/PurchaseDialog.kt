@@ -3,6 +3,7 @@ package com.tak.lite.ui
 import android.app.Dialog
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -17,6 +18,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import android.widget.Toast
 
 @AndroidEntryPoint
 class PurchaseDialog : DialogFragment() {
@@ -136,24 +138,42 @@ class PurchaseDialog : DialogFragment() {
         tier1Button.apply {
             text = getString(R.string.purchase)
             setOnClickListener {
-                billingManager.launchBillingFlow(requireActivity(), BillingManager.PRODUCT_ID_TIER_1)
-                dismiss()
+                try {
+                    billingManager.launchBillingFlow(requireActivity(), BillingManager.PRODUCT_ID_TIER_1)
+                    dismiss()
+                } catch (e: Exception) {
+                    Log.e("PurchaseDialog", "Failed to launch billing flow for tier 1: ${e.message}")
+                    // Show error message and don't dismiss dialog
+                    Toast.makeText(context, "Billing not available. Please use donation options instead.", Toast.LENGTH_LONG).show()
+                }
             }
         }
 
         tier2Button.apply {
             text = getString(R.string.purchase)
             setOnClickListener {
-                billingManager.launchBillingFlow(requireActivity(), BillingManager.PRODUCT_ID_TIER_2)
-                dismiss()
+                try {
+                    billingManager.launchBillingFlow(requireActivity(), BillingManager.PRODUCT_ID_TIER_2)
+                    dismiss()
+                } catch (e: Exception) {
+                    Log.e("PurchaseDialog", "Failed to launch billing flow for tier 2: ${e.message}")
+                    // Show error message and don't dismiss dialog
+                    Toast.makeText(context, "Billing not available. Please use donation options instead.", Toast.LENGTH_LONG).show()
+                }
             }
         }
 
         tier3Button.apply {
             text = getString(R.string.purchase)
             setOnClickListener {
-                billingManager.launchBillingFlow(requireActivity(), BillingManager.PRODUCT_ID_TIER_3)
-                dismiss()
+                try {
+                    billingManager.launchBillingFlow(requireActivity(), BillingManager.PRODUCT_ID_TIER_3)
+                    dismiss()
+                } catch (e: Exception) {
+                    Log.e("PurchaseDialog", "Failed to launch billing flow for tier 3: ${e.message}")
+                    // Show error message and don't dismiss dialog
+                    Toast.makeText(context, "Billing not available. Please use donation options instead.", Toast.LENGTH_LONG).show()
+                }
             }
         }
     }

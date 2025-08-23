@@ -36,6 +36,9 @@ class BillingManager @Inject constructor(
     // For debugging
     private val IS_PREMIUM_OVERRIDE = false
 
+    // Debug mode for troubleshooting billing issues
+    private val DEBUG_MODE = false
+
     private val _isPremium = MutableStateFlow(false)
     val isPremium: StateFlow<Boolean> = _isPremium
 
@@ -47,6 +50,9 @@ class BillingManager @Inject constructor(
 
     private val _isGooglePlayAvailable = MutableStateFlow(false)
     val isGooglePlayAvailable: StateFlow<Boolean> = _isGooglePlayAvailable
+
+    private val _isInitialized = MutableStateFlow(false)
+    val isInitialized: StateFlow<Boolean> = _isInitialized
 
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
@@ -85,6 +91,17 @@ class BillingManager @Inject constructor(
         checkConnectivity()
         checkGooglePlayAvailability()
         
+        // Perform runtime verification on a background thread
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            val billingFunctional = verifyBillingClientConnection()
+            if (!billingFunctional && _isGooglePlayAvailable.value) {
+                Log.w(TAG, "Google Play packages detected but billing client cannot connect - treating as degoogled device")
+                _isGooglePlayAvailable.value = false
+            }
+            // Mark initialization as complete
+            _isInitialized.value = true
+        }
+        
         if (_isGooglePlayAvailable.value) {
             billingClient.startConnection(object : BillingClientStateListener {
                 override fun onBillingSetupFinished(billingResult: BillingResult) {
@@ -94,6 +111,8 @@ class BillingManager @Inject constructor(
                         queryProductDetails()
                     } else {
                         Log.e(TAG, "Billing setup failed: ${billingResult.debugMessage}")
+                        // If billing setup fails, treat as degoogled device
+                        _isGooglePlayAvailable.value = false
                     }
                 }
 
@@ -160,13 +179,109 @@ class BillingManager @Inject constructor(
         
         try {
             val packageManager = context.packageManager
-            val playStoreInstalled = packageManager.getPackageInfo("com.android.vending", 0)
-            val playServicesInstalled = packageManager.getPackageInfo("com.google.android.gms", 0)
-            _isGooglePlayAvailable.value = true
-            Log.d(TAG, "Google Play Services available")
+            
+            // Check for Google Play Store
+            val playStoreInstalled = try {
+                val packageInfo = packageManager.getPackageInfo("com.android.vending", 0)
+                if (DEBUG_MODE) {
+                    Log.d(TAG, "Google Play Store found: version=${packageInfo.versionName}, versionCode=${packageInfo.versionCode}")
+                }
+                true
+            } catch (e: Exception) {
+                Log.d(TAG, "Google Play Store not found: ${e.message}")
+                false
+            }
+            
+            // Check for Google Play Services
+            val playServicesInstalled = try {
+                val packageInfo = packageManager.getPackageInfo("com.google.android.gms", 0)
+                if (DEBUG_MODE) {
+                    Log.d(TAG, "Google Play Services found: version=${packageInfo.versionName}, versionCode=${packageInfo.versionCode}")
+                }
+                true
+            } catch (e: Exception) {
+                Log.d(TAG, "Google Play Services not found: ${e.message}")
+                false
+            }
+            
+            // Check for MicroG (common in degoogled devices)
+            val microGInstalled = try {
+                val packageInfo = packageManager.getPackageInfo("com.google.android.gms", 0)
+                // Check if it's actually MicroG by looking for specific MicroG components
+                val microGSignature = packageInfo.applicationInfo.sourceDir
+                val isMicroG = microGSignature.contains("microg") || microGSignature.contains("microG")
+                if (DEBUG_MODE && isMicroG) {
+                    Log.d(TAG, "MicroG detected: $microGSignature")
+                }
+                isMicroG
+            } catch (e: Exception) {
+                false
+            }
+            
+            // Additional check: try to get Google Play Services version
+            val playServicesVersion = try {
+                val packageInfo = packageManager.getPackageInfo("com.google.android.gms", 0)
+                packageInfo.versionName
+            } catch (e: Exception) {
+                null
+            }
+            
+            Log.d(TAG, "Google Play availability check: PlayStore=$playStoreInstalled, PlayServices=$playServicesInstalled, MicroG=$microGInstalled, Version=$playServicesVersion")
+            
+            // Only consider Google Play available if both Play Store and Play Services are installed
+            // AND it's not MicroG (which has limited billing support)
+            val isAvailable = playStoreInstalled && playServicesInstalled && !microGInstalled
+            
+            _isGooglePlayAvailable.value = isAvailable
+            Log.d(TAG, "Final Google Play Services availability: $isAvailable")
+            
         } catch (e: Exception) {
             _isGooglePlayAvailable.value = false
-            Log.d(TAG, "Google Play Services not available: ${e.message}")
+            Log.d(TAG, "Google Play Services availability check failed: ${e.message}")
+        }
+    }
+
+    /**
+     * Runtime verification to test if billing client can actually connect
+     * This helps catch cases where packages exist but don't function properly
+     */
+    private fun verifyBillingClientConnection(): Boolean {
+        if (!_isGooglePlayAvailable.value) {
+            return false
+        }
+        
+        var connectionSuccessful = false
+        val connectionLatch = java.util.concurrent.CountDownLatch(1)
+        
+        try {
+            billingClient.startConnection(object : BillingClientStateListener {
+                override fun onBillingSetupFinished(billingResult: BillingResult) {
+                    Log.d(TAG, "Billing client verification result: ${billingResult.responseCode}")
+                    connectionSuccessful = billingResult.responseCode == BillingClient.BillingResponseCode.OK
+                    connectionLatch.countDown()
+                }
+
+                override fun onBillingServiceDisconnected() {
+                    Log.w(TAG, "Billing client verification: service disconnected")
+                    connectionSuccessful = false
+                    connectionLatch.countDown()
+                }
+            })
+            
+            // Wait for connection result with timeout
+            connectionLatch.await(5, java.util.concurrent.TimeUnit.SECONDS)
+            
+            if (connectionSuccessful) {
+                // Disconnect after successful verification
+                billingClient.endConnection()
+            }
+            
+            Log.d(TAG, "Billing client verification completed: $connectionSuccessful")
+            return connectionSuccessful
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Billing client verification failed: ${e.message}")
+            return false
         }
     }
 
@@ -321,8 +436,34 @@ class BillingManager @Inject constructor(
         _isPremium.value = currentStatus
     }
 
+    /**
+     * Force refresh Google Play availability check
+     * Useful for debugging or when system state changes
+     */
+    fun refreshGooglePlayAvailability() {
+        Log.d(TAG, "Forcing refresh of Google Play availability check")
+        checkGooglePlayAvailability()
+        
+        // Re-run runtime verification
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            val billingFunctional = verifyBillingClientConnection()
+            if (!billingFunctional && _isGooglePlayAvailable.value) {
+                Log.w(TAG, "Google Play packages detected but billing client cannot connect - treating as degoogled device")
+                _isGooglePlayAvailable.value = false
+            }
+        }
+    }
+
     fun launchBillingFlow(activity: Activity, productId: String) {
         Log.d(TAG, "Launching billing flow for product: $productId")
+        
+        // Check if Google Play is actually available and functional
+        if (!_isGooglePlayAvailable.value) {
+            Log.w(TAG, "Cannot launch billing flow: Google Play Services not available")
+            showDonationDialogFallback(activity)
+            return
+        }
+        
         if (_isOffline.value) {
             Log.w(TAG, "Cannot launch billing flow: device is offline")
             android.widget.Toast.makeText(
@@ -367,11 +508,116 @@ class BillingManager @Inject constructor(
                         .setProductDetailsParamsList(productDetailsParamsList)
                         .build()
 
-                    billingClient.launchBillingFlow(activity, billingFlowParams)
-                } ?: Log.w(TAG, "No product details found for ID: $actualProductId")
+                    try {
+                        billingClient.launchBillingFlow(activity, billingFlowParams)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to launch billing flow: ${e.message}")
+                        showDonationDialogFallback(activity)
+                    }
+                } ?: run {
+                    Log.w(TAG, "No product details found for ID: $actualProductId")
+                    showDonationDialogFallback(activity)
+                }
             } else {
                 Log.e(TAG, "Failed to query product details: ${billingResult.debugMessage}")
+                showDonationDialogFallback(activity)
             }
         }
+    }
+
+    /**
+     * Fallback method to show donation dialog when billing fails
+     */
+    private fun showDonationDialogFallback(activity: Activity) {
+        Log.d(TAG, "Showing donation dialog as fallback for billing failure")
+        activity.runOnUiThread {
+            try {
+                val dialog = com.tak.lite.ui.DonationDialog()
+                if (activity is androidx.fragment.app.FragmentActivity) {
+                    dialog.show(activity.supportFragmentManager, "donation_dialog_fallback")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to show donation dialog fallback: ${e.message}")
+                android.widget.Toast.makeText(
+                    context,
+                    "Billing not available. Please use donation options instead.",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+
+    /**
+     * Public method to check if billing is actually functional
+     * This can be called before showing the purchase dialog
+     */
+    fun isBillingFunctional(): Boolean {
+        return _isGooglePlayAvailable.value && !_isOffline.value
+    }
+
+    /**
+     * Wait for BillingManager to be fully initialized
+     * This ensures all checks are complete before making decisions
+     */
+    suspend fun waitForInitialization() {
+        if (!_isInitialized.value) {
+            // Wait for initialization to complete
+            kotlinx.coroutines.flow.first { it }
+        }
+    }
+
+    /**
+     * Check if BillingManager is ready to make decisions
+     */
+    fun isReady(): Boolean {
+        return _isInitialized.value
+    }
+
+    /**
+     * Debug method to get detailed information about Google Play availability
+     * This can be called from the UI for troubleshooting
+     */
+    fun getDebugInfo(): String {
+        val sb = StringBuilder()
+        sb.appendLine("=== BillingManager Debug Info ===")
+        sb.appendLine("Google Play Available: ${_isGooglePlayAvailable.value}")
+        sb.appendLine("Billing Functional: ${isBillingFunctional()}")
+        sb.appendLine("Is Offline: ${_isOffline.value}")
+        sb.appendLine("Is Initialized: ${_isInitialized.value}")
+        sb.appendLine("Is Premium: ${_isPremium.value}")
+        
+        try {
+            val packageManager = context.packageManager
+            
+            // Check Play Store
+            try {
+                val playStoreInfo = packageManager.getPackageInfo("com.android.vending", 0)
+                sb.appendLine("Play Store: Found (v${playStoreInfo.versionName})")
+            } catch (e: Exception) {
+                sb.appendLine("Play Store: Not found (${e.message})")
+            }
+            
+            // Check Play Services
+            try {
+                val playServicesInfo = packageManager.getPackageInfo("com.google.android.gms", 0)
+                sb.appendLine("Play Services: Found (v${playServicesInfo.versionName})")
+                
+                // Check for MicroG
+                val sourceDir = playServicesInfo.applicationInfo.sourceDir
+                if (sourceDir.contains("microg") || sourceDir.contains("microG")) {
+                    sb.appendLine("MicroG: Detected")
+                } else {
+                    sb.appendLine("MicroG: Not detected")
+                }
+            } catch (e: Exception) {
+                sb.appendLine("Play Services: Not found (${e.message})")
+            }
+            
+        } catch (e: Exception) {
+            sb.appendLine("Error getting package info: ${e.message}")
+        }
+        
+        sb.appendLine("================================")
+        return sb.toString()
     }
 } 
