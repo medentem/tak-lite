@@ -541,4 +541,10 @@
     <string name="status_failed">Fehler beim Senden an das Netzwerk.</string>
     <string name="status_retrying">Sende erneut an das Netzwerk...</string>
     <string name="toast_annotation_sent">Anmerkung erfolgreich gesendet.</string>
+    
+    <!-- Missing donation dialog strings -->
+    <string name="alternative_support_options">Alternative Unterstützungsoptionen</string>
+    <string name="alternative_support_description">Wenn Sie Google Play-Abrechnung nicht verwenden möchten oder Probleme haben, können Sie uns über alternative Methoden unterstützen.</string>
+    <string name="view_donation_options">Spendenoptionen anzeigen</string>
+    <string name="back_to_purchase_options">Zurück zu Kaufoptionen</string>
 </resources>

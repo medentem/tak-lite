@@ -541,4 +541,10 @@
     <string name="status_failed">Falha ao enviar para rede.</string>
     <string name="status_retrying">Tentando reenviar para rede...</string>
     <string name="toast_annotation_sent">Anotação enviada com sucesso.</string>
+    
+    <!-- Missing donation dialog strings -->
+    <string name="alternative_support_options">Opções de Apoio Alternativas</string>
+    <string name="alternative_support_description">Se você preferir não usar a cobrança do Google Play ou estiver tendo problemas, pode nos apoiar através de métodos alternativos.</string>
+    <string name="view_donation_options">Ver Opções de Doação</string>
+    <string name="back_to_purchase_options">Voltar às Opções de Compra</string>
 </resources>

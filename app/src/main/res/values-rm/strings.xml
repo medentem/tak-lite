@@ -541,4 +541,10 @@
     <string name="status_failed">Errur cun trametter a la rait.</string>
     <string name="status_retrying">Emprova da trametter anc ina giada a la rait...</string>
     <string name="toast_annotation_sent">Annotaziun tramessa cun success.</string>
+    
+    <!-- Missing donation dialog strings -->
+    <string name="alternative_support_options">Opziuns da Sustegn Alternativas</string>
+    <string name="alternative_support_description">Sche ti prefereschas betg d\'utilisar la facturaziun Google Play u has problems, pos ti ans sustegnair tras metods alternativs.</string>
+    <string name="view_donation_options">Vair Opziuns da Donaziun</string>
+    <string name="back_to_purchase_options">Tornar a las Opziuns da Cumpra</string>
 </resources>
