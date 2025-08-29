@@ -99,7 +99,9 @@ class MapController(
 
     private fun setStyleForCurrentViewport(map: MapLibreMap) {
         val tileCoords = getVisibleTileCoords(map)
-        val useOffline = allOfflineTilesExist(tileCoords)
+        val coverage = offlineCoverageRatio(tileCoords, mapType)
+        val useOffline = coverage >= 0.5
+        android.util.Log.d("OfflineTiles", "Offline coverage for viewport: ${"%.0f".format(coverage * 100)}% (useOffline=$useOffline, mapType=$mapType)")
         val isDeviceOnline = isOnline()
         val hillshadingTileUrl = getHillshadingTileUrl()
         val mapTilerUrl = getMapTilerUrl()
@@ -756,35 +758,31 @@ class MapController(
         }
     }
 
-    private fun allOfflineTilesExist(tileCoords: List<Triple<Int, Int, Int>>): Boolean {
-        android.util.Log.d("OfflineTiles", "Checking offline tiles existence for ${tileCoords.size} tiles")
+    private fun offlineCoverageRatio(tileCoords: List<Triple<Int, Int, Int>>, type: MapType): Double {
+        if (tileCoords.isEmpty()) return 0.0
+        var covered = 0
+        var total = 0
         for ((z, x, y) in tileCoords) {
+            total++
             val osmFile = File(getFilesDir(), "tiles/osm/$z/$x/$y.png")
             val satFile = File(getFilesDir(), "tiles/satellite-v2/$z/$x/$y.png")
             val vectorFile = File(getFilesDir(), "tiles/vector/$z/$x/$y.pbf")
-            val terrainFile = File(getFilesDir(), "tiles/terrain-dem/$z/$x/$y.webp")
-            
+            // terrain optional for coverage decision to avoid blocking offline usage
             val osmExists = osmFile.exists()
             val satExists = satFile.exists()
             val vectorExists = vectorFile.exists()
-            val terrainExists = terrainFile.exists()
-            
-            // Check required tiles based on zoom level
-            val requiresVector = z <= 15
-            val requiresTerrain = z <= 14
-            
-            val missingRequired = !osmExists || !satExists || 
-                                (requiresVector && !vectorExists) || 
-                                (requiresTerrain && !terrainExists)
-            
-            if (missingRequired) {
-                android.util.Log.d("OfflineTiles", "Missing tiles for $z/$x/$y - OSM: $osmExists, SAT: $satExists, VECTOR: $vectorExists (required: $requiresVector), TERRAIN: $terrainExists (required: $requiresTerrain)")
-                return false
+
+            val tileCovered = when (type) {
+                MapType.STREETS -> osmExists
+                MapType.SATELLITE -> satExists
+                MapType.HYBRID, MapType.LAST_USED -> satExists && (!requiresVectorAtZoom(z) || vectorExists)
             }
+            if (tileCovered) covered++
         }
-        android.util.Log.d("OfflineTiles", "All offline tiles exist for ${tileCoords.size} tiles")
-        return tileCoords.isNotEmpty()
+        return covered.toDouble() / total.toDouble()
     }
+
+    private fun requiresVectorAtZoom(z: Int): Boolean = z <= 15
 
     fun onResume() { mapView.onResume() }
     fun onPause() { mapView.onPause() }
