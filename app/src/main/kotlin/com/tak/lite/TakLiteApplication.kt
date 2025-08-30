@@ -6,6 +6,7 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.util.Log
 import com.tak.lite.util.LocaleManager
+import com.tak.lite.util.HttpCacheMonitor
 import dagger.hilt.android.HiltAndroidApp
 import okhttp3.Cache
 import okhttp3.OkHttpClient
@@ -37,8 +38,33 @@ class TakLiteApplication : Application() {
             val cacheSizeBytes = 200L * 1024 * 1024 // 200 MB
             val cache = Cache(httpCacheDir, cacheSizeBytes)
 
+            // For header diagnostics: log first few responses per host
+            val headerLogCounts = mutableMapOf<String, Int>()
+
             val client = OkHttpClient.Builder()
                 .cache(cache)
+                .addInterceptor { chain ->
+                    val request = chain.request()
+                    val response = chain.proceed(request)
+                    val host = request.url.host
+                    val fromCache = response.cacheResponse != null && response.networkResponse == null
+                    val conditionalHit = response.cacheResponse != null && response.networkResponse != null
+                    // Log limited cache-related headers for diagnostics (first 3 per host)
+                    val seen = headerLogCounts.getOrElse(host) { 0 }
+                    if (seen < 3) {
+                        headerLogCounts[host] = seen + 1
+                        Log.d(
+                            "TakLiteApplication",
+                            "HTTP resp host=$host code=${response.code} cacheHit=$fromCache Cache-Control='${response.header("Cache-Control")}' ETag='${response.header("ETag")}' Age='${response.header("Age")}' Expires='${response.header("Expires")}'"
+                        )
+                    }
+                    HttpCacheMonitor.record(host, when {
+                        fromCache -> HttpCacheMonitor.Category.CACHE_HIT
+                        conditionalHit -> HttpCacheMonitor.Category.CONDITIONAL_HIT
+                        else -> HttpCacheMonitor.Category.NETWORK
+                    })
+                    response
+                }
                 // Network responses: bound weather tile freshness to 5 minutes
                 .addNetworkInterceptor { chain ->
                     val response = chain.proceed(chain.request())
