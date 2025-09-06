@@ -5,12 +5,22 @@ import kotlinx.serialization.Serializable
 import java.util.UUID
 
 @Serializable
+enum class DataSource {
+    @SerialName("local") LOCAL,      // Created locally
+    @SerialName("mesh") MESH,       // Received from mesh
+    @SerialName("server") SERVER,   // Received from server
+    @SerialName("hybrid") HYBRID    // Created in hybrid mode
+}
+
+@Serializable
 sealed class MapAnnotation {
     abstract val id: String
     abstract val creatorId: String
     abstract val timestamp: Long
     abstract val color: AnnotationColor
     abstract val expirationTime: Long? // null means no expiration
+    abstract val source: DataSource? // Track where this data originated
+    abstract val originalSource: DataSource? // Track original source for conflict resolution
     
     @Serializable
     @SerialName("poi")
@@ -22,7 +32,9 @@ sealed class MapAnnotation {
         val position: LatLngSerializable,
         val shape: PointShape,
         val label: String? = null,
-        override val expirationTime: Long? = null
+        override val expirationTime: Long? = null,
+        override val source: DataSource? = null,
+        override val originalSource: DataSource? = null
     ) : MapAnnotation()
     
     @Serializable
@@ -36,7 +48,9 @@ sealed class MapAnnotation {
         val style: LineStyle = LineStyle.SOLID,
         val arrowHead: Boolean = true,
         val label: String? = null, // Optional label for the line
-        override val expirationTime: Long? = null
+        override val expirationTime: Long? = null,
+        override val source: DataSource? = null,
+        override val originalSource: DataSource? = null
     ) : MapAnnotation()
     
     @Serializable
@@ -49,7 +63,9 @@ sealed class MapAnnotation {
         val center: LatLngSerializable,
         val radius: Double, // in meters
         val label: String? = null, // Optional label for the area
-        override val expirationTime: Long? = null
+        override val expirationTime: Long? = null,
+        override val source: DataSource? = null,
+        override val originalSource: DataSource? = null
     ) : MapAnnotation()
     
     @Serializable
@@ -63,7 +79,9 @@ sealed class MapAnnotation {
         val fillOpacity: Float = 0.3f, // Fill transparency
         val strokeWidth: Float = 3f, // Border width
         val label: String? = null, // Optional label for the polygon
-        override val expirationTime: Long? = null
+        override val expirationTime: Long? = null,
+        override val source: DataSource? = null,
+        override val originalSource: DataSource? = null
     ) : MapAnnotation()
     
     @Serializable
@@ -73,7 +91,9 @@ sealed class MapAnnotation {
         override val creatorId: String,
         override val timestamp: Long = System.currentTimeMillis(),
         override val color: AnnotationColor = AnnotationColor.RED, // Not used, but required by base class
-        override val expirationTime: Long? = null
+        override val expirationTime: Long? = null,
+        override val source: DataSource? = null,
+        override val originalSource: DataSource? = null
     ) : MapAnnotation()
 }
 
@@ -129,4 +149,69 @@ data class LatLngSerializable(
             return LatLngSerializable(latLng.latitude, latLng.longitude)
         }
     }
+}
+
+/**
+ * Extension functions for MapAnnotation to handle copy operations with source tracking
+ */
+
+/**
+ * Creates a copy of the annotation with updated source tracking
+ */
+fun MapAnnotation.copyWithSourceTracking(
+    source: DataSource?,
+    originalSource: DataSource?
+): MapAnnotation {
+    return when (this) {
+        is MapAnnotation.PointOfInterest -> this.copy(
+            source = source,
+            originalSource = originalSource
+        )
+        is MapAnnotation.Line -> this.copy(
+            source = source,
+            originalSource = originalSource
+        )
+        is MapAnnotation.Area -> this.copy(
+            source = source,
+            originalSource = originalSource
+        )
+        is MapAnnotation.Polygon -> this.copy(
+            source = source,
+            originalSource = originalSource
+        )
+        is MapAnnotation.Deletion -> this.copy(
+            source = source,
+            originalSource = originalSource
+        )
+    }
+}
+
+/**
+ * Creates a copy of the annotation with LOCAL source tracking
+ */
+fun MapAnnotation.copyAsLocal(): MapAnnotation {
+    return copyWithSourceTracking(
+        source = DataSource.LOCAL,
+        originalSource = DataSource.LOCAL
+    )
+}
+
+/**
+ * Creates a copy of the annotation with MESH source tracking
+ */
+fun MapAnnotation.copyAsMesh(): MapAnnotation {
+    return copyWithSourceTracking(
+        source = DataSource.MESH,
+        originalSource = this.originalSource ?: DataSource.MESH
+    )
+}
+
+/**
+ * Creates a copy of the annotation with SERVER source tracking
+ */
+fun MapAnnotation.copyAsServer(): MapAnnotation {
+    return copyWithSourceTracking(
+        source = DataSource.SERVER,
+        originalSource = this.originalSource ?: DataSource.SERVER
+    )
 } 

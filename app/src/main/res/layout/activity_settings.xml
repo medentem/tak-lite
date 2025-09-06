@@ -161,6 +161,141 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="@string/enable_background_processing" />
+
+                    <!-- Divider between sections in merged card -->
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="?android:attr/dividerHorizontal"
+                        android:layout_marginTop="16dp"
+                        android:layout_marginBottom="16dp" />
+
+                    <!-- Server Connection Section -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/server_connection"
+                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                        android:paddingBottom="8dp" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/useTakliteServerSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/use_taklite_server"
+                        android:layout_marginBottom="16dp" />
+
+                    <!-- Server Connection Settings (hidden by default) -->
+                    <LinearLayout
+                        android:id="@+id/serverConnectionSettings"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/server_connection_help"
+                            android:textAppearance="@style/TextAppearance.Material3.BodySmall"
+                            android:textColor="?android:attr/textColorSecondary"
+                            android:layout_marginBottom="16dp" />
+
+                        <!-- Server URL -->
+                        <com.google.android.material.textfield.TextInputLayout
+                            android:id="@+id/serverUrlLayout"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:hint="@string/server_url"
+                            app:boxBackgroundMode="outline">
+
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/serverUrlEditText"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:inputType="textUri"
+                                android:hint="@string/server_url_hint" />
+                        </com.google.android.material.textfield.TextInputLayout>
+
+                        <!-- Username -->
+                        <com.google.android.material.textfield.TextInputLayout
+                            android:id="@+id/serverUsernameLayout"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:hint="@string/server_username"
+                            android:layout_marginTop="16dp"
+                            app:boxBackgroundMode="outline">
+
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/serverUsernameEditText"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:inputType="textEmailAddress"
+                                android:hint="@string/server_username_hint" />
+                        </com.google.android.material.textfield.TextInputLayout>
+
+                        <!-- Password -->
+                        <com.google.android.material.textfield.TextInputLayout
+                            android:id="@+id/serverPasswordLayout"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:hint="@string/server_password"
+                            android:layout_marginTop="16dp"
+                            app:boxBackgroundMode="outline"
+                            app:passwordToggleEnabled="true">
+
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/serverPasswordEditText"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:inputType="textPassword"
+                                android:hint="@string/server_password_hint" />
+                        </com.google.android.material.textfield.TextInputLayout>
+
+                        <!-- Connect Button -->
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/serverConnectButton"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/connect_to_server"
+                            android:layout_marginTop="16dp"
+                            android:layout_marginBottom="8dp" />
+
+                        <!-- Team Selection (shown after connection) -->
+                        <com.google.android.material.textfield.TextInputLayout
+                            android:id="@+id/serverTeamLayout"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:hint="@string/select_team"
+                            android:layout_marginTop="8dp"
+                            android:visibility="gone"
+                            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                            app:boxBackgroundMode="outline">
+
+                            <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                                android:id="@+id/serverTeamSpinner"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:inputType="none"
+                                android:focusable="false"
+                                android:clickable="true"
+                                android:importantForAccessibility="yes"
+                                android:dropDownHeight="wrap_content"
+                                android:dropDownWidth="match_parent"
+                                android:background="@android:color/transparent" />
+                        </com.google.android.material.textfield.TextInputLayout>
+
+                        <!-- Status Text -->
+                        <TextView
+                            android:id="@+id/serverStatusText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/server_not_connected"
+                            android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+                            android:paddingTop="8dp"
+                            android:paddingBottom="4dp" />
+
+                    </LinearLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 

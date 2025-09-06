@@ -547,4 +547,31 @@
     <string name="alternative_support_description">Si vous préférez ne pas utiliser la facturation Google Play ou rencontrez des problèmes, vous pouvez nous soutenir par des méthodes alternatives.</string>
     <string name="view_donation_options">Voir les Options de Don</string>
     <string name="back_to_purchase_options">Retour aux Options d\'Achat</string>
+    
+    <!-- Server Connection Settings -->
+    <string name="use_taklite_server">Utiliser le Serveur TAK Lite</string>
+    <string name="server_connection">Connexion au Serveur</string>
+    <string name="server_url">URL du Serveur</string>
+    <string name="server_url_hint">https://votre-serveur.com</string>
+    <string name="server_username">Nom d\'utilisateur/E-mail</string>
+    <string name="server_username_hint">Entrez votre nom d\'utilisateur ou e-mail</string>
+    <string name="server_password">Mot de passe</string>
+    <string name="server_password_hint">Entrez votre mot de passe</string>
+    <string name="connect_to_server">Se connecter au Serveur</string>
+    <string name="disconnect_from_server">Se déconnecter du Serveur</string>
+    <string name="server_connected">Connecté au serveur</string>
+    <string name="server_not_connected">Non connecté au serveur</string>
+    <string name="server_connecting">Connexion...</string>
+    <string name="server_connection_failed">Échec de la connexion</string>
+    <string name="select_team">Sélectionner l\'Équipe</string>
+    <string name="select_team_hint">Choisissez une équipe à rejoindre</string>
+    <string name="no_teams_available">Aucune équipe disponible</string>
+    <string name="server_connection_help">Connectez-vous à un serveur TAK Lite pour rejoindre des réseaux mesh basés sur des équipes et synchroniser les données.</string>
+    <string name="server_url_validation_error">Veuillez entrer une URL de serveur valide</string>
+    <string name="credentials_required">Le nom d\'utilisateur et le mot de passe sont requis</string>
+    <string name="server_connection_success">Connecté avec succès au serveur</string>
+    <string name="server_connection_error">Échec de la connexion au serveur : %1$s</string>
+    <string name="teams_loaded">Équipes chargées avec succès</string>
+    <string name="team_joined">Rejoint l\'équipe : %1$s</string>
+    <string name="team_join_failed">Échec de l\'adhésion à l\'équipe : %1$s</string>
 </resources>

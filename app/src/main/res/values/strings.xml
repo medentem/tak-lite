@@ -547,4 +547,31 @@
     <string name="status_failed">Failed to send to network.</string>
     <string name="status_retrying">Retrying send to network...</string>
     <string name="toast_annotation_sent">Successfully sent annotation.</string>
+    
+    <!-- Server Connection Settings -->
+    <string name="use_taklite_server">Use TAK Lite Server</string>
+    <string name="server_connection">Server Connection</string>
+    <string name="server_url">Server URL</string>
+    <string name="server_url_hint">https://your-server.com</string>
+    <string name="server_username">Username/Email</string>
+    <string name="server_username_hint">Enter your username or email</string>
+    <string name="server_password">Password</string>
+    <string name="server_password_hint">Enter your password</string>
+    <string name="connect_to_server">Connect to Server</string>
+    <string name="disconnect_from_server">Disconnect from Server</string>
+    <string name="server_connected">Connected to server</string>
+    <string name="server_not_connected">Not connected to server</string>
+    <string name="server_connecting">Connecting...</string>
+    <string name="server_connection_failed">Connection failed</string>
+    <string name="select_team">Select Team</string>
+    <string name="select_team_hint">Choose a team to join</string>
+    <string name="no_teams_available">No teams available</string>
+    <string name="server_connection_help">Connect to a TAK Lite server to join team-based mesh networks and sync data.</string>
+    <string name="server_url_validation_error">Please enter a valid server URL</string>
+    <string name="credentials_required">Username and password are required</string>
+    <string name="server_connection_success">Successfully connected to server</string>
+    <string name="server_connection_error">Failed to connect to server: %1$s</string>
+    <string name="teams_loaded">Teams loaded successfully</string>
+    <string name="team_joined">Joined team: %1$s</string>
+    <string name="team_join_failed">Failed to join team: %1$s</string>
 </resources> 

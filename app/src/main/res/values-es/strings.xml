@@ -547,4 +547,31 @@
     <string name="alternative_support_description">Si prefieres no usar la facturación de Google Play o tienes problemas, puedes apoyarnos a través de métodos alternativos.</string>
     <string name="view_donation_options">Ver Opciones de Donación</string>
     <string name="back_to_purchase_options">Volver a Opciones de Compra</string>
+    
+    <!-- Server Connection Settings -->
+    <string name="use_taklite_server">Usar Servidor TAK Lite</string>
+    <string name="server_connection">Conexión al Servidor</string>
+    <string name="server_url">URL del Servidor</string>
+    <string name="server_url_hint">https://tu-servidor.com</string>
+    <string name="server_username">Usuario/Correo</string>
+    <string name="server_username_hint">Ingresa tu usuario o correo</string>
+    <string name="server_password">Contraseña</string>
+    <string name="server_password_hint">Ingresa tu contraseña</string>
+    <string name="connect_to_server">Conectar al Servidor</string>
+    <string name="disconnect_from_server">Desconectar del Servidor</string>
+    <string name="server_connected">Conectado al servidor</string>
+    <string name="server_not_connected">No conectado al servidor</string>
+    <string name="server_connecting">Conectando...</string>
+    <string name="server_connection_failed">Conexión fallida</string>
+    <string name="select_team">Seleccionar Equipo</string>
+    <string name="select_team_hint">Elige un equipo para unirte</string>
+    <string name="no_teams_available">No hay equipos disponibles</string>
+    <string name="server_connection_help">Conéctate a un servidor TAK Lite para unirte a redes mesh basadas en equipos y sincronizar datos.</string>
+    <string name="server_url_validation_error">Por favor ingresa una URL de servidor válida</string>
+    <string name="credentials_required">Usuario y contraseña son requeridos</string>
+    <string name="server_connection_success">Conectado exitosamente al servidor</string>
+    <string name="server_connection_error">Error al conectar al servidor: %1$s</string>
+    <string name="teams_loaded">Equipos cargados exitosamente</string>
+    <string name="team_joined">Unido al equipo: %1$s</string>
+    <string name="team_join_failed">Error al unirse al equipo: %1$s</string>
 </resources>

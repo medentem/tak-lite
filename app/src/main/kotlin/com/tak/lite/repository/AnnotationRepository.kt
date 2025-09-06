@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.tak.lite.model.AnnotationStatus
 import com.tak.lite.model.MapAnnotation
+import com.tak.lite.model.copyAsLocal
 import com.tak.lite.network.MeshProtocolProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -88,7 +89,7 @@ class AnnotationRepository @Inject constructor(
         }
     }
     
-    private fun handleAnnotation(annotation: MapAnnotation) {
+    fun handleAnnotation(annotation: MapAnnotation) {
         Log.d(TAG, "Before: ${_annotations.value.map { it.id }}")
         when (annotation) {
             is MapAnnotation.Deletion -> {
@@ -100,6 +101,9 @@ class AnnotationRepository @Inject constructor(
                 val existing = _annotations.value.find { it.id == annotation.id }
                 if (existing == null || annotation.timestamp > existing.timestamp) {
                     _annotations.value = _annotations.value.filter { it.id != annotation.id } + annotation
+                    Log.d(TAG, "Updated annotation: ${annotation.id} (source: ${annotation.source})")
+                } else {
+                    Log.d(TAG, "Kept existing annotation: ${annotation.id} (existing timestamp: ${existing.timestamp} > new: ${annotation.timestamp})")
                 }
             }
         }
@@ -108,25 +112,33 @@ class AnnotationRepository @Inject constructor(
     }
     
     fun addAnnotation(annotation: MapAnnotation) {
+        // Add source tracking for locally created annotations
+        val annotatedData = annotation.copyAsLocal()
+        
         // Update local state first
-        _annotations.value = _annotations.value.filter { it.id != annotation.id } + annotation
-        internalAnnotationStatuses[annotation.id] = AnnotationStatus.SENDING
+        _annotations.value = _annotations.value.filter { it.id != annotatedData.id } + annotatedData
+        internalAnnotationStatuses[annotatedData.id] = AnnotationStatus.SENDING
         _annotationStatuses.value = internalAnnotationStatuses.toMap()
+        
         // Send to mesh network using current protocol
-        meshProtocolProvider.protocol.value.sendAnnotation(annotation)
+        meshProtocolProvider.protocol.value.sendAnnotation(annotatedData)
         saveAnnotations() // Save after adding new annotation
+        
+        Log.d(TAG, "Added local annotation: ${annotatedData.id} (source: ${annotatedData.source})")
     }
     
     fun removeAnnotation(annotationId: String) {
         // Update local state first
         _annotations.value = _annotations.value.filter { it.id != annotationId }
-        // Create and send deletion annotation
+        // Create and send deletion annotation with source tracking
         val deletion = MapAnnotation.Deletion(
             id = annotationId,
             creatorId = "local" // TODO: Replace with actual user ID
-        )
+        ).copyAsLocal()
         meshProtocolProvider.protocol.value.sendAnnotation(deletion)
         saveAnnotations() // Save after removing annotation
+        
+        Log.d(TAG, "Removed local annotation: $annotationId (source: ${deletion.source})")
     }
     
     fun sendBulkAnnotationDeletions(ids: List<String>) {

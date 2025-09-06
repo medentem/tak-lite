@@ -547,4 +547,31 @@
     <string name="alternative_support_description">Se preferisci non utilizzare la fatturazione Google Play o hai problemi, puoi supportarci attraverso metodi alternativi.</string>
     <string name="view_donation_options">Visualizza Opzioni di Donazione</string>
     <string name="back_to_purchase_options">Torna alle Opzioni di Acquisto</string>
+    
+    <!-- Server Connection Settings -->
+    <string name="use_taklite_server">Usa Server TAK Lite</string>
+    <string name="server_connection">Connessione al Server</string>
+    <string name="server_url">URL del Server</string>
+    <string name="server_url_hint">https://tuo-server.com</string>
+    <string name="server_username">Nome utente/Email</string>
+    <string name="server_username_hint">Inserisci il tuo nome utente o email</string>
+    <string name="server_password">Password</string>
+    <string name="server_password_hint">Inserisci la tua password</string>
+    <string name="connect_to_server">Connetti al Server</string>
+    <string name="disconnect_from_server">Disconnetti dal Server</string>
+    <string name="server_connected">Connesso al server</string>
+    <string name="server_not_connected">Non connesso al server</string>
+    <string name="server_connecting">Connessione...</string>
+    <string name="server_connection_failed">Connessione fallita</string>
+    <string name="select_team">Seleziona Squadra</string>
+    <string name="select_team_hint">Scegli una squadra a cui unirti</string>
+    <string name="no_teams_available">Nessuna squadra disponibile</string>
+    <string name="server_connection_help">Connettiti a un server TAK Lite per unirti a reti mesh basate su squadre e sincronizzare i dati.</string>
+    <string name="server_url_validation_error">Inserisci un URL del server valido</string>
+    <string name="credentials_required">Nome utente e password sono richiesti</string>
+    <string name="server_connection_success">Connesso con successo al server</string>
+    <string name="server_connection_error">Errore di connessione al server: %1$s</string>
+    <string name="teams_loaded">Squadre caricate con successo</string>
+    <string name="team_joined">Unito alla squadra: %1$s</string>
+    <string name="team_join_failed">Errore nell\'unirsi alla squadra: %1$s</string>
 </resources>

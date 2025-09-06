@@ -14,6 +14,7 @@ import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.Button
+import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
 import android.widget.TextView
@@ -36,6 +37,11 @@ import com.tak.lite.ui.util.EdgeToEdgeHelper
 import com.tak.lite.util.BillingManager
 import com.tak.lite.util.LocaleManager
 import com.tak.lite.util.UnitManager
+import com.tak.lite.network.ServerApiService
+import com.tak.lite.network.SocketService
+import com.tak.lite.network.HybridSyncManager
+import com.tak.lite.data.model.Team
+import com.tak.lite.repository.AnnotationRepository
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -45,6 +51,7 @@ import android.widget.Toast
 class SettingsActivity : BaseActivity() {
     @Inject lateinit var meshProtocolProvider: com.tak.lite.network.MeshProtocolProvider
     @Inject lateinit var billingManager: BillingManager
+    @Inject lateinit var annotationRepository: AnnotationRepository
     @Inject lateinit var weatherRepository: WeatherRepository
     private lateinit var mapModeSpinner: AutoCompleteTextView
     private lateinit var endBeepSwitch: SwitchMaterial
@@ -183,6 +190,23 @@ class SettingsActivity : BaseActivity() {
     private lateinit var quickMessage5EditText: com.google.android.material.textfield.TextInputEditText
     private lateinit var quickMessage6EditText: com.google.android.material.textfield.TextInputEditText
     private lateinit var resetQuickMessagesButton: com.google.android.material.button.MaterialButton
+    
+    // Server connection properties
+    private lateinit var useTakliteServerSwitch: SwitchMaterial
+    private lateinit var serverConnectionSettings: LinearLayout
+    private lateinit var serverUrlEditText: com.google.android.material.textfield.TextInputEditText
+    private lateinit var serverUsernameEditText: com.google.android.material.textfield.TextInputEditText
+    private lateinit var serverPasswordEditText: com.google.android.material.textfield.TextInputEditText
+    private lateinit var serverConnectButton: com.google.android.material.button.MaterialButton
+    private lateinit var serverTeamSpinner: com.google.android.material.textfield.MaterialAutoCompleteTextView
+    private lateinit var serverTeamLayout: com.google.android.material.textfield.TextInputLayout
+    private lateinit var serverStatusText: TextView
+    
+    // Server API service
+    private lateinit var serverApiService: ServerApiService
+    private lateinit var socketService: SocketService
+    private lateinit var hybridSyncManager: HybridSyncManager
+    
     private val REQUEST_CODE_FOREGROUND_SERVICE_CONNECTED_DEVICE = 2003
     private val REQUEST_CODE_ALL_PERMISSIONS = 4001
     
@@ -275,6 +299,22 @@ class SettingsActivity : BaseActivity() {
         quickMessage5EditText = findViewById(R.id.quickMessage5EditText)
         quickMessage6EditText = findViewById(R.id.quickMessage6EditText)
         resetQuickMessagesButton = findViewById(R.id.resetQuickMessagesButton)
+        
+        // Server connection properties
+        useTakliteServerSwitch = findViewById(R.id.useTakliteServerSwitch)
+        serverConnectionSettings = findViewById(R.id.serverConnectionSettings)
+        serverUrlEditText = findViewById(R.id.serverUrlEditText)
+        serverUsernameEditText = findViewById(R.id.serverUsernameEditText)
+        serverPasswordEditText = findViewById(R.id.serverPasswordEditText)
+        serverConnectButton = findViewById(R.id.serverConnectButton)
+        serverTeamSpinner = findViewById(R.id.serverTeamSpinner)
+        serverTeamLayout = findViewById(R.id.serverTeamLayout)
+        serverStatusText = findViewById(R.id.serverStatusText)
+        
+        // Initialize server services
+        serverApiService = ServerApiService(this)
+        socketService = SocketService(this)
+        hybridSyncManager = HybridSyncManager(this, meshProtocolProvider, serverApiService, socketService, annotationRepository)
 
         // Check premium status and update UI accordingly
         lifecycleScope.launch {
@@ -667,6 +707,9 @@ class SettingsActivity : BaseActivity() {
 
         // Setup quick messages settings
         setupQuickMessagesSettings()
+
+        // Setup server connection settings
+        setupServerConnectionSettings()
 
         // Setup map dark mode spinner
         val darkModeAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, darkModeOptions)
@@ -1401,6 +1444,274 @@ class SettingsActivity : BaseActivity() {
                 }
                 .setNegativeButton(getString(R.string.cancel), null)
                 .show()
+        }
+    }
+
+    private fun setupServerConnectionSettings() {
+        val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
+        
+        // Load server connection settings
+        val useServer = prefs.getBoolean("use_taklite_server", false)
+        val serverUrl = prefs.getString("server_url", "") ?: ""
+        val serverUsername = prefs.getString("server_username", "") ?: ""
+        val serverPassword = prefs.getString("server_password", "") ?: ""
+        val selectedTeam = prefs.getString("selected_team", "") ?: ""
+        
+        // Setup toggle switch
+        useTakliteServerSwitch.isChecked = useServer
+        useTakliteServerSwitch.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean("use_taklite_server", isChecked).apply()
+            updateServerConnectionVisibility(isChecked)
+        }
+        
+        // Setup server connection fields
+        serverUrlEditText.setText(serverUrl)
+        serverUsernameEditText.setText(serverUsername)
+        serverPasswordEditText.setText(serverPassword)
+        
+        // Setup connect button
+        serverConnectButton.setOnClickListener {
+            val isConnected = serverApiService.isLoggedIn()
+            if (isConnected) {
+                disconnectFromServer()
+            } else {
+                connectToServer()
+            }
+        }
+        
+        // Setup team selection
+        val teamAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, mutableListOf<String>())
+        serverTeamSpinner.setAdapter(teamAdapter)
+        
+        // Set initial visibility
+        updateServerConnectionVisibility(useServer)
+        
+        // Load saved values
+        if (serverUrl.isNotEmpty()) {
+            serverUrlEditText.setText(serverUrl)
+        }
+        if (serverUsername.isNotEmpty()) {
+            serverUsernameEditText.setText(serverUsername)
+        }
+        if (serverPassword.isNotEmpty()) {
+            serverPasswordEditText.setText(serverPassword)
+        }
+        
+        // Setup focus change listeners to save values
+        serverUrlEditText.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) {
+                val url = serverUrlEditText.text.toString().trim()
+                prefs.edit().putString("server_url", url).apply()
+            }
+        }
+        
+        serverUsernameEditText.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) {
+                val username = serverUsernameEditText.text.toString().trim()
+                prefs.edit().putString("server_username", username).apply()
+            }
+        }
+        
+        serverPasswordEditText.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) {
+                val password = serverPasswordEditText.text.toString().trim()
+                prefs.edit().putString("server_password", password).apply()
+            }
+        }
+        
+        // Update status
+        updateServerConnectionStatus()
+    }
+    
+    private fun updateServerConnectionVisibility(show: Boolean) {
+        serverConnectionSettings.visibility = if (show) View.VISIBLE else View.GONE
+    }
+    
+    private fun connectToServer() {
+        val url = serverUrlEditText.text.toString().trim()
+        val username = serverUsernameEditText.text.toString().trim()
+        val password = serverPasswordEditText.text.toString().trim()
+        
+        // Validate inputs
+        if (url.isEmpty()) {
+            serverUrlEditText.error = getString(R.string.server_url_validation_error)
+            return
+        }
+        if (username.isEmpty() || password.isEmpty()) {
+            Toast.makeText(this, getString(R.string.credentials_required), Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        // Update UI to show connecting state
+        serverConnectButton.isEnabled = false
+        serverConnectButton.text = getString(R.string.server_connecting)
+        serverStatusText.text = getString(R.string.server_connecting)
+        
+        // Perform actual server connection
+        lifecycleScope.launch {
+            try {
+                // Test connection first
+                val connectionResult = serverApiService.testConnection(url)
+                if (connectionResult.isFailure) {
+                    throw Exception("Cannot reach server: ${connectionResult.exceptionOrNull()?.message}")
+                }
+                
+                // Attempt login
+                val loginResult = serverApiService.login(url, username, password)
+                if (loginResult.isFailure) {
+                    throw Exception(loginResult.exceptionOrNull()?.message ?: "Login failed")
+                }
+                
+                // Get user info to verify connection
+                val userInfoResult = serverApiService.getUserInfo(url)
+                if (userInfoResult.isFailure) {
+                    throw Exception("Failed to get user info: ${userInfoResult.exceptionOrNull()?.message}")
+                }
+                
+                // Connect Socket.IO for real-time communication
+                val loginResponse = loginResult.getOrThrow()
+                socketService.connect(url, loginResponse.token)
+                
+                // Update UI for successful connection
+                serverStatusText.text = getString(R.string.server_connected)
+                serverConnectButton.text = getString(R.string.disconnect_from_server)
+                serverConnectButton.isEnabled = true
+                
+                // Show team selection and load teams
+                serverTeamLayout.visibility = View.VISIBLE
+                loadAvailableTeams()
+                
+                // Save connection state
+                val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
+                prefs.edit().putBoolean("server_connected", true).apply()
+                
+                Toast.makeText(this@SettingsActivity, getString(R.string.server_connection_success), Toast.LENGTH_SHORT).show()
+                
+            } catch (e: Exception) {
+                // Handle connection error
+                serverStatusText.text = getString(R.string.server_connection_failed)
+                serverConnectButton.text = getString(R.string.connect_to_server)
+                serverConnectButton.isEnabled = true
+                
+                // Clear any stored connection data
+                val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
+                prefs.edit().putBoolean("server_connected", false).apply()
+                serverApiService.clearAllData()
+                
+                Toast.makeText(this@SettingsActivity, getString(R.string.server_connection_error, e.message), Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+    
+    private fun disconnectFromServer() {
+        val serverUrl = serverApiService.getStoredServerUrl()
+        if (serverUrl == null) {
+            // No server URL stored, just clear local data
+            serverApiService.clearAllData()
+            updateServerConnectionStatus()
+            return
+        }
+        
+        lifecycleScope.launch {
+            try {
+                // Disable hybrid sync
+                hybridSyncManager.disableServerSync()
+                
+                // Disconnect Socket.IO
+                socketService.disconnect()
+                
+                // Attempt logout from server
+                serverApiService.logout(serverUrl)
+                
+                // Clear local data
+                serverApiService.clearAllData()
+                val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
+                prefs.edit().putBoolean("server_connected", false).apply()
+                
+                // Update UI
+                updateServerConnectionStatus()
+                
+                Toast.makeText(this@SettingsActivity, "Disconnected from server", Toast.LENGTH_SHORT).show()
+                
+            } catch (e: Exception) {
+                // Even if logout fails, clear local data
+                hybridSyncManager.disableServerSync()
+                socketService.disconnect()
+                serverApiService.clearAllData()
+                val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
+                prefs.edit().putBoolean("server_connected", false).apply()
+                updateServerConnectionStatus()
+                
+                Toast.makeText(this@SettingsActivity, "Disconnected from server", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    
+    private fun loadAvailableTeams() {
+        val serverUrl = serverUrlEditText.text.toString().trim()
+        if (serverUrl.isEmpty()) {
+            Toast.makeText(this, "Server URL is required", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        lifecycleScope.launch {
+            try {
+                val teamsResult = serverApiService.getUserTeams(serverUrl)
+                if (teamsResult.isFailure) {
+                    throw Exception(teamsResult.exceptionOrNull()?.message ?: "Failed to load teams")
+                }
+                
+                val teams = teamsResult.getOrThrow()
+                if (teams.isEmpty()) {
+                    Toast.makeText(this@SettingsActivity, getString(R.string.no_teams_available), Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+                
+                // Create team names list for the spinner
+                val teamNames = teams.map { it.name }
+                val teamAdapter = ArrayAdapter(this@SettingsActivity, android.R.layout.simple_dropdown_item_1line, teamNames)
+                serverTeamSpinner.setAdapter(teamAdapter)
+                
+                // Set up team selection listener
+                serverTeamSpinner.setOnItemClickListener { _, _, position, _ ->
+                    val selectedTeam = teams[position]
+                    val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
+                    prefs.edit().putString("selected_team_id", selectedTeam.id).apply()
+                    prefs.edit().putString("selected_team_name", selectedTeam.name).apply()
+                    
+                    // Enable hybrid sync for the selected team
+                    hybridSyncManager.enableServerSync(selectedTeam)
+                    
+                    Toast.makeText(this@SettingsActivity, getString(R.string.team_joined, selectedTeam.name), Toast.LENGTH_SHORT).show()
+                }
+                
+                Toast.makeText(this@SettingsActivity, getString(R.string.teams_loaded), Toast.LENGTH_SHORT).show()
+                
+            } catch (e: Exception) {
+                Toast.makeText(this@SettingsActivity, getString(R.string.team_join_failed, e.message), Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+    
+    private fun updateServerConnectionStatus() {
+        val isLoggedIn = serverApiService.isLoggedIn()
+        val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
+        val isConnected = prefs.getBoolean("server_connected", false) && isLoggedIn
+        
+        if (isConnected) {
+            serverStatusText.text = getString(R.string.server_connected)
+            serverConnectButton.text = getString(R.string.disconnect_from_server)
+            serverTeamLayout.visibility = View.VISIBLE
+            
+            // Load teams if we have a server URL
+            val serverUrl = serverApiService.getStoredServerUrl()
+            if (serverUrl != null) {
+                loadAvailableTeams()
+            }
+        } else {
+            serverStatusText.text = getString(R.string.server_not_connected)
+            serverConnectButton.text = getString(R.string.connect_to_server)
+            serverTeamLayout.visibility = View.GONE
         }
     }
 
