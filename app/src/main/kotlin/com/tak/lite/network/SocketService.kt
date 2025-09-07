@@ -68,8 +68,8 @@ class SocketService(private val context: Context) {
             _connectionState.value = SocketConnectionState.Connecting
             
             val options = IO.Options().apply {
-                // Add authentication token to query parameters
-                query = "token=$authToken"
+                // Add authentication token to auth object
+                auth = mapOf("token" to authToken)
                 // Enable reconnection
                 reconnection = true
                 reconnectionAttempts = 5
