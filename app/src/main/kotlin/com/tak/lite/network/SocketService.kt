@@ -108,6 +108,7 @@ class SocketService(private val context: Context) {
      * Join a team
      */
     fun joinTeam(teamId: String) {
+        Log.d(TAG, "joinTeam called for teamId: $teamId, connection state: ${_connectionState.value}")
         if (_connectionState.value != SocketConnectionState.Connected) {
             Log.w(TAG, "Cannot join team - not connected to server")
             onErrorCallback?.invoke("Not connected to server")
@@ -163,19 +164,25 @@ class SocketService(private val context: Context) {
      * Send annotation to server
      */
     fun sendAnnotation(annotation: MapAnnotation, teamId: String? = null) {
+        Log.d(TAG, "sendAnnotation called for: ${annotation.id}, teamId: $teamId, connection state: ${_connectionState.value}")
         if (_connectionState.value != SocketConnectionState.Connected) {
             Log.w(TAG, "Cannot send annotation - not connected to server")
             return
         }
         
         try {
+            // Parse the annotation to JSON object instead of string
+            val annotationJson = gson.toJson(annotation)
+            val annotationObject = JSONObject(annotationJson)
+            
             val annotationData = JSONObject().apply {
                 put("annotationId", annotation.id)
                 put("type", annotation::class.simpleName?.lowercase())
-                put("data", gson.toJson(annotation))
+                put("data", annotationObject) // Send as object, not string
                 teamId?.let { put("teamId", it) }
             }
             
+            Log.d(TAG, "Emitting annotation:update event with data: ${annotationData.toString()}")
             socket?.emit("annotation:update", annotationData)
             Log.d(TAG, "Sent annotation: ${annotation.id}")
             

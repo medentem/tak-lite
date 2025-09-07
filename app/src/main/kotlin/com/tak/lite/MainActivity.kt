@@ -135,6 +135,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
 
     @Inject lateinit var meshProtocolProvider: com.tak.lite.network.MeshProtocolProvider
     @Inject lateinit var billingManager: com.tak.lite.util.BillingManager
+    @Inject lateinit var serverConnectionManager: com.tak.lite.network.ServerConnectionManager
 
     // Activity result launcher for compass calibration
     private val compassCalibrationLauncher = registerForActivityResult(
@@ -1063,6 +1064,10 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
     override fun onResume() {
         super.onResume()
         mapController.onResume()
+        
+        // Restore server connection when returning from SettingsActivity
+        serverConnectionManager.restoreServerConnection()
+        
         // Apply keep screen awake preference
         val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
         val keepAwakeEnabled = prefs.getBoolean("keep_screen_awake", false)

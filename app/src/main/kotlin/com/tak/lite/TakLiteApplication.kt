@@ -1,11 +1,17 @@
 package com.tak.lite
 
 import android.app.Application
+import com.tak.lite.network.ServerConnectionManager
 import com.tak.lite.util.LocaleManager
 import dagger.hilt.android.HiltAndroidApp
+import javax.inject.Inject
 
 @HiltAndroidApp
 class TakLiteApplication : Application() {
+    
+    @Inject
+    lateinit var serverConnectionManager: ServerConnectionManager
+    
     override fun onCreate() {
         super.onCreate()
         
@@ -23,6 +29,10 @@ class TakLiteApplication : Application() {
         org.maplibre.android.MapLibre.getInstance(this)
         // MeshProtocolProvider.initialize(this) // No longer needed with DI
         instance = this
+        
+        // Restore server connection if previously connected
+        // This will be called after Hilt injection is complete
+        serverConnectionManager.restoreServerConnection()
     }
 
     companion object {

@@ -27,7 +27,7 @@ data class Team(
     val id: String,
     val name: String,
     @SerializedName("created_at")
-    val createdAt: String
+    val createdAt: String? = null
 )
 
 data class ServerError(

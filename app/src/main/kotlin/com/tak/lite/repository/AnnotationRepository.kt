@@ -5,7 +5,6 @@ import android.util.Log
 import com.tak.lite.model.AnnotationStatus
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.copyAsLocal
-import com.tak.lite.network.HybridSyncManager
 import com.tak.lite.network.MeshProtocolProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -23,7 +22,6 @@ import javax.inject.Singleton
 @Singleton
 class AnnotationRepository @Inject constructor(
     private val meshProtocolProvider: MeshProtocolProvider,
-    private val hybridSyncManager: HybridSyncManager,
     context: Context
 ) {
     private val TAG = "AnnotationRepository"
@@ -45,14 +43,8 @@ class AnnotationRepository @Inject constructor(
     private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
     init {
-        // Observe protocol changes and set callback dynamically
-        repositoryScope.launch {
-            meshProtocolProvider.protocol.collect { currentProtocol ->
-                currentProtocol.setAnnotationCallback { annotation ->
-                    handleAnnotation(annotation)
-                }
-            }
-        }
+        // Note: Mesh protocol callbacks are handled by HybridSyncManager
+        // Repository only receives updates via handleAnnotation() calls from HybridSyncManager
 
         // Observe annotation status updates from protocol
         repositoryScope.launch {
@@ -122,8 +114,7 @@ class AnnotationRepository @Inject constructor(
         internalAnnotationStatuses[annotatedData.id] = AnnotationStatus.SENDING
         _annotationStatuses.value = internalAnnotationStatuses.toMap()
         
-        // Send via HybridSyncManager (handles both mesh and server sync)
-        hybridSyncManager.sendAnnotation(annotatedData)
+        // Note: Sync is handled by HybridSyncManager, not directly by repository
         saveAnnotations() // Save after adding new annotation
         
         Log.d(TAG, "Added local annotation: ${annotatedData.id} (source: ${annotatedData.source})")
@@ -132,24 +123,18 @@ class AnnotationRepository @Inject constructor(
     fun removeAnnotation(annotationId: String) {
         // Update local state first
         _annotations.value = _annotations.value.filter { it.id != annotationId }
-        // Create and send deletion annotation with source tracking
-        val deletion = MapAnnotation.Deletion(
-            id = annotationId,
-            creatorId = "local" // TODO: Replace with actual user ID
-        ).copyAsLocal()
         
-        // Send via HybridSyncManager (handles both mesh and server sync)
-        hybridSyncManager.deleteAnnotation(annotationId)
+        // Note: Sync is handled by HybridSyncManager, not directly by repository
         saveAnnotations() // Save after removing annotation
         
-        Log.d(TAG, "Removed local annotation: $annotationId (source: ${deletion.source})")
+        Log.d(TAG, "Removed local annotation: $annotationId")
     }
     
     fun sendBulkAnnotationDeletions(ids: List<String>) {
-        // Send via HybridSyncManager (handles both mesh bulk packet and server individual packets)
-        hybridSyncManager.sendBulkAnnotationDeletions(ids)
-        // Remove from local state as well
+        // Remove from local state first
         _annotations.value = _annotations.value.filter { it.id !in ids }
+        
+        // Note: Sync is handled by HybridSyncManager, not directly by repository
         saveAnnotations() // Save after bulk deletion
     }
 

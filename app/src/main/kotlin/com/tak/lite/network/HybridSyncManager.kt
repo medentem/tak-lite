@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlin.coroutines.CoroutineContext
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 
@@ -30,12 +31,21 @@ class HybridSyncManager(
     private val meshProtocolProvider: MeshProtocolProvider,
     private val serverApiService: ServerApiService,
     private val socketService: SocketService,
-    private val annotationRepository: AnnotationRepository
+    private val annotationRepository: AnnotationRepository,
+    private val coroutineContext: CoroutineContext = Dispatchers.IO
 ) {
     
     private val TAG = "HybridSyncManager"
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(coroutineContext + SupervisorJob())
     private val syncMutex = Mutex()
+    
+    // Debug: Track which coroutine is holding the mutex
+    private var mutexHolder: String? = null
+    
+    private fun clearMutexHolder() {
+        Log.d(TAG, "Releasing mutex (was held by: $mutexHolder)")
+        mutexHolder = null
+    }
     
     // Offline queue for server sync
     private val offlineQueue = ConcurrentLinkedQueue<SyncItem>()
@@ -88,18 +98,45 @@ class HybridSyncManager(
      * Enable server synchronization
      */
     fun enableServerSync(team: Team) {
+        Log.d(TAG, "enableServerSync called for team: ${team.name} (${team.id})")
+        
+        // Check if already enabled for the same team to prevent duplicate calls
+        if (_isServerSyncEnabled.value && _currentTeam.value?.id == team.id) {
+            Log.d(TAG, "Server sync already enabled for team: ${team.name}, skipping duplicate call")
+            return
+        }
+        
         scope.launch {
-            syncMutex.withLock {
-                _currentTeam.value = team
-                _isServerSyncEnabled.value = true
-                
-                // Join team on server
-                socketService.joinTeam(team.id)
-                
-                // Process any queued items
-                processOfflineQueue()
-                
-                Log.d(TAG, "Server sync enabled for team: ${team.name}")
+            Log.d(TAG, "Inside enableServerSync coroutine for team: ${team.name}")
+            try {
+                syncMutex.withLock {
+                    mutexHolder = "enableServerSync-${team.name}"
+                    Log.d(TAG, "Acquired sync mutex for enableServerSync (holder: $mutexHolder)")
+                    
+                    // Double-check after acquiring mutex
+                    if (_isServerSyncEnabled.value && _currentTeam.value?.id == team.id) {
+                        Log.d(TAG, "Server sync already enabled for team: ${team.name}, releasing mutex")
+                        return@withLock
+                    }
+                    
+                    _currentTeam.value = team
+                    _isServerSyncEnabled.value = true
+                    
+                    Log.d(TAG, "Server sync state updated - enabled: ${_isServerSyncEnabled.value}, team: ${_currentTeam.value?.name}")
+                    
+                    // Join team on server (this should be non-blocking)
+                    socketService.joinTeam(team.id)
+                    Log.d(TAG, "Joined team on server: ${team.id}")
+                    
+                    // Process any queued items (don't acquire mutex since we already have it)
+                    processOfflineQueueInternal()
+                    
+                    Log.d(TAG, "Server sync enabled for team: ${team.name}")
+                }
+                clearMutexHolder()
+                Log.d(TAG, "Completed enableServerSync coroutine for team: ${team.name}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in enableServerSync", e)
             }
         }
     }
@@ -155,34 +192,73 @@ class HybridSyncManager(
      * Send annotation (dual-mode)
      */
     fun sendAnnotation(annotation: MapAnnotation) {
+        Log.d(TAG, "sendAnnotation called for: ${annotation.id}")
         scope.launch {
-            syncMutex.withLock {
-                // Mark as processed to prevent loops
-                val dataKey = "${annotation.id}_LOCAL"
-                processedDataIds[dataKey] = System.currentTimeMillis()
-                dataSourceMap[annotation.id] = DataSource.LOCAL
-                
-                // Add source tracking to annotation
-                val annotatedData = annotation.copyAsLocal()
-                
-                // Always send to mesh (immediate local sync)
-                meshProtocolProvider.protocol.value.sendAnnotation(annotatedData)
-                syncMetrics.recordAnnotationSentToMesh()
-                
-                // Send to server if enabled (global sync)
-                if (_isServerSyncEnabled.value) {
-                    val teamId = _currentTeam.value?.id
-                    if (teamId != null) {
-                        socketService.sendAnnotation(annotatedData, teamId)
-                        syncMetrics.recordAnnotationSentToServer()
-                        Log.d(TAG, "Sent annotation to both mesh and server: ${annotation.id}")
+            Log.d(TAG, "Inside coroutine for annotation: ${annotation.id}")
+            try {
+                Log.d(TAG, "About to start timeout block for annotation: ${annotation.id}")
+                // Add timeout to prevent hanging
+                kotlinx.coroutines.withTimeout(10000) { // 10 second timeout
+                    Log.d(TAG, "Inside timeout block for annotation: ${annotation.id}")
+                    Log.d(TAG, "About to acquire sync mutex for annotation: ${annotation.id}")
+                    
+                    // Try to acquire mutex with a shorter timeout to avoid hanging
+                    if (!syncMutex.tryLock(5000)) { // 5 second timeout
+                        Log.e(TAG, "Failed to acquire sync mutex within 5 seconds for annotation: ${annotation.id}")
+                        Log.e(TAG, "Mutex is likely held by another coroutine. Current state - Server sync enabled: ${_isServerSyncEnabled.value}, Team: ${_currentTeam.value?.name}")
+                        return@withTimeout
                     }
-                } else {
-                    // Queue for later sync
-                    queueForSync(SyncType.ANNOTATION_UPDATE, annotatedData)
-                    syncMetrics.recordOfflineQueueItem()
-                    Log.d(TAG, "Queued annotation for server sync: ${annotation.id}")
+                    
+                    try {
+                        mutexHolder = "sendAnnotation-${annotation.id}"
+                        Log.d(TAG, "Acquired sync mutex for annotation: ${annotation.id} (holder: $mutexHolder)")
+                        // Mark as processed to prevent loops
+                        val dataKey = "${annotation.id}_LOCAL"
+                        processedDataIds[dataKey] = System.currentTimeMillis()
+                        dataSourceMap[annotation.id] = DataSource.LOCAL
+                        Log.d(TAG, "Marked annotation as processed: ${annotation.id}")
+                        
+                        // Add source tracking to annotation
+                        val annotatedData = annotation.copyAsLocal()
+                        Log.d(TAG, "Created annotated data for: ${annotation.id}")
+                        
+                        // Always send to mesh (immediate local sync)
+                        Log.d(TAG, "About to send annotation to mesh: ${annotation.id}")
+                        meshProtocolProvider.protocol.value.sendAnnotation(annotatedData)
+                        syncMetrics.recordAnnotationSentToMesh()
+                        Log.d(TAG, "Sent annotation to mesh: ${annotation.id}")
+                        
+                        // Send to server if enabled (global sync)
+                        Log.d(TAG, "Server sync enabled: ${_isServerSyncEnabled.value}, current team: ${_currentTeam.value?.name}")
+                        if (_isServerSyncEnabled.value) {
+                            val teamId = _currentTeam.value?.id
+                            if (teamId != null) {
+                                Log.d(TAG, "Sending annotation to server with teamId: $teamId")
+                                socketService.sendAnnotation(annotatedData, teamId)
+                                syncMetrics.recordAnnotationSentToServer()
+                                Log.d(TAG, "Sent annotation to both mesh and server: ${annotation.id}")
+                            } else {
+                                Log.w(TAG, "Server sync enabled but no team ID available")
+                            }
+                        } else {
+                            // Queue for later sync
+                            Log.d(TAG, "Server sync not enabled, queuing annotation: ${annotation.id}")
+                            queueForSync(SyncType.ANNOTATION_UPDATE, annotatedData)
+                            syncMetrics.recordOfflineQueueItem()
+                            Log.d(TAG, "Queued annotation for server sync: ${annotation.id}")
+                        }
+                        Log.d(TAG, "Completed all sync operations for annotation: ${annotation.id}")
+                    } finally {
+                        clearMutexHolder()
+                        syncMutex.unlock()
+                        Log.d(TAG, "Released sync mutex for annotation: ${annotation.id}")
+                    }
                 }
+                Log.d(TAG, "Completed sendAnnotation for: ${annotation.id}")
+            } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                Log.e(TAG, "Timeout waiting for sync mutex for annotation: ${annotation.id}", e)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in sendAnnotation for: ${annotation.id}", e)
             }
         }
     }
@@ -322,6 +398,8 @@ class HybridSyncManager(
     private fun handleIncomingAnnotation(annotation: MapAnnotation, source: SyncSource) {
         scope.launch {
             syncMutex.withLock {
+                mutexHolder = "handleIncomingAnnotation-${annotation.id}-${source.name}"
+                Log.d(TAG, "handleIncomingAnnotation acquired mutex (holder: $mutexHolder)")
                 // Create unique key for this data from this source
                 val dataKey = "${annotation.id}_${source.name}"
                 
@@ -363,7 +441,7 @@ class HybridSyncManager(
                 }
                 
                 // Update repository (this will trigger UI updates)
-                annotationRepository.handleAnnotation(resolvedAnnotation)
+                    annotationRepository.handleAnnotation(resolvedAnnotation)
                 
                 // Determine if we should rebroadcast to mesh
                 if (shouldRebroadcastToMesh(resolvedAnnotation, source)) {
@@ -374,6 +452,7 @@ class HybridSyncManager(
                 
                 Log.d(TAG, "Processed annotation from $source: ${annotation.id}")
             }
+            clearMutexHolder()
         }
     }
     
@@ -460,64 +539,91 @@ class HybridSyncManager(
     }
     
     private suspend fun processOfflineQueue() {
-        syncMutex.withLock {
-            val items = mutableListOf<SyncItem>()
-            
-            // Drain the queue
-            while (offlineQueue.isNotEmpty()) {
-                offlineQueue.poll()?.let { items.add(it) }
+        Log.d(TAG, "processOfflineQueue called")
+        try {
+            syncMutex.withLock {
+                mutexHolder = "processOfflineQueue"
+                Log.d(TAG, "processOfflineQueue acquired mutex (holder: $mutexHolder)")
+                processOfflineQueueInternal()
+                Log.d(TAG, "processOfflineQueue completed")
             }
-            
-            // Process each item
-            items.forEach { item ->
-                try {
-                    when (item.type) {
-                        SyncType.LOCATION_UPDATE -> {
-                            val data = item.data as Map<String, Any?>
-                            val teamId = _currentTeam.value?.id
-                            if (teamId != null) {
-                                socketService.sendLocationUpdate(
-                                    latitude = data["latitude"] as Double,
-                                    longitude = data["longitude"] as Double,
-                                    altitude = data["altitude"] as? Double,
-                                    accuracy = data["accuracy"] as? Double,
-                                    teamId = teamId
-                                )
-                            }
-                        }
-                        SyncType.ANNOTATION_UPDATE -> {
-                            val annotation = item.data as MapAnnotation
-                            val teamId = _currentTeam.value?.id
-                            if (teamId != null) {
-                                socketService.sendAnnotation(annotation, teamId)
-                            }
-                        }
-                        SyncType.ANNOTATION_DELETE -> {
-                            val deletion = item.data as MapAnnotation.Deletion
-                            val teamId = _currentTeam.value?.id
-                            if (teamId != null) {
-                                socketService.sendAnnotation(deletion, teamId)
-                            }
-                        }
-                        SyncType.MESSAGE_SEND -> {
-                            val content = item.data as String
-                            val teamId = _currentTeam.value?.id
-                            if (teamId != null) {
-                                socketService.sendMessage(content, teamId)
-                            }
+            clearMutexHolder()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in processOfflineQueue", e)
+            clearMutexHolder()
+        }
+    }
+    
+    private suspend fun processOfflineQueueInternal() {
+        Log.d(TAG, "processOfflineQueueInternal called")
+        val items = mutableListOf<SyncItem>()
+        
+        // Drain the queue
+        while (offlineQueue.isNotEmpty()) {
+            offlineQueue.poll()?.let { items.add(it) }
+        }
+        
+        Log.d(TAG, "processOfflineQueueInternal found ${items.size} items to process")
+        
+        // Process each item
+        items.forEach { item ->
+            try {
+                Log.d(TAG, "processOfflineQueueInternal processing item: ${item.type}")
+                when (item.type) {
+                    SyncType.LOCATION_UPDATE -> {
+                        val data = item.data as Map<String, Any?>
+                        val teamId = _currentTeam.value?.id
+                        if (teamId != null) {
+                            Log.d(TAG, "processOfflineQueueInternal sending location update")
+                            socketService.sendLocationUpdate(
+                                latitude = data["latitude"] as Double,
+                                longitude = data["longitude"] as Double,
+                                altitude = data["altitude"] as? Double,
+                                accuracy = data["accuracy"] as? Double,
+                                teamId = teamId
+                            )
+                            Log.d(TAG, "processOfflineQueueInternal sent location update")
                         }
                     }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error processing queued item: ${item.type}", e)
-                    // Re-queue the item for later retry
-                    offlineQueue.offer(item)
+                    SyncType.ANNOTATION_UPDATE -> {
+                        val annotation = item.data as MapAnnotation
+                        val teamId = _currentTeam.value?.id
+                        if (teamId != null) {
+                            Log.d(TAG, "processOfflineQueueInternal sending annotation: ${annotation.id}")
+                            socketService.sendAnnotation(annotation, teamId)
+                            Log.d(TAG, "processOfflineQueueInternal sent annotation: ${annotation.id}")
+                        }
+                    }
+                    SyncType.ANNOTATION_DELETE -> {
+                        val deletion = item.data as MapAnnotation.Deletion
+                        val teamId = _currentTeam.value?.id
+                        if (teamId != null) {
+                            Log.d(TAG, "processOfflineQueueInternal sending deletion: ${deletion.id}")
+                            socketService.sendAnnotation(deletion, teamId)
+                            Log.d(TAG, "processOfflineQueueInternal sent deletion: ${deletion.id}")
+                        }
+                    }
+                    SyncType.MESSAGE_SEND -> {
+                        val content = item.data as String
+                        val teamId = _currentTeam.value?.id
+                        if (teamId != null) {
+                            Log.d(TAG, "processOfflineQueueInternal sending message")
+                            socketService.sendMessage(content, teamId)
+                            Log.d(TAG, "processOfflineQueueInternal sent message")
+                        }
+                    }
                 }
-            }
-            
-            if (items.isNotEmpty()) {
-                Log.d(TAG, "Processed ${items.size} queued items")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error processing queued item: ${item.type}", e)
+                // Re-queue the item for later retry
+                offlineQueue.offer(item)
             }
         }
+        
+        if (items.isNotEmpty()) {
+            Log.d(TAG, "Processed ${items.size} queued items")
+        }
+        Log.d(TAG, "processOfflineQueueInternal completed")
     }
     
     enum class SyncSource {
@@ -652,4 +758,5 @@ class HybridSyncManager(
             }
         }
     }
+    
 }

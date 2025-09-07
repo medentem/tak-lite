@@ -6,6 +6,7 @@ import com.tak.lite.network.Layer2MeshNetworkManager
 import com.tak.lite.network.Layer2MeshNetworkManagerImpl
 import com.tak.lite.network.MeshProtocolProvider
 import com.tak.lite.network.ServerApiService
+import com.tak.lite.network.ServerConnectionManager
 import com.tak.lite.network.SocketService
 import com.tak.lite.repository.AnnotationRepository
 import com.tak.lite.rtc.RtcEngine
@@ -15,6 +16,8 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.Dispatchers
+import kotlin.coroutines.CoroutineContext
 import javax.inject.Singleton
 
 @Module
@@ -59,6 +62,22 @@ object NetworkProvidesModule {
         meshProtocolProvider,
         serverApiService,
         socketService,
-        annotationRepository
+        annotationRepository,
+        Dispatchers.IO
+    )
+
+    @Provides
+    @Singleton
+    fun provideServerConnectionManager(
+        @ApplicationContext context: Context,
+        serverApiService: ServerApiService,
+        socketService: SocketService,
+        hybridSyncManager: HybridSyncManager
+    ): ServerConnectionManager = ServerConnectionManager(
+        context,
+        serverApiService,
+        socketService,
+        hybridSyncManager,
+        Dispatchers.IO
     )
 }

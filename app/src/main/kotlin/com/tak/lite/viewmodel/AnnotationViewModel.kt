@@ -7,6 +7,7 @@ import com.tak.lite.model.LatLngSerializable
 import com.tak.lite.model.LineStyle
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PointShape
+import com.tak.lite.network.HybridSyncManager
 import com.tak.lite.repository.AnnotationRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,7 +19,8 @@ import org.maplibre.android.geometry.LatLng
 
 @HiltViewModel
 class AnnotationViewModel @Inject constructor(
-    private val annotationRepository: AnnotationRepository
+    private val annotationRepository: AnnotationRepository,
+    private val hybridSyncManager: HybridSyncManager
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(AnnotationUiState())
@@ -70,7 +72,9 @@ class AnnotationViewModel @Inject constructor(
                 shape = currentShape,
                 expirationTime = null
             )
+            // Update repository first, then sync via HybridSyncManager
             annotationRepository.addAnnotation(annotation)
+            hybridSyncManager.sendAnnotation(annotation)
         }
     }
     
@@ -84,7 +88,9 @@ class AnnotationViewModel @Inject constructor(
                 arrowHead = currentArrowHead,
                 expirationTime = null
             )
+            // Update repository first, then sync via HybridSyncManager
             annotationRepository.addAnnotation(annotation)
+            hybridSyncManager.sendAnnotation(annotation)
         }
     }
     
@@ -99,7 +105,9 @@ class AnnotationViewModel @Inject constructor(
                 strokeWidth = 3f,
                 expirationTime = null
             )
+            // Update repository first, then sync via HybridSyncManager
             annotationRepository.addAnnotation(annotation)
+            hybridSyncManager.sendAnnotation(annotation)
         }
     }
     
@@ -112,13 +120,17 @@ class AnnotationViewModel @Inject constructor(
                 radius = radius, // in meters
                 expirationTime = null
             )
+            // Update repository first, then sync via HybridSyncManager
             annotationRepository.addAnnotation(annotation)
+            hybridSyncManager.sendAnnotation(annotation)
         }
     }
     
     fun removeAnnotation(annotationId: String) {
         viewModelScope.launch {
+            // Update repository first, then sync via HybridSyncManager
             annotationRepository.removeAnnotation(annotationId)
+            hybridSyncManager.deleteAnnotation(annotationId)
         }
     }
     
@@ -190,7 +202,9 @@ class AnnotationViewModel @Inject constructor(
     
     fun removeAnnotationsBulk(annotationIds: List<String>) {
         viewModelScope.launch {
+            // Update repository first, then sync via HybridSyncManager
             annotationRepository.sendBulkAnnotationDeletions(annotationIds)
+            hybridSyncManager.sendBulkAnnotationDeletions(annotationIds)
         }
     }
 }
