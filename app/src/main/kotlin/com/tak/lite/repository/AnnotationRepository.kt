@@ -5,6 +5,7 @@ import android.util.Log
 import com.tak.lite.model.AnnotationStatus
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.copyAsLocal
+import com.tak.lite.network.HybridSyncManager
 import com.tak.lite.network.MeshProtocolProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -21,7 +22,8 @@ import javax.inject.Singleton
 
 @Singleton
 class AnnotationRepository @Inject constructor(
-    private val meshProtocolProvider: MeshProtocolProvider,  // Change to private
+    private val meshProtocolProvider: MeshProtocolProvider,
+    private val hybridSyncManager: HybridSyncManager,
     context: Context
 ) {
     private val TAG = "AnnotationRepository"
@@ -120,8 +122,8 @@ class AnnotationRepository @Inject constructor(
         internalAnnotationStatuses[annotatedData.id] = AnnotationStatus.SENDING
         _annotationStatuses.value = internalAnnotationStatuses.toMap()
         
-        // Send to mesh network using current protocol
-        meshProtocolProvider.protocol.value.sendAnnotation(annotatedData)
+        // Send via HybridSyncManager (handles both mesh and server sync)
+        hybridSyncManager.sendAnnotation(annotatedData)
         saveAnnotations() // Save after adding new annotation
         
         Log.d(TAG, "Added local annotation: ${annotatedData.id} (source: ${annotatedData.source})")
@@ -135,14 +137,17 @@ class AnnotationRepository @Inject constructor(
             id = annotationId,
             creatorId = "local" // TODO: Replace with actual user ID
         ).copyAsLocal()
-        meshProtocolProvider.protocol.value.sendAnnotation(deletion)
+        
+        // Send via HybridSyncManager (handles both mesh and server sync)
+        hybridSyncManager.deleteAnnotation(annotationId)
         saveAnnotations() // Save after removing annotation
         
         Log.d(TAG, "Removed local annotation: $annotationId (source: ${deletion.source})")
     }
     
     fun sendBulkAnnotationDeletions(ids: List<String>) {
-        meshProtocolProvider.protocol.value.sendBulkAnnotationDeletions(ids)
+        // Send via HybridSyncManager (handles both mesh bulk packet and server individual packets)
+        hybridSyncManager.sendBulkAnnotationDeletions(ids)
         // Remove from local state as well
         _annotations.value = _annotations.value.filter { it.id !in ids }
         saveAnnotations() // Save after bulk deletion

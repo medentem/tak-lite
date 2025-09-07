@@ -52,6 +52,7 @@ class SettingsActivity : BaseActivity() {
     @Inject lateinit var meshProtocolProvider: com.tak.lite.network.MeshProtocolProvider
     @Inject lateinit var billingManager: BillingManager
     @Inject lateinit var annotationRepository: AnnotationRepository
+    @Inject lateinit var hybridSyncManager: HybridSyncManager
     @Inject lateinit var weatherRepository: WeatherRepository
     private lateinit var mapModeSpinner: AutoCompleteTextView
     private lateinit var endBeepSwitch: SwitchMaterial
@@ -205,7 +206,6 @@ class SettingsActivity : BaseActivity() {
     // Server API service
     private lateinit var serverApiService: ServerApiService
     private lateinit var socketService: SocketService
-    private lateinit var hybridSyncManager: HybridSyncManager
     
     private val REQUEST_CODE_FOREGROUND_SERVICE_CONNECTED_DEVICE = 2003
     private val REQUEST_CODE_ALL_PERMISSIONS = 4001
@@ -314,7 +314,6 @@ class SettingsActivity : BaseActivity() {
         // Initialize server services
         serverApiService = ServerApiService(this)
         socketService = SocketService(this)
-        hybridSyncManager = HybridSyncManager(this, meshProtocolProvider, serverApiService, socketService, annotationRepository)
 
         // Check premium status and update UI accordingly
         lifecycleScope.launch {

@@ -16,6 +16,7 @@ import com.tak.lite.R
 import com.tak.lite.di.MeshConnectionState
 import com.tak.lite.di.MeshProtocol
 import com.tak.lite.model.PacketSummary
+import com.tak.lite.network.HybridSyncManager
 import com.tak.lite.network.MeshProtocolProvider
 import com.tak.lite.repository.MessageRepository
 import dagger.hilt.android.AndroidEntryPoint
@@ -37,6 +38,8 @@ class MeshForegroundService : Service() {
     @Inject lateinit var meshProtocolProvider: MeshProtocolProvider
     // This needs to be here because it is monitoring for incoming messages
     @Inject lateinit var messageRepository: MessageRepository
+    // This needs to be here for background server sync
+    @Inject lateinit var hybridSyncManager: HybridSyncManager
 
     private var packetSummaryJob: Job? = null
     // Hold a strong reference to the protocol instance
@@ -49,7 +52,8 @@ class MeshForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         Log.d("MeshForegroundService", "onCreate called")
-        // Protocol provider and message repository are now injected and ready to use
+        // Protocol provider, message repository, and hybrid sync manager are now injected and ready to use
+        // HybridSyncManager will automatically handle forwarding mesh data to server when server sync is enabled
         startForegroundServiceNotification()
         observePacketSummaries()
         observeProtocolChanges()

@@ -223,6 +223,52 @@ class HybridSyncManager(
     }
     
     /**
+     * Send bulk annotation deletions (dual-mode)
+     */
+    fun sendBulkAnnotationDeletions(ids: List<String>) {
+        scope.launch {
+            syncMutex.withLock {
+                // Mark as processed to prevent loops
+                ids.forEach { id ->
+                    val dataKey = "${id}_LOCAL_BULK_DELETE"
+                    processedDataIds[dataKey] = System.currentTimeMillis()
+                }
+                
+                // Always send bulk deletion to mesh (single packet for efficiency)
+                meshProtocolProvider.protocol.value.sendBulkAnnotationDeletions(ids)
+                syncMetrics.recordAnnotationSentToMesh()
+                
+                // Send individual deletions to server if enabled (server doesn't support bulk)
+                if (_isServerSyncEnabled.value) {
+                    val teamId = _currentTeam.value?.id
+                    if (teamId != null) {
+                        ids.forEach { id ->
+                            val deletion = MapAnnotation.Deletion(
+                                id = id,
+                                creatorId = "local" // TODO: Replace with actual user ID
+                            ).copyAsLocal()
+                            socketService.sendAnnotation(deletion, teamId)
+                        }
+                        syncMetrics.recordAnnotationSentToServer()
+                        Log.d(TAG, "Sent bulk deletion to both mesh and server: ${ids.size} annotations")
+                    }
+                } else {
+                    // Queue individual deletions for later sync
+                    ids.forEach { id ->
+                        val deletion = MapAnnotation.Deletion(
+                            id = id,
+                            creatorId = "local" // TODO: Replace with actual user ID
+                        ).copyAsLocal()
+                        queueForSync(SyncType.ANNOTATION_DELETE, deletion)
+                    }
+                    syncMetrics.recordOfflineQueueItem()
+                    Log.d(TAG, "Queued bulk deletion for server sync: ${ids.size} annotations")
+                }
+            }
+        }
+    }
+    
+    /**
      * Send message (dual-mode)
      */
     fun sendMessage(content: String) {

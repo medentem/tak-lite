@@ -29,6 +29,7 @@ import javax.inject.Singleton
 class MeshNetworkService @Inject constructor(
     private val meshProtocolProvider: MeshProtocolProvider,
     private val peerLocationHistoryRepository: PeerLocationHistoryRepository,
+    private val hybridSyncManager: HybridSyncManager,
     private val context: Context
 ) {
     private val scope = CoroutineScope(Dispatchers.Main)
@@ -548,7 +549,8 @@ class MeshNetworkService @Inject constructor(
     }
 
     fun sendLocationUpdate(latitude: Double, longitude: Double) {
-        meshProtocol.sendLocationUpdate(latitude, longitude)
+        // Use HybridSyncManager for dual-mode location updates (mesh + server)
+        hybridSyncManager.sendLocationUpdate(latitude, longitude)
     }
 
     fun sendAudioData(audioData: ByteArray, channelId: String = "default") {
