@@ -18,6 +18,7 @@ import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.ActivityCompat
@@ -29,6 +30,10 @@ import com.google.android.material.switchmaterial.SwitchMaterial
 import com.tak.lite.di.ConfigDownloadStep
 import com.tak.lite.di.MeshConnectionState
 import com.tak.lite.di.MeshProtocol
+import com.tak.lite.network.HybridSyncManager
+import com.tak.lite.network.ServerApiService
+import com.tak.lite.network.SocketService
+import com.tak.lite.repository.AnnotationRepository
 import com.tak.lite.repository.WeatherRepository
 import com.tak.lite.service.MeshForegroundService
 import com.tak.lite.ui.map.MapController
@@ -37,15 +42,9 @@ import com.tak.lite.ui.util.EdgeToEdgeHelper
 import com.tak.lite.util.BillingManager
 import com.tak.lite.util.LocaleManager
 import com.tak.lite.util.UnitManager
-import com.tak.lite.network.ServerApiService
-import com.tak.lite.network.SocketService
-import com.tak.lite.network.HybridSyncManager
-import com.tak.lite.data.model.Team
-import com.tak.lite.repository.AnnotationRepository
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-import android.widget.Toast
 
 @AndroidEntryPoint
 class SettingsActivity : BaseActivity() {
@@ -1715,8 +1714,6 @@ class SettingsActivity : BaseActivity() {
                         prefs.edit().putString("selected_team_id", teamToSelect.id).apply()
                         prefs.edit().putString("selected_team_name", teamToSelect.name).apply()
                         hybridSyncManager.enableServerSync(teamToSelect)
-                        
-                        Toast.makeText(this@SettingsActivity, getString(R.string.team_joined, teamToSelect.name), Toast.LENGTH_SHORT).show()
                     }
                 }
                 
@@ -1728,11 +1725,7 @@ class SettingsActivity : BaseActivity() {
                     
                     // Enable hybrid sync for the selected team
                     hybridSyncManager.enableServerSync(selectedTeam)
-                    
-                    Toast.makeText(this@SettingsActivity, getString(R.string.team_joined, selectedTeam.name), Toast.LENGTH_SHORT).show()
                 }
-                
-                Toast.makeText(this@SettingsActivity, getString(R.string.teams_loaded), Toast.LENGTH_SHORT).show()
                 
             } catch (e: Exception) {
                 Toast.makeText(this@SettingsActivity, getString(R.string.team_join_failed, e.message), Toast.LENGTH_LONG).show()
