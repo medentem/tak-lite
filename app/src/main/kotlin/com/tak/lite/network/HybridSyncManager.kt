@@ -287,12 +287,12 @@ class HybridSyncManager(
                 if (_isServerSyncEnabled.value) {
                     val teamId = _currentTeam.value?.id
                     if (teamId != null) {
-                        socketService.sendAnnotation(deletion, teamId)
+                        socketService.sendAnnotationDelete(annotationId, teamId)
                         Log.d(TAG, "Sent deletion to both mesh and server: $annotationId")
                     }
                 } else {
                     // Queue for later sync
-                    queueForSync(SyncType.ANNOTATION_DELETE, deletion)
+                    queueForSync(SyncType.ANNOTATION_DELETE, annotationId)
                     Log.d(TAG, "Queued deletion for server sync: $annotationId")
                 }
             }
@@ -585,12 +585,12 @@ class HybridSyncManager(
                         }
                     }
                     SyncType.ANNOTATION_DELETE -> {
-                        val deletion = item.data as MapAnnotation.Deletion
+                        val annotationId = item.data as String
                         val teamId = _currentTeam.value?.id
                         if (teamId != null) {
-                            Log.d(TAG, "processOfflineQueueInternal sending deletion: ${deletion.id}")
-                            socketService.sendAnnotation(deletion, teamId)
-                            Log.d(TAG, "processOfflineQueueInternal sent deletion: ${deletion.id}")
+                            Log.d(TAG, "processOfflineQueueInternal sending deletion: $annotationId")
+                            socketService.sendAnnotationDelete(annotationId, teamId)
+                            Log.d(TAG, "processOfflineQueueInternal sent deletion: $annotationId")
                         }
                     }
                     SyncType.ANNOTATION_BULK_DELETE -> {

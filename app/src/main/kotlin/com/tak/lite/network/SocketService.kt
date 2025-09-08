@@ -6,11 +6,13 @@ import com.google.gson.Gson
 import com.tak.lite.data.model.Team
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PeerLocationEntry
+import com.tak.lite.model.copyAsServer
 import io.socket.client.IO
 import io.socket.client.Socket
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URI
 
@@ -177,7 +179,7 @@ class SocketService(private val context: Context) {
             
             val annotationData = JSONObject().apply {
                 put("annotationId", annotation.id)
-                put("type", annotation::class.simpleName?.lowercase())
+                put("type", getAnnotationTypeName(annotation))
                 put("data", annotationObject) // Send as object, not string
                 teamId?.let { put("teamId", it) }
             }
@@ -209,6 +211,33 @@ class SocketService(private val context: Context) {
         
         socket?.emit("message:send", messageData)
         Log.d(TAG, "Sent message to team: $teamId")
+    }
+    
+    /**
+     * Send single annotation deletion to server
+     */
+    fun sendAnnotationDelete(annotationId: String, teamId: String) {
+        Log.d(TAG, "sendAnnotationDelete called for: $annotationId, teamId: $teamId, connection state: ${_connectionState.value}")
+        
+        if (_connectionState.value != SocketConnectionState.Connected) {
+            Log.w(TAG, "Cannot send annotation deletion - not connected to server")
+            return
+        }
+        
+        try {
+            val deleteData = JSONObject().apply {
+                put("teamId", teamId)
+                put("annotationId", annotationId)
+            }
+            
+            Log.d(TAG, "Emitting annotation:delete event with data: ${deleteData.toString()}")
+            socket?.emit("annotation:delete", deleteData)
+            Log.d(TAG, "Sent annotation deletion: $annotationId")
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to send annotation deletion", e)
+            onErrorCallback?.invoke("Failed to send annotation deletion: ${e.message}")
+        }
     }
     
     /**
@@ -443,5 +472,18 @@ class SocketService(private val context: Context) {
      */
     fun getConnectionState(): SocketConnectionState {
         return _connectionState.value
+    }
+    
+    /**
+     * Get the correct annotation type name for server communication
+     */
+    private fun getAnnotationTypeName(annotation: MapAnnotation): String {
+        return when (annotation) {
+            is MapAnnotation.PointOfInterest -> "poi"
+            is MapAnnotation.Line -> "line"
+            is MapAnnotation.Area -> "area"
+            is MapAnnotation.Polygon -> "polygon"
+            is MapAnnotation.Deletion -> "deletion"
+        }
     }
 }
