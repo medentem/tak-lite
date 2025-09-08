@@ -383,6 +383,16 @@ class HybridSyncManager(
             Log.e(TAG, "Server error: $error")
             // Handle server errors (e.g., disable server sync temporarily)
         }
+        
+        // Auto-join team when socket connects if server sync is enabled
+        socketService.setOnConnectedCallback {
+            Log.d(TAG, "Socket connected, checking if we need to join team")
+            val currentTeam = _currentTeam.value
+            if (_isServerSyncEnabled.value && currentTeam != null) {
+                Log.d(TAG, "Auto-joining team on socket connect: ${currentTeam.name}")
+                socketService.joinTeam(currentTeam.id)
+            }
+        }
     }
     
     private fun handleIncomingAnnotation(annotation: MapAnnotation, source: SyncSource) {
@@ -390,18 +400,24 @@ class HybridSyncManager(
             syncMutex.withLock {
                 mutexHolder = "handleIncomingAnnotation-${annotation.id}-${source.name}"
                 Log.d(TAG, "handleIncomingAnnotation acquired mutex (holder: $mutexHolder)")
-                // Create unique key for this data from this source
-                val dataKey = "${annotation.id}_${source.name}"
+                // Create unique key for this specific version of the annotation
+                val dataKey = "${annotation.id}_${source.name}_${annotation.timestamp}"
                 
-                // Check if we've already processed this data from this source
+                // Check if we've already processed this exact version from this source
                 if (processedDataIds.containsKey(dataKey)) {
                     syncMetrics.recordLoopPrevented()
-                    Log.d(TAG, "Skipping duplicate annotation: ${annotation.id} from $source")
+                    Log.d(TAG, "Skipping duplicate annotation version: ${annotation.id} (timestamp: ${annotation.timestamp}) from $source")
                     return@withLock
                 }
                 
-                // Mark as processed
+                // Mark this specific version as processed
                 processedDataIds[dataKey] = System.currentTimeMillis()
+                
+                // Clean up old versions of the same annotation to prevent memory leaks
+                val oldKeys = processedDataIds.keys.filter { 
+                    it.startsWith("${annotation.id}_${source.name}_") && it != dataKey 
+                }
+                oldKeys.forEach { processedDataIds.remove(it) }
                 
                 // Determine data source
                 val dataSource = when (source) {

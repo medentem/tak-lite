@@ -290,7 +290,7 @@ object MeshAnnotationInterop {
                     }
                 }))
             }
-            else -> Json.encodeToString(annotation)
+            else -> Json.encodeToString(MapAnnotation.serializer(), annotation)
         }
         Log.d(TAG, "Serialized annotation to JSON: $jsonString")
         val takPacketBuilder = ATAKProtos.TAKPacket.newBuilder()

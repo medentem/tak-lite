@@ -2,7 +2,6 @@ package com.tak.lite.network
 
 import android.content.Context
 import android.util.Log
-import com.google.gson.Gson
 import com.tak.lite.data.model.Team
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PeerLocationEntry
@@ -12,6 +11,7 @@ import io.socket.client.Socket
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.serialization.json.Json
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URI
@@ -22,7 +22,6 @@ import java.net.URI
 class SocketService(private val context: Context) {
     
     private val TAG = "SocketService"
-    private val gson = Gson()
     private val prefs = context.getSharedPreferences("server_prefs", Context.MODE_PRIVATE)
     
     private var socket: Socket? = null
@@ -50,6 +49,7 @@ class SocketService(private val context: Context) {
     private var onTeamJoinedCallback: ((Team) -> Unit)? = null
     private var onTeamLeftCallback: ((String) -> Unit)? = null
     private var onErrorCallback: ((String) -> Unit)? = null
+    private var onConnectedCallback: (() -> Unit)? = null
     
     enum class SocketConnectionState {
         Disconnected,
@@ -174,7 +174,7 @@ class SocketService(private val context: Context) {
         
         try {
             // Parse the annotation to JSON object instead of string
-            val annotationJson = gson.toJson(annotation)
+            val annotationJson = Json.encodeToString(MapAnnotation.serializer(), annotation)
             val annotationObject = JSONObject(annotationJson)
             
             val annotationData = JSONObject().apply {
@@ -271,6 +271,7 @@ class SocketService(private val context: Context) {
         socket?.on(Socket.EVENT_CONNECT) {
             Log.d(TAG, "Connected to server")
             _connectionState.value = SocketConnectionState.Connected
+            onConnectedCallback?.invoke()
         }
         
         socket?.on(Socket.EVENT_DISCONNECT) { reason ->
@@ -348,7 +349,7 @@ class SocketService(private val context: Context) {
                 val annotationData = data?.getString("data")
                 
                 if (annotationData != null) {
-                    val annotation = gson.fromJson(annotationData, MapAnnotation::class.java)
+                    val annotation = Json.decodeFromString<MapAnnotation>(annotationData)
                     
                     // Update annotations list
                     val currentAnnotations = _annotations.value.toMutableList()
@@ -458,6 +459,10 @@ class SocketService(private val context: Context) {
     
     fun setOnErrorCallback(callback: (String) -> Unit) {
         onErrorCallback = callback
+    }
+    
+    fun setOnConnectedCallback(callback: () -> Unit) {
+        onConnectedCallback = callback
     }
     
     /**
