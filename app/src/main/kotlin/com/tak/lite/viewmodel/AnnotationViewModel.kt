@@ -144,6 +144,8 @@ class AnnotationViewModel @Inject constructor(
                 timestamp = System.currentTimeMillis()
             )
             annotationRepository.addAnnotation(updated)
+            // Sync the update to server and mesh
+            hybridSyncManager.sendAnnotation(updated)
         }
     }
     
@@ -157,6 +159,8 @@ class AnnotationViewModel @Inject constructor(
                 timestamp = System.currentTimeMillis()
             )
             annotationRepository.addAnnotation(updated)
+            // Sync the update to server and mesh
+            hybridSyncManager.sendAnnotation(updated)
         }
     }
     
@@ -171,6 +175,8 @@ class AnnotationViewModel @Inject constructor(
                 else -> current
             }
             annotationRepository.addAnnotation(updated)
+            // Sync the update to server and mesh
+            hybridSyncManager.sendAnnotation(updated)
         }
     }
 
@@ -184,6 +190,8 @@ class AnnotationViewModel @Inject constructor(
                     timestamp = System.currentTimeMillis()
                 )
                 annotationRepository.addAnnotation(updated)
+                // Sync the update to server and mesh
+                hybridSyncManager.sendAnnotation(updated)
             }
         }
     }
@@ -197,6 +205,8 @@ class AnnotationViewModel @Inject constructor(
                 timestamp = System.currentTimeMillis()
             )
             annotationRepository.addAnnotation(updated)
+            // Sync the update to server and mesh
+            hybridSyncManager.sendAnnotation(updated)
         }
     }
     

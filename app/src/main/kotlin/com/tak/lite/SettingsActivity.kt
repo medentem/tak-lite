@@ -54,6 +54,7 @@ class SettingsActivity : BaseActivity() {
     @Inject lateinit var annotationRepository: AnnotationRepository
     @Inject lateinit var hybridSyncManager: HybridSyncManager
     @Inject lateinit var weatherRepository: WeatherRepository
+    @Inject lateinit var serverConnectionManager: com.tak.lite.network.ServerConnectionManager
     private lateinit var mapModeSpinner: AutoCompleteTextView
     private lateinit var endBeepSwitch: SwitchMaterial
     private lateinit var minLineSegmentDistEditText: com.google.android.material.textfield.TextInputEditText
@@ -1580,9 +1581,10 @@ class SettingsActivity : BaseActivity() {
                 serverTeamLayout.visibility = View.VISIBLE
                 loadAvailableTeams()
                 
-                // Save connection state
+                // Save connection state and clear manual disconnect flag
                 val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
                 prefs.edit().putBoolean("server_connected", true).apply()
+                serverConnectionManager.clearManualDisconnectFlag()
                 
                 Toast.makeText(this@SettingsActivity, getString(R.string.server_connection_success), Toast.LENGTH_SHORT).show()
                 
@@ -1622,10 +1624,13 @@ class SettingsActivity : BaseActivity() {
                 // Attempt logout from server
                 serverApiService.logout(serverUrl)
                 
-                // Clear local data
+                // Clear local data and set manual disconnect flag
                 serverApiService.clearAllData()
                 val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
-                prefs.edit().putBoolean("server_connected", false).apply()
+                prefs.edit()
+                    .putBoolean("server_connected", false)
+                    .putBoolean("manually_disconnected", true) // Flag to prevent auto-reconnection
+                    .apply()
                 
                 // Update UI
                 updateServerConnectionStatus()
@@ -1638,7 +1643,10 @@ class SettingsActivity : BaseActivity() {
                 socketService.disconnect()
                 serverApiService.clearAllData()
                 val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
-                prefs.edit().putBoolean("server_connected", false).apply()
+                prefs.edit()
+                    .putBoolean("server_connected", false)
+                    .putBoolean("manually_disconnected", true) // Flag to prevent auto-reconnection
+                    .apply()
                 updateServerConnectionStatus()
                 
                 Toast.makeText(this@SettingsActivity, "Disconnected from server", Toast.LENGTH_SHORT).show()
@@ -1671,10 +1679,50 @@ class SettingsActivity : BaseActivity() {
                 val teamAdapter = ArrayAdapter(this@SettingsActivity, android.R.layout.simple_dropdown_item_1line, teamNames)
                 serverTeamSpinner.setAdapter(teamAdapter)
                 
+                // Get previously selected team from preferences
+                val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
+                val previouslySelectedTeamId = prefs.getString("selected_team_id", null)
+                val previouslySelectedTeamName = prefs.getString("selected_team_name", null)
+                
+                // Determine which team to pre-select
+                val teamToSelect = when {
+                    // If there's only one team, select it automatically
+                    teams.size == 1 -> {
+                        Log.d("SettingsActivity", "Only one team available, auto-selecting: ${teams[0].name}")
+                        teams[0]
+                    }
+                    // If user previously selected a team and it's still available, select it
+                    previouslySelectedTeamId != null && previouslySelectedTeamName != null -> {
+                        val previouslySelectedTeam = teams.find { it.id == previouslySelectedTeamId }
+                        if (previouslySelectedTeam != null) {
+                            Log.d("SettingsActivity", "Found previously selected team, auto-selecting: ${previouslySelectedTeam.name}")
+                            previouslySelectedTeam
+                        } else {
+                            Log.d("SettingsActivity", "Previously selected team not found in available teams")
+                            null
+                        }
+                    }
+                    else -> null
+                }
+                
+                // Auto-select team if determined
+                if (teamToSelect != null) {
+                    val teamIndex = teams.indexOf(teamToSelect)
+                    if (teamIndex >= 0) {
+                        serverTeamSpinner.setText(teamNames[teamIndex], false)
+                        
+                        // Save the selection and enable hybrid sync
+                        prefs.edit().putString("selected_team_id", teamToSelect.id).apply()
+                        prefs.edit().putString("selected_team_name", teamToSelect.name).apply()
+                        hybridSyncManager.enableServerSync(teamToSelect)
+                        
+                        Toast.makeText(this@SettingsActivity, getString(R.string.team_joined, teamToSelect.name), Toast.LENGTH_SHORT).show()
+                    }
+                }
+                
                 // Set up team selection listener
                 serverTeamSpinner.setOnItemClickListener { _, _, position, _ ->
                     val selectedTeam = teams[position]
-                    val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
                     prefs.edit().putString("selected_team_id", selectedTeam.id).apply()
                     prefs.edit().putString("selected_team_name", selectedTeam.name).apply()
                     

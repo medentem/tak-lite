@@ -34,6 +34,15 @@ class ServerConnectionManager @Inject constructor(
     fun restoreServerConnection() {
         scope.launch {
             try {
+                // Check if user manually disconnected - if so, don't auto-reconnect
+                val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+                val manuallyDisconnected = prefs.getBoolean("manually_disconnected", false)
+                
+                if (manuallyDisconnected) {
+                    Log.d(TAG, "User manually disconnected, skipping auto-reconnection")
+                    return@launch
+                }
+                
                 // Check if we have stored credentials
                 val serverUrl = serverApiService.getStoredServerUrl()
                 val isLoggedIn = serverApiService.isLoggedIn()
@@ -102,6 +111,16 @@ class ServerConnectionManager @Inject constructor(
         prefs.edit().putBoolean("server_connected", false).apply()
         serverApiService.clearAllData()
         hybridSyncManager.disableServerSync()
+    }
+    
+    /**
+     * Clear the manual disconnect flag to allow auto-reconnection
+     * This should be called when the user explicitly wants to reconnect
+     */
+    fun clearManualDisconnectFlag() {
+        val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putBoolean("manually_disconnected", false).apply()
+        Log.d(TAG, "Manual disconnect flag cleared")
     }
     
     /**
