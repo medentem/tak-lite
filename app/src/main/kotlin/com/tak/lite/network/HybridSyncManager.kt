@@ -81,6 +81,7 @@ class HybridSyncManager(
         LOCATION_UPDATE,
         ANNOTATION_UPDATE,
         ANNOTATION_DELETE,
+        ANNOTATION_BULK_DELETE,
         MESSAGE_SEND
     }
     
@@ -314,29 +315,18 @@ class HybridSyncManager(
                 meshProtocolProvider.protocol.value.sendBulkAnnotationDeletions(ids)
                 syncMetrics.recordAnnotationSentToMesh()
                 
-                // Send individual deletions to server if enabled (server doesn't support bulk)
+                // Send bulk deletion to server if enabled (now supports bulk operations)
                 if (_isServerSyncEnabled.value) {
                     val teamId = _currentTeam.value?.id
                     if (teamId != null) {
-                        ids.forEach { id ->
-                            val deletion = MapAnnotation.Deletion(
-                                id = id,
-                                creatorId = "local" // TODO: Replace with actual user ID
-                            ).copyAsLocal()
-                            socketService.sendAnnotation(deletion, teamId)
-                        }
+                        // Use new bulk deletion WebSocket event
+                        socketService.sendBulkAnnotationDeletions(ids, teamId)
                         syncMetrics.recordAnnotationSentToServer()
                         Log.d(TAG, "Sent bulk deletion to both mesh and server: ${ids.size} annotations")
                     }
                 } else {
-                    // Queue individual deletions for later sync
-                    ids.forEach { id ->
-                        val deletion = MapAnnotation.Deletion(
-                            id = id,
-                            creatorId = "local" // TODO: Replace with actual user ID
-                        ).copyAsLocal()
-                        queueForSync(SyncType.ANNOTATION_DELETE, deletion)
-                    }
+                    // Queue bulk deletion for later sync
+                    queueForSync(SyncType.ANNOTATION_BULK_DELETE, ids)
                     syncMetrics.recordOfflineQueueItem()
                     Log.d(TAG, "Queued bulk deletion for server sync: ${ids.size} annotations")
                 }
@@ -601,6 +591,15 @@ class HybridSyncManager(
                             Log.d(TAG, "processOfflineQueueInternal sending deletion: ${deletion.id}")
                             socketService.sendAnnotation(deletion, teamId)
                             Log.d(TAG, "processOfflineQueueInternal sent deletion: ${deletion.id}")
+                        }
+                    }
+                    SyncType.ANNOTATION_BULK_DELETE -> {
+                        val annotationIds = item.data as List<String>
+                        val teamId = _currentTeam.value?.id
+                        if (teamId != null) {
+                            Log.d(TAG, "processOfflineQueueInternal sending bulk deletion: ${annotationIds.size} annotations")
+                            socketService.sendBulkAnnotationDeletions(annotationIds, teamId)
+                            Log.d(TAG, "processOfflineQueueInternal sent bulk deletion: ${annotationIds.size} annotations")
                         }
                     }
                     SyncType.MESSAGE_SEND -> {

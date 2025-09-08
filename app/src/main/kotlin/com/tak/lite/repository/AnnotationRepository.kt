@@ -85,6 +85,13 @@ class AnnotationRepository @Inject constructor(
     
     fun handleAnnotation(annotation: MapAnnotation) {
         Log.d(TAG, "Before: ${_annotations.value.map { it.id }}")
+        
+        // Validate annotation before processing
+        if (!validateAnnotation(annotation)) {
+            Log.e(TAG, "Invalid annotation received, skipping: ${annotation.id}")
+            return
+        }
+        
         when (annotation) {
             is MapAnnotation.Deletion -> {
                 Log.d(TAG, "Processing deletion for id=${annotation.id}")
@@ -103,6 +110,40 @@ class AnnotationRepository @Inject constructor(
         }
         Log.d(TAG, "After: ${_annotations.value.map { it.id }}")
         saveAnnotations() // Save after any annotation change
+    }
+    
+    private fun validateAnnotation(annotation: MapAnnotation): Boolean {
+        return try {
+            when (annotation) {
+                is MapAnnotation.PointOfInterest -> {
+                    annotation.position.lt.isFinite() && annotation.position.lng.isFinite() &&
+                    annotation.position.lt in -90.0..90.0 && annotation.position.lng in -180.0..180.0
+                }
+                is MapAnnotation.Line -> {
+                    annotation.points.size >= 2 && annotation.points.all { point ->
+                        point.lt.isFinite() && point.lng.isFinite() &&
+                        point.lt in -90.0..90.0 && point.lng in -180.0..180.0
+                    }
+                }
+                is MapAnnotation.Area -> {
+                    annotation.center.lt.isFinite() && annotation.center.lng.isFinite() &&
+                    annotation.center.lt in -90.0..90.0 && annotation.center.lng in -180.0..180.0 &&
+                    annotation.radius > 0 && annotation.radius <= 100000 // Max 100km radius
+                }
+                is MapAnnotation.Polygon -> {
+                    annotation.points.size >= 3 && annotation.points.all { point ->
+                        point.lt.isFinite() && point.lng.isFinite() &&
+                        point.lt in -90.0..90.0 && point.lng in -180.0..180.0
+                    }
+                }
+                is MapAnnotation.Deletion -> {
+                    annotation.id.isNotBlank()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Annotation validation failed", e)
+            false
+        }
     }
     
     fun addAnnotation(annotation: MapAnnotation) {

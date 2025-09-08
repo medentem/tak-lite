@@ -211,6 +211,33 @@ class SocketService(private val context: Context) {
         Log.d(TAG, "Sent message to team: $teamId")
     }
     
+    /**
+     * Send bulk annotation deletions to server
+     */
+    fun sendBulkAnnotationDeletions(annotationIds: List<String>, teamId: String) {
+        Log.d(TAG, "sendBulkAnnotationDeletions called for: ${annotationIds.size} annotations, teamId: $teamId, connection state: ${_connectionState.value}")
+        
+        if (_connectionState.value != SocketConnectionState.Connected) {
+            Log.w(TAG, "Cannot send bulk annotation deletions - not connected to server")
+            return
+        }
+        
+        try {
+            val bulkDeleteData = JSONObject().apply {
+                put("teamId", teamId)
+                put("annotationIds", JSONArray(annotationIds))
+            }
+            
+            Log.d(TAG, "Emitting annotation:bulk_delete event with data: ${bulkDeleteData.toString()}")
+            socket?.emit("annotation:bulk_delete", bulkDeleteData)
+            Log.d(TAG, "Sent bulk annotation deletion: ${annotationIds.size} annotations")
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to send bulk annotation deletion", e)
+            onErrorCallback?.invoke("Failed to send bulk annotation deletion: ${e.message}")
+        }
+    }
+    
     private fun setupEventListeners() {
         socket?.on(Socket.EVENT_CONNECT) {
             Log.d(TAG, "Connected to server")
@@ -309,6 +336,65 @@ class SocketService(private val context: Context) {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error handling annotation:update", e)
+            }
+        }
+        
+        socket?.on("annotation:delete") { args ->
+            try {
+                val data = args[0] as? JSONObject
+                val annotationId = data?.getString("annotationId")
+                
+                if (annotationId != null) {
+                    val deletion = MapAnnotation.Deletion(
+                        id = annotationId,
+                        creatorId = "server",
+                        timestamp = System.currentTimeMillis()
+                    ).copyAsServer()
+                    
+                    // Update annotations list - remove the deleted annotation
+                    val currentAnnotations = _annotations.value.toMutableList()
+                    currentAnnotations.removeAll { it.id == annotationId }
+                    _annotations.value = currentAnnotations
+                    
+                    onAnnotationUpdateCallback?.invoke(deletion)
+                    Log.d(TAG, "Received annotation deletion: $annotationId")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error handling annotation:delete", e)
+            }
+        }
+        
+        socket?.on("annotation:bulk_delete") { args ->
+            try {
+                val data = args[0] as? JSONObject
+                val annotationIds = data?.getJSONArray("annotationIds")
+                
+                if (annotationIds != null) {
+                    val currentAnnotations = _annotations.value.toMutableList()
+                    val deletedIds = mutableListOf<String>()
+                    
+                    for (i in 0 until annotationIds.length()) {
+                        val annotationId = annotationIds.getString(i)
+                        currentAnnotations.removeAll { it.id == annotationId }
+                        deletedIds.add(annotationId)
+                    }
+                    
+                    _annotations.value = currentAnnotations
+                    
+                    // Notify callback for each deletion
+                    deletedIds.forEach { id ->
+                        val deletion = MapAnnotation.Deletion(
+                            id = id,
+                            creatorId = "server",
+                            timestamp = System.currentTimeMillis()
+                        ).copyAsServer()
+                        onAnnotationUpdateCallback?.invoke(deletion)
+                    }
+                    
+                    Log.d(TAG, "Received bulk annotation deletion: ${deletedIds.size} annotations")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error handling annotation:bulk_delete", e)
             }
         }
         
