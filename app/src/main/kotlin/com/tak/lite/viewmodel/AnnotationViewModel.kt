@@ -8,6 +8,7 @@ import com.tak.lite.model.LineStyle
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PointShape
 import com.tak.lite.network.HybridSyncManager
+import com.tak.lite.network.MeshProtocolProvider
 import com.tak.lite.repository.AnnotationRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,7 +21,8 @@ import org.maplibre.android.geometry.LatLng
 @HiltViewModel
 class AnnotationViewModel @Inject constructor(
     private val annotationRepository: AnnotationRepository,
-    private val hybridSyncManager: HybridSyncManager
+    private val hybridSyncManager: HybridSyncManager,
+    private val meshProtocolProvider: MeshProtocolProvider
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(AnnotationUiState())
@@ -28,6 +30,25 @@ class AnnotationViewModel @Inject constructor(
     
     // Expose annotation statuses from repository
     val annotationStatuses: StateFlow<Map<String, com.tak.lite.model.AnnotationStatus>> = annotationRepository.annotationStatuses
+    
+    /**
+     * Get the mesh device identifier for annotation creation
+     * Uses the connected mesh device's node ID
+     */
+    private fun getMeshDeviceIdentifier(): String {
+        // Get the current mesh protocol
+        val currentProtocol = meshProtocolProvider.protocol.value
+        
+        // Try to get the local node ID from the mesh protocol
+        val localNodeId = currentProtocol.localNodeIdOrNickname.value
+        
+        if (!localNodeId.isNullOrEmpty()) {
+            return localNodeId
+        }
+        
+        // Fallback if no mesh node ID available
+        return "unknown_mesh_device"
+    }
     
     private var currentColor: AnnotationColor = AnnotationColor.RED
     private var currentShape: PointShape = PointShape.CIRCLE
@@ -66,7 +87,7 @@ class AnnotationViewModel @Inject constructor(
     fun addPointOfInterest(position: LatLng, nickname: String? = null) {
         viewModelScope.launch {
             val annotation = MapAnnotation.PointOfInterest(
-                creatorId = nickname ?: "local", // Use nickname if available
+                creatorId = nickname ?: getMeshDeviceIdentifier(), // Use nickname if available, otherwise mesh device ID
                 color = currentColor,
                 position = LatLngSerializable.fromMapLibreLatLng(position),
                 shape = currentShape,
@@ -81,7 +102,7 @@ class AnnotationViewModel @Inject constructor(
     fun addLine(points: List<LatLng>, nickname: String? = null) {
         viewModelScope.launch {
             val annotation = MapAnnotation.Line(
-                creatorId = nickname ?: "local", // Use nickname if available
+                creatorId = nickname ?: getMeshDeviceIdentifier(), // Use nickname if available, otherwise mesh device ID
                 color = currentColor,
                 points = points.map { LatLngSerializable.fromMapLibreLatLng(it) },
                 style = currentLineStyle,
@@ -98,7 +119,7 @@ class AnnotationViewModel @Inject constructor(
         viewModelScope.launch {
             // Store polygon without the closing point - it will be added during rendering
             val annotation = MapAnnotation.Polygon(
-                creatorId = nickname ?: "local", // Use nickname if available
+                creatorId = nickname ?: getMeshDeviceIdentifier(), // Use nickname if available, otherwise mesh device ID
                 color = currentColor,
                 points = points.map { LatLngSerializable.fromMapLibreLatLng(it) },
                 fillOpacity = 0.3f,
@@ -114,7 +135,7 @@ class AnnotationViewModel @Inject constructor(
     fun addArea(center: LatLng, radius: Double, nickname: String? = null) {
         viewModelScope.launch {
             val annotation = MapAnnotation.Area(
-                creatorId = nickname ?: "local", // Use nickname if available
+                creatorId = nickname ?: getMeshDeviceIdentifier(), // Use nickname if available, otherwise mesh device ID
                 color = currentColor,
                 center = LatLngSerializable.fromMapLibreLatLng(center),
                 radius = radius, // in meters

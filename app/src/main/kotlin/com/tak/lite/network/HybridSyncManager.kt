@@ -12,15 +12,16 @@ import com.tak.lite.repository.AnnotationRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlin.coroutines.CoroutineContext
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
+import kotlin.coroutines.CoroutineContext
 
 /**
  * Manages synchronization between mesh network and server
@@ -62,6 +63,10 @@ class HybridSyncManager(
     private val meshSyncAttempts = ConcurrentHashMap<String, Long>() // annotationId -> timestamp
     private val MESH_SYNC_COORDINATION_WINDOW_MS = 30 * 1000L // 30 seconds
     private val meshSyncCoordinationMutex = Mutex()
+    
+    // Wait-and-see coordination
+    private val waitAndSeePeriods = ConcurrentHashMap<String, Long>() // annotationId -> start timestamp
+    private val WAIT_AND_SEE_PERIOD_MS = 3000L // 3 seconds
     
     // Monitoring and metrics
     private val syncMetrics = SyncMetrics()
@@ -174,7 +179,8 @@ class HybridSyncManager(
         latitude: Double,
         longitude: Double,
         altitude: Double? = null,
-        accuracy: Double? = null
+        accuracy: Double? = null,
+        userStatus: com.tak.lite.model.UserStatus? = null
     ) {
         // Always send to mesh (immediate local sync)
         meshProtocolProvider.protocol.value.sendLocationUpdate(latitude, longitude)
@@ -183,7 +189,7 @@ class HybridSyncManager(
         if (_isServerSyncEnabled.value) {
             val teamId = _currentTeam.value?.id
             if (teamId != null) {
-                socketService.sendLocationUpdate(latitude, longitude, altitude, accuracy, teamId)
+                socketService.sendLocationUpdate(latitude, longitude, altitude, accuracy, teamId, userStatus)
             }
         } else {
             // Queue for later sync
@@ -191,7 +197,8 @@ class HybridSyncManager(
                 "latitude" to latitude,
                 "longitude" to longitude,
                 "altitude" to altitude,
-                "accuracy" to accuracy
+                "accuracy" to accuracy,
+                "userStatus" to (userStatus?.name ?: "GREEN")
             ))
         }
     }
@@ -512,7 +519,7 @@ class HybridSyncManager(
     }
     
     /**
-     * Handle mesh-to-server sync with coordination to prevent duplicate sync attempts
+     * Handle mesh-to-server sync with wait-and-see coordination to prevent duplicate sync attempts
      */
     private fun handleMeshToServerSync(annotation: MapAnnotation) {
         scope.launch {
@@ -529,23 +536,22 @@ class HybridSyncManager(
                         return@withLock
                     }
                     
-                    // Check if we should be the sync leader for this annotation
-                    if (!shouldBeSyncLeader(annotation)) {
-                        Log.d(TAG, "Not elected as sync leader for annotation $annotationId, skipping")
+                    // Check if this annotation was originally created by this client (prevent loops)
+                    // We should only skip if this annotation was created by THIS client and we're receiving it back
+                    val currentClientId = getClientIdentifier()
+                    
+                    // Skip if this annotation was created by this client and we're receiving it back from mesh
+                    // This prevents the loop: local -> mesh -> server -> mesh -> local
+                    // We only skip if the creatorId matches our client ID exactly
+                    val isFromThisClient = annotation.creatorId == currentClientId
+                    
+                    if (isFromThisClient) {
+                        Log.d(TAG, "Skipping mesh-to-server sync for annotation from this client: $annotationId (creatorId: ${annotation.creatorId}, source: ${annotation.source}, originalSource: ${annotation.originalSource})")
                         syncMetrics.recordMeshSyncSkipped()
                         return@withLock
                     }
                     
-                    // Mark our sync attempt
-                    meshSyncAttempts[annotationId] = now
-                    
-                    // Check if this annotation is from a local user (prevent loops)
-                    val isLocalUser = annotation.creatorId == "local" // TODO: Replace with actual user ID check
-                    if (isLocalUser) {
-                        Log.d(TAG, "Skipping mesh-to-server sync for local annotation: $annotationId")
-                        syncMetrics.recordMeshSyncSkipped()
-                        return@withLock
-                    }
+                    Log.d(TAG, "Annotation from another client, proceeding with sync: $annotationId (creatorId: ${annotation.creatorId}, source: ${annotation.source}, originalSource: ${annotation.originalSource})")
                     
                     // Check if annotation already exists on server (prevent duplicates)
                     if (isAnnotationOnServer(annotationId)) {
@@ -554,23 +560,16 @@ class HybridSyncManager(
                         return@withLock
                     }
                     
-                    // Perform the sync
-                    Log.d(TAG, "Syncing mesh annotation to server: $annotationId")
-                    val teamId = _currentTeam.value?.id
-                    if (teamId != null) {
-                        // Add mesh origin metadata to the annotation
-                        val meshSyncAnnotation = annotation.copyWithSourceTracking(
-                            source = DataSource.HYBRID,
-                            originalSource = DataSource.MESH
-                        )
-                        
-                        socketService.sendAnnotation(meshSyncAnnotation, teamId)
-                        syncMetrics.recordMeshToServerSync()
-                        Log.d(TAG, "Successfully synced mesh annotation to server: $annotationId")
-                    } else {
-                        Log.w(TAG, "Cannot sync mesh annotation to server: no team ID available")
-                        syncMetrics.recordMeshSyncFailed()
+                    // Check if we should be an immediate sync leader
+                    if (shouldBeImmediateSyncLeader(annotation)) {
+                        Log.d(TAG, "Elected as immediate sync leader for annotation $annotationId, proceeding with sync")
+                        performServerSync(annotation)
+                        return@withLock
                     }
+                    
+                    // Not immediate leader - start wait-and-see period
+                    Log.d(TAG, "Not immediate leader for annotation $annotationId, starting wait-and-see period")
+                    startWaitAndSeePeriod(annotation)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error in mesh-to-server sync for annotation: ${annotation.id}", e)
@@ -580,10 +579,10 @@ class HybridSyncManager(
     }
     
     /**
-     * Determine if this client should be the sync leader for a mesh annotation
-     * Uses deterministic algorithm based on client ID and annotation ID
+     * Determine if this client should be an immediate sync leader for a mesh annotation
+     * Uses deterministic algorithm - 50% of clients are immediate leaders
      */
-    private fun shouldBeSyncLeader(annotation: MapAnnotation): Boolean {
+    private fun shouldBeImmediateSyncLeader(annotation: MapAnnotation): Boolean {
         // Get a stable client identifier
         val clientId = getClientIdentifier()
         
@@ -591,23 +590,101 @@ class HybridSyncManager(
         val hashInput = "${clientId}_${annotation.id}"
         val hash = Math.abs(hashInput.hashCode())
         
-        // Use modulo to distribute leadership across clients
-        // This ensures only a subset of clients attempt to sync
-        // Adjust LEADERSHIP_GROUP_SIZE based on expected client density:
-        // - Higher values = fewer leaders (more selective)
-        // - Lower values = more leaders (more aggressive)
-        val LEADERSHIP_GROUP_SIZE = 3 // Only 1/3 of clients will attempt sync
-        val leadershipGroup = hash % LEADERSHIP_GROUP_SIZE
+        // 50% of clients are immediate leaders (more aggressive than before)
+        val IMMEDIATE_LEADER_GROUP_SIZE = 2
+        val leadershipGroup = hash % IMMEDIATE_LEADER_GROUP_SIZE
         
-        val isLeader = leadershipGroup == 0
-        Log.d(TAG, "Leader election for annotation ${annotation.id}: clientId=$clientId, hash=$hash, group=$leadershipGroup, isLeader=$isLeader")
+        val isImmediateLeader = leadershipGroup == 0
         
-        return isLeader
+        Log.d(TAG, "Immediate leader election for annotation ${annotation.id}: clientId=$clientId, hash=$hash, group=$leadershipGroup, isImmediateLeader=$isImmediateLeader")
+        
+        return isImmediateLeader
+    }
+    
+    /**
+     * Perform the actual server sync for a mesh annotation
+     */
+    private fun performServerSync(annotation: MapAnnotation) {
+        val annotationId = annotation.id
+        val now = System.currentTimeMillis()
+        
+        // Mark our sync attempt
+        meshSyncAttempts[annotationId] = now
+        
+        // Perform the sync
+        Log.d(TAG, "Syncing mesh annotation to server: $annotationId")
+        val teamId = _currentTeam.value?.id
+        if (teamId != null) {
+            // Add mesh origin metadata to the annotation
+            val meshSyncAnnotation = annotation.copyWithSourceTracking(
+                source = DataSource.HYBRID,
+                originalSource = DataSource.MESH
+            )
+            
+            socketService.sendAnnotation(meshSyncAnnotation, teamId)
+            syncMetrics.recordMeshToServerSync()
+            Log.d(TAG, "Successfully synced mesh annotation to server: $annotationId")
+        } else {
+            Log.w(TAG, "Cannot sync mesh annotation to server: no team ID available")
+            syncMetrics.recordMeshSyncFailed()
+        }
+    }
+    
+    /**
+     * Start a wait-and-see period for an annotation
+     * If no server sync is detected within the wait period, this client will step up as backup leader
+     */
+    private fun startWaitAndSeePeriod(annotation: MapAnnotation) {
+        val annotationId = annotation.id
+        val now = System.currentTimeMillis()
+        
+        // Mark the start of wait-and-see period
+        waitAndSeePeriods[annotationId] = now
+        syncMetrics.recordWaitAndSeePeriod()
+        
+        Log.d(TAG, "Starting wait-and-see period for annotation $annotationId: ${WAIT_AND_SEE_PERIOD_MS}ms")
+        
+        // Schedule a delayed check
+        scope.launch {
+            delay(WAIT_AND_SEE_PERIOD_MS)
+            
+            // Check if we've received this annotation from the server during the wait period
+            if (hasReceivedFromServer(annotationId)) {
+                Log.d(TAG, "Annotation $annotationId received from server during wait period, skipping sync")
+                syncMetrics.recordMeshSyncSkipped()
+            } else {
+                Log.d(TAG, "No server sync detected for annotation $annotationId after ${WAIT_AND_SEE_PERIOD_MS}ms, stepping up as backup leader")
+                syncMetrics.recordBackupLeaderSync()
+                performServerSync(annotation)
+            }
+            
+            // Clean up the wait period tracking
+            waitAndSeePeriods.remove(annotationId)
+        }
+    }
+    
+    /**
+     * Check if we've received this annotation from the server
+     * This indicates that another client successfully synced it
+     */
+    private fun hasReceivedFromServer(annotationId: String): Boolean {
+        // Check if we've received this annotation from the server
+        // Look for any processed data with SERVER source for this annotation
+        val serverKeys = processedDataIds.keys.filter { 
+            it.startsWith("${annotationId}_SERVER_") 
+        }
+        
+        val hasReceived = serverKeys.isNotEmpty()
+        if (hasReceived) {
+            Log.d(TAG, "Found server receipt for annotation $annotationId: $serverKeys")
+        }
+        
+        return hasReceived
     }
     
     /**
      * Get a stable client identifier for coordination purposes
-     * Uses the connected mesh device node ID for consistent identification
+     * Uses the connected mesh device's node ID (same as AnnotationViewModel)
      */
     private fun getClientIdentifier(): String {
         // Get the current mesh protocol
@@ -618,25 +695,11 @@ class HybridSyncManager(
         
         if (!localNodeId.isNullOrEmpty()) {
             Log.d(TAG, "Using mesh node ID as client identifier: $localNodeId")
-            return "mesh_$localNodeId"
+            return localNodeId
         }
         
-        // Fallback to device ID if available
-        try {
-            val deviceId = android.provider.Settings.Secure.getString(
-                context.contentResolver,
-                android.provider.Settings.Secure.ANDROID_ID
-            )
-            if (!deviceId.isNullOrEmpty()) {
-                Log.d(TAG, "Using Android device ID as client identifier: $deviceId")
-                return "device_$deviceId"
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to get Android device ID", e)
-        }
-        
-        // Final fallback - use a hash of available identifiers
-        val fallbackId = "fallback_${context.packageName.hashCode()}"
+        // Fallback if no mesh node ID available
+        val fallbackId = "unknown_mesh_device"
         Log.w(TAG, "Using fallback client identifier: $fallbackId")
         return fallbackId
     }
@@ -690,8 +753,18 @@ class HybridSyncManager(
                     Log.d(TAG, "Cleaned up expired mesh sync attempt: $key")
                 }
                 
-                if (expiredKeys.isNotEmpty() || expiredSyncAttempts.isNotEmpty()) {
-                    Log.d(TAG, "Cleaned up ${expiredKeys.size} expired processed data entries and ${expiredSyncAttempts.size} expired mesh sync attempts")
+                // Clean up expired wait-and-see periods
+                val expiredWaitPeriods = waitAndSeePeriods.entries
+                    .filter { (_, timestamp) -> now - timestamp > WAIT_AND_SEE_PERIOD_MS * 2 }
+                    .map { it.key }
+                
+                expiredWaitPeriods.forEach { key ->
+                    waitAndSeePeriods.remove(key)
+                    Log.d(TAG, "Cleaned up expired wait-and-see period: $key")
+                }
+                
+                if (expiredKeys.isNotEmpty() || expiredSyncAttempts.isNotEmpty() || expiredWaitPeriods.isNotEmpty()) {
+                    Log.d(TAG, "Cleaned up ${expiredKeys.size} expired processed data entries, ${expiredSyncAttempts.size} expired mesh sync attempts, and ${expiredWaitPeriods.size} expired wait-and-see periods")
                 }
             }
         }
@@ -746,12 +819,22 @@ class HybridSyncManager(
                         val teamId = _currentTeam.value?.id
                         if (teamId != null) {
                             Log.d(TAG, "processOfflineQueueInternal sending location update")
+                            val userStatusStr = data["userStatus"] as? String
+                            val userStatus = if (userStatusStr != null) {
+                                try {
+                                    com.tak.lite.model.UserStatus.valueOf(userStatusStr)
+                                } catch (e: IllegalArgumentException) {
+                                    null
+                                }
+                            } else null
+                            
                             socketService.sendLocationUpdate(
                                 latitude = data["latitude"] as Double,
                                 longitude = data["longitude"] as Double,
                                 altitude = data["altitude"] as? Double,
                                 accuracy = data["accuracy"] as? Double,
-                                teamId = teamId
+                                teamId = teamId,
+                                userStatus = userStatus
                             )
                             Log.d(TAG, "processOfflineQueueInternal sent location update")
                         }
@@ -916,6 +999,8 @@ class HybridSyncManager(
         private var meshToServerSyncs = 0L
         private var meshSyncSkipped = 0L
         private var meshSyncFailed = 0L
+        private var waitAndSeePeriods = 0L
+        private var backupLeaderSyncs = 0L
         
         fun recordAnnotationSentToMesh() { annotationsSentToMesh++ }
         fun recordAnnotationSentToServer() { annotationsSentToServer++ }
@@ -927,6 +1012,8 @@ class HybridSyncManager(
         fun recordMeshToServerSync() { meshToServerSyncs++ }
         fun recordMeshSyncSkipped() { meshSyncSkipped++ }
         fun recordMeshSyncFailed() { meshSyncFailed++ }
+        fun recordWaitAndSeePeriod() { waitAndSeePeriods++ }
+        fun recordBackupLeaderSync() { backupLeaderSyncs++ }
         
         fun getReport(): String {
             val uptime = System.currentTimeMillis() - startTime
@@ -942,9 +1029,12 @@ class HybridSyncManager(
                 - Mesh-to-server syncs: $meshToServerSyncs
                 - Mesh syncs skipped: $meshSyncSkipped
                 - Mesh syncs failed: $meshSyncFailed
+                - Wait-and-see periods: $waitAndSeePeriods
+                - Backup leader syncs: $backupLeaderSyncs
                 - Processed data entries: ${processedDataIds.size}
                 - Data source entries: ${dataSourceMap.size}
                 - Mesh sync attempts: ${meshSyncAttempts.size}
+                - Active wait periods: $waitAndSeePeriods
             """.trimIndent()
         }
     }

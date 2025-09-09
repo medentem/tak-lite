@@ -213,8 +213,7 @@
                                 android:id="@+id/serverUrlEditText"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:inputType="textUri"
-                                android:hint="@string/server_url_hint" />
+                                android:inputType="textUri" />
                         </com.google.android.material.textfield.TextInputLayout>
 
                         <!-- Username -->
@@ -230,8 +229,7 @@
                                 android:id="@+id/serverUsernameEditText"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:inputType="textEmailAddress"
-                                android:hint="@string/server_username_hint" />
+                                android:inputType="textEmailAddress" />
                         </com.google.android.material.textfield.TextInputLayout>
 
                         <!-- Password -->
@@ -248,8 +246,7 @@
                                 android:id="@+id/serverPasswordEditText"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:inputType="textPassword"
-                                android:hint="@string/server_password_hint" />
+                                android:inputType="textPassword" />
                         </com.google.android.material.textfield.TextInputLayout>
 
                         <!-- Connect Button -->

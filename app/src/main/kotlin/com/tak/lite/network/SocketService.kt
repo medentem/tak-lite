@@ -143,7 +143,8 @@ class SocketService(private val context: Context) {
         longitude: Double,
         altitude: Double? = null,
         accuracy: Double? = null,
-        teamId: String? = null
+        teamId: String? = null,
+        userStatus: com.tak.lite.model.UserStatus? = null
     ) {
         if (_connectionState.value != SocketConnectionState.Connected) {
             Log.w(TAG, "Cannot send location - not connected to server")
@@ -157,10 +158,11 @@ class SocketService(private val context: Context) {
             altitude?.let { put("altitude", it) }
             accuracy?.let { put("accuracy", it) }
             teamId?.let { put("teamId", it) }
+            userStatus?.let { put("userStatus", it.name) }
         }
         
         socket?.emit("location:update", locationData)
-        Log.d(TAG, "Sent location update: $latitude, $longitude")
+        Log.d(TAG, "Sent location update: $latitude, $longitude with status: ${userStatus?.name ?: "GREEN"}")
     }
     
     /**

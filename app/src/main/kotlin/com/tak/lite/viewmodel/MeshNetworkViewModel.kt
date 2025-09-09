@@ -157,7 +157,8 @@ class MeshNetworkViewModel @Inject constructor(
 
     fun sendLocationUpdate(latitude: Double, longitude: Double) {
         viewModelScope.launch {
-            meshNetworkRepository.sendLocationUpdate(latitude, longitude)
+            val currentStatus = _userStatus.value
+            meshNetworkRepository.sendLocationUpdate(latitude, longitude, userStatus = currentStatus)
         }
     }
     

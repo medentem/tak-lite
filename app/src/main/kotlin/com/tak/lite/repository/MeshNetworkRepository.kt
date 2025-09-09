@@ -45,8 +45,8 @@ class MeshNetworkRepository @Inject constructor(
     val selfId: StateFlow<String?> get() = meshNetworkService.selfId
 
     
-    fun sendLocationUpdate(latitude: Double, longitude: Double) {
-        meshNetworkService.sendLocationUpdate(latitude, longitude)
+    fun sendLocationUpdate(latitude: Double, longitude: Double, userStatus: com.tak.lite.model.UserStatus? = null) {
+        meshNetworkService.sendLocationUpdate(latitude, longitude, userStatus)
     }
 
     fun requestPeerLocation(peerId: String, onLocationReceived: (timeout: Boolean) -> Unit) {

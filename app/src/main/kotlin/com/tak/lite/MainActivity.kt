@@ -137,6 +137,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
     @Inject lateinit var billingManager: com.tak.lite.util.BillingManager
     @Inject lateinit var serverConnectionManager: com.tak.lite.network.ServerConnectionManager
     @Inject lateinit var socketService: com.tak.lite.network.SocketService
+    @Inject lateinit var serverApiService: com.tak.lite.network.ServerApiService
 
     // Activity result launcher for compass calibration
     private val compassCalibrationLauncher = registerForActivityResult(
@@ -818,10 +819,12 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
 
         val meshState = viewModel.uiState.value
         val serverState = socketService.connectionState.value
+        val isLoggedIn = serverApiService.isLoggedIn()
         val isMeshConnected = meshState is MeshNetworkUiState.Connected
-        val isServerConnected = serverState == com.tak.lite.network.SocketService.SocketConnectionState.Connected || 
-                               serverState == com.tak.lite.network.SocketService.SocketConnectionState.Authenticated
+        val isServerConnected = (serverState == com.tak.lite.network.SocketService.SocketConnectionState.Connected || 
+                               serverState == com.tak.lite.network.SocketService.SocketConnectionState.Authenticated) && isLoggedIn
 
+        Log.d("MainActivity", "updateConnectionStatusBar - meshState: $meshState, serverState: $serverState, isLoggedIn: $isLoggedIn")
         Log.d("MainActivity", "updateConnectionStatusBar - meshConnected: $isMeshConnected, serverConnected: $isServerConnected, dismissed: $isServerOnlyWarningDismissed")
 
         when {
@@ -939,6 +942,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
             repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
                 socketService.connectionState.collect { serverState ->
                     Log.d("MainActivity", "Server connection state changed to: $serverState")
+                    Log.d("MainActivity", "Current mesh state: ${viewModel.uiState.value}")
                     // Reset dismiss state when server connection changes
                     resetServerOnlyWarningDismissed()
                     updateConnectionStatusBar()
@@ -1157,6 +1161,10 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
         
         // Restore server connection when returning from SettingsActivity
         serverConnectionManager.restoreServerConnection()
+        
+        // Update connection status bar when returning from SettingsActivity
+        // This ensures we detect server connection changes made in settings
+        updateConnectionStatusBar()
         
         // Apply keep screen awake preference
         val prefs = getSharedPreferences("user_prefs", MODE_PRIVATE)

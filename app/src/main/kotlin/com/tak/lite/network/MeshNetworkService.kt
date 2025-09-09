@@ -548,9 +548,9 @@ class MeshNetworkService @Inject constructor(
         }
     }
 
-    fun sendLocationUpdate(latitude: Double, longitude: Double) {
+    fun sendLocationUpdate(latitude: Double, longitude: Double, userStatus: com.tak.lite.model.UserStatus? = null) {
         // Use HybridSyncManager for dual-mode location updates (mesh + server)
-        hybridSyncManager.sendLocationUpdate(latitude, longitude)
+        hybridSyncManager.sendLocationUpdate(latitude, longitude, userStatus = userStatus)
     }
 
     fun sendAudioData(audioData: ByteArray, channelId: String = "default") {
