@@ -9,6 +9,7 @@ import androidx.core.content.ContextCompat
 import com.tak.lite.R
 import com.tak.lite.data.model.ChannelMessage
 import com.tak.lite.data.model.DirectMessageChannel
+import com.tak.lite.network.HybridSyncManager
 import com.tak.lite.network.MeshProtocolProvider
 import com.tak.lite.notification.MessageNotificationManager
 import kotlinx.coroutines.CoroutineScope
@@ -26,6 +27,7 @@ import javax.inject.Singleton
 class MessageRepository @Inject constructor(
     private val meshProtocolProvider: MeshProtocolProvider,
     private val messageNotificationManager: MessageNotificationManager,
+    private val hybridSyncManager: HybridSyncManager,
     private val context: Context
 ) {
     private val _messages = MutableStateFlow<Map<String, List<ChannelMessage>>>(emptyMap())
@@ -124,6 +126,8 @@ class MessageRepository @Inject constructor(
 
     fun sendMessage(channelId: String, content: String) {
         try {
+            Log.d(TAG, "sendMessage called for channel: $channelId, content: $content")
+            
             // Check if this is a direct message channel
             if (channelId.startsWith("dm_")) {
                 val peerId = channelId.substring(3) // Remove "dm_" prefix
@@ -131,9 +135,11 @@ class MessageRepository @Inject constructor(
                 return
             }
             
-            // Regular channel message
-            val protocol = meshProtocolProvider.protocol.value
-            protocol.sendTextMessage(channelId, content)
+            // For broadcast messages, delegate to HybridSyncManager for dual-mode operation
+            // This is consistent with how annotations and location updates work
+            hybridSyncManager.sendMessage(channelId, content)
+            Log.d(TAG, "Delegated broadcast message to HybridSyncManager for channel: $channelId")
+            
         } catch (e: Exception) {
             Log.e(TAG, "Error sending message: ${e.message}")
         }
@@ -149,9 +155,16 @@ class MessageRepository @Inject constructor(
 
     private fun sendDirectMessage(peerId: String, content: String) {
         try {
+            Log.d(TAG, "sendDirectMessage called for peer: $peerId, content: $content")
+            
             val protocol = meshProtocolProvider.protocol.value
             // Send the message through the protocol
             protocol.sendDirectMessage(peerId, content)
+            Log.d(TAG, "Sent direct message to mesh for peer: $peerId")
+            
+            // Note: Direct messages are NOT sent to server - they are mesh-only
+            // This ensures privacy and prevents direct messages from being stored on the server
+            
         } catch (e: Exception) {
             Log.e(TAG, "Error sending direct message: ${e.message}")
         }

@@ -3,6 +3,7 @@ package com.tak.lite.network
 import android.content.Context
 import android.util.Log
 import com.tak.lite.data.model.Team
+import com.tak.lite.di.MeshProtocol
 import com.tak.lite.model.DataSource
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PeerLocationEntry
@@ -39,6 +40,9 @@ class HybridSyncManager(
     private val TAG = "HybridSyncManager"
     private val scope = CoroutineScope(coroutineContext + SupervisorJob())
     private val syncMutex = Mutex()
+    
+    // Local protocol reference to avoid race conditions during protocol switching
+    private var currentProtocol: MeshProtocol = meshProtocolProvider.protocol.value
     
     // Debug: Track which coroutine is holding the mutex
     private var mutexHolder: String? = null
@@ -183,7 +187,7 @@ class HybridSyncManager(
         userStatus: com.tak.lite.model.UserStatus? = null
     ) {
         // Always send to mesh (immediate local sync)
-        meshProtocolProvider.protocol.value.sendLocationUpdate(latitude, longitude)
+        currentProtocol.sendLocationUpdate(latitude, longitude)
         
         // Send to server if enabled (global sync)
         if (_isServerSyncEnabled.value) {
@@ -239,7 +243,7 @@ class HybridSyncManager(
                         
                         // Always send to mesh (immediate local sync)
                         Log.d(TAG, "About to send annotation to mesh: ${annotation.id}")
-                        meshProtocolProvider.protocol.value.sendAnnotation(annotatedData)
+                        currentProtocol.sendAnnotation(annotatedData)
                         syncMetrics.recordAnnotationSentToMesh()
                         Log.d(TAG, "Sent annotation to mesh: ${annotation.id}")
                         
@@ -295,7 +299,7 @@ class HybridSyncManager(
                 ).copyAsLocal()
                 
                 // Always send to mesh (immediate local sync)
-                meshProtocolProvider.protocol.value.sendAnnotation(deletion)
+                currentProtocol.sendAnnotation(deletion)
                 
                 // Send to server if enabled (global sync)
                 if (_isServerSyncEnabled.value) {
@@ -326,7 +330,7 @@ class HybridSyncManager(
                 }
                 
                 // Always send bulk deletion to mesh (single packet for efficiency)
-                meshProtocolProvider.protocol.value.sendBulkAnnotationDeletions(ids)
+                currentProtocol.sendBulkAnnotationDeletions(ids)
                 syncMetrics.recordAnnotationSentToMesh()
                 
                 // Send bulk deletion to server if enabled (now supports bulk operations)
@@ -349,19 +353,32 @@ class HybridSyncManager(
     }
     
     /**
-     * Send message (dual-mode)
+     * Send broadcast message (dual-mode: mesh + server)
+     * This method should only be called for broadcast messages, not direct messages
      */
-    fun sendMessage(content: String) {
-        // Always send to mesh (immediate local sync)
-        // Note: Mesh message sending would need to be implemented in the protocol
+    fun sendMessage(channelId: String, content: String) {
+        Log.d(TAG, "HybridSyncManager.sendMessage called for channel: $channelId, content: $content")
+        Log.d(TAG, "Server sync enabled: ${_isServerSyncEnabled.value}")
+        Log.d(TAG, "Current team: ${_currentTeam.value?.name} (${_currentTeam.value?.id})")
+        Log.d(TAG, "Socket connection state: ${socketService.getConnectionState()}")
+        
+        // Always send to mesh first (immediate local sync)
+        Log.d(TAG, "Sending message to mesh for channel: $channelId")
+        currentProtocol.sendTextMessage(channelId, content)
+        Log.d(TAG, "Message sent to mesh for channel: $channelId")
         
         // Send to server if enabled (global sync)
         if (_isServerSyncEnabled.value) {
             val teamId = _currentTeam.value?.id
             if (teamId != null) {
+                Log.d(TAG, "Sending broadcast message to server with teamId: $teamId")
                 socketService.sendMessage(content, teamId)
+                Log.d(TAG, "Broadcast message sent to server successfully")
+            } else {
+                Log.w(TAG, "Cannot send message to server - no team ID available")
             }
         } else {
+            Log.d(TAG, "Server sync not enabled, queuing broadcast message for later sync")
             // Queue for later sync
             queueForSync(SyncType.MESSAGE_SEND, content)
         }
@@ -370,15 +387,25 @@ class HybridSyncManager(
     private fun setupMeshCallbacks() {
         // Listen for mesh protocol changes
         scope.launch {
-            meshProtocolProvider.protocol.collect { protocol ->
+            meshProtocolProvider.protocol.collect { newProtocol ->
+                Log.d(TAG, "Protocol changed from ${currentProtocol.javaClass.simpleName} to ${newProtocol.javaClass.simpleName}")
+                
+                // Update local protocol reference to avoid race conditions
+                if (currentProtocol !== newProtocol) {
+                    Log.d(TAG, "Updating local protocol reference")
+                    currentProtocol = newProtocol
+                }
+                
                 // Set up callbacks for incoming mesh data
-                protocol.setAnnotationCallback { annotation ->
+                currentProtocol.setAnnotationCallback { annotation ->
                     handleIncomingAnnotation(annotation, SyncSource.MESH)
                 }
                 
-                protocol.setPeerLocationCallback { locations ->
+                currentProtocol.setPeerLocationCallback { locations ->
                     handleIncomingLocations(locations, SyncSource.MESH)
                 }
+                
+                Log.d(TAG, "Updated mesh callbacks for protocol: ${currentProtocol.javaClass.simpleName}")
             }
         }
     }
@@ -466,7 +493,7 @@ class HybridSyncManager(
                 // Determine if we should rebroadcast to mesh
                 if (shouldRebroadcastToMesh(resolvedAnnotation, source)) {
                     Log.d(TAG, "Rebroadcasting annotation to mesh: ${annotation.id}")
-                    meshProtocolProvider.protocol.value.sendAnnotation(resolvedAnnotation)
+                    currentProtocol.sendAnnotation(resolvedAnnotation)
                     syncMetrics.recordAnnotationSentToMesh()
                 }
                 
@@ -687,9 +714,6 @@ class HybridSyncManager(
      * Uses the connected mesh device's node ID (same as AnnotationViewModel)
      */
     private fun getClientIdentifier(): String {
-        // Get the current mesh protocol
-        val currentProtocol = meshProtocolProvider.protocol.value
-        
         // Try to get the local node ID from the mesh protocol
         val localNodeId = currentProtocol.localNodeIdOrNickname.value
         

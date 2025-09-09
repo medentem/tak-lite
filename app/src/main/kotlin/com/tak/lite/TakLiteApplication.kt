@@ -1,7 +1,9 @@
 package com.tak.lite
 
 import android.app.Application
+import android.util.Log
 import com.tak.lite.network.ServerConnectionManager
+import com.tak.lite.network.SocketService
 import com.tak.lite.util.LocaleManager
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
@@ -11,6 +13,9 @@ class TakLiteApplication : Application() {
     
     @Inject
     lateinit var serverConnectionManager: ServerConnectionManager
+    
+    @Inject
+    lateinit var socketService: SocketService
     
     override fun onCreate() {
         super.onCreate()
@@ -33,6 +38,18 @@ class TakLiteApplication : Application() {
         // Restore server connection if previously connected
         // This will be called after Hilt injection is complete
         serverConnectionManager.restoreServerConnection()
+    }
+    
+    override fun onTerminate() {
+        super.onTerminate()
+        Log.d("TakLiteApplication", "Application terminating - cleaning up socket connections")
+        
+        // Clean up socket service to prevent connection leaks
+        try {
+            socketService.cleanup()
+        } catch (e: Exception) {
+            Log.e("TakLiteApplication", "Error during socket cleanup", e)
+        }
     }
 
     companion object {

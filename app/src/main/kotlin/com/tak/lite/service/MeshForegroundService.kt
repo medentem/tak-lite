@@ -18,6 +18,7 @@ import com.tak.lite.di.MeshProtocol
 import com.tak.lite.model.PacketSummary
 import com.tak.lite.network.HybridSyncManager
 import com.tak.lite.network.MeshProtocolProvider
+import com.tak.lite.network.SocketService
 import com.tak.lite.repository.MessageRepository
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -40,6 +41,8 @@ class MeshForegroundService : Service() {
     @Inject lateinit var messageRepository: MessageRepository
     // This needs to be here for background server sync
     @Inject lateinit var hybridSyncManager: HybridSyncManager
+    // This needs to be here to maintain server socket connections in background
+    @Inject lateinit var socketService: SocketService
 
     private var packetSummaryJob: Job? = null
     // Hold a strong reference to the protocol instance
@@ -48,6 +51,7 @@ class MeshForegroundService : Service() {
     private var notificationUpdateJob: Job? = null
     private var connectionStateJob: Job? = null
     private var healthCheckJob: Job? = null
+    private var socketHealthCheckJob: Job? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -60,6 +64,7 @@ class MeshForegroundService : Service() {
         observeConnectionState()
         startPeriodicNotificationUpdates()
         startHealthCheck()
+        startSocketHealthCheck()
     }
 
     private fun observePacketSummaries() {
@@ -224,6 +229,31 @@ class MeshForegroundService : Service() {
             }
         }
     }
+    
+    private fun startSocketHealthCheck() {
+        socketHealthCheckJob?.cancel()
+        socketHealthCheckJob = CoroutineScope(Dispatchers.Default).launch {
+            while (true) {
+                delay(60000) // Check every 60 seconds
+                
+                try {
+                    val connectionState = socketService.getConnectionState()
+                    Log.d("MeshForegroundService", "Socket connection state: $connectionState")
+                    
+                    // If socket is disconnected but server sync is enabled, attempt reconnection
+                    if (connectionState == com.tak.lite.network.SocketService.SocketConnectionState.Disconnected) {
+                        val isServerSyncEnabled = hybridSyncManager.isServerSyncEnabled.value
+                        if (isServerSyncEnabled) {
+                            Log.w("MeshForegroundService", "Socket disconnected but server sync enabled, attempting reconnection")
+                            socketService.reconnect()
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("MeshForegroundService", "Socket health check failed: ${e.message}")
+                }
+            }
+        }
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d("MeshForegroundService", "onStartCommand called: intent=$intent, flags=$flags, startId=$startId")
@@ -235,15 +265,15 @@ class MeshForegroundService : Service() {
         Log.d("MeshForegroundService", "startForegroundServiceNotification called")
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "Mesh Background Service",
+            "TAKLite Background Service",
             NotificationManager.IMPORTANCE_LOW
         )
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(channel)
         Log.d("MeshForegroundService", "Notification channel created")
         val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("TAKLite Mesh Connection")
-            .setContentText("Mesh networking is active in the background")
+            .setContentTitle("TAKLite Background Service")
+            .setContentText("Mesh networking and server sync active in background")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setOngoing(true)
             .setContentIntent(getMainActivityPendingIntent())
@@ -259,6 +289,7 @@ class MeshForegroundService : Service() {
         notificationUpdateJob?.cancel()
         connectionStateJob?.cancel()
         healthCheckJob?.cancel()
+        socketHealthCheckJob?.cancel()
         // Clear the protocol reference
         currentProtocol = null
         // Optionally clean up protocol if needed

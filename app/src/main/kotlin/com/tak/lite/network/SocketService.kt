@@ -67,16 +67,26 @@ class SocketService(private val context: Context) {
         this.serverUrl = serverUrl
         this.authToken = authToken
         
+        // Prevent multiple simultaneous connections
+        if (socket != null && _connectionState.value == SocketConnectionState.Connected) {
+            Log.w(TAG, "Already connected to server, skipping new connection")
+            return
+        }
+        
+        // Clean up any existing connection first
+        if (socket != null) {
+            Log.d(TAG, "Cleaning up existing connection before creating new one")
+            disconnect()
+        }
+        
         try {
             _connectionState.value = SocketConnectionState.Connecting
             
             val options = IO.Options().apply {
                 // Add authentication token to auth object
                 auth = mapOf("token" to authToken)
-                // Enable reconnection
-                reconnection = true
-                reconnectionAttempts = 5
-                reconnectionDelay = 1000
+                // Disable auto-reconnection to prevent connection leaks
+                reconnection = false
                 timeout = 10000
             }
             
@@ -97,7 +107,11 @@ class SocketService(private val context: Context) {
      * Disconnect from the server
      */
     fun disconnect() {
-        socket?.disconnect()
+        socket?.let { currentSocket ->
+            Log.d(TAG, "Disconnecting socket: ${currentSocket.id()}")
+            // Remove all event listeners to prevent memory leaks
+            currentSocket.disconnect()
+        }
         socket = null
         _connectionState.value = SocketConnectionState.Disconnected
         _currentTeam.value = null
@@ -499,6 +513,41 @@ class SocketService(private val context: Context) {
             is MapAnnotation.Area -> "area"
             is MapAnnotation.Polygon -> "polygon"
             is MapAnnotation.Deletion -> "deletion"
+        }
+    }
+    
+    /**
+     * Cleanup method to be called when the service is no longer needed
+     * This should be called from the application lifecycle or when the service is destroyed
+     */
+    fun cleanup() {
+        Log.d(TAG, "Cleaning up SocketService")
+        disconnect()
+        
+        // Clear all callbacks to prevent memory leaks
+        onLocationUpdateCallback = null
+        onAnnotationUpdateCallback = null
+        onTeamJoinedCallback = null
+        onTeamLeftCallback = null
+        onErrorCallback = null
+        onConnectedCallback = null
+        
+        // Clear stored credentials
+        serverUrl = null
+        authToken = null
+        
+        Log.d(TAG, "SocketService cleanup completed")
+    }
+    
+    /**
+     * Reconnect to server if disconnected (manual reconnection)
+     */
+    fun reconnect() {
+        if (serverUrl != null && authToken != null) {
+            Log.d(TAG, "Manual reconnection requested")
+            connect(serverUrl!!, authToken!!)
+        } else {
+            Log.w(TAG, "Cannot reconnect - missing server URL or auth token")
         }
     }
 }
