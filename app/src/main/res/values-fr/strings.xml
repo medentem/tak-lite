@@ -189,6 +189,7 @@
     <string name="delete_channel">Supprimer le Canal</string>
     <string name="channels_chats">Canaux / Chats</string>
     <string name="no_device_connected">Aucun Appareil Connecté</string>
+    <string name="server_connection_only">Connexion serveur uniquement</string>
     <string name="connect_to_device_manage">Se connecter à un appareil pour gérer les canaux / chats</string>
     <string name="peers_count">Pairs (%1$d)</string>
     <string name="connect_to_device_view_peers">Se connecter à un appareil pour voir les pairs</string>

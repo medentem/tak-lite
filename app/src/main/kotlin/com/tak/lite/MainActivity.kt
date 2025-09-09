@@ -136,6 +136,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
     @Inject lateinit var meshProtocolProvider: com.tak.lite.network.MeshProtocolProvider
     @Inject lateinit var billingManager: com.tak.lite.util.BillingManager
     @Inject lateinit var serverConnectionManager: com.tak.lite.network.ServerConnectionManager
+    @Inject lateinit var socketService: com.tak.lite.network.SocketService
 
     // Activity result launcher for compass calibration
     private val compassCalibrationLauncher = registerForActivityResult(
@@ -197,14 +198,20 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
     private lateinit var coverageProgressText: TextView
     private lateinit var coverageStatusText: TextView
 
+    // Connection status bar views
+    private lateinit var connectionStatusBar: LinearLayout
+    private lateinit var connectionStatusIcon: ImageView
+    private lateinit var connectionStatusText: TextView
+    private lateinit var connectionStatusDismiss: ImageView
+    
+    // Connection state tracking
+    private var isServerOnlyWarningDismissed = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-
-        // Show the connection status bar immediately
-        toggleDeviceStatusBar(true)
 
         // Apply edge-to-edge insets to bottom overlays and sides to avoid gesture/nav overlap
         val bottomContainers = listOf(
@@ -363,6 +370,20 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
         coverageProgressText = findViewById(R.id.coverageProgressText)
         coverageStatusText = findViewById(R.id.coverageStatusText)
 
+        // Initialize connection status bar views
+        connectionStatusBar = findViewById(R.id.connectionStatusBar)
+        connectionStatusIcon = findViewById(R.id.connectionStatusIcon)
+        connectionStatusText = findViewById(R.id.connectionStatusText)
+        connectionStatusDismiss = findViewById(R.id.connectionStatusDismiss)
+        
+        // Set up dismiss button click listener
+        connectionStatusDismiss.setOnClickListener {
+            dismissServerOnlyWarning()
+        }
+        
+        // Initialize connection status bar state after views are ready
+        updateConnectionStatusBar()
+
         lifecycleScope.launch {
             repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
                 viewModel.isDeviceLocationStale.collectLatest { stale ->
@@ -432,6 +453,7 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
         channelController.setupChannelButton()
 
         observeMeshNetworkState()
+        observeServerConnectionState()
         observeProtocolChanges()
 
         mapTypeToggleButton.setOnClickListener {
@@ -788,18 +810,74 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
         }
     }
 
-    private fun toggleDeviceStatusBar(show: Boolean) {
-        val statusBar = findViewById<View>(R.id.connectionStatusBar)
+    private fun updateConnectionStatusBar() {
         if (HIDE_DEVICE_CONNECTION_STATUS_BAR) {
-            statusBar.visibility = View.GONE
+            connectionStatusBar.visibility = View.GONE
             return
         }
 
-        statusBar.visibility = if (show) {
-            View.VISIBLE
-        } else {
-            View.GONE
+        val meshState = viewModel.uiState.value
+        val serverState = socketService.connectionState.value
+        val isMeshConnected = meshState is MeshNetworkUiState.Connected
+        val isServerConnected = serverState == com.tak.lite.network.SocketService.SocketConnectionState.Connected || 
+                               serverState == com.tak.lite.network.SocketService.SocketConnectionState.Authenticated
+
+        Log.d("MainActivity", "updateConnectionStatusBar - meshConnected: $isMeshConnected, serverConnected: $isServerConnected, dismissed: $isServerOnlyWarningDismissed")
+
+        when {
+            isMeshConnected -> {
+                // Hide status bar when mesh device is connected
+                connectionStatusBar.visibility = View.GONE
+                Log.d("MainActivity", "Hiding connection status bar - Mesh connected")
+            }
+            isServerConnected && !isServerOnlyWarningDismissed -> {
+                // Show orange warning for server-only connection
+                showServerOnlyWarning()
+                Log.d("MainActivity", "Showing server-only warning")
+            }
+            else -> {
+                // Show red warning for no connection
+                showNoConnectionWarning()
+                Log.d("MainActivity", "Showing no connection warning")
+            }
         }
+    }
+
+    private fun showServerOnlyWarning() {
+        connectionStatusBar.setBackgroundColor(Color.parseColor("#FF9800")) // Orange
+        connectionStatusIcon.setImageResource(android.R.drawable.ic_dialog_info)
+        connectionStatusIcon.setColorFilter(Color.WHITE)
+        connectionStatusText.text = getString(R.string.server_connection_only)
+        connectionStatusText.setTextColor(Color.WHITE)
+        connectionStatusDismiss.visibility = View.VISIBLE
+        connectionStatusBar.visibility = View.VISIBLE
+    }
+
+    private fun showNoConnectionWarning() {
+        connectionStatusBar.setBackgroundColor(Color.parseColor("#FF0000")) // Red
+        connectionStatusIcon.setImageResource(android.R.drawable.ic_dialog_alert)
+        connectionStatusIcon.setColorFilter(Color.WHITE)
+        connectionStatusText.text = getString(R.string.no_device_connected)
+        connectionStatusText.setTextColor(Color.WHITE)
+        connectionStatusDismiss.visibility = View.GONE
+        connectionStatusBar.visibility = View.VISIBLE
+    }
+
+    private fun dismissServerOnlyWarning() {
+        isServerOnlyWarningDismissed = true
+        connectionStatusBar.visibility = View.GONE
+        Log.d("MainActivity", "Server-only warning dismissed")
+    }
+
+    private fun resetServerOnlyWarningDismissed() {
+        isServerOnlyWarningDismissed = false
+        Log.d("MainActivity", "Server-only warning dismiss state reset")
+    }
+
+    private fun toggleDeviceStatusBar(show: Boolean) {
+        // Legacy method - now handled by updateConnectionStatusBar()
+        // Keep for backward compatibility but redirect to new method
+        updateConnectionStatusBar()
     }
 
     private fun observeMeshNetworkState() {
@@ -812,46 +890,58 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                         for (peer in state.peers) {
                             peerIdToNickname[peer.id] = peer.nickname
                         }
-                        // Hide the connection status bar when connected
-                        toggleDeviceStatusBar(false)
-                        Log.d("MainActivity", "Hiding connection status bar - Connected")
                         Log.d("MainActivity", "Connection state changed to Connected - updating PTT button")
                         // Update PTT button visibility when connection state changes
                         updatePTTButtonVisibility()
+                        // Update connection status bar based on combined state
+                        updateConnectionStatusBar()
                     }
                     is MeshNetworkUiState.Connecting -> {
                         Toast.makeText(this@MainActivity, getString(R.string.connecting_to_mesh), Toast.LENGTH_SHORT).show()
                         peerIdToNickname.clear()
-                        // Show the connection status bar when disconnected
-                        toggleDeviceStatusBar(true)
-                        Log.d("MainActivity", "Showing connection status bar - Disconnected")
+                        Log.d("MainActivity", "Connection state changed to Connecting")
                         // Update PTT button visibility when connection state changes
                         updatePTTButtonVisibility()
+                        // Update connection status bar based on combined state
+                        updateConnectionStatusBar()
                     }
                     is MeshNetworkUiState.Disconnected -> {
                         Toast.makeText(this@MainActivity, getString(R.string.disconnected_from_mesh), Toast.LENGTH_SHORT).show()
                         peerIdToNickname.clear()
-                        // Show the connection status bar when disconnected
-                        toggleDeviceStatusBar(true)
-                        Log.d("MainActivity", "Showing connection status bar - Disconnected")
+                        Log.d("MainActivity", "Connection state changed to Disconnected")
                         // Update PTT button visibility when connection state changes
                         updatePTTButtonVisibility()
+                        // Update connection status bar based on combined state
+                        updateConnectionStatusBar()
                     }
                     is MeshNetworkUiState.Error -> {
                         Toast.makeText(this@MainActivity, state.message, Toast.LENGTH_LONG).show()
-                        // Show the connection status bar on error
-                        toggleDeviceStatusBar(true)
-                        Log.d("MainActivity", "Showing connection status bar - Error: ${state.message}")
+                        Log.d("MainActivity", "Connection state changed to Error: ${state.message}")
                         // Update PTT button visibility when connection state changes
                         updatePTTButtonVisibility()
+                        // Update connection status bar based on combined state
+                        updateConnectionStatusBar()
                     }
                     MeshNetworkUiState.Initial -> {
-                        // Show the connection status bar in initial state
-                        toggleDeviceStatusBar(true)
-                        Log.d("MainActivity", "Showing connection status bar - Initial state")
+                        Log.d("MainActivity", "Connection state changed to Initial")
                         // Update PTT button visibility when connection state changes
                         updatePTTButtonVisibility()
+                        // Update connection status bar based on combined state
+                        updateConnectionStatusBar()
                     }
+                }
+            }
+        }
+    }
+
+    private fun observeServerConnectionState() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                socketService.connectionState.collect { serverState ->
+                    Log.d("MainActivity", "Server connection state changed to: $serverState")
+                    // Reset dismiss state when server connection changes
+                    resetServerOnlyWarningDismissed()
+                    updateConnectionStatusBar()
                 }
             }
         }

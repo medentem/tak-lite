@@ -182,6 +182,13 @@ class SocketService(private val context: Context) {
                 put("type", getAnnotationTypeName(annotation))
                 put("data", annotationObject) // Send as object, not string
                 teamId?.let { put("teamId", it) }
+                
+                // Add mesh origin metadata if this is a mesh-originated annotation
+                if (annotation.source == DataSource.MESH || annotation.originalSource == DataSource.MESH) {
+                    put("meshOrigin", true)
+                    put("originalSource", annotation.originalSource?.name?.lowercase() ?: "mesh")
+                    Log.d(TAG, "Sending mesh-originated annotation: ${annotation.id}")
+                }
             }
             
             Log.d(TAG, "Emitting annotation:update event with data: ${annotationData.toString()}")

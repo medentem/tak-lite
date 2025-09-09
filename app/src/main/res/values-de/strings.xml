@@ -189,6 +189,7 @@
     <string name="delete_channel">Kanal löschen</string>
     <string name="channels_chats">Kanäle / Chats</string>
     <string name="no_device_connected">Kein Gerät verbunden</string>
+    <string name="server_connection_only">Nur Serververbindung</string>
     <string name="connect_to_device_manage">Mit einem Gerät verbinden, um Kanäle / Chats zu verwalten</string>
     <string name="peers_count">Peers (%1$d)</string>
     <string name="connect_to_device_view_peers">Mit einem Gerät verbinden, um Peers anzuzeigen</string>

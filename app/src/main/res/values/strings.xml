@@ -195,6 +195,7 @@
     <string name="delete_channel">Delete Channel</string>
     <string name="channels_chats">Channels / Chats</string>
     <string name="no_device_connected">No Device Connected</string>
+    <string name="server_connection_only">Server Connection Only</string>
     <string name="connect_to_device_manage">Connect to a device to manage channels / chats</string>
     <string name="peers_count">Peers (%1$d)</string>
     <string name="connect_to_device_view_peers">Connect to a device to view peers</string>
