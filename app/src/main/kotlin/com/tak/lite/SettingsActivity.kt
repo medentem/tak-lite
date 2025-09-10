@@ -607,6 +607,14 @@ class SettingsActivity : BaseActivity() {
             prefs.edit().putBoolean("show_packet_summary", isChecked).apply()
         }
 
+        // Setup annotation notifications switch
+        val annotationNotificationsSwitch = findViewById<SwitchMaterial>(R.id.annotationNotificationsSwitch)
+        val annotationNotificationsEnabled = prefs.getBoolean("annotation_notifications_enabled", true)
+        annotationNotificationsSwitch.isChecked = annotationNotificationsEnabled
+        annotationNotificationsSwitch.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean("annotation_notifications_enabled", isChecked).apply()
+        }
+
         // Setup prediction overlay switch
         val showPredictionOverlayEnabled = prefs.getBoolean("show_prediction_overlay", false)
         showPredictionOverlaySwitch.isChecked = showPredictionOverlayEnabled

@@ -20,6 +20,10 @@ import com.tak.lite.network.HybridSyncManager
 import com.tak.lite.network.MeshProtocolProvider
 import com.tak.lite.network.SocketService
 import com.tak.lite.repository.MessageRepository
+import com.tak.lite.repository.AnnotationRepository
+import com.tak.lite.notification.AnnotationNotificationManager
+import com.tak.lite.model.MapAnnotation
+import com.tak.lite.network.MeshNetworkService
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -43,6 +47,12 @@ class MeshForegroundService : Service() {
     @Inject lateinit var hybridSyncManager: HybridSyncManager
     // This needs to be here to maintain server socket connections in background
     @Inject lateinit var socketService: SocketService
+    // This needs to be here to monitor annotations for notifications
+    @Inject lateinit var annotationRepository: AnnotationRepository
+    // This needs to be here to show annotation notifications
+    @Inject lateinit var annotationNotificationManager: AnnotationNotificationManager
+    // This needs to be here to get user location and peer names
+    @Inject lateinit var meshNetworkService: MeshNetworkService
 
     private var packetSummaryJob: Job? = null
     // Hold a strong reference to the protocol instance
@@ -52,6 +62,7 @@ class MeshForegroundService : Service() {
     private var connectionStateJob: Job? = null
     private var healthCheckJob: Job? = null
     private var socketHealthCheckJob: Job? = null
+    private var annotationNotificationJob: Job? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -65,6 +76,7 @@ class MeshForegroundService : Service() {
         startPeriodicNotificationUpdates()
         startHealthCheck()
         startSocketHealthCheck()
+        startAnnotationNotifications()
     }
 
     private fun observePacketSummaries() {
@@ -254,6 +266,110 @@ class MeshForegroundService : Service() {
             }
         }
     }
+    
+    private fun startAnnotationNotifications() {
+        annotationNotificationJob?.cancel()
+        annotationNotificationJob = CoroutineScope(Dispatchers.Default).launch {
+            // Track previously seen annotations to avoid duplicate notifications
+            val seenAnnotations = mutableSetOf<String>()
+            
+            annotationRepository.annotations.collect { annotations ->
+                val prefs = applicationContext.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+                val annotationNotificationsEnabled = prefs.getBoolean("annotation_notifications_enabled", true)
+                
+                if (!annotationNotificationsEnabled) {
+                    return@collect
+                }
+                
+                // Get current user's identifier to filter out self-created annotations
+                val currentUserIdentifier = getCurrentUserIdentifier()
+                Log.d("MeshForegroundService", "Current user identifier: $currentUserIdentifier")
+                
+                // Find new annotations (excluding self-created ones)
+                val newAnnotations = annotations.filter { annotation ->
+                    val isNew = annotation.id !in seenAnnotations
+                    val isNotDeletion = annotation !is MapAnnotation.Deletion
+                    val isNotSelfCreated = !isAnnotationCreatedByCurrentUser(annotation, currentUserIdentifier)
+                    
+                    Log.d("MeshForegroundService", "Annotation ${annotation.id}: isNew=$isNew, isNotDeletion=$isNotDeletion, isNotSelfCreated=$isNotSelfCreated (creatorId=${annotation.creatorId})")
+                    
+                    isNew && isNotDeletion && isNotSelfCreated
+                }
+                
+                // Add new annotations to seen set
+                newAnnotations.forEach { annotation ->
+                    seenAnnotations.add(annotation.id)
+                }
+                
+                // Get user location for distance calculations
+                val userLocation = meshNetworkService.bestLocation.value
+                val userLat = userLocation?.latitude
+                val userLng = userLocation?.longitude
+                
+                // Show notifications for new annotations
+                newAnnotations.forEach { annotation ->
+                    try {
+                        // Get creator nickname if available
+                        val creatorNickname = meshNetworkService.getPeerName(annotation.creatorId)
+                        
+                        annotationNotificationManager.showAnnotationNotification(
+                            annotation = annotation,
+                            userLatitude = userLat,
+                            userLongitude = userLng,
+                            creatorNickname = creatorNickname
+                        )
+                        
+                        Log.d("MeshForegroundService", "Showed notification for new annotation: ${annotation.id} from creator: ${annotation.creatorId}")
+                    } catch (e: Exception) {
+                        Log.e("MeshForegroundService", "Error showing annotation notification", e)
+                    }
+                }
+                
+                // Clean up seen annotations set to prevent memory leaks
+                val currentAnnotationIds = annotations.map { it.id }.toSet()
+                seenAnnotations.retainAll(currentAnnotationIds)
+            }
+        }
+    }
+    
+    /**
+     * Get the current user's identifier to filter out self-created annotations
+     * Uses the same logic as AnnotationViewModel.getMeshDeviceIdentifier()
+     */
+    private fun getCurrentUserIdentifier(): String {
+        // Get the current mesh protocol
+        val currentProtocol = meshProtocolProvider.protocol.value
+        
+        // Try to get the local node ID from the mesh protocol
+        val localNodeId = currentProtocol.localNodeIdOrNickname.value
+        
+        if (!localNodeId.isNullOrEmpty()) {
+            return localNodeId
+        }
+        
+        // Fallback if no mesh node ID available
+        return "unknown_mesh_device"
+    }
+    
+    /**
+     * Check if an annotation was created by the current user
+     * Handles both mesh device ID and nickname cases
+     */
+    private fun isAnnotationCreatedByCurrentUser(annotation: MapAnnotation, currentUserIdentifier: String): Boolean {
+        // Direct match with mesh device ID
+        if (annotation.creatorId == currentUserIdentifier) {
+            return true
+        }
+        
+        // Check if creatorId matches the user's nickname
+        val prefs = applicationContext.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+        val userNickname = prefs.getString("nickname", null)
+        if (userNickname != null && annotation.creatorId == userNickname) {
+            return true
+        }
+        
+        return false
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d("MeshForegroundService", "onStartCommand called: intent=$intent, flags=$flags, startId=$startId")
@@ -290,6 +406,7 @@ class MeshForegroundService : Service() {
         connectionStateJob?.cancel()
         healthCheckJob?.cancel()
         socketHealthCheckJob?.cancel()
+        annotationNotificationJob?.cancel()
         // Clear the protocol reference
         currentProtocol = null
         // Optionally clean up protocol if needed

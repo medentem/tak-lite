@@ -73,8 +73,14 @@ class AnnotationFragment : Fragment(), LayersTarget {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        // Log fragment creation details
+        Log.d("AnnotationFragment", "onViewCreated() called - savedInstanceState: ${savedInstanceState != null}")
+        Log.d("AnnotationFragment", "hasSavedAnnotations(): ${viewModel.hasSavedAnnotations()}")
+        Log.d("AnnotationFragment", "isAdded: $isAdded")
+
         // Check for saved annotations and show dialog if needed
         if (viewModel.hasSavedAnnotations() && isAdded) {
+            Log.d("AnnotationFragment", "Showing restore annotations dialog")
             showRestoreAnnotationsDialog()
         }
 
@@ -683,5 +689,9 @@ class AnnotationFragment : Fragment(), LayersTarget {
         } catch (e: Exception) {
             Log.w("AnnotationFragment", "Failed to toggle predictions overlay: ${e.message}", e)
         }
+    }
+
+    fun getAnnotationController(): AnnotationController? {
+        return if (::annotationController.isInitialized) annotationController else null
     }
 } 

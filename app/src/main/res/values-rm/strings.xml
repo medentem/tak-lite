@@ -54,6 +54,8 @@
     <string name="prevent_screen_sleep">Impedir che il visur durma cura che l\'app è averta</string>
     <string name="show_packet_summary">Mussar Resumè da Pachets</string>
     <string name="show_packet_overlay">Mussar surposiziun cun ils ultims 3 pachets retschavids</string>
+    <string name="annotation_notifications">Notificaziuns d\'Annotaziuns</string>
+    <string name="enable_annotation_notifications">Mussar notificaziuns per novas annotaziuns</string>
     <string name="location_prediction">Previsiun da Posiziun</string>
     <string name="show_predicted_location">Mussar posiziun prevista per peers</string>
     <string name="advanced">Avanzà</string>
@@ -421,6 +423,33 @@
     <string name="notification_channel_description">Notificaziuns per novs messadis</string>
     <string name="notification_reply">Respunder</string>
     <string name="notification_unknown_sender">Incognit</string>
+    
+    <!-- Annotation Notifications -->
+    <string name="notification_channel_annotations">Annotaziuns TAKLite</string>
+    <string name="notification_channel_annotations_description">Notificaziuns per novas annotaziuns da la carta</string>
+    <string name="notification_channel_annotations_urgent">Annotaziuns Urgentas TAKLite</string>
+    <string name="notification_channel_annotations_urgent_description">Notificaziuns da priorità auta per annotaziuns urgentas</string>
+    <string name="notification_annotation_title">%1$s da %2$s</string>
+    <string name="notification_annotation_distance">%1$s da distanza</string>
+    <string name="notification_annotation_label">%1$s</string>
+    <string name="notification_annotation_location_poi">Punct d\'Interess</string>
+    <string name="notification_annotation_location_line">Lingia cun %1$d puncts</string>
+    <string name="notification_annotation_location_area">Zona (radius %1$s km)</string>
+    <string name="notification_annotation_location_polygon">Poligon cun %1$d puncts</string>
+    <string name="notification_annotations_group">%1$d novas annotaziuns</string>
+    <string name="notification_annotations_urgent_group">%1$d urgentas, %2$d annotaziuns totalas</string>
+    <string name="notification_urgent_annotations">%1$d annotaziuns urgentas en vischinanza:</string>
+    <string name="notification_regular_annotations">%1$d autras annotaziuns</string>
+    <string name="notification_action_view_map">Mussar sin la Carta</string>
+    <string name="notification_action_dismiss">Refusar</string>
+    <string name="annotation_type_danger">Pericul</string>
+    <string name="annotation_type_warning">Avertiment</string>
+    <string name="annotation_type_poi">Punct d\'Interess</string>
+    <string name="annotation_type_waypoint">Punct da Referenza</string>
+    <string name="annotation_type_line">Lingia</string>
+    <string name="annotation_type_area">Zona</string>
+    <string name="annotation_type_polygon">Poligon</string>
+    <string name="annotation_type_deletion">Stizzar</string>
     
     <!-- Purchase Dialog Strings -->
     <string name="support_tier_1">Nivell da Support 1</string>

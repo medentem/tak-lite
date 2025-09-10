@@ -54,6 +54,8 @@
     <string name="prevent_screen_sleep">Prevent the screen from sleeping while app is open</string>
     <string name="show_packet_summary">Show Packet Summary</string>
     <string name="show_packet_overlay">Show overlay with last 3 received packets</string>
+    <string name="annotation_notifications">Annotation Notifications</string>
+    <string name="enable_annotation_notifications">Show notifications for new annotations</string>
     <string name="location_prediction">Location Prediction</string>
     <string name="show_predicted_location">Show predicted location for peers</string>
     <string name="advanced">Advanced</string>
@@ -396,6 +398,33 @@
     <!-- Notification Strings -->
     <string name="notification_channel_messages">Messages</string>
     <string name="notification_channel_description">Notifications for new messages</string>
+    
+    <!-- Annotation Notifications -->
+    <string name="notification_channel_annotations">TAKLite Annotations</string>
+    <string name="notification_channel_annotations_description">Notifications for new map annotations</string>
+    <string name="notification_channel_annotations_urgent">TAKLite Urgent Annotations</string>
+    <string name="notification_channel_annotations_urgent_description">High priority notifications for urgent annotations</string>
+    <string name="notification_annotation_title">%1$s from %2$s</string>
+    <string name="notification_annotation_distance">%1$s away</string>
+    <string name="notification_annotation_label">%1$s</string>
+    <string name="notification_annotation_location_poi">Point of Interest</string>
+    <string name="notification_annotation_location_line">Line with %1$d points</string>
+    <string name="notification_annotation_location_area">Area (radius %1$s km)</string>
+    <string name="notification_annotation_location_polygon">Polygon with %1$d points</string>
+    <string name="notification_annotations_group">%1$d new annotations</string>
+    <string name="notification_annotations_urgent_group">%1$d urgent, %2$d total annotations</string>
+    <string name="notification_urgent_annotations">%1$d urgent annotations nearby:</string>
+    <string name="notification_regular_annotations">%1$d other annotations</string>
+    <string name="notification_action_view_map">View on Map</string>
+    <string name="notification_action_dismiss">Dismiss</string>
+    <string name="annotation_type_danger">Danger</string>
+    <string name="annotation_type_warning">Warning</string>
+    <string name="annotation_type_poi">Point of Interest</string>
+    <string name="annotation_type_waypoint">Waypoint</string>
+    <string name="annotation_type_line">Line</string>
+    <string name="annotation_type_area">Area</string>
+    <string name="annotation_type_polygon">Polygon</string>
+    <string name="annotation_type_deletion">Deletion</string>
     <string name="notification_reply">Reply</string>
     <string name="notification_unknown_sender">Unknown</string>
     

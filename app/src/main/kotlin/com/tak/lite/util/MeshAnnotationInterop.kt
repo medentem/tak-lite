@@ -24,6 +24,9 @@ import kotlinx.serialization.json.longOrNull
 // TODO: There should be protobufs for this stuff. We can PR that to the official meshtastic firmware later
 object MeshAnnotationInterop {
     private const val TAG = "MeshAnnotationInterop"
+    
+    // Custom Json instance that ignores unknown keys to handle server responses with extra fields
+    private val json = Json { ignoreUnknownKeys = true }
 
     fun mapAnnotationToMeshData(
         annotation: MapAnnotation,
@@ -290,7 +293,7 @@ object MeshAnnotationInterop {
                     }
                 }))
             }
-            else -> Json.encodeToString(MapAnnotation.serializer(), annotation)
+            else -> json.encodeToString(MapAnnotation.serializer(), annotation)
         }
         Log.d(TAG, "Serialized annotation to JSON: $jsonString")
         val takPacketBuilder = ATAKProtos.TAKPacket.newBuilder()
@@ -347,14 +350,14 @@ object MeshAnnotationInterop {
             val jsonString = takPacket.detail.toStringUtf8()
             Log.d(TAG, "Extracted JSON from TAKPacket: $jsonString")
             // Try to detect minified POI/Line/Area/Deletion
-            val json = kotlinx.serialization.json.Json.parseToJsonElement(jsonString)
-            if (json is JsonObject) {
-                when (json["t"]?.jsonPrimitive?.contentOrNull) {
+            val jsonElement = kotlinx.serialization.json.Json.parseToJsonElement(jsonString)
+            if (jsonElement is JsonObject) {
+                when (jsonElement["t"]?.jsonPrimitive?.contentOrNull) {
                     "poi" -> {
-                        val id = json["i"]?.jsonPrimitive?.content ?: return null
-                        val creatorId = json["c"]?.jsonPrimitive?.content ?: "local"
-                        val timestamp = json["ts"]?.jsonPrimitive?.longOrNull ?: System.currentTimeMillis()
-                        val colorShort = json["cl"]?.jsonPrimitive?.content ?: "g"
+                        val id = jsonElement["i"]?.jsonPrimitive?.content ?: return null
+                        val creatorId = jsonElement["c"]?.jsonPrimitive?.content ?: "local"
+                        val timestamp = jsonElement["ts"]?.jsonPrimitive?.longOrNull ?: System.currentTimeMillis()
+                        val colorShort = jsonElement["cl"]?.jsonPrimitive?.content ?: "g"
                         val color = when (colorShort) {
                             "g" -> AnnotationColor.GREEN
                             "y" -> AnnotationColor.YELLOW
@@ -362,11 +365,11 @@ object MeshAnnotationInterop {
                             "b" -> AnnotationColor.BLACK
                             else -> AnnotationColor.GREEN
                         }
-                        val posObj = json["p"]?.jsonObject
+                        val posObj = jsonElement["p"]?.jsonObject
                         // Integer decoding with 5 decimal places
                         val lat = posObj?.get("a")?.jsonPrimitive?.longOrNull?.toDouble()?.div(1e5) ?: 0.0
                         val lon = posObj?.get("o")?.jsonPrimitive?.longOrNull?.toDouble()?.div(1e5) ?: 0.0
-                        val shapeShort = json["s"]?.jsonPrimitive?.content ?: "c"
+                        val shapeShort = jsonElement["s"]?.jsonPrimitive?.content ?: "c"
                         val shape = when (shapeShort) {
                             "c" -> PointShape.CIRCLE
                             "e" -> PointShape.EXCLAMATION
@@ -374,8 +377,8 @@ object MeshAnnotationInterop {
                             "t" -> PointShape.TRIANGLE
                             else -> PointShape.CIRCLE
                         }
-                        val expirationTime = json["e"]?.jsonPrimitive?.longOrNull
-                        val label = json["l"]?.jsonPrimitive?.content
+                        val expirationTime = jsonElement["e"]?.jsonPrimitive?.longOrNull
+                        val label = jsonElement["l"]?.jsonPrimitive?.content
                         MapAnnotation.PointOfInterest(
                             id = id,
                             creatorId = creatorId,
@@ -388,10 +391,10 @@ object MeshAnnotationInterop {
                         )
                     }
                     "line" -> {
-                        val id = json["i"]?.jsonPrimitive?.content ?: return null
-                        val creatorId = json["c"]?.jsonPrimitive?.content ?: "local"
-                        val timestamp = json["ts"]?.jsonPrimitive?.longOrNull ?: System.currentTimeMillis()
-                        val colorShort = json["cl"]?.jsonPrimitive?.content ?: "g"
+                        val id = jsonElement["i"]?.jsonPrimitive?.content ?: return null
+                        val creatorId = jsonElement["c"]?.jsonPrimitive?.content ?: "local"
+                        val timestamp = jsonElement["ts"]?.jsonPrimitive?.longOrNull ?: System.currentTimeMillis()
+                        val colorShort = jsonElement["cl"]?.jsonPrimitive?.content ?: "g"
                         val color = when (colorShort) {
                             "g" -> AnnotationColor.GREEN
                             "y" -> AnnotationColor.YELLOW
@@ -400,7 +403,7 @@ object MeshAnnotationInterop {
                             else -> AnnotationColor.GREEN
                         }
                         // Delta decoding with 5 decimal places
-                        val pointsArr = json["pts"]?.jsonArray?.let { arr ->
+                        val pointsArr = jsonElement["pts"]?.jsonArray?.let { arr ->
                             val decoded = mutableListOf<com.tak.lite.model.LatLngSerializable>()
                             var lastLat: Long? = null
                             var lastLon: Long? = null
@@ -424,15 +427,15 @@ object MeshAnnotationInterop {
                             }
                             decoded
                         } ?: emptyList()
-                        val styleShort = json["st"]?.jsonPrimitive?.content ?: "s"
+                        val styleShort = jsonElement["st"]?.jsonPrimitive?.content ?: "s"
                         val style = when (styleShort) {
                             "s" -> LineStyle.SOLID
                             "d" -> LineStyle.DASHED
                             else -> LineStyle.SOLID
                         }
-                        val arrowHead = json["ah"]?.jsonPrimitive?.intOrNull == 1
-                        val expirationTime = json["e"]?.jsonPrimitive?.longOrNull
-                        val label = json["l"]?.jsonPrimitive?.content
+                        val arrowHead = jsonElement["ah"]?.jsonPrimitive?.intOrNull == 1
+                        val expirationTime = jsonElement["e"]?.jsonPrimitive?.longOrNull
+                        val label = jsonElement["l"]?.jsonPrimitive?.content
                         MapAnnotation.Line(
                             id = id,
                             creatorId = creatorId,
@@ -446,10 +449,10 @@ object MeshAnnotationInterop {
                         )
                     }
                     "area" -> {
-                        val id = json["i"]?.jsonPrimitive?.content ?: return null
-                        val creatorId = json["c"]?.jsonPrimitive?.content ?: "local"
-                        val timestamp = json["ts"]?.jsonPrimitive?.longOrNull ?: System.currentTimeMillis()
-                        val colorShort = json["cl"]?.jsonPrimitive?.content ?: "g"
+                        val id = jsonElement["i"]?.jsonPrimitive?.content ?: return null
+                        val creatorId = jsonElement["c"]?.jsonPrimitive?.content ?: "local"
+                        val timestamp = jsonElement["ts"]?.jsonPrimitive?.longOrNull ?: System.currentTimeMillis()
+                        val colorShort = jsonElement["cl"]?.jsonPrimitive?.content ?: "g"
                         val color = when (colorShort) {
                             "g" -> AnnotationColor.GREEN
                             "y" -> AnnotationColor.YELLOW
@@ -457,15 +460,15 @@ object MeshAnnotationInterop {
                             "b" -> AnnotationColor.BLACK
                             else -> AnnotationColor.GREEN
                         }
-                        val centerObj = json["ctr"]?.jsonObject
+                        val centerObj = jsonElement["ctr"]?.jsonObject
                         // Integer decoding with 5 decimal places
                         val lat = centerObj?.get("a")?.jsonPrimitive?.longOrNull?.toDouble()?.div(1e5) ?: 0.0
                         val lon = centerObj?.get("o")?.jsonPrimitive?.longOrNull?.toDouble()?.div(1e5) ?: 0.0
                         // Radius is now stored as integer centimeters, convert back to meters
-                        val radiusCm = json["r"]?.jsonPrimitive?.longOrNull ?: 0L
+                        val radiusCm = jsonElement["r"]?.jsonPrimitive?.longOrNull ?: 0L
                         val radius = radiusCm.toDouble() / 100.0
-                        val expirationTime = json["e"]?.jsonPrimitive?.longOrNull
-                        val label = json["l"]?.jsonPrimitive?.content
+                        val expirationTime = jsonElement["e"]?.jsonPrimitive?.longOrNull
+                        val label = jsonElement["l"]?.jsonPrimitive?.content
                         MapAnnotation.Area(
                             id = id,
                             creatorId = creatorId,
@@ -478,10 +481,10 @@ object MeshAnnotationInterop {
                         )
                     }
                     "polygon" -> {
-                        val id = json["i"]?.jsonPrimitive?.content ?: return null
-                        val creatorId = json["c"]?.jsonPrimitive?.content ?: "local"
-                        val timestamp = json["ts"]?.jsonPrimitive?.longOrNull ?: System.currentTimeMillis()
-                        val colorShort = json["cl"]?.jsonPrimitive?.content ?: "g"
+                        val id = jsonElement["i"]?.jsonPrimitive?.content ?: return null
+                        val creatorId = jsonElement["c"]?.jsonPrimitive?.content ?: "local"
+                        val timestamp = jsonElement["ts"]?.jsonPrimitive?.longOrNull ?: System.currentTimeMillis()
+                        val colorShort = jsonElement["cl"]?.jsonPrimitive?.content ?: "g"
                         val color = when (colorShort) {
                             "g" -> AnnotationColor.GREEN
                             "y" -> AnnotationColor.YELLOW
@@ -490,7 +493,7 @@ object MeshAnnotationInterop {
                             else -> AnnotationColor.GREEN
                         }
                         // Delta decoding with 5 decimal places
-                        val pointsArr = json["pts"]?.jsonArray?.let { arr ->
+                        val pointsArr = jsonElement["pts"]?.jsonArray?.let { arr ->
                             val decoded = mutableListOf<com.tak.lite.model.LatLngSerializable>()
                             var lastLat: Long? = null
                             var lastLon: Long? = null
@@ -514,10 +517,10 @@ object MeshAnnotationInterop {
                             }
                             decoded
                         } ?: emptyList()
-                        val fillOpacity = json["fo"]?.jsonPrimitive?.doubleOrNull ?: 0.0
-                        val strokeWidth = json["sw"]?.jsonPrimitive?.doubleOrNull ?: 0.0
-                        val expirationTime = json["e"]?.jsonPrimitive?.longOrNull
-                        val label = json["l"]?.jsonPrimitive?.content
+                        val fillOpacity = jsonElement["fo"]?.jsonPrimitive?.doubleOrNull ?: 0.0
+                        val strokeWidth = jsonElement["sw"]?.jsonPrimitive?.doubleOrNull ?: 0.0
+                        val expirationTime = jsonElement["e"]?.jsonPrimitive?.longOrNull
+                        val label = jsonElement["l"]?.jsonPrimitive?.content
                         MapAnnotation.Polygon(
                             id = id,
                             creatorId = creatorId,
@@ -531,10 +534,10 @@ object MeshAnnotationInterop {
                         )
                     }
                     "del" -> {
-                        val id = json["i"]?.jsonPrimitive?.content ?: return null
-                        val creatorId = json["c"]?.jsonPrimitive?.content ?: "local"
-                        val timestamp = json["ts"]?.jsonPrimitive?.longOrNull ?: System.currentTimeMillis()
-                        val expirationTime = json["e"]?.jsonPrimitive?.longOrNull
+                        val id = jsonElement["i"]?.jsonPrimitive?.content ?: return null
+                        val creatorId = jsonElement["c"]?.jsonPrimitive?.content ?: "local"
+                        val timestamp = jsonElement["ts"]?.jsonPrimitive?.longOrNull ?: System.currentTimeMillis()
+                        val expirationTime = jsonElement["e"]?.jsonPrimitive?.longOrNull
                         MapAnnotation.Deletion(
                             id = id,
                             creatorId = creatorId,
@@ -542,10 +545,10 @@ object MeshAnnotationInterop {
                             expirationTime = expirationTime
                         )
                     }
-                    else -> Json.decodeFromString<MapAnnotation>(jsonString)
+                    else -> json.decodeFromString<MapAnnotation>(jsonString)
                 }
             } else {
-                Json.decodeFromString<MapAnnotation>(jsonString)
+                json.decodeFromString<MapAnnotation>(jsonString)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Exception in meshDataToMapAnnotation", e)
@@ -600,7 +603,7 @@ object MeshAnnotationInterop {
         batteryLevel: Int? = null
     ): MeshProtos.Data {
         // Use a compact JSON array of IDs for space efficiency
-        val jsonArray = Json.encodeToString(ids)
+        val jsonArray = json.encodeToString(ids)
         val takPacketBuilder = ATAKProtos.TAKPacket.newBuilder()
             .setDetail(ByteString.copyFrom(jsonArray.toByteArray(Charsets.UTF_8)))
         if (!nickname.isNullOrBlank()) {
@@ -632,7 +635,7 @@ object MeshAnnotationInterop {
             status = status,
             timestamp = System.currentTimeMillis()
         )
-        val statusJson = Json.encodeToString(statusUpdate)
+        val statusJson = json.encodeToString(statusUpdate)
         takPacketBuilder.detail = ByteString.copyFrom(statusJson.toByteArray(Charsets.UTF_8))
         
         if (!nickname.isNullOrBlank()) {
@@ -663,7 +666,7 @@ object MeshAnnotationInterop {
             
             // Try to parse as UserStatusUpdate first
             try {
-                val statusUpdate = Json.decodeFromString<com.tak.lite.model.UserStatusUpdate>(jsonString)
+                val statusUpdate = json.decodeFromString<com.tak.lite.model.UserStatusUpdate>(jsonString)
                 return statusUpdate.status
             } catch (e: Exception) {
                 // Fallback to old format for backward compatibility

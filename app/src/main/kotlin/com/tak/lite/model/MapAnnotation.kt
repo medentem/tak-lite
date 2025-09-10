@@ -143,7 +143,7 @@ data class LatLngSerializable(
             }
         }
     }
-    
+
     companion object {
         fun fromMapLibreLatLng(latLng: org.maplibre.android.geometry.LatLng): LatLngSerializable {
             return LatLngSerializable(latLng.latitude, latLng.longitude)

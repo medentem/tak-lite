@@ -51,6 +51,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.TakLite.Splash">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -76,6 +77,14 @@
             android:exported="false">
             <intent-filter>
                 <action android:name="com.tak.lite.ACTION_REPLY" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".notification.AnnotationNotificationReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.tak.lite.ACTION_DISMISS_ANNOTATION" />
             </intent-filter>
         </receiver>
     </application>

@@ -1,5 +1,6 @@
 package com.tak.lite.ui.map
 
+// Extension function to convert LatLngSerializable to LatLng
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.PointF
@@ -40,7 +41,7 @@ class AnnotationController(
     private val annotationOverlayView: AnnotationOverlayView,
     private val annotationStatusOverlayView: AnnotationStatusOverlayView,
     private val onAnnotationChanged: (() -> Unit)? = null,
-    mapLibreMap: MapLibreMap
+    private val mapLibreMap: MapLibreMap
 ) {
     private var pendingPoiLatLng: LatLng? = null
     var editingPoiId: String? = null
@@ -2128,5 +2129,66 @@ class AnnotationController(
         // Minimal updates: e.g., popover positions only
         popoverManager.updatePopoverPosition()
         // No full renders here—native layers auto-update
+    }
+
+    /**
+     * Focus on an annotation by ID - centers the map and shows the annotation popover
+     */
+    fun focusOnAnnotation(annotationId: String) {
+        Log.d("AnnotationController", "focusOnAnnotation: annotationId=$annotationId")
+        
+        // Find the annotation by ID
+        val annotation = annotationViewModel.uiState.value.annotations.find { it.id == annotationId }
+        if (annotation == null) {
+            Log.e("AnnotationController", "Annotation not found: $annotationId")
+            return
+        }
+        
+        // Get the position of the annotation
+        val position = when (annotation) {
+            is MapAnnotation.PointOfInterest -> annotation.position.toMapLibreLatLngSafe()
+            is MapAnnotation.Line -> annotation.points.firstOrNull()?.toMapLibreLatLngSafe()
+            is MapAnnotation.Area -> annotation.center.toMapLibreLatLngSafe()
+            is MapAnnotation.Polygon -> {
+                if (annotation.points.isNotEmpty()) {
+                    val avgLat = annotation.points.map { it.lt }.average()
+                    val avgLng = annotation.points.map { it.lng }.average()
+                    LatLng(avgLat, avgLng)
+                } else null
+            }
+            is MapAnnotation.Deletion -> null
+        }
+        
+        if (position != null) {
+            // Center the map on the annotation
+            mapLibreMap?.animateCamera(
+                org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(position, 16.0)
+            )
+            
+            // Show the appropriate popover after a short delay to allow camera animation
+            fragment.lifecycleScope.launch {
+                kotlinx.coroutines.delay(500) // Wait for camera animation
+                when (annotation) {
+                    is MapAnnotation.PointOfInterest -> {
+                        val screenPoint = mapLibreMap?.projection?.toScreenLocation(position)
+                        if (screenPoint != null) {
+                            showPoiLabel(annotationId, screenPoint)
+                        }
+                    }
+                    is MapAnnotation.Area -> {
+                        val screenPoint = mapLibreMap?.projection?.toScreenLocation(position)
+                        if (screenPoint != null) {
+                            showAreaLabel(annotationId, screenPoint)
+                        }
+                    }
+                    // For lines and polygons, we could show a different popover or just center on them
+                    else -> {
+                        Log.d("AnnotationController", "Focused on ${annotation::class.simpleName} annotation: $annotationId")
+                    }
+                }
+            }
+        } else {
+            Log.e("AnnotationController", "Could not determine position for annotation: $annotationId")
+        }
     }
 }

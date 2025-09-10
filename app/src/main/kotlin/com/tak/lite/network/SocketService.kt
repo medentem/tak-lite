@@ -25,6 +25,9 @@ class SocketService(private val context: Context) {
     private val TAG = "SocketService"
     private val prefs = context.getSharedPreferences("server_prefs", Context.MODE_PRIVATE)
     
+    // Custom Json instance that ignores unknown keys to handle server responses with extra fields
+    private val json = Json { ignoreUnknownKeys = true }
+    
     private var socket: Socket? = null
     private var serverUrl: String? = null
     private var authToken: String? = null
@@ -191,7 +194,7 @@ class SocketService(private val context: Context) {
         
         try {
             // Parse the annotation to JSON object instead of string
-            val annotationJson = Json.encodeToString(MapAnnotation.serializer(), annotation)
+            val annotationJson = json.encodeToString(MapAnnotation.serializer(), annotation)
             val annotationObject = JSONObject(annotationJson)
             
             val annotationData = JSONObject().apply {
@@ -373,7 +376,7 @@ class SocketService(private val context: Context) {
                 val annotationData = data?.getString("data")
                 
                 if (annotationData != null) {
-                    val annotation = Json.decodeFromString<MapAnnotation>(annotationData)
+                    val annotation = json.decodeFromString<MapAnnotation>(annotationData)
                     
                     // Update annotations list
                     val currentAnnotations = _annotations.value.toMutableList()

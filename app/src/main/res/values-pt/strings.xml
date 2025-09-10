@@ -54,6 +54,8 @@
     <string name="prevent_screen_sleep">Impedir que a tela durma enquanto o app está aberto</string>
     <string name="show_packet_summary">Mostrar Resumo de Pacotes</string>
     <string name="show_packet_overlay">Mostrar sobreposição com os últimos 3 pacotes recebidos</string>
+    <string name="annotation_notifications">Notificações de Anotações</string>
+    <string name="enable_annotation_notifications">Mostrar notificações para novas anotações</string>
     <string name="location_prediction">Previsão de Localização</string>
     <string name="show_predicted_location">Mostrar localização prevista para pares</string>
     <string name="advanced">Avançado</string>
@@ -421,6 +423,33 @@
     <string name="notification_channel_description">Notificações para novas mensagens</string>
     <string name="notification_reply">Responder</string>
     <string name="notification_unknown_sender">Desconhecido</string>
+    
+    <!-- Annotation Notifications -->
+    <string name="notification_channel_annotations">Anotações TAKLite</string>
+    <string name="notification_channel_annotations_description">Notificações para novas anotações do mapa</string>
+    <string name="notification_channel_annotations_urgent">Anotações Urgentes TAKLite</string>
+    <string name="notification_channel_annotations_urgent_description">Notificações de alta prioridade para anotações urgentes</string>
+    <string name="notification_annotation_title">%1$s de %2$s</string>
+    <string name="notification_annotation_distance">%1$s de distância</string>
+    <string name="notification_annotation_label">%1$s</string>
+    <string name="notification_annotation_location_poi">Ponto de Interesse</string>
+    <string name="notification_annotation_location_line">Linha com %1$d pontos</string>
+    <string name="notification_annotation_location_area">Área (raio %1$s km)</string>
+    <string name="notification_annotation_location_polygon">Polígono com %1$d pontos</string>
+    <string name="notification_annotations_group">%1$d novas anotações</string>
+    <string name="notification_annotations_urgent_group">%1$d urgentes, %2$d anotações totais</string>
+    <string name="notification_urgent_annotations">%1$d anotações urgentes próximas:</string>
+    <string name="notification_regular_annotations">%1$d outras anotações</string>
+    <string name="notification_action_view_map">Ver no Mapa</string>
+    <string name="notification_action_dismiss">Descartar</string>
+    <string name="annotation_type_danger">Perigo</string>
+    <string name="annotation_type_warning">Aviso</string>
+    <string name="annotation_type_poi">Ponto de Interesse</string>
+    <string name="annotation_type_waypoint">Ponto de Referência</string>
+    <string name="annotation_type_line">Linha</string>
+    <string name="annotation_type_area">Área</string>
+    <string name="annotation_type_polygon">Polígono</string>
+    <string name="annotation_type_deletion">Exclusão</string>
     
     <!-- Purchase Dialog Strings -->
     <string name="support_tier_1">Nível de Suporte 1</string>

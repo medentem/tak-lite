@@ -450,13 +450,23 @@ class MeshtasticAidlProtocol @Inject constructor(
             }
             "com.geeksville.mesh.RECEIVED.ATAK_PLUGIN" -> {
                 try {
-                    val dataPacket = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        intent.getParcelableExtra("com.geeksville.mesh.Payload", DataPacket::class.java)
-                    } else {
-                        @Suppress("DEPRECATION")
-                        intent.getParcelableExtra("com.geeksville.mesh.Payload")
+                    val dataPacket = try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            intent.getParcelableExtra("com.geeksville.mesh.Payload", DataPacket::class.java)
+                        } else {
+                            @Suppress("DEPRECATION")
+                            intent.getParcelableExtra("com.geeksville.mesh.Payload")
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error extracting DataPacket from intent: ${e.message}", e)
+                        null
                     }
-                    handleAnnotation(dataPacket)
+                    
+                    if (dataPacket != null) {
+                        handleAnnotation(dataPacket)
+                    } else {
+                        Log.w(TAG, "Received null DataPacket from Meshtastic app")
+                    }
                 } catch (e: Exception) {
                     Log.e(TAG, "Error unmarshalling ATAK_PLUGIN: ${e.message}", e)
                 }

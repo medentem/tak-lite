@@ -54,6 +54,8 @@
     <string name="prevent_screen_sleep">Verhindern, dass der Bildschirm schläft, während die App geöffnet ist</string>
     <string name="show_packet_summary">Paketzusammenfassung anzeigen</string>
     <string name="show_packet_overlay">Overlay mit den letzten 3 empfangenen Paketen anzeigen</string>
+    <string name="annotation_notifications">Anmerkungs-Benachrichtigungen</string>
+    <string name="enable_annotation_notifications">Benachrichtigungen für neue Anmerkungen anzeigen</string>
     <string name="location_prediction">Standortvorhersage</string>
     <string name="show_predicted_location">Vorhergesagten Standort für Peers anzeigen</string>
     <string name="advanced">Erweitert</string>
@@ -421,6 +423,33 @@
     <string name="notification_channel_description">Benachrichtigungen für neue Nachrichten</string>
     <string name="notification_reply">Antworten</string>
     <string name="notification_unknown_sender">Unbekannt</string>
+    
+    <!-- Annotation Notifications -->
+    <string name="notification_channel_annotations">TAKLite Anmerkungen</string>
+    <string name="notification_channel_annotations_description">Benachrichtigungen für neue Kartenanmerkungen</string>
+    <string name="notification_channel_annotations_urgent">TAKLite Dringende Anmerkungen</string>
+    <string name="notification_channel_annotations_urgent_description">Hohe Priorität Benachrichtigungen für dringende Anmerkungen</string>
+    <string name="notification_annotation_title">%1$s von %2$s</string>
+    <string name="notification_annotation_distance">%1$s entfernt</string>
+    <string name="notification_annotation_label">%1$s</string>
+    <string name="notification_annotation_location_poi">Interessanter Punkt</string>
+    <string name="notification_annotation_location_line">Linie mit %1$d Punkten</string>
+    <string name="notification_annotation_location_area">Bereich (Radius %1$s km)</string>
+    <string name="notification_annotation_location_polygon">Polygon mit %1$d Punkten</string>
+    <string name="notification_annotations_group">%1$d neue Anmerkungen</string>
+    <string name="notification_annotations_urgent_group">%1$d dringend, %2$d Anmerkungen insgesamt</string>
+    <string name="notification_urgent_annotations">%1$d dringende Anmerkungen in der Nähe:</string>
+    <string name="notification_regular_annotations">%1$d andere Anmerkungen</string>
+    <string name="notification_action_view_map">Auf Karte anzeigen</string>
+    <string name="notification_action_dismiss">Verwerfen</string>
+    <string name="annotation_type_danger">Gefahr</string>
+    <string name="annotation_type_warning">Warnung</string>
+    <string name="annotation_type_poi">Interessanter Punkt</string>
+    <string name="annotation_type_waypoint">Wegpunkt</string>
+    <string name="annotation_type_line">Linie</string>
+    <string name="annotation_type_area">Bereich</string>
+    <string name="annotation_type_polygon">Polygon</string>
+    <string name="annotation_type_deletion">Löschung</string>
     
     <!-- Purchase Dialog Strings -->
     <string name="support_tier_1">Support-Stufe 1</string>

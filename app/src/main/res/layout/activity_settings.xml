@@ -923,6 +923,23 @@
                         android:paddingTop="4dp"
                         android:paddingBottom="4dp" />
 
+                    <!-- Annotation Notifications -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/annotation_notifications"
+                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                        android:paddingTop="16dp"
+                        android:paddingBottom="8dp" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/annotationNotificationsSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/enable_annotation_notifications"
+                        android:paddingTop="4dp"
+                        android:paddingBottom="4dp" />
+
                     <!-- Divider -->
                     <View
                         android:layout_width="match_parent"

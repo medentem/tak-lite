@@ -211,6 +211,13 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
+        // Log activity creation details
+        Log.d("MainActivity", "onCreate() called - savedInstanceState: ${savedInstanceState != null}")
+        Log.d("MainActivity", "Intent extras: ${intent.extras?.keySet()}")
+        Log.d("MainActivity", "Intent action: ${intent.action}")
+        Log.d("MainActivity", "Intent flags: ${intent.flags}")
+        Log.d("MainActivity", "Task ID: ${taskId}")
+        
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
@@ -317,6 +324,10 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                 mapLibreMap = map
                 _mapReadyLiveData.postValue(map)
                 mapController.setMapType(initialMapMode)
+                
+                // Handle focus annotation intent
+                handleFocusAnnotationIntent()
+                
                 // Center on last known location if available
                 lastLocation?.let { (lat, lon, zoom) ->
                     val latLng = LatLng(lat, lon)
@@ -1830,6 +1841,47 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
         } catch (e: Exception) {
             Log.e("MainActivity", "Error getting viewport bounds: ${e.message}", e)
             null
+        }
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        
+        // Log new intent details
+        Log.d("MainActivity", "onNewIntent() called - Intent: ${intent}")
+        Log.d("MainActivity", "Intent extras: ${intent?.extras?.keySet()}")
+        Log.d("MainActivity", "Intent action: ${intent?.action}")
+        Log.d("MainActivity", "Intent flags: ${intent?.flags}")
+        Log.d("MainActivity", "Task ID: ${taskId}")
+        
+        setIntent(intent)
+        handleFocusAnnotationIntent()
+    }
+
+    private fun handleFocusAnnotationIntent() {
+        val focusAnnotationId = intent.getStringExtra("focus_annotation_id")
+        if (focusAnnotationId != null) {
+            Log.d("MainActivity", "Focus annotation intent received: $focusAnnotationId")
+            
+            // Wait for the annotation fragment to be ready, then focus on the annotation
+            lifecycleScope.launch {
+                // Wait a bit for the fragment to be fully initialized
+                kotlinx.coroutines.delay(1000)
+                
+                val fragment = supportFragmentManager.findFragmentById(R.id.mainFragmentContainer) as? AnnotationFragment
+                if (fragment != null) {
+                    // Access the annotationController through the fragment
+                    val annotationController = fragment.getAnnotationController()
+                    if (annotationController != null) {
+                        annotationController.focusOnAnnotation(focusAnnotationId)
+                        Log.d("MainActivity", "Focused on annotation: $focusAnnotationId")
+                    } else {
+                        Log.w("MainActivity", "AnnotationController not ready for focus: $focusAnnotationId")
+                    }
+                } else {
+                    Log.w("MainActivity", "AnnotationFragment not found for focus: $focusAnnotationId")
+                }
+            }
         }
     }
 }
