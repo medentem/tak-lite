@@ -1508,7 +1508,9 @@ class SettingsActivity : BaseActivity() {
         serverUrlEditText.setOnFocusChangeListener { _, hasFocus ->
             if (!hasFocus) {
                 val url = serverUrlEditText.text.toString().trim()
-                prefs.edit().putString("server_url", url).apply()
+                // Normalize URL by removing trailing slash before saving
+                val normalizedUrl = url.removeSuffix("/")
+                prefs.edit().putString("server_url", normalizedUrl).apply()
             }
         }
         
@@ -1544,6 +1546,9 @@ class SettingsActivity : BaseActivity() {
             serverUrlEditText.error = getString(R.string.server_url_validation_error)
             return
         }
+        
+        // Normalize URL by removing trailing slash
+        val normalizedUrl = url.removeSuffix("/")
         if (username.isEmpty() || password.isEmpty()) {
             Toast.makeText(this, getString(R.string.credentials_required), Toast.LENGTH_SHORT).show()
             return
@@ -1558,26 +1563,26 @@ class SettingsActivity : BaseActivity() {
         lifecycleScope.launch {
             try {
                 // Test connection first
-                val connectionResult = serverApiService.testConnection(url)
+                val connectionResult = serverApiService.testConnection(normalizedUrl)
                 if (connectionResult.isFailure) {
                     throw Exception("Cannot reach server: ${connectionResult.exceptionOrNull()?.message}")
                 }
                 
                 // Attempt login
-                val loginResult = serverApiService.login(url, username, password)
+                val loginResult = serverApiService.login(normalizedUrl, username, password)
                 if (loginResult.isFailure) {
                     throw Exception(loginResult.exceptionOrNull()?.message ?: "Login failed")
                 }
                 
                 // Get user info to verify connection
-                val userInfoResult = serverApiService.getUserInfo(url)
+                val userInfoResult = serverApiService.getUserInfo(normalizedUrl)
                 if (userInfoResult.isFailure) {
                     throw Exception("Failed to get user info: ${userInfoResult.exceptionOrNull()?.message}")
                 }
                 
                 // Connect Socket.IO for real-time communication
                 val loginResponse = loginResult.getOrThrow()
-                socketService.connect(url, loginResponse.token)
+                socketService.connect(normalizedUrl, loginResponse.token)
                 
                 // Update UI for successful connection
                 serverStatusText.text = getString(R.string.server_connected)
@@ -1668,9 +1673,12 @@ class SettingsActivity : BaseActivity() {
             return
         }
         
+        // Normalize URL by removing trailing slash
+        val normalizedUrl = serverUrl.removeSuffix("/")
+        
         lifecycleScope.launch {
             try {
-                val teamsResult = serverApiService.getUserTeams(serverUrl)
+                val teamsResult = serverApiService.getUserTeams(normalizedUrl)
                 if (teamsResult.isFailure) {
                     throw Exception(teamsResult.exceptionOrNull()?.message ?: "Failed to load teams")
                 }

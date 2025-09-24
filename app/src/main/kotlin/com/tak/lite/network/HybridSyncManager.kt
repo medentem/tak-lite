@@ -145,6 +145,10 @@ class HybridSyncManager(
                     socketService.joinTeam(team.id)
                     Log.d(TAG, "Joined team on server: ${team.id}")
                     
+                    // Also join global room to receive global annotations
+                    socketService.joinGlobalRoom()
+                    Log.d(TAG, "Joined global room for global annotations")
+                    
                     // Process any queued items (don't acquire mutex since we already have it)
                     processOfflineQueueInternal()
                     
@@ -432,6 +436,8 @@ class HybridSyncManager(
             if (_isServerSyncEnabled.value && currentTeam != null) {
                 Log.d(TAG, "Auto-joining team on socket connect: ${currentTeam.name}")
                 socketService.joinTeam(currentTeam.id)
+                // Also join global room for global annotations
+                socketService.joinGlobalRoom()
             }
         }
     }
@@ -488,7 +494,7 @@ class HybridSyncManager(
                 }
                 
                 // Update repository (this will trigger UI updates)
-                    annotationRepository.handleAnnotation(resolvedAnnotation)
+                annotationRepository.handleAnnotation(resolvedAnnotation)
                 
                 // Determine if we should rebroadcast to mesh
                 if (shouldRebroadcastToMesh(resolvedAnnotation, source)) {

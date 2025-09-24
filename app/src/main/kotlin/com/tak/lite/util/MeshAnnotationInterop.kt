@@ -74,6 +74,7 @@ object MeshAnnotationInterop {
                 )
                 annotation.expirationTime?.let { map["e"] = it }
                 annotation.label?.let { map["l"] = it }
+                annotation.description?.let { map["d"] = it }
                 Json.encodeToString(JsonObject(map.mapValues { (k, v) ->
                     when (v) {
                         is String -> JsonPrimitive(v)
@@ -379,6 +380,7 @@ object MeshAnnotationInterop {
                         }
                         val expirationTime = jsonElement["e"]?.jsonPrimitive?.longOrNull
                         val label = jsonElement["l"]?.jsonPrimitive?.content
+                        val description = jsonElement["d"]?.jsonPrimitive?.content
                         MapAnnotation.PointOfInterest(
                             id = id,
                             creatorId = creatorId,
@@ -387,6 +389,7 @@ object MeshAnnotationInterop {
                             position = com.tak.lite.model.LatLngSerializable(lat, lon),
                             shape = shape,
                             label = label,
+                            description = description,
                             expirationTime = expirationTime
                         )
                     }

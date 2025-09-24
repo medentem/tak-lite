@@ -585,34 +585,49 @@ class AnnotationController(
     
     // === ENHANCED: Update POI annotations with native clustering ===
     fun updatePoiAnnotationsOnMap(mapLibreMap: MapLibreMap?, pois: List<MapAnnotation.PointOfInterest>) {
-        Log.d("PoiDebug", "updatePoiAnnotationsOnMap called with ${pois.size} POIs, using native clustering")
+        Log.d("PoiDebug", "updatePoiAnnotationsOnMap called with ${pois.size} POIs, clustering enabled: ${clusteringConfig.enablePoiClustering}")
         
         if (!clusteringConfig.enablePoiClustering) {
-            Log.d("PoiDebug", "Native POI clustering disabled")
-            return
-        }
-        
-        mapLibreMap?.getStyle { style ->
-            var featureCollection = FeatureCollection.fromFeatures(arrayOf())
-            if (pois.isNotEmpty()) {
-                featureCollection = poiAnnotationsToClusteredFeatureCollection(pois)
-            }
-            val source = style.getSourceAs<GeoJsonSource>(ClusteredLayerManager.POI_CLUSTERED_SOURCE)
-            if (source != null) {
-                source.setGeoJson(featureCollection.toJson())
-            } else {
-                // Create new source with data and clustering options
-                Log.d("PoiDebug", "Creating new POI clustered source")
-                try {
-                    clusteredLayerManager.setupPoiClusteredLayer(featureCollection.toJson())
-                } catch (e: Exception) {
-                    Log.e("PeerDotDebug", "Failed to create clustered source: ${e.message}", e)
+            Log.d("PoiDebug", "Native POI clustering disabled, updating non-clustered POI source")
+            // Update non-clustered POI source
+            mapLibreMap?.getStyle { style ->
+                val poiSourceId = "poi-source"
+                val source = style.getSourceAs<GeoJsonSource>(poiSourceId)
+                if (source != null) {
+                    var featureCollection = FeatureCollection.fromFeatures(arrayOf())
+                    if (pois.isNotEmpty()) {
+                        featureCollection = poiAnnotationsToClusteredFeatureCollection(pois)
+                    }
+                    source.setGeoJson(featureCollection)
+                    Log.d("PoiDebug", "Updated non-clustered POI source with ${pois.size} POIs")
+                } else {
+                    Log.e("PoiDebug", "Non-clustered POI source not found - this should have been created during initialization")
                 }
-                
-                // Retry timer layer setup now that clustered POI layer exists
-                poiTimerManager?.retrySetupTimerLayers()
-                lineTimerManager?.retrySetupTimerLayers()
-                polygonTimerManager?.retrySetupTimerLayers()
+            }
+        } else {
+            Log.d("PoiDebug", "Native POI clustering enabled, updating clustered POI source")
+            mapLibreMap?.getStyle { style ->
+                var featureCollection = FeatureCollection.fromFeatures(arrayOf())
+                if (pois.isNotEmpty()) {
+                    featureCollection = poiAnnotationsToClusteredFeatureCollection(pois)
+                }
+                val source = style.getSourceAs<GeoJsonSource>(ClusteredLayerManager.POI_CLUSTERED_SOURCE)
+                if (source != null) {
+                    source.setGeoJson(featureCollection.toJson())
+                } else {
+                    // Create new source with data and clustering options
+                    Log.d("PoiDebug", "Creating new POI clustered source")
+                    try {
+                        clusteredLayerManager.setupPoiClusteredLayer(featureCollection.toJson())
+                    } catch (e: Exception) {
+                        Log.e("PeerDotDebug", "Failed to create clustered source: ${e.message}", e)
+                    }
+                    
+                    // Retry timer layer setup now that clustered POI layer exists
+                    poiTimerManager?.retrySetupTimerLayers()
+                    lineTimerManager?.retrySetupTimerLayers()
+                    polygonTimerManager?.retrySetupTimerLayers()
+                }
             }
         }
         

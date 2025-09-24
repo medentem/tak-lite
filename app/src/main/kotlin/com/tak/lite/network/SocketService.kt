@@ -140,6 +140,22 @@ class SocketService(private val context: Context) {
     }
     
     /**
+     * Join global room to receive global annotations (annotations with null team_id)
+     */
+    fun joinGlobalRoom() {
+        Log.d(TAG, "joinGlobalRoom called, connection state: ${_connectionState.value}")
+        if (_connectionState.value != SocketConnectionState.Connected) {
+            Log.w(TAG, "Cannot join global room - not connected to server")
+            return
+        }
+        
+        // The server automatically adds clients to the global room when they join a team,
+        // but we need to ensure we're always in the global room for global annotations
+        socket?.emit("team:join", "global")
+        Log.d(TAG, "Joining global room for global annotations")
+    }
+    
+    /**
      * Leave current team
      */
     fun leaveTeam(teamId: String) {

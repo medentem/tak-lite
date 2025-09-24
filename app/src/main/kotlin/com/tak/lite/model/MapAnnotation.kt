@@ -32,6 +32,7 @@ sealed class MapAnnotation {
         val position: LatLngSerializable,
         val shape: PointShape,
         val label: String? = null,
+        val description: String? = null, // Additional description field for detailed information
         override val expirationTime: Long? = null,
         override val source: DataSource? = null,
         override val originalSource: DataSource? = null
@@ -48,6 +49,7 @@ sealed class MapAnnotation {
         val style: LineStyle = LineStyle.SOLID,
         val arrowHead: Boolean = true,
         val label: String? = null, // Optional label for the line
+        val description: String? = null, // Additional description field for detailed information
         override val expirationTime: Long? = null,
         override val source: DataSource? = null,
         override val originalSource: DataSource? = null
@@ -63,6 +65,7 @@ sealed class MapAnnotation {
         val center: LatLngSerializable,
         val radius: Double, // in meters
         val label: String? = null, // Optional label for the area
+        val description: String? = null, // Additional description field for detailed information
         override val expirationTime: Long? = null,
         override val source: DataSource? = null,
         override val originalSource: DataSource? = null
@@ -79,6 +82,7 @@ sealed class MapAnnotation {
         val fillOpacity: Float = 0.3f, // Fill transparency
         val strokeWidth: Float = 3f, // Border width
         val label: String? = null, // Optional label for the polygon
+        val description: String? = null, // Additional description field for detailed information
         override val expirationTime: Long? = null,
         override val source: DataSource? = null,
         override val originalSource: DataSource? = null

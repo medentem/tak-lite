@@ -500,6 +500,19 @@ class HybridPopoverManager(
         // Title line - only add if label exists
         poi.label?.let { lines.add(it) }
         
+        // Description line - add if description exists and is different from label
+        poi.description?.let { description ->
+            if (description.isNotBlank() && description != poi.label) {
+                // Truncate long descriptions to keep popover readable
+                val truncatedDescription = if (description.length > 100) {
+                    description.take(97) + "..."
+                } else {
+                    description
+                }
+                lines.add(truncatedDescription)
+            }
+        }
+        
         // Content lines (status will be handled separately)
         val ageSec = (System.currentTimeMillis() - poi.timestamp) / 1000
         val ageStr = if (ageSec > 60) "${ageSec / 60}m old" else "${ageSec}s old"
