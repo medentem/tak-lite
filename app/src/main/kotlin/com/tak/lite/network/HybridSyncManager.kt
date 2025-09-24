@@ -3,10 +3,15 @@ package com.tak.lite.network
 import android.content.Context
 import android.util.Log
 import com.tak.lite.data.model.Team
+import com.tak.lite.data.model.ServerAnnotation
 import com.tak.lite.di.MeshProtocol
 import com.tak.lite.model.DataSource
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PeerLocationEntry
+import com.tak.lite.model.LatLngSerializable
+import com.tak.lite.model.AnnotationColor
+import com.tak.lite.model.PointShape
+import com.tak.lite.model.LineStyle
 import com.tak.lite.model.copyAsLocal
 import com.tak.lite.model.copyWithSourceTracking
 import com.tak.lite.repository.AnnotationRepository
@@ -155,6 +160,10 @@ class HybridSyncManager(
                     Log.d(TAG, "Server sync enabled for team: ${team.name}")
                 }
                 clearMutexHolder()
+                
+                // Fetch existing annotations after enabling server sync
+                fetchExistingAnnotations(team.id)
+                
                 Log.d(TAG, "Completed enableServerSync coroutine for team: ${team.name}")
             } catch (e: Exception) {
                 Log.e(TAG, "Error in enableServerSync", e)
@@ -177,6 +186,208 @@ class HybridSyncManager(
                 
                 Log.d(TAG, "Server sync disabled")
             }
+        }
+    }
+    
+    /**
+     * Fetch existing annotations from server when first connecting to a team
+     */
+    private suspend fun fetchExistingAnnotations(teamId: String) {
+        try {
+            Log.d(TAG, "Fetching existing annotations for team: $teamId")
+            
+            // Get server URL from stored preferences
+            val serverUrl = context.getSharedPreferences("server_prefs", Context.MODE_PRIVATE)
+                .getString("server_url", null)
+            
+            if (serverUrl == null) {
+                Log.w(TAG, "No server URL available for fetching annotations")
+                return
+            }
+            
+            // Fetch annotations from server
+            val result = serverApiService.getAnnotations(serverUrl, teamId)
+            
+            if (result.isSuccess) {
+                val serverAnnotations = result.getOrThrow()
+                Log.d(TAG, "Successfully fetched ${serverAnnotations.size} annotations from server")
+                
+                // Process each annotation through the same flow as real-time annotations
+                serverAnnotations.forEach { serverAnnotation ->
+                    try {
+                        val mapAnnotation = convertServerAnnotationToMapAnnotation(serverAnnotation)
+                        if (mapAnnotation != null) {
+                            Log.d(TAG, "Processing historical annotation: ${mapAnnotation.id}")
+                            handleIncomingAnnotation(mapAnnotation, SyncSource.SERVER)
+                        } else {
+                            Log.w(TAG, "Failed to convert server annotation: ${serverAnnotation.id}")
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error processing historical annotation: ${serverAnnotation.id}", e)
+                    }
+                }
+                
+                Log.d(TAG, "Completed processing ${serverAnnotations.size} historical annotations")
+            } else {
+                Log.e(TAG, "Failed to fetch annotations from server: ${result.exceptionOrNull()?.message}")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching existing annotations", e)
+        }
+    }
+    
+    /**
+     * Convert server annotation to MapAnnotation
+     */
+    private fun convertServerAnnotationToMapAnnotation(serverAnnotation: ServerAnnotation): MapAnnotation? {
+        return try {
+            val data = serverAnnotation.data
+            val type = serverAnnotation.type
+            
+            when (type) {
+                "poi" -> {
+                    val position = data["position"] as? Map<String, Any>
+                    val lat = (position?.get("lt") as? Number)?.toDouble()
+                    val lng = (position?.get("lng") as? Number)?.toDouble()
+                    
+                    if (lat != null && lng != null) {
+                        MapAnnotation.PointOfInterest(
+                            id = serverAnnotation.id,
+                            creatorId = serverAnnotation.user_id,
+                            timestamp = parseServerTimestamp(serverAnnotation.created_at),
+                            color = parseColor(data["color"] as? String),
+                            position = LatLngSerializable(lat, lng),
+                            shape = parseShape(data["shape"] as? String),
+                            label = data["label"] as? String,
+                            description = data["description"] as? String,
+                            source = DataSource.SERVER,
+                            originalSource = DataSource.SERVER
+                        )
+                    } else null
+                }
+                "line" -> {
+                    val points = data["points"] as? List<Map<String, Any>>
+                    if (points != null) {
+                        val latLngPoints = points.mapNotNull { point ->
+                            val pointLat = (point["lt"] as? Number)?.toDouble()
+                            val pointLng = (point["lng"] as? Number)?.toDouble()
+                            if (pointLat != null && pointLng != null) {
+                                LatLngSerializable(pointLat, pointLng)
+                            } else null
+                        }
+                        
+                        if (latLngPoints.isNotEmpty()) {
+                            MapAnnotation.Line(
+                                id = serverAnnotation.id,
+                                creatorId = serverAnnotation.user_id,
+                                timestamp = parseServerTimestamp(serverAnnotation.created_at),
+                                color = parseColor(data["color"] as? String),
+                                points = latLngPoints,
+                                style = parseLineStyle(data["style"] as? String),
+                                arrowHead = data["arrowHead"] as? Boolean ?: true,
+                                label = data["label"] as? String,
+                                description = data["description"] as? String,
+                                source = DataSource.SERVER,
+                                originalSource = DataSource.SERVER
+                            )
+                        } else null
+                    } else null
+                }
+                "area" -> {
+                    val center = data["center"] as? Map<String, Any>
+                    val centerLat = (center?.get("lt") as? Number)?.toDouble()
+                    val centerLng = (center?.get("lng") as? Number)?.toDouble()
+                    val radius = (data["radius"] as? Number)?.toDouble()
+                    
+                    if (centerLat != null && centerLng != null && radius != null) {
+                        MapAnnotation.Area(
+                            id = serverAnnotation.id,
+                            creatorId = serverAnnotation.user_id,
+                            timestamp = parseServerTimestamp(serverAnnotation.created_at),
+                            color = parseColor(data["color"] as? String),
+                            center = LatLngSerializable(centerLat, centerLng),
+                            radius = radius,
+                            label = data["label"] as? String,
+                            description = data["description"] as? String,
+                            source = DataSource.SERVER,
+                            originalSource = DataSource.SERVER
+                        )
+                    } else null
+                }
+                "polygon" -> {
+                    val points = data["points"] as? List<Map<String, Any>>
+                    if (points != null) {
+                        val latLngPoints = points.mapNotNull { point ->
+                            val pointLat = (point["lt"] as? Number)?.toDouble()
+                            val pointLng = (point["lng"] as? Number)?.toDouble()
+                            if (pointLat != null && pointLng != null) {
+                                LatLngSerializable(pointLat, pointLng)
+                            } else null
+                        }
+                        
+                        if (latLngPoints.isNotEmpty()) {
+                            MapAnnotation.Polygon(
+                                id = serverAnnotation.id,
+                                creatorId = serverAnnotation.user_id,
+                                timestamp = parseServerTimestamp(serverAnnotation.created_at),
+                                color = parseColor(data["color"] as? String),
+                                points = latLngPoints,
+                                fillOpacity = (data["fillOpacity"] as? Number)?.toFloat() ?: 0.3f,
+                                strokeWidth = (data["strokeWidth"] as? Number)?.toFloat() ?: 3f,
+                                label = data["label"] as? String,
+                                description = data["description"] as? String,
+                                source = DataSource.SERVER,
+                                originalSource = DataSource.SERVER
+                            )
+                        } else null
+                    } else null
+                }
+                else -> {
+                    Log.w(TAG, "Unknown annotation type from server: $type")
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error converting server annotation: ${serverAnnotation.id}", e)
+            null
+        }
+    }
+    
+    private fun parseServerTimestamp(timestamp: String): Long {
+        return try {
+            // Parse ISO 8601 timestamp
+            java.time.Instant.parse(timestamp).toEpochMilli()
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to parse timestamp: $timestamp", e)
+            System.currentTimeMillis()
+        }
+    }
+    
+    private fun parseColor(colorString: String?): AnnotationColor {
+        return when (colorString?.lowercase()) {
+            "green" -> AnnotationColor.GREEN
+            "yellow" -> AnnotationColor.YELLOW
+            "red" -> AnnotationColor.RED
+            "black" -> AnnotationColor.BLACK
+            "white" -> AnnotationColor.WHITE
+            else -> AnnotationColor.GREEN
+        }
+    }
+    
+    private fun parseShape(shapeString: String?): PointShape {
+        return when (shapeString?.lowercase()) {
+            "circle" -> PointShape.CIRCLE
+            "exclamation" -> PointShape.EXCLAMATION
+            "square" -> PointShape.SQUARE
+            "triangle" -> PointShape.TRIANGLE
+            else -> PointShape.CIRCLE
+        }
+    }
+    
+    private fun parseLineStyle(styleString: String?): LineStyle {
+        return when (styleString?.lowercase()) {
+            "dashed" -> LineStyle.DASHED
+            else -> LineStyle.SOLID
         }
     }
     

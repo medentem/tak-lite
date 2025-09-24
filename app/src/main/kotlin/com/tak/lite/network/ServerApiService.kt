@@ -243,6 +243,48 @@ class ServerApiService(private val context: Context) {
         }
     }
     
+    /**
+     * Fetch existing annotations for a team (includes team annotations + global annotations)
+     */
+    suspend fun getAnnotations(serverUrl: String, teamId: String): Result<List<ServerAnnotation>> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val request = Request.Builder()
+                    .url("$serverUrl/api/sync/annotations?teamId=$teamId")
+                    .get()
+                    .build()
+                
+                val response = client.newCall(request).execute()
+                
+                if (response.isSuccessful) {
+                    val responseBody = response.body?.string()
+                    if (responseBody != null) {
+                        val annotations = gson.fromJson(responseBody, Array<ServerAnnotation>::class.java).toList()
+                        Log.d("ServerApiService", "Fetched ${annotations.size} annotations for team $teamId")
+                        Result.success(annotations)
+                    } else {
+                        Result.failure(Exception("Empty response body"))
+                    }
+                } else {
+                    val errorBody = response.body?.string()
+                    val error = if (errorBody != null) {
+                        try {
+                            gson.fromJson(errorBody, ServerError::class.java)
+                        } catch (e: Exception) {
+                            ServerError("Failed to fetch annotations", errorBody)
+                        }
+                    } else {
+                        ServerError("Failed to fetch annotations", "HTTP ${response.code}")
+                    }
+                    Result.failure(Exception(error.error))
+                }
+            } catch (e: Exception) {
+                Log.e("ServerApiService", "Get annotations error", e)
+                Result.failure(e)
+            }
+        }
+    }
+    
     // Token management
     private fun storeToken(token: String) {
         prefs.edit().putString("server_token", token).apply()
