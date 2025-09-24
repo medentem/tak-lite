@@ -587,16 +587,25 @@ class AnnotationController(
     fun updatePoiAnnotationsOnMap(mapLibreMap: MapLibreMap?, pois: List<MapAnnotation.PointOfInterest>) {
         Log.d("PoiDebug", "updatePoiAnnotationsOnMap called with ${pois.size} POIs, clustering enabled: ${clusteringConfig.enablePoiClustering}")
         
+        // Debug: Log POI details including source
+        pois.forEach { poi ->
+            Log.d("PoiDebug", "POI: ${poi.id}, source: ${poi.source}, shape: ${poi.shape}, color: ${poi.color}, position: ${poi.position.lt}, ${poi.position.lng}")
+        }
+        
         if (!clusteringConfig.enablePoiClustering) {
             Log.d("PoiDebug", "Native POI clustering disabled, updating non-clustered POI source")
             // Update non-clustered POI source
             mapLibreMap?.getStyle { style ->
+                // Ensure POI icons are generated before updating source
+                generatePoiIcons(style)
+                
                 val poiSourceId = "poi-source"
                 val source = style.getSourceAs<GeoJsonSource>(poiSourceId)
                 if (source != null) {
                     var featureCollection = FeatureCollection.fromFeatures(arrayOf())
                     if (pois.isNotEmpty()) {
                         featureCollection = poiAnnotationsToClusteredFeatureCollection(pois)
+                        Log.d("PoiDebug", "Generated non-clustered feature collection with ${featureCollection.features()?.size ?: 0} features")
                     }
                     source.setGeoJson(featureCollection)
                     Log.d("PoiDebug", "Updated non-clustered POI source with ${pois.size} POIs")
@@ -607,13 +616,18 @@ class AnnotationController(
         } else {
             Log.d("PoiDebug", "Native POI clustering enabled, updating clustered POI source")
             mapLibreMap?.getStyle { style ->
+                // Ensure POI icons are generated before updating source
+                generatePoiIcons(style)
+                
                 var featureCollection = FeatureCollection.fromFeatures(arrayOf())
                 if (pois.isNotEmpty()) {
                     featureCollection = poiAnnotationsToClusteredFeatureCollection(pois)
+                    Log.d("PoiDebug", "Generated clustered feature collection with ${featureCollection.features()?.size ?: 0} features")
                 }
                 val source = style.getSourceAs<GeoJsonSource>(ClusteredLayerManager.POI_CLUSTERED_SOURCE)
                 if (source != null) {
                     source.setGeoJson(featureCollection.toJson())
+                    Log.d("PoiDebug", "Updated clustered POI source with ${pois.size} POIs")
                 } else {
                     // Create new source with data and clustering options
                     Log.d("PoiDebug", "Creating new POI clustered source")
@@ -1131,7 +1145,11 @@ class AnnotationController(
         val lineAnnotations = allAnnotations.filterIsInstance<MapAnnotation.Line>()
         
         Log.d("PoiDebug", "renderAllAnnotations: total=${allAnnotations.size}, nonPoi=${nonPoiAnnotations.size}, poi=${poiAnnotations.size}, lines=${lineAnnotations.size}")
-        Log.d("PoiDebug", "POI annotations: ${poiAnnotations.map { "${it.id}:${it.label}" }}")
+        Log.d("PoiDebug", "POI annotations: ${poiAnnotations.map { "${it.id}:${it.label}:${it.source}" }}")
+        
+        // Debug: Log annotation sources
+        val sourceCounts = allAnnotations.groupBy { it.source }.mapValues { it.value.size }
+        Log.d("PoiDebug", "Annotation sources: $sourceCounts")
         
         // Update unified annotation manager for lines, areas, and polygons
         val linesAndAreas = nonPoiAnnotations.filter { it is MapAnnotation.Line || it is MapAnnotation.Area || it is MapAnnotation.Polygon }
