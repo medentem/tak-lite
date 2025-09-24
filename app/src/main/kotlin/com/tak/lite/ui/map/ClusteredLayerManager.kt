@@ -7,6 +7,7 @@ import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.layers.SymbolLayer
+import org.maplibre.android.style.sources.GeoJsonSource
 
 /**
  * Manages clustered layers for peer dots and POIs using MapLibre native clustering
@@ -151,20 +152,28 @@ class ClusteredLayerManager(
      * Setup POIs with native clustering
      */
     fun setupPoiClusteredLayer(data: String) {
+        val startTime = System.currentTimeMillis()
+        Log.d(TAG, "=== POI CLUSTERED LAYER SETUP START ===")
         Log.d(TAG, "Setting up POI clustered layer")
+        Log.d(TAG, "Clustering config - radius: ${clusteringConfig.clusterRadius}, maxZoom: ${clusteringConfig.poiClusterMaxZoom}")
+        Log.d(TAG, "Data length: ${data.length} characters")
         
         mapLibreMap.getStyle { style ->
             try {
+                Log.d(TAG, "Got style for POI clustered layer setup")
+                
                 // Create clustered source with user configuration
+                val sourceStart = System.currentTimeMillis()
                 val source = ClusteredGeoJsonSource(
                     sourceId = POI_CLUSTERED_SOURCE,
                     clusterRadius = clusteringConfig.clusterRadius,
                     clusterMaxZoom = clusteringConfig.poiClusterMaxZoom
                 ).createSourceWithData(data)
                 style.addSource(source)
-                Log.d(TAG, "Added POI clustered source with radius=${clusteringConfig.clusterRadius}, maxZoom=${clusteringConfig.poiClusterMaxZoom}")
+                Log.d(TAG, "Added POI clustered source in ${System.currentTimeMillis() - sourceStart}ms")
 
                 // Add individual POI symbols layer
+                val poiLayerStart = System.currentTimeMillis()
                 val poiLayer = SymbolLayer(POI_DOTS_LAYER, POI_CLUSTERED_SOURCE)
                     .withProperties(
                         PropertyFactory.iconImage(Expression.get("icon")),
@@ -182,9 +191,10 @@ class ClusteredLayerManager(
                         Expression.has("poiId") // Only show POIs, not line endpoints
                     ))
                 style.addLayer(poiLayer)
-                Log.d(TAG, "Added POI symbols layer")
+                Log.d(TAG, "Added POI symbols layer in ${System.currentTimeMillis() - poiLayerStart}ms")
 
                 // Add cluster circles layer (background for clusters)
+                val clusterLayerStart = System.currentTimeMillis()
                 val clusterLayer = CircleLayer(POI_CLUSTERS_LAYER, POI_CLUSTERED_SOURCE)
                     .withProperties(
                         PropertyFactory.circleColor("#FCFCFC"),
@@ -192,11 +202,45 @@ class ClusteredLayerManager(
                     )
                     .withFilter(Expression.has("point_count"))
                 style.addLayer(clusterLayer)
-                Log.d(TAG, "Added POI cluster circles layer")
+                Log.d(TAG, "Added POI cluster circles layer in ${System.currentTimeMillis() - clusterLayerStart}ms")
+                
+                // Verify clustering setup
+                verifyClusteringSetup(style, "POI Clustered Layer Setup")
+                
+                Log.d(TAG, "=== POI CLUSTERED LAYER SETUP COMPLETED in ${System.currentTimeMillis() - startTime}ms ===")
                 
             } catch (e: Exception) {
                 Log.e(TAG, "Error setting up POI clustered layer", e)
             }
         }
+    }
+    
+    /**
+     * Verify clustering setup and log state
+     */
+    private fun verifyClusteringSetup(style: org.maplibre.android.maps.Style, context: String) {
+        Log.d(TAG, "=== CLUSTERING SETUP VERIFICATION: $context ===")
+        
+        // Check POI clustering
+        val poiSource = style.getSourceAs<GeoJsonSource>(POI_CLUSTERED_SOURCE)
+        val poiLayer = style.getLayer(POI_DOTS_LAYER)
+        val poiClusterLayer = style.getLayer(POI_CLUSTERS_LAYER)
+        
+        Log.d(TAG, "POI Clustering - Source exists: ${poiSource != null}, POI layer exists: ${poiLayer != null}, Cluster layer exists: ${poiClusterLayer != null}")
+        Log.d(TAG, "POI Layer visibility: ${poiLayer?.visibility?.value}, Cluster layer visibility: ${poiClusterLayer?.visibility?.value}")
+        
+        // Check peer clustering
+        val peerSource = style.getSourceAs<GeoJsonSource>(PEER_CLUSTERED_SOURCE)
+        val peerLayer = style.getLayer(PEER_DOTS_LAYER)
+        val peerClusterLayer = style.getLayer(PEER_CLUSTERS_LAYER)
+        
+        Log.d(TAG, "Peer Clustering - Source exists: ${peerSource != null}, Peer layer exists: ${peerLayer != null}, Cluster layer exists: ${peerClusterLayer != null}")
+        Log.d(TAG, "Peer Layer visibility: ${peerLayer?.visibility?.value}, Cluster layer visibility: ${peerClusterLayer?.visibility?.value}")
+        
+        // Log clustering configuration
+        Log.d(TAG, "Clustering Config - POI enabled: ${clusteringConfig.enablePoiClustering}, Peer enabled: ${clusteringConfig.enablePeerClustering}")
+        Log.d(TAG, "Clustering Config - Radius: ${clusteringConfig.clusterRadius}, POI max zoom: ${clusteringConfig.poiClusterMaxZoom}, Peer max zoom: ${clusteringConfig.peerClusterMaxZoom}")
+        
+        Log.d(TAG, "=== CLUSTERING SETUP VERIFICATION COMPLETED ===")
     }
 } 

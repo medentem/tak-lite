@@ -260,21 +260,52 @@ class AnnotationController(
 
     // Generate POI icons for MapLibre
     private fun generatePoiIcons(style: org.maplibre.android.maps.Style) {
+        val startTime = System.currentTimeMillis()
+        Log.d("PoiDebug", "=== ICON GENERATION START ===")
         Log.d("PoiDebug", "generatePoiIcons called")
         val shapes = listOf(PointShape.CIRCLE, PointShape.SQUARE, PointShape.TRIANGLE, PointShape.EXCLAMATION)
         val colors = listOf(AnnotationColor.GREEN, AnnotationColor.YELLOW, AnnotationColor.RED, AnnotationColor.BLACK)
+        
+        var iconsGenerated = 0
+        var iconsSkipped = 0
+        var iconsFailed = 0
         
         shapes.forEach { shape ->
             colors.forEach { color ->
                 val iconName = "poi-${shape.name.lowercase()}-${color.name.lowercase()}"
                 // Check if icon already exists
                 if (style.getImage(iconName) == null) {
-                    val bitmap = createPoiIconBitmap(shape, color)
-                    style.addImage(iconName, bitmap)
-                    Log.d("PoiDebug", "Generated icon: $iconName")
+                    try {
+                        val bitmapStart = System.currentTimeMillis()
+                        val bitmap = createPoiIconBitmap(shape, color)
+                        val bitmapTime = System.currentTimeMillis() - bitmapStart
+                        
+                        val addStart = System.currentTimeMillis()
+                        style.addImage(iconName, bitmap)
+                        val addTime = System.currentTimeMillis() - addStart
+                        
+                        // Verify icon was added successfully
+                        val addedIcon = style.getImage(iconName)
+                        if (addedIcon != null) {
+                            iconsGenerated++
+                            Log.d("PoiDebug", "Generated icon: $iconName (bitmap: ${bitmapTime}ms, add: ${addTime}ms)")
+                        } else {
+                            iconsFailed++
+                            Log.e("PoiDebug", "Failed to verify icon after adding: $iconName")
+                        }
+                    } catch (e: Exception) {
+                        iconsFailed++
+                        Log.e("PoiDebug", "Exception generating icon $iconName: ${e.message}", e)
+                    }
+                } else {
+                    iconsSkipped++
+                    Log.d("PoiDebug", "Icon already exists: $iconName")
                 }
             }
         }
+        
+        Log.d("PoiDebug", "Icon generation summary - Generated: $iconsGenerated, Skipped: $iconsSkipped, Failed: $iconsFailed")
+        Log.d("PoiDebug", "=== ICON GENERATION COMPLETED in ${System.currentTimeMillis() - startTime}ms ===")
     }
 
     // Create bitmap for POI icon
@@ -585,7 +616,10 @@ class AnnotationController(
     
     // === ENHANCED: Update POI annotations with native clustering ===
     fun updatePoiAnnotationsOnMap(mapLibreMap: MapLibreMap?, pois: List<MapAnnotation.PointOfInterest>) {
+        val startTime = System.currentTimeMillis()
+        Log.d("PoiDebug", "=== POI UPDATE START ===")
         Log.d("PoiDebug", "updatePoiAnnotationsOnMap called with ${pois.size} POIs, clustering enabled: ${clusteringConfig.enablePoiClustering}")
+        Log.d("PoiDebug", "MapLibreMap available: ${mapLibreMap != null}")
         
         // Debug: Log POI details including source
         pois.forEach { poi ->
@@ -596,19 +630,30 @@ class AnnotationController(
             Log.d("PoiDebug", "Native POI clustering disabled, updating non-clustered POI source")
             // Update non-clustered POI source
             mapLibreMap?.getStyle { style ->
+                Log.d("PoiDebug", "Got style for non-clustered POI update")
+                
                 // Ensure POI icons are generated before updating source
+                val iconGenStart = System.currentTimeMillis()
                 generatePoiIcons(style)
+                Log.d("PoiDebug", "Icon generation completed in ${System.currentTimeMillis() - iconGenStart}ms")
                 
                 val poiSourceId = "poi-source"
                 val source = style.getSourceAs<GeoJsonSource>(poiSourceId)
                 if (source != null) {
+                    Log.d("PoiDebug", "Found existing non-clustered POI source: $poiSourceId")
                     var featureCollection = FeatureCollection.fromFeatures(arrayOf())
                     if (pois.isNotEmpty()) {
+                        val featureGenStart = System.currentTimeMillis()
                         featureCollection = poiAnnotationsToClusteredFeatureCollection(pois)
-                        Log.d("PoiDebug", "Generated non-clustered feature collection with ${featureCollection.features()?.size ?: 0} features")
+                        Log.d("PoiDebug", "Generated non-clustered feature collection with ${featureCollection.features()?.size ?: 0} features in ${System.currentTimeMillis() - featureGenStart}ms")
                     }
+                    
+                    val updateStart = System.currentTimeMillis()
                     source.setGeoJson(featureCollection)
-                    Log.d("PoiDebug", "Updated non-clustered POI source with ${pois.size} POIs")
+                    Log.d("PoiDebug", "Updated non-clustered POI source with ${pois.size} POIs in ${System.currentTimeMillis() - updateStart}ms")
+                    
+                    // Verify layer state after update
+                    verifyLayerState(style, "Non-clustered POI Update")
                 } else {
                     Log.e("PoiDebug", "Non-clustered POI source not found - this should have been created during initialization")
                 }
@@ -616,25 +661,45 @@ class AnnotationController(
         } else {
             Log.d("PoiDebug", "Native POI clustering enabled, updating clustered POI source")
             mapLibreMap?.getStyle { style ->
+                Log.d("PoiDebug", "Got style for clustered POI update")
+                
                 // Ensure POI icons are generated before updating source
+                val iconGenStart = System.currentTimeMillis()
                 generatePoiIcons(style)
+                Log.d("PoiDebug", "Icon generation completed in ${System.currentTimeMillis() - iconGenStart}ms")
                 
                 var featureCollection = FeatureCollection.fromFeatures(arrayOf())
                 if (pois.isNotEmpty()) {
+                    val featureGenStart = System.currentTimeMillis()
                     featureCollection = poiAnnotationsToClusteredFeatureCollection(pois)
-                    Log.d("PoiDebug", "Generated clustered feature collection with ${featureCollection.features()?.size ?: 0} features")
+                    Log.d("PoiDebug", "Generated clustered feature collection with ${featureCollection.features()?.size ?: 0} features in ${System.currentTimeMillis() - featureGenStart}ms")
                 }
+                
                 val source = style.getSourceAs<GeoJsonSource>(ClusteredLayerManager.POI_CLUSTERED_SOURCE)
                 if (source != null) {
+                    Log.d("PoiDebug", "Found existing clustered POI source: ${ClusteredLayerManager.POI_CLUSTERED_SOURCE}")
+                    val updateStart = System.currentTimeMillis()
                     source.setGeoJson(featureCollection.toJson())
-                    Log.d("PoiDebug", "Updated clustered POI source with ${pois.size} POIs")
+                    Log.d("PoiDebug", "Updated clustered POI source with ${pois.size} POIs in ${System.currentTimeMillis() - updateStart}ms")
+                    
+                    // Verify source state after update
+                    val updatedSource = style.getSourceAs<GeoJsonSource>(ClusteredLayerManager.POI_CLUSTERED_SOURCE)
+                    Log.d("PoiDebug", "Source update verification - source still exists: ${updatedSource != null}")
+                    
+                    // Verify layer state after update
+                    verifyLayerState(style, "Clustered POI Update")
                 } else {
                     // Create new source with data and clustering options
                     Log.d("PoiDebug", "Creating new POI clustered source")
                     try {
+                        val setupStart = System.currentTimeMillis()
                         clusteredLayerManager.setupPoiClusteredLayer(featureCollection.toJson())
+                        Log.d("PoiDebug", "POI clustered layer setup completed in ${System.currentTimeMillis() - setupStart}ms")
+                        
+                        // Verify layers were created
+                        verifyLayerState(style, "New Clustered POI Setup")
                     } catch (e: Exception) {
-                        Log.e("PeerDotDebug", "Failed to create clustered source: ${e.message}", e)
+                        Log.e("PoiDebug", "Failed to create clustered source: ${e.message}", e)
                     }
                     
                     // Retry timer layer setup now that clustered POI layer exists
@@ -647,8 +712,65 @@ class AnnotationController(
         
         // Update status overlay with current POIs
         updateAnnotationStatusOverlay(pois)
+        
+        Log.d("PoiDebug", "=== POI UPDATE COMPLETED in ${System.currentTimeMillis() - startTime}ms ===")
     }
     
+    // === LAYER STATE VERIFICATION ===
+    private fun verifyLayerState(style: org.maplibre.android.maps.Style, context: String) {
+        Log.d("PoiDebug", "=== LAYER STATE VERIFICATION: $context ===")
+        
+        // Check POI layers
+        val poiLayer = if (clusteringConfig.enablePoiClustering) {
+            style.getLayer(ClusteredLayerManager.POI_DOTS_LAYER)
+        } else {
+            style.getLayer("poi-layer")
+        }
+        val poiSource = if (clusteringConfig.enablePoiClustering) {
+            style.getSourceAs<GeoJsonSource>(ClusteredLayerManager.POI_CLUSTERED_SOURCE)
+        } else {
+            style.getSourceAs<GeoJsonSource>("poi-source")
+        }
+        
+        Log.d("PoiDebug", "POI Layer - exists: ${poiLayer != null}, visible: ${poiLayer?.visibility?.value}, id: ${poiLayer?.id}")
+        Log.d("PoiDebug", "POI Source - exists: ${poiSource != null}, id: ${poiSource?.id}")
+        
+        if (clusteringConfig.enablePoiClustering) {
+            val clusterLayer = style.getLayer(ClusteredLayerManager.POI_CLUSTERS_LAYER)
+            Log.d("PoiDebug", "POI Cluster Layer - exists: ${clusterLayer != null}, visible: ${clusterLayer?.visibility?.value}")
+        }
+        
+        // Check peer layers
+        val peerLayer = if (clusteringConfig.enablePeerClustering) {
+            style.getLayer(ClusteredLayerManager.PEER_DOTS_LAYER)
+        } else {
+            style.getLayer("peer-dots-layer")
+        }
+        val peerSource = if (clusteringConfig.enablePeerClustering) {
+            style.getSourceAs<GeoJsonSource>(ClusteredLayerManager.PEER_CLUSTERED_SOURCE)
+        } else {
+            style.getSourceAs<GeoJsonSource>("peer-dots-source")
+        }
+        
+        Log.d("PoiDebug", "Peer Layer - exists: ${peerLayer != null}, visible: ${peerLayer?.visibility?.value}")
+        Log.d("PoiDebug", "Peer Source - exists: ${peerSource != null}")
+        
+        // Check unified annotation layers
+        val lineLayer = style.getLayer(LineLayerManager.LINE_LAYER)
+        val areaLayer = style.getLayer(AreaLayerManager.AREA_FILL_LAYER)
+        val polygonLayer = style.getLayer(PolygonLayerManager.POLYGON_FILL_LAYER)
+        
+        Log.d("PoiDebug", "Line Layer - exists: ${lineLayer != null}, visible: ${lineLayer?.visibility?.value}")
+        Log.d("PoiDebug", "Area Layer - exists: ${areaLayer != null}, visible: ${areaLayer?.visibility?.value}")
+        Log.d("PoiDebug", "Polygon Layer - exists: ${polygonLayer != null}, visible: ${polygonLayer?.visibility?.value}")
+        
+        // Check device location layer
+        val deviceLayer = style.getLayer(DeviceLocationLayerManager.DEVICE_LOCATION_FILL_LAYER)
+        Log.d("PoiDebug", "Device Location Layer - exists: ${deviceLayer != null}, visible: ${deviceLayer?.visibility?.value}")
+        
+        Log.d("PoiDebug", "=== LAYER STATE VERIFICATION COMPLETED ===")
+    }
+
     // === ANNOTATION STATUS OVERLAY MANAGEMENT ===
     fun updateAnnotationStatusOverlay(pois: List<MapAnnotation.PointOfInterest>) {
         // Get current annotation statuses from the view model

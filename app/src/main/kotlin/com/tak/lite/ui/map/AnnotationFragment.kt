@@ -153,31 +153,55 @@ class AnnotationFragment : Fragment(), LayersTarget {
                 lineToolButton
             )
             mapController?.setOnStyleChangedCallback {
+                val styleChangeStart = System.currentTimeMillis()
+                Log.d("AnnotationFragment", "=== STYLE CHANGE DETECTED ===")
                 Log.d("AnnotationFragment", "Style changed, restoring annotation layers")
                 // Add a small delay to ensure the style is fully loaded
                 viewLifecycleOwner.lifecycleScope.launch {
                     kotlinx.coroutines.delay(100) // 100ms delay
+                    Log.d("AnnotationFragment", "Style restoration delay completed in ${System.currentTimeMillis() - styleChangeStart}ms")
+                    
                     // Restore weather overlay first so annotation layers render above it
+                    val weatherStart = System.currentTimeMillis()
                     weatherLayerManager?.restore()
+                    Log.d("AnnotationFragment", "Weather layer restored in ${System.currentTimeMillis() - weatherStart}ms")
+                    
+                    val overlayStart = System.currentTimeMillis()
                     annotationController.setupAnnotationOverlay(mapLibreMap)
+                    Log.d("AnnotationFragment", "Annotation overlay setup completed in ${System.currentTimeMillis() - overlayStart}ms")
+                    
+                    val renderStart = System.currentTimeMillis()
                     annotationController.renderAllAnnotations(mapLibreMap)
+                    Log.d("AnnotationFragment", "All annotations rendered in ${System.currentTimeMillis() - renderStart}ms")
                     
                     // Restore peer dots after style change
+                    val peerStart = System.currentTimeMillis()
                     val currentPeerLocations = annotationOverlayView.getCurrentPeerLocations()
                     if (currentPeerLocations.isNotEmpty()) {
                         Log.d("AnnotationFragment", "Restoring ${currentPeerLocations.size} peer dots after style change")
                         annotationController.updatePeerDotsOnMap(mapLibreMap, currentPeerLocations)
+                        Log.d("AnnotationFragment", "Peer dots restored in ${System.currentTimeMillis() - peerStart}ms")
+                    } else {
+                        Log.d("AnnotationFragment", "No peer locations to restore")
                     }
                     
                     // Restore POI annotations after style change
+                    val poiStart = System.currentTimeMillis()
                     val currentPoiAnnotations = viewModel.uiState.value.annotations.filterIsInstance<MapAnnotation.PointOfInterest>()
                     if (currentPoiAnnotations.isNotEmpty()) {
                         Log.d("AnnotationFragment", "Restoring ${currentPoiAnnotations.size} POI annotations after style change")
                         annotationController.updatePoiAnnotationsOnMap(mapLibreMap, currentPoiAnnotations)
+                        Log.d("AnnotationFragment", "POI annotations restored in ${System.currentTimeMillis() - poiStart}ms")
+                    } else {
+                        Log.d("AnnotationFragment", "No POI annotations to restore")
                     }
                     
                     // Restore timer layers after style change
+                    val timerStart = System.currentTimeMillis()
                     annotationController.timerManager?.setupTimerLayers()
+                    Log.d("AnnotationFragment", "Timer layers setup completed in ${System.currentTimeMillis() - timerStart}ms")
+                    
+                    Log.d("AnnotationFragment", "=== STYLE CHANGE RESTORATION COMPLETED in ${System.currentTimeMillis() - styleChangeStart}ms ===")
                 }
             }
             annotationController.mapController = mapController
