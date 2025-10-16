@@ -5,6 +5,8 @@ import com.tak.lite.model.LatLngSerializable
 import com.tak.lite.model.MapAnnotation
 import com.tak.lite.model.PeerLocationEntry
 import com.tak.lite.network.MeshNetworkService
+import com.tak.lite.repository.AnnotationRepository
+import com.tak.lite.repository.LocationRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,6 +26,8 @@ import javax.inject.Singleton
 class MinimapService @Inject constructor(
     @ApplicationContext private val context: Context,
     private val meshNetworkService: MeshNetworkService,
+    private val annotationRepository: AnnotationRepository,
+    private val locationRepository: LocationRepository,
     private val vuzixManager: VuzixManager
 ) {
     companion object {
@@ -37,20 +41,25 @@ class MinimapService @Inject constructor(
      */
     fun startMinimapService() {
         coroutineScope.launch {
+            // Start sensor tracking for heading data
+            locationRepository.startSensorTracking()
+            
             // Combine all TAK-Lite data streams
             combine(
                 meshNetworkService.bestLocation,
-                meshNetworkService.peerLocations
-            ) { userLocation: LatLng?, peerLocations: Map<String, PeerLocationEntry> ->
+                meshNetworkService.peerLocations,
+                annotationRepository.annotations,
+                locationRepository.headingData
+            ) { userLocation: LatLng?, peerLocations: Map<String, PeerLocationEntry>, annotations: List<MapAnnotation>, headingData: com.tak.lite.ui.location.DirectionOverlayData ->
                 MinimapData(
                     userLocation = userLocation?.let { 
                         LatLngSerializable(it.latitude, it.longitude)
                     },
-                    userHeading = null, // TODO: Get heading from alternative source
+                    userHeading = headingData.headingDegrees,
                     peers = peerLocations,
-                    annotations = emptyList(), // TODO: Get annotations from alternative source
-                    compassQuality = null, // TODO: Get compass quality from alternative source
-                    headingSource = null // TODO: Get heading source from alternative source
+                    annotations = annotations,
+                    compassQuality = headingData.compassQuality,
+                    headingSource = headingData.headingSource
                 )
             }.onEach { minimapData ->
                 updateMinimap(minimapData)
@@ -125,6 +134,7 @@ class MinimapService @Inject constructor(
      * Stop minimap service
      */
     fun stopMinimapService() {
+        locationRepository.stopSensorTracking()
         vuzixManager.disconnect()
     }
 }

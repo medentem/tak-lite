@@ -1,6 +1,8 @@
 package com.tak.lite.vuzix
 
 import android.content.Context
+import com.tak.lite.repository.AnnotationRepository
+import com.tak.lite.repository.LocationRepository
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -28,12 +30,22 @@ object VuzixModule {
 
     @Provides
     @Singleton
+    fun provideLocationRepository(
+        @ApplicationContext context: Context
+    ): LocationRepository {
+        return LocationRepository(context)
+    }
+
+    @Provides
+    @Singleton
     fun provideMinimapService(
         @ApplicationContext context: Context,
         meshNetworkService: com.tak.lite.network.MeshNetworkService,
+        annotationRepository: AnnotationRepository,
+        locationRepository: LocationRepository,
         vuzixManager: VuzixManager
     ): MinimapService {
-        return MinimapService(context, meshNetworkService, vuzixManager)
+        return MinimapService(context, meshNetworkService, annotationRepository, locationRepository, vuzixManager)
     }
 
     @Provides
