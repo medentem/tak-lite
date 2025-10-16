@@ -30,31 +30,25 @@ data class MeshUser(
     val role: Int = 0,
 ) : Parcelable {
 
-    override fun toString(): String {
-        return "MeshUser(id=${id.anonymize}, " +
-                "longName=${longName.anonymize}, " +
-                "shortName=${shortName.anonymize}, " +
-                "hwModel=$hwModelString, " +
-                "isLicensed=$isLicensed, " +
-                "role=$role)"
-    }
+    override fun toString(): String = "MeshUser(id=${id.anonymize}, " +
+            "longName=${longName.anonymize}, " +
+            "shortName=${shortName.anonymize}, " +
+            "hwModel=$hwModelString, " +
+            "isLicensed=$isLicensed, " +
+            "role=$role)"
 
-    /** Create our model object from a protobuf.
+    /** Create our model object from a protobuf. */
+    constructor(p: MeshProtos.User) : this(p.id, p.longName, p.shortName, p.hwModel, p.isLicensed, p.roleValue)
+
+    /**
+     * a string version of the hardware model, converted into pretty lowercase and changing _ to -, and p to dot or null
+     * if unset
      */
-    constructor(p: MeshProtos.User) : this(
-        p.id,
-        p.longName,
-        p.shortName,
-        p.hwModel,
-        p.isLicensed,
-        p.roleValue
-    )
-
-    /** a string version of the hardware model, converted into pretty lowercase and changing _ to -, and p to dot
-     * or null if unset
-     * */
     val hwModelString: String?
         get() =
-            if (hwModel == MeshProtos.HardwareModel.UNSET) null
-            else hwModel.name.replace('_', '-').replace('p', '.').lowercase()
+            if (hwModel == MeshProtos.HardwareModel.UNSET) {
+                null
+            } else {
+                hwModel.name.replace('_', '-').replace('p', '.').lowercase()
+            }
 }

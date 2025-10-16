@@ -18,6 +18,8 @@
 package com.geeksville.mesh
 
 import android.os.Parcelable
+import com.tak.lite.util.CoordinateUtils.calculateBearing
+import com.tak.lite.util.haversine
 import kotlinx.parcelize.Parcelize
 
 @Parcelize
@@ -32,17 +34,24 @@ data class Position(
     val precisionBits: Int = 0,
 ) : Parcelable {
 
+    @Suppress("MagicNumber")
     companion object {
-        /// Convert to a double representation of degrees
+        // / Convert to a double representation of degrees
         fun degD(i: Int) = i * 1e-7
+
         fun degI(d: Double) = (d * 1e7).toInt()
 
         fun currentTime() = (System.currentTimeMillis() / 1000).toInt()
     }
 
-    /** Create our model object from a protobuf.  If time is unspecified in the protobuf, the provided default time will be used.
+    /**
+     * Create our model object from a protobuf. If time is unspecified in the protobuf, the provided default time will
+     * be used.
      */
-    constructor(position: MeshProtos.Position, defaultTime: Int = currentTime()) : this(
+    constructor(
+        position: MeshProtos.Position,
+        defaultTime: Int = currentTime(),
+    ) : this(
         // We prefer the int version of lat/lon but if not available use the depreciated legacy version
         degD(position.latitudeI),
         degD(position.longitudeI),
@@ -51,10 +60,22 @@ data class Position(
         position.satsInView,
         position.groundSpeed,
         position.groundTrack,
-        position.precisionBits
+        position.precisionBits,
     )
 
-    override fun toString(): String {
-        return "Position(lat=${latitude.anonymize}, lon=${longitude.anonymize}, alt=${altitude.anonymize}, time=${time})"
-    }
+    // / @return distance in meters to some other node (or null if unknown)
+    fun distance(o: Position) = haversine(latitude, longitude, o.latitude, o.longitude)
+
+    // / @return bearing to the other position in degrees
+    fun bearing(o: Position) = calculateBearing(latitude, longitude, o.latitude, o.longitude)
+
+    // If GPS gives a crap position don't crash our app
+    @Suppress("MagicNumber")
+    fun isValid(): Boolean = latitude != 0.0 &&
+            longitude != 0.0 &&
+            (latitude >= -90 && latitude <= 90.0) &&
+            (longitude >= -180 && longitude <= 180)
+
+    override fun toString(): String =
+        "Position(lat=${latitude.anonymize}, lon=${longitude.anonymize}, alt=${altitude.anonymize}, time=$time)"
 }

@@ -26,7 +26,7 @@ android {
 
     defaultConfig {
         applicationId "com.tak.lite"
-        minSdk 26       // <— modern key
+        minSdk 30       // <— modern key
         targetSdk 35
         versionCode 113
         versionName "1.3.2-beta.83"
@@ -167,4 +167,12 @@ dependencies {
     
     // Socket.IO for real-time communication
     implementation 'io.socket:socket.io-client:2.1.0'
+    
+    // Vuzix Z100 Smart Glasses SDK
+    implementation 'com.github.Vuzix:ultralite-sdk-android:1.9'
+    
+    // Additional dependencies for minimap rendering
+    implementation 'androidx.compose.ui:ui:1.5.4'
+    implementation 'androidx.compose.ui:ui-graphics:1.5.4'
+    implementation 'androidx.compose.ui:ui-tooling-preview:1.5.4'
 }

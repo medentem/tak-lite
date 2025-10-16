@@ -73,3 +73,6 @@ fun EditText.onEditorAction(actionId: Int, func: () -> Unit) {
         true
     }
 }
+
+@Suppress("MagicNumber")
+fun onlineTimeThreshold() = (System.currentTimeMillis() / 1000 - 2 * 60 * 60).toInt()

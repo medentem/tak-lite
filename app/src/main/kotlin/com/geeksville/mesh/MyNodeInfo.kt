@@ -39,5 +39,6 @@ data class MyNodeInfo(
         val deviceId: String?,
 ) : Parcelable {
         /** A human readable description of the software/hardware version */
-        val firmwareString: String get() = "$model $firmwareVersion"
+        val firmwareString: String
+                get() = "$model $firmwareVersion"
 }

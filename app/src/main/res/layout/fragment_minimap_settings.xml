@@ -1,0 +1,380 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- Header -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Vuzix Z100 Minimap Settings"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Connection Status -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Connection Status: "
+                android:textSize="16sp" />
+
+            <TextView
+                android:id="@+id/connectionStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Disconnected"
+                android:textSize="16sp"
+                android:textColor="@android:color/holo_red_dark" />
+
+        </LinearLayout>
+
+        <!-- Minimap Toggle -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="8dp"
+            app:cardElevation="4dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Minimap Control"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/minimapToggle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Show Minimap"
+                    android:textSize="16sp" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Orientation Settings -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="8dp"
+            app:cardElevation="4dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Orientation"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <RadioGroup
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
+
+                    <RadioButton
+                        android:id="@+id/orientationNorthUp"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="North Always Up (Rotating)"
+                        android:textSize="14sp" />
+
+                    <RadioButton
+                        android:id="@+id/orientationHeadingUp"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Heading Always Up (Fixed)"
+                        android:textSize="14sp" />
+
+                    <RadioButton
+                        android:id="@+id/orientationAuto"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Auto (Switch Based on Movement)"
+                        android:textSize="14sp" />
+
+                </RadioGroup>
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Size Settings -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="8dp"
+            app:cardElevation="4dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Size"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <RadioGroup
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
+
+                    <RadioButton
+                        android:id="@+id/sizeSmall"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Small (150x150)"
+                        android:textSize="14sp" />
+
+                    <RadioButton
+                        android:id="@+id/sizeMedium"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Medium (200x200)"
+                        android:textSize="14sp" />
+
+                    <RadioButton
+                        android:id="@+id/sizeLarge"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Large (250x250)"
+                        android:textSize="14sp" />
+
+                </RadioGroup>
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Position Settings -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="8dp"
+            app:cardElevation="4dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Position"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <RadioGroup
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
+
+                    <RadioButton
+                        android:id="@+id/positionTopLeft"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Top Left"
+                        android:textSize="14sp" />
+
+                    <RadioButton
+                        android:id="@+id/positionTopRight"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Top Right"
+                        android:textSize="14sp" />
+
+                    <RadioButton
+                        android:id="@+id/positionBottomLeft"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Bottom Left"
+                        android:textSize="14sp" />
+
+                    <RadioButton
+                        android:id="@+id/positionBottomRight"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Bottom Right"
+                        android:textSize="14sp" />
+
+                    <RadioButton
+                        android:id="@+id/positionCenter"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Center"
+                        android:textSize="14sp" />
+
+                </RadioGroup>
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Zoom Control -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="8dp"
+            app:cardElevation="4dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Zoom Level"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <SeekBar
+                    android:id="@+id/zoomSlider"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:max="200"
+                    android:progress="100" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="0.5x - 2.0x"
+                    android:textSize="12sp"
+                    android:textAlignment="center"
+                    android:layout_marginTop="4dp" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Features -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="8dp"
+            app:cardElevation="4dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Features"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/featurePeers"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Show Peers"
+                    android:textSize="14sp"
+                    android:checked="true" />
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/featureWaypoints"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Show Waypoints"
+                    android:textSize="14sp"
+                    android:checked="true" />
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/featureGrid"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Show Grid"
+                    android:textSize="14sp"
+                    android:checked="true" />
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/featureNorthIndicator"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Show North Indicator"
+                    android:textSize="14sp"
+                    android:checked="true" />
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/featureDistanceRings"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Show Distance Rings"
+                    android:textSize="14sp" />
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/featureCompassQuality"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Show Compass Quality"
+                    android:textSize="14sp" />
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/featureBatteryLevel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Show Battery Level"
+                    android:textSize="14sp" />
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/featureNetworkStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Show Network Status"
+                    android:textSize="14sp" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+    </LinearLayout>
+
+</ScrollView>

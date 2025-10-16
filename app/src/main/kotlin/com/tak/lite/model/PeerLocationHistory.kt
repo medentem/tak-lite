@@ -28,6 +28,8 @@ data class PeerLocationEntry(
     val userStatus: UserStatus? = null // User status color
 ) {
     fun toLatLng(): LatLng = LatLng(latitude, longitude)
+
+    fun toLatLngSerializable(): LatLngSerializable = LatLngSerializable(latitude, longitude)
     
     /**
      * Get the most accurate timestamp available

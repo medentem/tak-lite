@@ -48,6 +48,8 @@ import com.tak.lite.viewmodel.CoverageViewModel
 import com.tak.lite.viewmodel.MeshNetworkUiState
 import com.tak.lite.viewmodel.MeshNetworkViewModel
 import com.tak.lite.viewmodel.MessageViewModel
+import com.tak.lite.vuzix.MinimapController
+import com.tak.lite.vuzix.MinimapService
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -82,6 +84,10 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
     private lateinit var channelController: ChannelController
     private var is3DBuildingsEnabled = false
     private var isTrackingLocation = false
+    
+    // Vuzix Z100 Smart Glasses integration
+    @Inject lateinit var minimapService: MinimapService
+    private val minimapController: MinimapController by viewModels()
     
     // Weather fetch state tracking
     private var weatherLastFetchTime = 0L
@@ -395,6 +401,9 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
         
         // Initialize connection status bar state after views are ready
         updateConnectionStatusBar()
+
+        // Initialize Vuzix Z100 Smart Glasses minimap
+        initializeVuzixMinimap()
 
         lifecycleScope.launch {
             repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
@@ -1883,5 +1892,59 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                 }
             }
         }
+    }
+
+    /**
+     * Initialize Vuzix Z100 Smart Glasses minimap
+     */
+    private fun initializeVuzixMinimap() {
+        lifecycleScope.launch {
+            try {
+                Log.d("MainActivity", "Initializing Vuzix Z100 minimap...")
+                
+                // Start minimap service
+                minimapService.startMinimapService()
+                
+                // Observe minimap controller state
+                repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                    minimapController.isMinimapEnabled.collect { isEnabled ->
+                        Log.d("MainActivity", "Minimap enabled: $isEnabled")
+                    }
+                }
+                
+                // Observe Vuzix connection state
+                repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                    minimapController.isVuzixConnected.collect { isConnected ->
+                        Log.d("MainActivity", "Vuzix connected: $isConnected")
+                    }
+                }
+                
+                Log.d("MainActivity", "Vuzix Z100 minimap initialized successfully")
+                
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Failed to initialize Vuzix Z100 minimap", e)
+            }
+        }
+    }
+
+    /**
+     * Handle Vuzix touchpad input
+     */
+    fun handleVuzixTouchpadInput(x: Float, y: Float, action: Int) {
+        minimapController.handleTouchpadInput(x, y, action)
+    }
+
+    /**
+     * Handle Vuzix voice command
+     */
+    fun handleVuzixVoiceCommand(command: String) {
+        minimapController.handleVoiceCommand(command)
+    }
+
+    /**
+     * Toggle Vuzix minimap visibility
+     */
+    fun toggleVuzixMinimap() {
+        minimapController.toggleMinimap()
     }
 }
