@@ -604,4 +604,14 @@
     <string name="teams_loaded">Teams erfolgreich geladen</string>
     <string name="team_joined">Team beigetreten: %1$s</string>
     <string name="team_join_failed">Team-Beitritt fehlgeschlagen: %1$s</string>
+    
+    <!-- Vuzix Settings -->
+    <string name="vuzix_settings">Vuzix Z100 Einstellungen</string>
+    <string name="vuzix_settings_description">Konfigurieren Sie Ihre Vuzix Z100 Smart Glasses für Minimap-Anzeige und Geräteverbindung.</string>
+    <string name="open_vuzix_settings">Vuzix Einstellungen öffnen</string>
+    
+    <!-- Map Scale Settings -->
+    <string name="map_scale">Kartenmaßstab</string>
+    <string name="map_scale_description">Passen Sie an, wie weit Sie auf der Minimap sehen können. Höhere Werte zeigen größere Bereiche.</string>
+    <string name="map_scale_radius_format">Kartenmaßstab: %1$s Radius</string>
 </resources>

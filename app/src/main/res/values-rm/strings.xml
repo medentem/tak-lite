@@ -604,4 +604,14 @@
     <string name="teams_loaded">Squadras chargiadas cun success</string>
     <string name="team_joined">Participà a la squadra: %1$s</string>
     <string name="team_join_failed">Errur cun sa participar a la squadra: %1$s</string>
+    
+    <!-- Vuzix Settings -->
+    <string name="vuzix_settings">Configuraziuns Vuzix Z100</string>
+    <string name="vuzix_settings_description">Configurar tes lunschetas intelligents Vuzix Z100 per la visualisaziun da minimap e la connexiun da l\'apparat.</string>
+    <string name="open_vuzix_settings">Avrir Configuraziuns Vuzix</string>
+    
+    <!-- Map Scale Settings -->
+    <string name="map_scale">Scala da la Charta</string>
+    <string name="map_scale_description">Agiustar co lunsch che ti pos vair sin la minimap. Valurs pli autas mussan areas pli grondas.</string>
+    <string name="map_scale_radius_format">Scala da la Charta: %1$s radius</string>
 </resources>

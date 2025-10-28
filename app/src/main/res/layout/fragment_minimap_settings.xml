@@ -265,9 +265,17 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Zoom Level"
+                    android:text="@string/map_scale"
                     android:textSize="18sp"
                     android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/map_scale_description"
+                    android:textSize="12sp"
+                    android:textColor="?android:attr/textColorSecondary"
                     android:layout_marginBottom="8dp" />
 
                 <SeekBar
@@ -275,13 +283,14 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:max="200"
-                    android:progress="100" />
+                    android:progress="4" />
 
                 <TextView
+                    android:id="@+id/zoomLabel"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="0.5x - 2.0x"
-                    android:textSize="12sp"
+                    android:text="Map Scale: 100m radius"
+                    android:textSize="14sp"
                     android:textAlignment="center"
                     android:layout_marginTop="4dp" />
 

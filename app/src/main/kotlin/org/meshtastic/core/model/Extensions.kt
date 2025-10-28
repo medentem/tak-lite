@@ -15,9 +15,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package com.geeksville.mesh
+package org.meshtastic.core.model
 
 import android.widget.EditText
+import com.geeksville.mesh.ConfigProtos
 import com.tak.lite.R
 
 /**

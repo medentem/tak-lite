@@ -604,4 +604,14 @@
     <string name="teams_loaded">Equipos cargados exitosamente</string>
     <string name="team_joined">Unido al equipo: %1$s</string>
     <string name="team_join_failed">Error al unirse al equipo: %1$s</string>
+    
+    <!-- Vuzix Settings -->
+    <string name="vuzix_settings">Configuración Vuzix Z100</string>
+    <string name="vuzix_settings_description">Configure sus gafas inteligentes Vuzix Z100 para visualización de minimapa y conexión de dispositivo.</string>
+    <string name="open_vuzix_settings">Abrir Configuración Vuzix</string>
+    
+    <!-- Map Scale Settings -->
+    <string name="map_scale">Escala del Mapa</string>
+    <string name="map_scale_description">Ajuste qué tan lejos puede ver en el minimapa. Valores más altos muestran áreas más grandes.</string>
+    <string name="map_scale_radius_format">Escala del Mapa: %1$s radio</string>
 </resources>

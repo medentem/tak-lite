@@ -604,4 +604,14 @@
     <string name="teams_loaded">Teams loaded successfully</string>
     <string name="team_joined">Joined team: %1$s</string>
     <string name="team_join_failed">Failed to join team: %1$s</string>
+
+    <!-- Vuzix Settings -->
+    <string name="vuzix_settings">Vuzix Z100 Settings</string>
+    <string name="vuzix_settings_description">Configure your Vuzix Z100 smart glasses for minimap display and device connection.</string>
+    <string name="open_vuzix_settings">Open Vuzix Settings</string>
+    
+    <!-- Map Scale Settings -->
+    <string name="map_scale">Map Scale</string>
+    <string name="map_scale_description">Adjust how far you can see on the minimap. Higher values show larger areas.</string>
+    <string name="map_scale_radius_format">Map Scale: %1$s radius</string>
 </resources> 

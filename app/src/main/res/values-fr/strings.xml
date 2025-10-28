@@ -604,4 +604,14 @@
     <string name="teams_loaded">Équipes chargées avec succès</string>
     <string name="team_joined">Rejoint l\'équipe : %1$s</string>
     <string name="team_join_failed">Échec de l\'adhésion à l\'équipe : %1$s</string>
+    
+    <!-- Vuzix Settings -->
+    <string name="vuzix_settings">Paramètres Vuzix Z100</string>
+    <string name="vuzix_settings_description">Configurez vos lunettes intelligentes Vuzix Z100 pour l\'affichage de minimap et la connexion d\'appareil.</string>
+    <string name="open_vuzix_settings">Ouvrir les Paramètres Vuzix</string>
+    
+    <!-- Map Scale Settings -->
+    <string name="map_scale">Échelle de la Carte</string>
+    <string name="map_scale_description">Ajustez la distance visible sur la minimap. Des valeurs plus élevées montrent des zones plus grandes.</string>
+    <string name="map_scale_radius_format">Échelle de la Carte: %1$s rayon</string>
 </resources>

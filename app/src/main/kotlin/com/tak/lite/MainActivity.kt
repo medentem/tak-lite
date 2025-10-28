@@ -1900,14 +1900,19 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
     private fun initializeVuzixMinimap() {
         lifecycleScope.launch {
             try {
-                Log.d("MainActivity", "Initializing Vuzix Z100 minimap...")
+                Log.d("MainActivity", "=== VUZIX MINIMAP INITIALIZATION STARTED ===")
+                Log.d("MainActivity", "Starting Vuzix Z100 minimap...")
                 
                 // Start minimap service
+                Log.d("MainActivity", "Starting minimap service...")
                 minimapService.startMinimapService()
+                
+                Log.d("MainActivity", "Setting up minimap controller observers...")
                 
                 // Observe minimap controller state
                 repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
                     minimapController.isMinimapEnabled.collect { isEnabled ->
+                        Log.d("MainActivity", "=== MINIMAP ENABLED STATE UPDATE ===")
                         Log.d("MainActivity", "Minimap enabled: $isEnabled")
                     }
                 }
@@ -1915,14 +1920,26 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
                 // Observe Vuzix connection state
                 repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
                     minimapController.isVuzixConnected.collect { isConnected ->
+                        Log.d("MainActivity", "=== VUZIX CONNECTION STATE UPDATE ===")
                         Log.d("MainActivity", "Vuzix connected: $isConnected")
+                        
+                        if (isConnected) {
+                            Log.i("MainActivity", "✅ Vuzix glasses are CONNECTED!")
+                            Log.i("MainActivity", "Minimap functionality is now available")
+                        } else {
+                            Log.w("MainActivity", "❌ Vuzix glasses are NOT CONNECTED")
+                            Log.w("MainActivity", "Minimap functionality is not available")
+                        }
                     }
                 }
                 
-                Log.d("MainActivity", "Vuzix Z100 minimap initialized successfully")
+                Log.d("MainActivity", "✅ Vuzix Z100 minimap initialized successfully")
+                Log.d("MainActivity", "=== VUZIX MINIMAP INITIALIZATION COMPLETED ===")
                 
             } catch (e: Exception) {
-                Log.e("MainActivity", "Failed to initialize Vuzix Z100 minimap", e)
+                Log.e("MainActivity", "❌ CRITICAL ERROR: Failed to initialize Vuzix Z100 minimap", e)
+                Log.e("MainActivity", "Exception type: ${e.javaClass.simpleName}")
+                Log.e("MainActivity", "Exception message: ${e.message}")
             }
         }
     }

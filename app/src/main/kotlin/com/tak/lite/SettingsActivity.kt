@@ -202,6 +202,7 @@ class SettingsActivity : BaseActivity() {
     private lateinit var serverTeamSpinner: com.google.android.material.textfield.MaterialAutoCompleteTextView
     private lateinit var serverTeamLayout: com.google.android.material.textfield.TextInputLayout
     private lateinit var serverStatusText: TextView
+    private lateinit var vuzixSettingsButton: com.google.android.material.button.MaterialButton
     
     // Server API service
     private lateinit var serverApiService: ServerApiService
@@ -310,6 +311,7 @@ class SettingsActivity : BaseActivity() {
         serverTeamSpinner = findViewById(R.id.serverTeamSpinner)
         serverTeamLayout = findViewById(R.id.serverTeamLayout)
         serverStatusText = findViewById(R.id.serverStatusText)
+        vuzixSettingsButton = findViewById(R.id.vuzixSettingsButton)
         
         // Initialize server services
         serverApiService = ServerApiService(this)
@@ -802,6 +804,12 @@ class SettingsActivity : BaseActivity() {
         // Setup calibration button
         compassCalibrateButton.setOnClickListener {
             startCompassCalibration()
+        }
+        
+        // Setup Vuzix settings button
+        vuzixSettingsButton.setOnClickListener {
+            val intent = Intent(this, com.tak.lite.vuzix.MinimapSettingsActivity::class.java)
+            startActivity(intent)
         }
         
         // Monitor compass status changes

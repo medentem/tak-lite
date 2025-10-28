@@ -15,10 +15,12 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package com.geeksville.mesh
+package org.meshtastic.core.model
 
 import android.os.Parcel
 import android.os.Parcelable
+import com.geeksville.mesh.MeshProtos
+import com.geeksville.mesh.Portnums
 import kotlinx.parcelize.Parcelize
 import kotlinx.serialization.Serializable
 

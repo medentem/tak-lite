@@ -31,10 +31,10 @@ class MinimapController @Inject constructor(
     private val _isVuzixConnected = MutableStateFlow(false)
     val isVuzixConnected: StateFlow<Boolean> = _isVuzixConnected.asStateFlow()
 
-    private val _minimapSettings = MutableStateFlow(MinimapSettings())
-    val minimapSettings: StateFlow<MinimapSettings> = _minimapSettings.asStateFlow()
 
     init {
+        Log.d(TAG, "=== MINIMAP CONTROLLER INITIALIZATION ===")
+        Log.d(TAG, "MinimapController created")
         startMinimapService()
     }
 
@@ -44,12 +44,48 @@ class MinimapController @Inject constructor(
     private fun startMinimapService() {
         viewModelScope.launch {
             try {
+                Log.d(TAG, "Starting minimap service...")
                 minimapService.startMinimapService()
                 _isMinimapEnabled.value = true
-                Log.d(TAG, "Minimap service started")
+                Log.d(TAG, "✅ Minimap service started successfully")
+                
+                // Monitor Vuzix connection state
+                monitorVuzixConnection()
+                
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to start minimap service", e)
+                Log.e(TAG, "❌ Failed to start minimap service", e)
                 _isMinimapEnabled.value = false
+            }
+        }
+    }
+
+    /**
+     * Monitor Vuzix connection state
+     */
+    private fun monitorVuzixConnection() {
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "Starting Vuzix connection monitoring...")
+                
+                // Get the VuzixManager from MinimapService to monitor connection
+                val vuzixManager = minimapService.getVuzixManager()
+                vuzixManager.isConnected.collect { isConnected ->
+                    Log.d(TAG, "=== VUZIX CONNECTION STATE UPDATE ===")
+                    Log.d(TAG, "Connection state changed: $isConnected")
+                    Log.d(TAG, "Previous state: ${_isVuzixConnected.value}")
+                    
+                    _isVuzixConnected.value = isConnected
+                    
+                    if (isConnected) {
+                        Log.i(TAG, "✅ Vuzix glasses are CONNECTED!")
+                        Log.i(TAG, "Minimap can now be displayed on glasses")
+                    } else {
+                        Log.w(TAG, "❌ Vuzix glasses are NOT CONNECTED")
+                        Log.w(TAG, "Minimap cannot be displayed")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Error monitoring Vuzix connection", e)
             }
         }
     }
@@ -124,65 +160,12 @@ class MinimapController @Inject constructor(
         }
     }
 
-    /**
-     * Update minimap settings
-     */
-    fun updateMinimapSettings(settings: MinimapSettings) {
-        _minimapSettings.value = settings
-        Log.d(TAG, "Minimap settings updated: $settings")
-    }
 
     /**
-     * Set minimap zoom level
+     * Get the minimap service instance
      */
-    fun setMinimapZoom(zoomLevel: Float) {
-        val currentSettings = _minimapSettings.value
-        _minimapSettings.value = currentSettings.copy(zoomLevel = zoomLevel)
-        Log.d(TAG, "Minimap zoom set to: $zoomLevel")
-    }
-
-    /**
-     * Set minimap orientation mode
-     */
-    fun setMinimapOrientation(orientation: MinimapOrientation) {
-        val currentSettings = _minimapSettings.value
-        _minimapSettings.value = currentSettings.copy(orientation = orientation)
-        Log.d(TAG, "Minimap orientation set to: $orientation")
-    }
-
-    /**
-     * Set minimap size
-     */
-    fun setMinimapSize(size: MinimapSize) {
-        val currentSettings = _minimapSettings.value
-        _minimapSettings.value = currentSettings.copy(size = size)
-        Log.d(TAG, "Minimap size set to: $size")
-    }
-
-    /**
-     * Set minimap position
-     */
-    fun setMinimapPosition(position: MinimapPosition) {
-        val currentSettings = _minimapSettings.value
-        _minimapSettings.value = currentSettings.copy(position = position)
-        Log.d(TAG, "Minimap position set to: $position")
-    }
-
-    /**
-     * Toggle minimap features
-     */
-    fun toggleMinimapFeature(feature: MinimapFeature) {
-        val currentSettings = _minimapSettings.value
-        val updatedFeatures = currentSettings.features.toMutableSet()
-        
-        if (updatedFeatures.contains(feature)) {
-            updatedFeatures.remove(feature)
-        } else {
-            updatedFeatures.add(feature)
-        }
-        
-        _minimapSettings.value = currentSettings.copy(features = updatedFeatures)
-        Log.d(TAG, "Minimap feature toggled: $feature")
+    fun getMinimapService(): MinimapService {
+        return minimapService
     }
 
     /**
@@ -209,8 +192,9 @@ class MinimapController @Inject constructor(
 /**
  * Minimap settings data class
  */
+@kotlinx.serialization.Serializable
 data class MinimapSettings(
-    val zoomLevel: Float = 1.0f,
+    val zoomLevel: Float = 1.0f, // 1.0 = 100m radius, 2.0 = 200m radius, etc.
     val orientation: MinimapOrientation = MinimapOrientation.NORTH_UP,
     val size: MinimapSize = MinimapSize.MEDIUM,
     val position: MinimapPosition = MinimapPosition.BOTTOM_RIGHT,
@@ -220,11 +204,32 @@ data class MinimapSettings(
         MinimapFeature.GRID,
         MinimapFeature.NORTH_INDICATOR
     )
-)
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is MinimapSettings) return false
+        
+        return zoomLevel == other.zoomLevel &&
+                orientation == other.orientation &&
+                size == other.size &&
+                position == other.position &&
+                features == other.features
+    }
+    
+    override fun hashCode(): Int {
+        var result = zoomLevel.hashCode()
+        result = 31 * result + orientation.hashCode()
+        result = 31 * result + size.hashCode()
+        result = 31 * result + position.hashCode()
+        result = 31 * result + features.hashCode()
+        return result
+    }
+}
 
 /**
  * Minimap orientation modes
  */
+@kotlinx.serialization.Serializable
 enum class MinimapOrientation {
     NORTH_UP,           // North always up (rotating)
     HEADING_UP,         // User direction always up (fixed)
@@ -234,6 +239,7 @@ enum class MinimapOrientation {
 /**
  * Minimap sizes
  */
+@kotlinx.serialization.Serializable
 enum class MinimapSize {
     SMALL,              // 150x150 pixels
     MEDIUM,             // 200x200 pixels
@@ -243,6 +249,7 @@ enum class MinimapSize {
 /**
  * Minimap positions
  */
+@kotlinx.serialization.Serializable
 enum class MinimapPosition {
     TOP_LEFT,
     TOP_RIGHT,
@@ -254,6 +261,7 @@ enum class MinimapPosition {
 /**
  * Minimap features
  */
+@kotlinx.serialization.Serializable
 enum class MinimapFeature {
     PEERS,              // Show peer locations
     WAYPOINTS,          // Show waypoints
