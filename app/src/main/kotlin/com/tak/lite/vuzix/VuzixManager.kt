@@ -110,81 +110,47 @@ class VuzixManager @Inject constructor(
     private fun initializeVuzixConnection() {
         coroutineScope.launch(Dispatchers.Main) {
             try {
-                Log.d(TAG, "=== VUZIX CONNECTION INITIALIZATION STARTED ===")
-                Log.d(TAG, "Context: ${context.packageName}")
-                Log.d(TAG, "SDK instance created: ${ultraliteSDK}")
-                
-                // Monitor SDK availability using proper method
+                // Monitor SDK availability - only log when value changes
                 ultraliteSDK.getAvailable().observeForever { isAvailable ->
-                    Log.d(TAG, "=== VUZIX AVAILABILITY STATE CHANGED ===")
-                    Log.d(TAG, "SDK available: $isAvailable")
-                    _isAvailable.value = isAvailable
-                    
-                    if (!isAvailable) {
-                        Log.w(TAG, "Vuzix SDK not available - this could mean:")
-                        Log.w(TAG, "1. Vuzix Connect app is not installed")
-                        Log.w(TAG, "2. Vuzix Connect app is not running")
-                        Log.w(TAG, "3. Vuzix glasses are not paired")
-                        Log.w(TAG, "4. Vuzix glasses are not connected to phone")
-                    } else {
-                        Log.i(TAG, "Vuzix SDK is available!")
+                    if (_isAvailable.value != isAvailable) {
+                        _isAvailable.value = isAvailable
+                        if (!isAvailable) {
+                            Log.w(TAG, "Vuzix SDK not available (Connect app/glasses not connected)")
+                        } else {
+                            Log.i(TAG, "Vuzix SDK available")
+                        }
                     }
                 }
                 
-                // Monitor linked state using proper method
+                // Monitor linked state - only log when value changes
                 ultraliteSDK.getLinked().observeForever { isLinked ->
-                    Log.d(TAG, "=== VUZIX LINKED STATE CHANGED ===")
-                    Log.d(TAG, "Linked status: $isLinked")
-                    _isLinked.value = isLinked
-                    
-                    if (isLinked) {
-                        Log.i(TAG, "Vuzix glasses are now LINKED!")
-                        Log.i(TAG, "Glasses are connected to the app")
-                    } else {
-                        Log.w(TAG, "Vuzix glasses are NOT LINKED")
-                        Log.w(TAG, "Glasses are not connected to the app")
+                    if (_isLinked.value != isLinked) {
+                        _isLinked.value = isLinked
+                        Log.i(TAG, "Vuzix linked: $isLinked")
                     }
                 }
                 
-                // Monitor connected state using proper method
+                // Monitor connected state - only log when value changes
                 ultraliteSDK.getConnected().observeForever { isConnected ->
-                    Log.d(TAG, "=== VUZIX CONNECTED STATE CHANGED ===")
-                    Log.d(TAG, "Connected status: $isConnected")
-                    _isConnected.value = isConnected
-                    
-                    if (isConnected) {
-                        Log.i(TAG, "Vuzix glasses are now CONNECTED!")
-                        Log.i(TAG, "Ready for content display")
-                    } else {
-                        Log.w(TAG, "Vuzix glasses are NOT CONNECTED")
-                        Log.w(TAG, "Cannot display content")
+                    if (_isConnected.value != isConnected) {
+                        _isConnected.value = isConnected
+                        Log.i(TAG, "Vuzix connected: $isConnected")
                     }
                 }
                 
-                // Monitor control status using proper method
+                // Monitor control status - only log when value changes
                 ultraliteSDK.getControlledByMe().observeForever { hasControl ->
-                    Log.d(TAG, "=== VUZIX CONTROL STATE CHANGED ===")
-                    Log.d(TAG, "Control status: $hasControl")
-                    _isControlled.value = hasControl
-                    _hasControl.value = hasControl
-                    
-                    if (hasControl) {
-                        Log.i(TAG, "Vuzix glasses are now CONTROLLED by this app!")
-                        Log.i(TAG, "App can now send content to glasses")
+                    if (_isControlled.value != hasControl) {
+                        _isControlled.value = hasControl
+                        _hasControl.value = hasControl
+                        Log.i(TAG, "Vuzix control: $hasControl")
                         
                         // If minimap should be visible, render it now that we have control
-                        if (_isMinimapVisible.value) {
-                            Log.d(TAG, "Minimap should be visible - rendering now that we have control")
+                        if (hasControl && _isMinimapVisible.value) {
                             renderMinimap()
                         }
-                    } else {
-                        Log.w(TAG, "Vuzix glasses are NOT CONTROLLED by this app")
-                        Log.w(TAG, "Another app may be controlling the glasses")
                     }
                 }
-                
-                Log.d(TAG, "Vuzix Z100 connection monitoring started successfully")
-                Log.d(TAG, "=== VUZIX CONNECTION INITIALIZATION COMPLETED ===")
                 
             } catch (e: Exception) {
                 Log.e(TAG, "CRITICAL ERROR: Failed to initialize Vuzix Z100 connection", e)
@@ -208,14 +174,6 @@ class VuzixManager @Inject constructor(
         peers: Map<String, PeerLocationEntry>,
         annotations: List<MinimapWaypoint>
     ) {
-        Log.d(TAG, "=== UPDATE MINIMAP CALLED ===")
-        Log.d(TAG, "User location: $userLocation")
-        Log.d(TAG, "User heading: $userHeading")
-        Log.d(TAG, "Peers count: ${peers.size}")
-        Log.d(TAG, "Annotations count: ${annotations.size}")
-        Log.d(TAG, "Current minimap visible: ${_isMinimapVisible.value}")
-        Log.d(TAG, "Current connected state: ${_isConnected.value}")
-        
         // Store current values
         currentUserLocation = userLocation
         currentUserHeading = userHeading
@@ -225,7 +183,6 @@ class VuzixManager @Inject constructor(
         // Check if we should update based on throttling and change detection
         if (_isMinimapVisible.value && _isConnected.value) {
             if (shouldUpdate(userLocation, userHeading, peers, annotations)) {
-                Log.d(TAG, "Conditions met and changes detected - calling renderMinimap()")
                 renderMinimap()
                 
                 // Update tracking values
@@ -234,13 +191,7 @@ class VuzixManager @Inject constructor(
                 lastPeerCount = peers.size
                 lastAnnotationCount = annotations.size
                 lastUpdateTime = System.currentTimeMillis()
-            } else {
-                Log.d(TAG, "Conditions met but no significant changes - skipping render")
             }
-        } else {
-            Log.w(TAG, "Conditions NOT met for rendering:")
-            Log.w(TAG, "  - Minimap visible: ${_isMinimapVisible.value}")
-            Log.w(TAG, "  - Connected: ${_isConnected.value}")
         }
     }
 
@@ -256,7 +207,6 @@ class VuzixManager @Inject constructor(
         // Check throttling - minimum time between updates
         val currentTime = System.currentTimeMillis()
         if (currentTime - lastUpdateTime < updateInterval) {
-            Log.d(TAG, "Throttling: Too soon since last update (${currentTime - lastUpdateTime}ms < ${updateInterval}ms)")
             return false
         }
         
@@ -268,11 +218,9 @@ class VuzixManager @Inject constructor(
         val settingsChanged = lastSettings != currentSettings
         
         if (settingsChanged) {
-            Log.d(TAG, "Settings changed - forcing render")
             lastSettings = currentSettings
         }
         
-        Log.d(TAG, "Change detection: data=$hasChanges, settings=$settingsChanged")
         return hasChanges || settingsChanged
     }
     
@@ -289,7 +237,6 @@ class VuzixManager @Inject constructor(
         val locationChanged = lastUserLocation?.let { last ->
             userLocation?.let { current ->
                 val distance = haversine(last.lt, last.lng, current.lt, current.lng)
-                Log.d(TAG, "Location change: ${distance}m")
                 distance > 10.0 // 10 meters threshold
             } ?: true
         } ?: true
@@ -298,39 +245,25 @@ class VuzixManager @Inject constructor(
         val headingChanged = lastUserHeading?.let { last ->
             userHeading?.let { current ->
                 val headingDiff = abs(current - last)
-                Log.d(TAG, "Heading change: ${headingDiff}°")
                 headingDiff > 5.0
             } ?: true
         } ?: true
         
         // Update if peer/annotation count changed
         val countChanged = peers.size != lastPeerCount || annotations.size != lastAnnotationCount
-        if (countChanged) {
-            Log.d(TAG, "📊 Count change: peers ${lastPeerCount}→${peers.size}, annotations ${lastAnnotationCount}→${annotations.size}")
-        }
         
-        val hasChanges = locationChanged || headingChanged || countChanged
-        Log.d(TAG, "Change detection: location=$locationChanged, heading=$headingChanged, count=$countChanged → $hasChanges")
-        
-        return hasChanges
+        return locationChanged || headingChanged || countChanged
     }
 
     /**
      * Show/hide minimap
      */
     fun setMinimapVisible(visible: Boolean) {
-        Log.d(TAG, "=== SET MINIMAP VISIBLE ===")
-        Log.d(TAG, "Requested visibility: $visible")
-        Log.d(TAG, "Current visibility: ${_isMinimapVisible.value}")
-        Log.d(TAG, "Current connected state: ${_isConnected.value}")
-        
         _isMinimapVisible.value = visible
         
         if (visible && _isConnected.value) {
-            Log.d(TAG, "Showing minimap - requesting control and rendering")
             requestControlAndRender()
         } else {
-            Log.d(TAG, "Hiding minimap or not connected - clearing display")
             clearDisplay()
         }
     }
@@ -341,27 +274,13 @@ class VuzixManager @Inject constructor(
     private fun requestControlAndRender() {
         coroutineScope.launch(Dispatchers.Main) {
             try {
-                Log.d(TAG, "=== REQUESTING CONTROL AND RENDERING ===")
-                
-                if (!_isAvailable.value) {
-                    Log.w(TAG, "Vuzix SDK not available for control request")
-                    return@launch
-                }
-                
-                if (!_isConnected.value) {
-                    Log.w(TAG, "Vuzix glasses not connected for control request")
-                    return@launch
-                }
+                if (!_isAvailable.value || !_isConnected.value) return@launch
                 
                 if (_hasControl.value) {
-                    Log.d(TAG, "Already have control - rendering minimap directly")
                     renderMinimap()
                 } else {
-                    Log.d(TAG, "Requesting control from Vuzix glasses...")
                     ultraliteSDK.requestControl()
-                    Log.d(TAG, "Control request sent - waiting for confirmation...")
                 }
-                
             } catch (e: Exception) {
                 Log.e(TAG, "Error requesting control and rendering", e)
             }
@@ -373,14 +292,9 @@ class VuzixManager @Inject constructor(
      */
     fun forceRender() {
         if (_isMinimapVisible.value && _isConnected.value) {
-        Log.d(TAG, "Force render requested")
             renderMinimap()
         } else if (isInSettingsActivity && _isConnected.value) {
-            // In settings, render preview even if minimap not visible
-            Log.d(TAG, "Force render requested in settings - showing preview")
             renderMinimap()
-        } else {
-            Log.d(TAG, "Force render skipped - minimap visible: ${_isMinimapVisible.value}, connected: ${_isConnected.value}, in settings: $isInSettingsActivity")
         }
     }
 
@@ -396,11 +310,7 @@ class VuzixManager @Inject constructor(
      */
     fun setInSettingsActivity(inSettings: Boolean) {
         isInSettingsActivity = inSettings
-        Log.d(TAG, "Settings activity state: $inSettings")
-        
-        // If entering settings, show minimap and force render
         if (inSettings && _isConnected.value) {
-            Log.d(TAG, "Entering settings - showing minimap and forcing render")
             setMinimapVisible(true)
             forceRender()
         }
@@ -410,28 +320,16 @@ class VuzixManager @Inject constructor(
      * Render minimap on Vuzix display
      */
     private fun renderMinimap() {
-        // Prevent overlapping renders
-        if (isRendering) {
-            Log.d(TAG, "🚫 Render already in progress - skipping")
-            return
-        }
+        if (isRendering) return
 
         isRendering = true
-        Log.d(TAG, "Starting single-thread render...")
-
-        // Use dedicated render scope for single-thread rendering
         renderScope.launch {
             try {
-                // Load current settings from SharedPreferences
                 val settings = loadMinimapSettings()
-                Log.d(TAG, "Rendering with settings: $settings")
-                
                 val minimapBitmap = if (currentUserLocation == null) {
                     if (isInSettingsActivity) {
-                        Log.w(TAG, "No user location but in settings - rendering preview")
                         minimapRenderer.renderNoLocationMessage(settings, context)
                     } else {
-                        Log.w(TAG, "No user location and not in settings - skipping render")
                         return@launch
                     }
                 } else {
@@ -444,16 +342,11 @@ class VuzixManager @Inject constructor(
                         context = context
                     )
                 }
-
-                // Send to Vuzix display
                 sendToVuzixDisplay(minimapBitmap)
-                Log.d(TAG, "Single-thread render completed successfully")
-                
             } catch (e: Exception) {
-                Log.e(TAG, "Single-thread render failed", e)
+                Log.e(TAG, "Render failed", e)
             } finally {
                 isRendering = false
-                Log.d(TAG, "Render state cleared")
             }
         }
     }
@@ -473,18 +366,13 @@ class VuzixManager @Inject constructor(
             MinimapFeature.NORTH_INDICATOR.name
         )) ?: emptySet()
         
-        val settings = MinimapSettings(
+        return MinimapSettings(
             zoomLevel = zoomLevel,
             orientation = MinimapOrientation.valueOf(orientation),
             size = MinimapSize.valueOf(size),
             position = MinimapPosition.valueOf(position),
             features = features.map { MinimapFeature.valueOf(it) }.toSet()
         )
-        
-        Log.d(TAG, "Loaded settings - distance rings enabled: ${settings.features.contains(MinimapFeature.DISTANCE_RINGS)}")
-        Log.d(TAG, "All features: ${settings.features}")
-        
-        return settings
     }
 
     /**
@@ -515,11 +403,7 @@ class VuzixManager @Inject constructor(
             // Send bitmap to Vuzix display using Canvas background drawing
             ultraliteSDK.canvas.drawBackground(bitmap, clampedX, clampedY)
             
-            // Commit the changes to ensure they're applied
             ultraliteSDK.canvas.commit()
-            
-            Log.d(TAG, "Minimap sent to Vuzix display successfully at position ($clampedX, $clampedY)")
-            
         } catch (e: Exception) {
             Log.e(TAG, "Failed to send to Vuzix display", e)
         }
@@ -557,12 +441,8 @@ class VuzixManager @Inject constructor(
                 return
             }
             
-            // Clear the canvas background
             ultraliteSDK.canvas.clearBackground()
             ultraliteSDK.canvas.commit()
-            
-            Log.d(TAG, "Vuzix display cleared")
-            
         } catch (e: Exception) {
             Log.e(TAG, "Failed to clear Vuzix display", e)
         }
@@ -572,8 +452,6 @@ class VuzixManager @Inject constructor(
      * Handle touchpad input from Vuzix Z100
      */
     fun handleTouchpadInput(x: Float, y: Float, action: Int) {
-        Log.d(TAG, "Touchpad input: x=$x, y=$y, action=$action")
-        
         // Handle minimap interactions
         if (_isMinimapVisible.value) {
             when (action) {
@@ -591,13 +469,11 @@ class VuzixManager @Inject constructor(
      * Handle voice commands from Vuzix Z100
      */
     fun handleVoiceCommand(command: String) {
-        Log.d(TAG, "Voice command: $command")
-        
         when (command.lowercase()) {
             "show minimap", "minimap on" -> setMinimapVisible(true)
             "hide minimap", "minimap off" -> setMinimapVisible(false)
             "toggle minimap" -> toggleMinimap()
-            else -> Log.d(TAG, "Unknown voice command: $command")
+            else -> { /* unknown command */ }
         }
     }
 
@@ -609,8 +485,6 @@ class VuzixManager @Inject constructor(
             clearDisplay()
             _isConnected.value = false
             _isMinimapVisible.value = false
-            Log.d(TAG, "Disconnected from Vuzix Z100")
-            
         } catch (e: Exception) {
             Log.e(TAG, "Error disconnecting from Vuzix Z100", e)
         }
@@ -762,12 +636,7 @@ class MinimapRenderer {
         
         // Draw additional features
         if (settings.features.contains(MinimapFeature.DISTANCE_RINGS)) {
-            Log.d(TAG, "DISTANCE_RINGS feature is ENABLED")
-            Log.d(TAG, "Drawing distance rings - map radius: ${mapRadiusMeters}m, scale: $scale")
             drawDistanceRings(canvas, centerX, centerY, mapRadiusMeters, scale, textPaint, context)
-        } else {
-            Log.w(TAG, "DISTANCE_RINGS feature is DISABLED - skipping ring drawing")
-            Log.d(TAG, "Available features: ${settings.features}")
         }
         
         if (settings.features.contains(MinimapFeature.COMPASS_QUALITY)) {
@@ -934,85 +803,33 @@ class MinimapRenderer {
      * Draw distance rings with dynamic increments based on map scale
      */
     private fun drawDistanceRings(canvas: Canvas, centerX: Float, centerY: Float, mapRadiusMeters: Double, scale: Double, textPaint: Paint, context: Context) {
-        Log.d(TAG, "=== DISTANCE RINGS DEBUG ===")
-        Log.d(TAG, "Input parameters:")
-        Log.d(TAG, "  centerX: $centerX")
-        Log.d(TAG, "  centerY: $centerY") 
-        Log.d(TAG, "  mapRadiusMeters: $mapRadiusMeters")
-        Log.d(TAG, "  scale: $scale")
-        
-        // Calculate exactly 2 rings: slightly inside visible area and half of that
         val fullDistance = mapRadiusMeters * 0.8  // 80% of map radius to ensure it fits inside
         val halfDistance = fullDistance / 2.0
-        
-        Log.d(TAG, "Calculated distances:")
-        Log.d(TAG, "  fullDistance: $fullDistance meters")
-        Log.d(TAG, "  halfDistance: $halfDistance meters")
         
         val ringPaint = Paint().apply {
             color = Color.GREEN
             style = Paint.Style.STROKE
-            strokeWidth = 1f  // Thinner lines to not interfere with peers/annotations
-            alpha = 120  // More subtle
+            strokeWidth = 1f
+            alpha = 120
         }
-        
-        Log.d(TAG, "Ring paint: color=GREEN, strokeWidth=1f, alpha=120")
 
-        // Draw half-distance ring (inner ring)
         val halfRadius = (halfDistance / scale).toFloat()
-        Log.d(TAG, "=== HALF RING CALCULATION ===")
-        Log.d(TAG, "  halfDistance: $halfDistance meters")
-        Log.d(TAG, "  scale: $scale meters per pixel")
-        Log.d(TAG, "  halfRadius: $halfRadius pixels")
-        Log.d(TAG, "  centerX: $centerX pixels")
-        Log.d(TAG, "  threshold (60% of centerX): ${centerX * 0.6f} pixels")
-        Log.d(TAG, "  condition: ${halfRadius} < ${centerX * 0.6f} = ${halfRadius < centerX * 0.6f}")
-        
-        if (halfRadius < centerX * 0.6f) { // Only draw if it fits well within the minimap
-            Log.d(TAG, "DRAWING HALF RING: center=($centerX, $centerY), radius=$halfRadius")
+        if (halfRadius < centerX * 0.6f) {
             canvas.drawCircle(centerX, centerY, halfRadius, ringPaint)
-            Log.d(TAG, "Half ring drawn successfully")
-            
-            // Draw half-distance label positioned outside the ring using user's unit system
             val halfDistanceText = UnitManager.metersToDistanceShort(halfDistance, context)
-            
-            // Position label at 45-degree angle, outside the ring
             val labelX = centerX + halfRadius * 0.7f + 5f
             val labelY = centerY - halfRadius * 0.7f - 8f
-            Log.d(TAG, "Half ring label: '$halfDistanceText' at ($labelX, $labelY)")
             canvas.drawText(halfDistanceText, labelX, labelY, textPaint)
-        } else {
-            Log.w(TAG, "HALF RING SKIPPED: too large (${halfRadius}px >= ${centerX * 0.6f}px)")
         }
 
-        // Draw full-distance ring (outer ring) - now should be visible since it's 80% of map radius
         val fullRadius = (fullDistance / scale).toFloat()
-        Log.d(TAG, "=== FULL RING CALCULATION ===")
-        Log.d(TAG, "  fullDistance: $fullDistance meters")
-        Log.d(TAG, "  scale: $scale meters per pixel")
-        Log.d(TAG, "  fullRadius: $fullRadius pixels")
-        Log.d(TAG, "  centerX: $centerX pixels")
-        Log.d(TAG, "  threshold (85% of centerX): ${centerX * 0.85f} pixels")
-        Log.d(TAG, "  condition: ${fullRadius} <= ${centerX * 0.85f} = ${fullRadius <= centerX * 0.85f}")
-        
-        if (fullRadius <= centerX * 0.85f) { // Allow rings up to 85% of centerX for better visibility
-            Log.d(TAG, "DRAWING FULL RING: center=($centerX, $centerY), radius=$fullRadius")
+        if (fullRadius <= centerX * 0.85f) {
             canvas.drawCircle(centerX, centerY, fullRadius, ringPaint)
-            Log.d(TAG, "Full ring drawn successfully")
-            
-            // Draw full-distance label positioned outside the ring using user's unit system
             val fullDistanceText = UnitManager.metersToDistanceShort(fullDistance, context)
-            
-            // Position label at 45-degree angle, outside the ring
             val labelX = centerX + fullRadius * 0.7f + 5f
             val labelY = centerY - fullRadius * 0.7f - 8f
-            Log.d(TAG, "Full ring label: '$fullDistanceText' at ($labelX, $labelY)")
             canvas.drawText(fullDistanceText, labelX, labelY, textPaint)
-        } else {
-            Log.w(TAG, "FULL RING SKIPPED: too large (${fullRadius}px > ${centerX * 0.85f}px)")
         }
-        
-        Log.d(TAG, "=== DISTANCE RINGS DEBUG COMPLETE ===")
     }
     
     /**
@@ -1059,20 +876,11 @@ class MinimapRenderer {
      * Shows how the minimap will look with current settings
      */
     fun renderNoLocationMessage(settings: MinimapSettings, context: Context): Bitmap {
-        Log.d(TAG, "=== PREVIEW METHOD CALLED ===")
-        Log.d(TAG, "Settings: $settings")
-        Log.d(TAG, "Features: ${settings.features}")
-        Log.d(TAG, "Distance rings enabled: ${settings.features.contains(MinimapFeature.DISTANCE_RINGS)}")
-        
-        // Get size from settings
         val minimapSize = when (settings.size) {
             MinimapSize.SMALL -> 150
             MinimapSize.MEDIUM -> 200
             MinimapSize.LARGE -> 250
         }
-        
-        Log.d(TAG, "Minimap size: $minimapSize")
-        
         val bitmap = Bitmap.createBitmap(minimapSize, minimapSize, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         
@@ -1145,55 +953,32 @@ class MinimapRenderer {
                 Pair(mapRadiusMeters * 0.7, -mapRadiusMeters * 0.4), // 70% radius north, 40% west
                 Pair(-mapRadiusMeters * 0.3, -mapRadiusMeters * 0.5) // 30% radius south, 50% west
             )
-            
-            Log.d(TAG, "Sample peers with mapRadiusMeters: $mapRadiusMeters, scale: $scale")
-            samplePeers.forEachIndexed { index, (northMeters, eastMeters) ->
+            samplePeers.forEach { (northMeters, eastMeters) ->
                 val x = centerX + (eastMeters / scale).toFloat()
                 val y = centerY - (northMeters / scale).toFloat()
-                
-                Log.d(TAG, "Peer $index: north=${northMeters}m, east=${eastMeters}m -> pixel($x, $y)")
-                
-                // Only draw if within minimap bounds
                 if (x >= 0 && x < minimapSize && y >= 0 && y < minimapSize) {
-                    canvas.drawCircle(x, y, 5f, peerPaint) // Smaller dots for better visibility
+                    canvas.drawCircle(x, y, 5f, peerPaint)
                 }
             }
         }
         
-        // Draw sample waypoints if WAYPOINTS feature is enabled
         if (settings.features.contains(MinimapFeature.WAYPOINTS)) {
             val sampleWaypoints = listOf(
-                Pair(mapRadiusMeters * 0.8, 0.0), // 80% radius north
-                Pair(0.0, mapRadiusMeters * 0.9), // 90% radius east
-                Pair(-mapRadiusMeters * 0.7, -mapRadiusMeters * 0.4) // 70% radius south, 40% west
+                Pair(mapRadiusMeters * 0.8, 0.0),
+                Pair(0.0, mapRadiusMeters * 0.9),
+                Pair(-mapRadiusMeters * 0.7, -mapRadiusMeters * 0.4)
             )
-            
-            Log.d(TAG, "Sample waypoints with mapRadiusMeters: $mapRadiusMeters, scale: $scale")
-            sampleWaypoints.forEachIndexed { index, (northMeters, eastMeters) ->
+            sampleWaypoints.forEach { (northMeters, eastMeters) ->
                 val x = centerX + (eastMeters / scale).toFloat()
                 val y = centerY - (northMeters / scale).toFloat()
-                
-                Log.d(TAG, "Waypoint $index: north=${northMeters}m, east=${eastMeters}m -> pixel($x, $y)")
-                
-                // Only draw if within minimap bounds
                 if (x >= 0 && x < minimapSize && y >= 0 && y < minimapSize) {
-                    canvas.drawCircle(x, y, 8f, waypointPaint) // Smaller waypoints
+                    canvas.drawCircle(x, y, 8f, waypointPaint)
                 }
             }
         }
         
-        // Draw distance rings if enabled
-        Log.d(TAG, "=== PREVIEW: CHECKING DISTANCE RINGS ===")
-        Log.d(TAG, "Features contains DISTANCE_RINGS: ${settings.features.contains(MinimapFeature.DISTANCE_RINGS)}")
-        Log.d(TAG, "All features: ${settings.features}")
-        
         if (settings.features.contains(MinimapFeature.DISTANCE_RINGS)) {
-            Log.d(TAG, "PREVIEW: DISTANCE_RINGS feature is ENABLED")
-            Log.d(TAG, "Preview drawing distance rings - map radius: ${mapRadiusMeters}m, scale: $scale")
             drawDistanceRings(canvas, centerX, centerY, mapRadiusMeters, scale, textPaint, context)
-        } else {
-            Log.w(TAG, "PREVIEW: DISTANCE_RINGS feature is DISABLED - skipping ring drawing")
-            Log.d(TAG, "Preview available features: ${settings.features}")
         }
         
         // Draw compass quality if enabled
