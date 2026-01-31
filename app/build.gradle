@@ -28,8 +28,8 @@ android {
         applicationId "com.tak.lite"
         minSdk 30       // <— modern key
         targetSdk 35
-        versionCode 114
-        versionName "1.4.0-beta.84"
+        versionCode 115
+        versionName "1.4.0-beta.85"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
   
