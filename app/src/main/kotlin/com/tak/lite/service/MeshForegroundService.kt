@@ -309,8 +309,10 @@ class MeshForegroundService : Service() {
                 // Show notifications for new annotations
                 newAnnotations.forEach { annotation ->
                     try {
-                        // Get creator nickname if available
-                        val creatorNickname = meshNetworkService.getPeerName(annotation.creatorId)
+                        // Prefer server-provided creator name; fall back to mesh peer name or ID
+                        val creatorNickname = annotation.creatorUsername
+                            ?: meshNetworkService.getPeerName(annotation.creatorId)
+                            ?: annotation.creatorId
                         
                         annotationNotificationManager.showAnnotationNotification(
                             annotation = annotation,

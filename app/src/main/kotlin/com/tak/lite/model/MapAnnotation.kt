@@ -16,6 +16,7 @@ enum class DataSource {
 sealed class MapAnnotation {
     abstract val id: String
     abstract val creatorId: String
+    abstract val creatorUsername: String? // Human-readable name from server; null for mesh/local
     abstract val timestamp: Long
     abstract val color: AnnotationColor
     abstract val expirationTime: Long? // null means no expiration
@@ -27,6 +28,7 @@ sealed class MapAnnotation {
     data class PointOfInterest(
         override val id: String = UUID.randomUUID().toString(),
         override val creatorId: String,
+        override val creatorUsername: String? = null,
         override val timestamp: Long = System.currentTimeMillis(),
         override val color: AnnotationColor,
         val position: LatLngSerializable,
@@ -43,6 +45,7 @@ sealed class MapAnnotation {
     data class Line(
         override val id: String = UUID.randomUUID().toString(),
         override val creatorId: String,
+        override val creatorUsername: String? = null,
         override val timestamp: Long = System.currentTimeMillis(),
         override val color: AnnotationColor,
         val points: List<LatLngSerializable>,
@@ -60,6 +63,7 @@ sealed class MapAnnotation {
     data class Area(
         override val id: String = UUID.randomUUID().toString(),
         override val creatorId: String,
+        override val creatorUsername: String? = null,
         override val timestamp: Long = System.currentTimeMillis(),
         override val color: AnnotationColor,
         val center: LatLngSerializable,
@@ -76,6 +80,7 @@ sealed class MapAnnotation {
     data class Polygon(
         override val id: String = UUID.randomUUID().toString(),
         override val creatorId: String,
+        override val creatorUsername: String? = null,
         override val timestamp: Long = System.currentTimeMillis(),
         override val color: AnnotationColor,
         val points: List<LatLngSerializable>, // Polygon vertices
@@ -93,6 +98,7 @@ sealed class MapAnnotation {
     data class Deletion(
         override val id: String,
         override val creatorId: String,
+        override val creatorUsername: String? = null,
         override val timestamp: Long = System.currentTimeMillis(),
         override val color: AnnotationColor = AnnotationColor.RED, // Not used, but required by base class
         override val expirationTime: Long? = null,

@@ -243,6 +243,7 @@ class HybridSyncManager(
         return try {
             val data = serverAnnotation.data
             val type = serverAnnotation.type
+            val creatorUsername = data["creatorUsername"] as? String
             
             when (type) {
                 "poi" -> {
@@ -254,6 +255,7 @@ class HybridSyncManager(
                         MapAnnotation.PointOfInterest(
                             id = serverAnnotation.id,
                             creatorId = serverAnnotation.user_id,
+                            creatorUsername = creatorUsername,
                             timestamp = parseServerTimestamp(serverAnnotation.created_at),
                             color = parseColor(data["color"] as? String),
                             position = LatLngSerializable(lat, lng),
@@ -280,6 +282,7 @@ class HybridSyncManager(
                             MapAnnotation.Line(
                                 id = serverAnnotation.id,
                                 creatorId = serverAnnotation.user_id,
+                                creatorUsername = creatorUsername,
                                 timestamp = parseServerTimestamp(serverAnnotation.created_at),
                                 color = parseColor(data["color"] as? String),
                                 points = latLngPoints,
@@ -303,6 +306,7 @@ class HybridSyncManager(
                         MapAnnotation.Area(
                             id = serverAnnotation.id,
                             creatorId = serverAnnotation.user_id,
+                            creatorUsername = creatorUsername,
                             timestamp = parseServerTimestamp(serverAnnotation.created_at),
                             color = parseColor(data["color"] as? String),
                             center = LatLngSerializable(centerLat, centerLng),
@@ -329,6 +333,7 @@ class HybridSyncManager(
                             MapAnnotation.Polygon(
                                 id = serverAnnotation.id,
                                 creatorId = serverAnnotation.user_id,
+                                creatorUsername = creatorUsername,
                                 timestamp = parseServerTimestamp(serverAnnotation.created_at),
                                 color = parseColor(data["color"] as? String),
                                 points = latLngPoints,
