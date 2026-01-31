@@ -583,8 +583,8 @@
     <string name="server_connection">Connexiun cun il Server</string>
     <string name="server_url">URL dal Server</string>
     <string name="server_url_hint">https://tes-server.com</string>
-    <string name="server_username">Num d\'utilisader/E-mail</string>
-    <string name="server_username_hint">Endatescha tes num d\'utilisader u e-mail</string>
+    <string name="server_username">Num d\'utilisader</string>
+    <string name="server_username_hint">Endatescha tes num d\'utilisader</string>
     <string name="server_password">Plaid-clav</string>
     <string name="server_password_hint">Endatescha tia plaid-clav</string>
     <string name="connect_to_server">Connegiar cun il Server</string>

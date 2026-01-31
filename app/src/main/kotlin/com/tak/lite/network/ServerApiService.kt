@@ -58,12 +58,12 @@ class ServerApiService(private val context: Context) {
     }
     
     /**
-     * Login to the server with email and password
+     * Login to the server with username and password
      */
-    suspend fun login(serverUrl: String, email: String, password: String): Result<LoginResponse> {
+    suspend fun login(serverUrl: String, username: String, password: String): Result<LoginResponse> {
         return withContext(Dispatchers.IO) {
             try {
-                val requestBody = gson.toJson(LoginRequest(email, password))
+                val requestBody = gson.toJson(LoginRequest(username, password))
                     .toRequestBody("application/json".toMediaType())
                 
                 val request = Request.Builder()

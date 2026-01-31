@@ -583,8 +583,8 @@
     <string name="server_connection">Server-Verbindung</string>
     <string name="server_url">Server-URL</string>
     <string name="server_url_hint">https://ihr-server.com</string>
-    <string name="server_username">Benutzername/E-Mail</string>
-    <string name="server_username_hint">Geben Sie Ihren Benutzernamen oder E-Mail ein</string>
+    <string name="server_username">Benutzername</string>
+    <string name="server_username_hint">Geben Sie Ihren Benutzernamen ein</string>
     <string name="server_password">Passwort</string>
     <string name="server_password_hint">Geben Sie Ihr Passwort ein</string>
     <string name="connect_to_server">Mit Server verbinden</string>
