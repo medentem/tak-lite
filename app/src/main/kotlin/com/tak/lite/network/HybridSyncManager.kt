@@ -239,18 +239,27 @@ class HybridSyncManager(
     /**
      * Convert server annotation to MapAnnotation
      */
+    private fun parseExpirationTime(data: Map<String, Any>): Long? {
+        val v = data["expirationTime"] ?: return null
+        return when (v) {
+            is Number -> v.toLong()
+            else -> null
+        }
+    }
+
     private fun convertServerAnnotationToMapAnnotation(serverAnnotation: ServerAnnotation): MapAnnotation? {
         return try {
             val data = serverAnnotation.data
             val type = serverAnnotation.type
             val creatorUsername = data["creatorUsername"] as? String
-            
+            val expirationTime = parseExpirationTime(data)
+
             when (type) {
                 "poi" -> {
                     val position = data["position"] as? Map<String, Any>
                     val lat = (position?.get("lt") as? Number)?.toDouble()
                     val lng = (position?.get("lng") as? Number)?.toDouble()
-                    
+
                     if (lat != null && lng != null) {
                         MapAnnotation.PointOfInterest(
                             id = serverAnnotation.id,
@@ -262,6 +271,7 @@ class HybridSyncManager(
                             shape = parseShape(data["shape"] as? String),
                             label = data["label"] as? String,
                             description = data["description"] as? String,
+                            expirationTime = expirationTime,
                             source = DataSource.SERVER,
                             originalSource = DataSource.SERVER
                         )
@@ -290,6 +300,7 @@ class HybridSyncManager(
                                 arrowHead = data["arrowHead"] as? Boolean ?: true,
                                 label = data["label"] as? String,
                                 description = data["description"] as? String,
+                                expirationTime = expirationTime,
                                 source = DataSource.SERVER,
                                 originalSource = DataSource.SERVER
                             )
@@ -313,6 +324,7 @@ class HybridSyncManager(
                             radius = radius,
                             label = data["label"] as? String,
                             description = data["description"] as? String,
+                            expirationTime = expirationTime,
                             source = DataSource.SERVER,
                             originalSource = DataSource.SERVER
                         )
@@ -341,6 +353,7 @@ class HybridSyncManager(
                                 strokeWidth = (data["strokeWidth"] as? Number)?.toFloat() ?: 3f,
                                 label = data["label"] as? String,
                                 description = data["description"] as? String,
+                                expirationTime = expirationTime,
                                 source = DataSource.SERVER,
                                 originalSource = DataSource.SERVER
                             )
