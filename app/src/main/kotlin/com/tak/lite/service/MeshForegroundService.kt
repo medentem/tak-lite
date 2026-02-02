@@ -33,6 +33,13 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+private val UUID_REGEX = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+
+private fun isGuidLike(value: String?): Boolean {
+    if (value.isNullOrBlank()) return false
+    return UUID_REGEX.matches(value)
+}
+
 @AndroidEntryPoint
 class MeshForegroundService : Service() {
     companion object {
@@ -309,10 +316,10 @@ class MeshForegroundService : Service() {
                 // Show notifications for new annotations
                 newAnnotations.forEach { annotation ->
                     try {
-                        // Prefer server-provided creator name; fall back to mesh peer name or ID
+                        // Prefer server-provided creator name; fall back to mesh peer name; never show raw GUID
                         val creatorNickname = annotation.creatorUsername
                             ?: meshNetworkService.getPeerName(annotation.creatorId)
-                            ?: annotation.creatorId
+                            ?: if (isGuidLike(annotation.creatorId)) "Unknown" else annotation.creatorId
                         
                         annotationNotificationManager.showAnnotationNotification(
                             annotation = annotation,

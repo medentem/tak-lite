@@ -35,7 +35,12 @@ class HybridPopoverManager(
         private const val POPOVER_LAYER = "popover-position"
         private const val POPOVER_SOURCE = "popover-source"
         private const val POPOVER_TAG = "MapPopover"
+        private val UUID_REGEX = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+        private fun isGuidLike(value: String?) = !value.isNullOrBlank() && UUID_REGEX.matches(value)
     }
+
+    private fun getCreatorDisplayName(annotation: MapAnnotation): String =
+        annotation.creatorUsername ?: if (isGuidLike(annotation.creatorId)) "Unknown" else annotation.creatorId
 
     private var currentPopover: PopoverData? = null
     private var popoverView: View? = null
@@ -528,6 +533,7 @@ class HybridPopoverManager(
             lines.add("${UnitManager.metersToDistanceShort(distMeters, context)} away")
         }
         
+        lines.add("Created by: ${getCreatorDisplayName(poi)}")
         return lines.joinToString("|")
     }
 
@@ -557,6 +563,7 @@ class HybridPopoverManager(
             lines.add("${UnitManager.metersToDistanceShort(distMeters, context)} away")
         }
         
+        lines.add("Created by: ${getCreatorDisplayName(line)}")
         return lines.joinToString("|")
     }
 
@@ -599,6 +606,7 @@ class HybridPopoverManager(
             lines.add("${UnitManager.metersToDistanceShort(distMeters, context)} away")
         }
         
+        lines.add("Created by: ${getCreatorDisplayName(polygon)}")
         return lines.joinToString("|")
     }
 
@@ -629,6 +637,7 @@ class HybridPopoverManager(
             lines.add("${UnitManager.metersToDistanceShort(distMeters, context)} away")
         }
         
+        lines.add("Created by: ${getCreatorDisplayName(area)}")
         return lines.joinToString("|")
     }
 
