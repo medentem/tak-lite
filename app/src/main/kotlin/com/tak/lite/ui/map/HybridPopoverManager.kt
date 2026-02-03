@@ -39,8 +39,10 @@ class HybridPopoverManager(
         private fun isGuidLike(value: String?) = !value.isNullOrBlank() && UUID_REGEX.matches(value)
     }
 
-    private fun getCreatorDisplayName(annotation: MapAnnotation): String =
-        annotation.creatorUsername ?: if (isGuidLike(annotation.creatorId)) "Unknown" else annotation.creatorId
+    private fun getCreatorDisplayName(annotation: MapAnnotation): String {
+        val serverName = annotation.creatorUsername?.takeUnless { isGuidLike(it) }
+        return serverName ?: if (isGuidLike(annotation.creatorId)) "Unknown" else annotation.creatorId
+    }
 
     private var currentPopover: PopoverData? = null
     private var popoverView: View? = null

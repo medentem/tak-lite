@@ -317,7 +317,8 @@ class MeshForegroundService : Service() {
                 newAnnotations.forEach { annotation ->
                     try {
                         // Prefer server-provided creator name; fall back to mesh peer name; never show raw GUID
-                        val creatorNickname = annotation.creatorUsername
+                        val serverName = annotation.creatorUsername?.takeUnless { isGuidLike(it) }
+                        val creatorNickname = serverName
                             ?: meshNetworkService.getPeerName(annotation.creatorId)
                             ?: if (isGuidLike(annotation.creatorId)) "Unknown" else annotation.creatorId
                         
