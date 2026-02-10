@@ -576,6 +576,7 @@
     <string name="alternative_support_options">Opzioni di Supporto Alternative</string>
     <string name="alternative_support_description">Se preferisci non utilizzare la fatturazione Google Play o hai problemi, puoi supportarci attraverso metodi alternativi.</string>
     <string name="view_donation_options">Visualizza Opzioni di Donazione</string>
+    <string name="view_source">Visualizza fonte</string>
     <string name="back_to_purchase_options">Torna alle Opzioni di Acquisto</string>
     
     <!-- Server Connection Settings -->

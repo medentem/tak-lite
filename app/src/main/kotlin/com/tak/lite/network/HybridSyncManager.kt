@@ -12,6 +12,7 @@ import com.tak.lite.model.LatLngSerializable
 import com.tak.lite.model.AnnotationColor
 import com.tak.lite.model.PointShape
 import com.tak.lite.model.LineStyle
+import com.tak.lite.model.ThreatInfo
 import com.tak.lite.model.copyAsLocal
 import com.tak.lite.model.copyWithSourceTracking
 import com.tak.lite.repository.AnnotationRepository
@@ -247,12 +248,20 @@ class HybridSyncManager(
         }
     }
 
+    private fun parseThreatInfo(data: Map<String, Any?>): ThreatInfo? {
+        val threatInfo = data["threatInfo"] as? Map<*, *> ?: return null
+        val urls = (threatInfo["citationUrls"] as? List<*>)?.mapNotNull { (it as? String)?.takeIf { s -> s.isNotBlank() } } ?: return null
+        if (urls.isEmpty()) return null
+        return ThreatInfo(citationUrls = urls)
+    }
+
     private fun convertServerAnnotationToMapAnnotation(serverAnnotation: ServerAnnotation): MapAnnotation? {
         return try {
             val data = serverAnnotation.data
             val type = serverAnnotation.type
             val creatorUsername = data["creatorUsername"] as? String
             val expirationTime = parseExpirationTime(data)
+            val threatInfo = parseThreatInfo(data)
 
             when (type) {
                 "poi" -> {
@@ -271,6 +280,7 @@ class HybridSyncManager(
                             shape = parseShape(data["shape"] as? String),
                             label = data["label"] as? String,
                             description = data["description"] as? String,
+                            threatInfo = threatInfo,
                             expirationTime = expirationTime,
                             source = DataSource.SERVER,
                             originalSource = DataSource.SERVER
@@ -324,6 +334,7 @@ class HybridSyncManager(
                             radius = radius,
                             label = data["label"] as? String,
                             description = data["description"] as? String,
+                            threatInfo = threatInfo,
                             expirationTime = expirationTime,
                             source = DataSource.SERVER,
                             originalSource = DataSource.SERVER

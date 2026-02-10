@@ -35,6 +35,7 @@ sealed class MapAnnotation {
         val shape: PointShape,
         val label: String? = null,
         val description: String? = null, // Additional description field for detailed information
+        val threatInfo: ThreatInfo? = null, // When from server threat approval: citation URLs for "View source"
         override val expirationTime: Long? = null,
         override val source: DataSource? = null,
         override val originalSource: DataSource? = null
@@ -70,6 +71,7 @@ sealed class MapAnnotation {
         val radius: Double, // in meters
         val label: String? = null, // Optional label for the area
         val description: String? = null, // Additional description field for detailed information
+        val threatInfo: ThreatInfo? = null, // When from server threat approval: citation URLs for "View source"
         override val expirationTime: Long? = null,
         override val source: DataSource? = null,
         override val originalSource: DataSource? = null
@@ -115,6 +117,12 @@ enum class AnnotationColor {
     @SerialName("black") BLACK,
     @SerialName("white") WHITE,
 }
+
+/** Optional threat metadata from server (e.g. AI threat detection), including source citation URLs. */
+@Serializable
+data class ThreatInfo(
+    val citationUrls: List<String> = emptyList()
+)
 
 @Serializable
 enum class PointShape {

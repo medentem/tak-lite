@@ -1,5 +1,7 @@
 package com.tak.lite.ui.map
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -42,6 +44,24 @@ class HybridPopoverManager(
     private fun getCreatorDisplayName(annotation: MapAnnotation): String {
         val serverName = annotation.creatorUsername?.takeUnless { isGuidLike(it) }
         return serverName ?: if (isGuidLike(annotation.creatorId)) "Unknown" else annotation.creatorId
+    }
+
+    private fun setupViewSourceLink(view: TextView, citationUrls: List<String>) {
+        val firstUrl = citationUrls.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }
+        if (firstUrl != null) {
+            view.visibility = View.VISIBLE
+            view.setOnClickListener {
+                try {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(firstUrl))
+                    context.startActivity(intent)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to open citation URL", e)
+                }
+            }
+        } else {
+            view.visibility = View.GONE
+            view.setOnClickListener(null)
+        }
     }
 
     private var currentPopover: PopoverData? = null
@@ -91,6 +111,7 @@ class HybridPopoverManager(
     fun showPoiPopover(poiId: String, poi: MapAnnotation.PointOfInterest) {
         val content = buildPoiPopoverContent(poi)
         val status = annotationViewModel.annotationStatuses.value[poi.id]
+        val citationUrls = poi.threatInfo?.citationUrls?.filter { it.isNotBlank() } ?: emptyList()
         showPopover(PopoverData(
             id = "poi_$poiId",
             type = PopoverType.POI,
@@ -98,7 +119,8 @@ class HybridPopoverManager(
             content = content,
             timestamp = System.currentTimeMillis(),
             autoDismissTime = System.currentTimeMillis() + 8000L,
-            status = status
+            status = status,
+            citationUrls = citationUrls
         ))
     }
 
@@ -143,6 +165,7 @@ class HybridPopoverManager(
     fun showAreaPopover(areaId: String, area: MapAnnotation.Area) {
         val content = buildAreaPopoverContent(area)
         val status = annotationViewModel.annotationStatuses.value[area.id]
+        val citationUrls = area.threatInfo?.citationUrls?.filter { it.isNotBlank() } ?: emptyList()
         // Use area center for positioning
         val centerPosition = LatLng(area.center.lt, area.center.lng)
         
@@ -153,7 +176,8 @@ class HybridPopoverManager(
             content = content,
             timestamp = System.currentTimeMillis(),
             autoDismissTime = System.currentTimeMillis() + 8000L,
-            status = status
+            status = status,
+            citationUrls = citationUrls
         ))
     }
 
@@ -271,6 +295,7 @@ class HybridPopoverManager(
         val titleView = view.findViewById<TextView>(R.id.popoverTitle)
         val contentView = view.findViewById<TextView>(R.id.popoverContent)
         val statusView = view.findViewById<TextView>(R.id.popoverStatus)
+        val viewSourceView = view.findViewById<TextView>(R.id.popoverViewSource)
 
         // Parse content
         val lines = data.content.split("|")
@@ -289,6 +314,8 @@ class HybridPopoverManager(
         } else {
             statusView.visibility = View.GONE
         }
+
+        setupViewSourceLink(viewSourceView, data.citationUrls)
     }
 
     private fun setupPolygonPopoverContent(view: View, data: PopoverData) {
@@ -319,6 +346,7 @@ class HybridPopoverManager(
         val titleView = view.findViewById<TextView>(R.id.popoverTitle)
         val contentView = view.findViewById<TextView>(R.id.popoverContent)
         val statusView = view.findViewById<TextView>(R.id.popoverStatus)
+        val viewSourceView = view.findViewById<TextView>(R.id.popoverViewSource)
 
         // Parse content
         val lines = data.content.split("|")
@@ -337,6 +365,8 @@ class HybridPopoverManager(
         } else {
             statusView.visibility = View.GONE
         }
+
+        setupViewSourceLink(viewSourceView, data.citationUrls)
     }
 
     private fun setupLinePopoverContent(view: View, data: PopoverData) {

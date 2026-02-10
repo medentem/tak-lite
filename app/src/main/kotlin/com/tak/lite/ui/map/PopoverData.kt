@@ -9,7 +9,9 @@ data class PopoverData(
     val content: String,
     val timestamp: Long,
     val autoDismissTime: Long,
-    val status: com.tak.lite.model.AnnotationStatus? = null
+    val status: com.tak.lite.model.AnnotationStatus? = null,
+    /** When non-empty, show a "View source" link that opens the first URL (e.g. threat citation). */
+    val citationUrls: List<String> = emptyList()
 )
 
 enum class PopoverType {

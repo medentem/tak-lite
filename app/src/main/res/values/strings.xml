@@ -189,6 +189,7 @@
     <string name="alternative_support_options">Alternative Support Options</string>
     <string name="alternative_support_description">If you prefer not to use Google Play billing or are having issues, you can support us through alternative methods.</string>
     <string name="view_donation_options">View Donation Options</string>
+    <string name="view_source">View source</string>
     <string name="back_to_purchase_options">Back to Purchase Options</string>
     
     <!-- Channels and Peers -->
