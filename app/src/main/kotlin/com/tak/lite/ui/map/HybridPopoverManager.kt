@@ -649,6 +649,18 @@ class HybridPopoverManager(
         val title = area.label ?: "Area"
         lines.add(title)
         
+        // Description line (e.g. threat summary) - add if present and different from label
+        area.description?.let { description ->
+            if (description.isNotBlank() && description != area.label) {
+                val truncatedDescription = if (description.length > 100) {
+                    description.take(97) + "..."
+                } else {
+                    description
+                }
+                lines.add(truncatedDescription)
+            }
+        }
+        
         // Calculate area in appropriate units
         val areaSqMeters = calculateCircleArea(area.radius) * 1609.344 * 1609.344 // Convert from sq miles to sq meters
         lines.add(UnitManager.squareMetersToArea(areaSqMeters, context))
