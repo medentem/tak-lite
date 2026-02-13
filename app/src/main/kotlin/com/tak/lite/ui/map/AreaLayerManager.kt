@@ -142,7 +142,9 @@ class AreaLayerManager(private val mapLibreMap: MapLibreMap) {
     }
 
     /**
-     * Update area features in the GL layer
+     * Update area features in the GL layer.
+     * Areas are sorted by radius descending (largest first) so that smaller areas are drawn on top
+     * and receive taps first when overlapping (queryRenderedFeatures returns topmost feature first).
      */
     fun updateFeatures(areas: List<MapAnnotation.Area>) {
         if (!isInitialized) {
@@ -152,10 +154,11 @@ class AreaLayerManager(private val mapLibreMap: MapLibreMap) {
 
         try {
             lastAreas = areas
-            val fillFeatures = areas.map { area ->
+            val sortedByLargestFirst = areas.sortedByDescending { it.radius }
+            val fillFeatures = sortedByLargestFirst.map { area ->
                 areaFeatureConverter.convertToGeoJsonFeature(area) // Returns fill polygon feature
             }
-            val hitFeatures = areas.map { area ->
+            val hitFeatures = sortedByLargestFirst.map { area ->
                 areaFeatureConverter.convertToHitFeature(area) // New method for larger polygon
             }
             val labelFeatures = areas.filter { it.label != null }.map { area ->
