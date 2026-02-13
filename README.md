@@ -1,6 +1,8 @@
 # TAK Lite
 
-A situational awareness Android application designed for use with mesh network devices (Doodle Labs, Meshtastic)
+A situational awareness Android application designed for use with mesh network devices (Doodle Labs, Meshtastic). Check out TAK Lite Server for additional command and control and network redundancy capabilities [here](https://github.com/medentem/tak-lite-server).
+
+<img width="800" height="600" alt="image" src="https://github.com/user-attachments/assets/dffa64a7-a00a-416b-91f2-c5e985a063a5" />
 
 ## Features
 
