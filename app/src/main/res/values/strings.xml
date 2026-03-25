@@ -62,6 +62,7 @@
     <string name="weather_settings">Weather Settings</string>
     <string name="enable_weather_layer">Enable Weather Layer</string>
     <string name="weather_source">Weather Source</string>
+    <string name="openweather_attribution">Weather data © OpenWeather (https://openweathermap.org)</string>
     <string name="opacity">Opacity</string>
     <string name="coverage_analysis">Coverage Analysis</string>
     <string name="include_peers_in_coverage">Include Peers in Coverage</string>

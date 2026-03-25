@@ -21,6 +21,7 @@ class WeatherLayerManager(
 ) {
     companion object {
         private const val TAG = "WeatherLayerManager"
+        private const val OPENWEATHER_ATTRIBUTION = "Weather data © OpenWeather (https://openweathermap.org)"
         const val SOURCE_ID = "weather-radar"
         const val LAYER_ID = "weather-radar-layer"
         private const val CACHE_BUST_INTERVAL_MS = 5 * 60 * 1000L // 5 minutes
@@ -139,6 +140,13 @@ class WeatherLayerManager(
 
             try {
                 val tileSet = TileSet("2.1.0", url)
+                // Ensure OpenWeather attribution appears in the map attribution UI when this layer is enabled.
+                runCatching {
+                    // Avoid compile-time dependency on a specific MapLibre TileSet API surface.
+                    tileSet.javaClass
+                        .getMethod("setAttribution", String::class.java)
+                        .invoke(tileSet, OPENWEATHER_ATTRIBUTION)
+                }.onFailure { Log.w(TAG, "Failed to set OpenWeather attribution on TileSet: ${it.message}", it) }
                 val source = RasterSource(SOURCE_ID, tileSet, 256)
                 style.addSource(source)
                 Log.d(TAG, "Added weather radar source with URL: $url")

@@ -469,4 +469,14 @@
         android:gravity="center"
         android:visibility="gone" />
 
+    <TextView
+        android:id="@+id/weatherAttributionText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:text="@string/openweather_attribution"
+        android:textSize="10sp"
+        android:textColor="#B0B0B0"
+        android:gravity="center" />
+
 </LinearLayout>
