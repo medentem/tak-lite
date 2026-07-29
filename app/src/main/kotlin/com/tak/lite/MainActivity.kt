@@ -654,8 +654,10 @@ class MainActivity : BaseActivity(), com.tak.lite.ui.map.MapControllerProvider {
         lifecycleScope.launch {
             repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
                 viewModel.userLocation.collectLatest { userLatLng ->
-                    if (userLatLng != null) {
-                        // Center map or update user marker as needed
+                    // Only recenter while My Location tracking is active. TAK Server mode
+                    // emits frequent own-location updates (phone GPS + radio PLI); always
+                    // moving the camera here made panning snap back after ~1s.
+                    if (userLatLng != null && isTrackingLocation) {
                         val currentZoom = mapController.mapLibreMap?.cameraPosition?.zoom ?: DEFAULT_US_ZOOM
                         mapController.mapLibreMap?.moveCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(userLatLng, currentZoom))
                     }

@@ -420,7 +420,9 @@ class MeshtasticTakServerProtocol(
     override fun sendLocationUpdate(latitude: Double, longitude: Double) {
         lastLat = latitude
         lastLon = longitude
-        userLocationCallback?.invoke(LatLng(latitude, longitude))
+        // Do not invoke userLocationCallback here — phone GPS is already applied via
+        // setPhoneLocation / MapLibre location component. Callback is reserved for
+        // Meshtastic radio self-PLI (applyOwnLocation) so we don't flood map recenter.
         val xml = CotXml.buildPli(
             uid = localUid,
             callsign = localNickname,
