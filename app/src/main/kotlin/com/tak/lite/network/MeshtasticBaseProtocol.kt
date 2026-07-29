@@ -527,7 +527,7 @@ abstract class MeshtasticBaseProtocol(
             uplinkEnabled = channel.settings.uplinkEnabled,
             downlinkEnabled = channel.settings.downlinkEnabled,
             positionPrecision = channel.settings.moduleSettings.positionPrecision,
-            isClientMuted = channel.settings.moduleSettings.isClientMuted,
+            isClientMuted = channel.settings.moduleSettings.isMuted,
             lastMessage = channelLastMessages[channelId]
         )
 

@@ -61,9 +61,10 @@ class MeshProtocolProvider @Inject constructor(
                 Log.d(TAG, "Creating MeshtasticBluetoothProtocol with @ApplicationContext")
                 MeshtasticBluetoothProtocol(bluetoothDeviceManager, context)
             }
-            "MeshtasticAidl" -> {
-                Log.d(TAG, "Creating MeshtasticAidlProtocol with @ApplicationContext")
-                MeshtasticAidlProtocol(context, activityContextProvider)
+            "MeshtasticTakServer", "MeshtasticAidl" -> {
+                // MeshtasticAidl is a legacy pref alias after AIDL removal
+                Log.d(TAG, "Creating MeshtasticTakServerProtocol with @ApplicationContext")
+                MeshtasticTakServerProtocol(context)
             }
             else -> {
                 Log.d(TAG, "Creating Layer2MeshNetworkProtocol with @ApplicationContext")

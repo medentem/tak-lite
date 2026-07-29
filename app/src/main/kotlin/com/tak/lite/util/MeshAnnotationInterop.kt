@@ -722,4 +722,59 @@ object MeshAnnotationInterop {
             null
         }
     }
+
+    /** Compact JSON used inside TAKPacket.detail / CoT &lt;taklite&gt;. */
+    fun annotationToCompactJson(annotation: MapAnnotation): String {
+        val data = mapAnnotationToMeshData(annotation)
+        val takPacket = ATAKProtos.TAKPacket.parseFrom(data.payload)
+        return takPacket.detail.toStringUtf8()
+    }
+
+    fun compactJsonToAnnotation(jsonString: String): MapAnnotation? {
+        val takPacket = ATAKProtos.TAKPacket.newBuilder()
+            .setDetail(ByteString.copyFromUtf8(jsonString))
+            .build()
+        val data = MeshProtos.Data.newBuilder()
+            .setPortnum(com.geeksville.mesh.Portnums.PortNum.ATAK_PLUGIN)
+            .setPayload(takPacket.toByteString())
+            .build()
+        return meshDataToMapAnnotation(data)
+    }
+
+    fun statusToCompactJson(status: com.tak.lite.model.UserStatus): String {
+        val statusUpdate = com.tak.lite.model.UserStatusUpdate(
+            userId = "local",
+            status = status,
+            timestamp = System.currentTimeMillis()
+        )
+        return json.encodeToString(statusUpdate)
+    }
+
+    fun compactJsonToStatus(jsonString: String): com.tak.lite.model.UserStatus? {
+        return try {
+            json.decodeFromString<com.tak.lite.model.UserStatusUpdate>(jsonString).status
+        } catch (_: Exception) {
+            try {
+                val parsed = Json.parseToJsonElement(jsonString)
+                if (parsed is JsonObject && parsed["type"]?.jsonPrimitive?.content == "status") {
+                    parsed["status"]?.jsonPrimitive?.content?.let { com.tak.lite.model.UserStatus.valueOf(it) }
+                } else null
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+
+    fun bulkDeleteToCompactJson(ids: List<String>): String = json.encodeToString(ids)
+
+    fun compactJsonToBulkDeleteIds(jsonString: String): List<String>? {
+        return try {
+            val parsed = Json.parseToJsonElement(jsonString)
+            if (parsed is JsonArray) {
+                parsed.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+            } else null
+        } catch (_: Exception) {
+            null
+        }
+    }
 } 

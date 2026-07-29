@@ -31,6 +31,9 @@
 *MyNodeInfo.air_period_tx       max_count:8
 *MyNodeInfo.air_period_rx       max_count:8
 
+*MyNodeInfo.firmware_edition int_size:8
+*MyNodeInfo.nodedb_count int_size:16
+
 # Note: the actual limit (because of header bytes) on the size of encrypted payloads is 251 bytes, but I use 256
 # here because we might need to fill with zeros for padding to encryption block size (16 bytes per block)
 *MeshPacket.encrypted max_size:256
@@ -66,6 +69,14 @@
 *KeyVerification.hash1 max_size:32
 *KeyVerification.hash2 max_size:32
 
+*StoreForwardPlusPlus.message_hash max_size:32
+*StoreForwardPlusPlus.commit_hash max_size:32
+*StoreForwardPlusPlus.root_hash max_size:32
+*StoreForwardPlusPlus.message max_size:240
+
+*RemoteShell.payload max_size:200
+
+*StatusMessage.status max_size:80
 
 # MyMessage.name         max_size:40 
 # or fixed_length or fixed_count, or max_count
@@ -87,3 +98,7 @@
 *ChunkedPayload.chunk_count int_size:16
 *ChunkedPayload.chunk_index int_size:16
 *ChunkedPayload.payload_chunk max_size:228
+
+# Longest documented value is "token_wrong_size" (16 chars); 32 leaves room
+# for future short reasons without forcing nanopb to use callbacks.
+*LockdownStatus.lock_reason max_size:32

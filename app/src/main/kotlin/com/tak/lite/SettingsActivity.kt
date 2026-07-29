@@ -59,8 +59,9 @@ class SettingsActivity : BaseActivity() {
     private lateinit var minLineSegmentDistEditText: com.google.android.material.textfield.TextInputEditText
     private lateinit var bluetoothConnectButton: Button
     private lateinit var bluetoothStatusText: TextView
-    private lateinit var aidlConnectButton: com.google.android.material.button.MaterialButton
-    private lateinit var aidlStatusText: TextView
+    private lateinit var takServerConnectButton: com.google.android.material.button.MaterialButton
+    private lateinit var takServerImportButton: com.google.android.material.button.MaterialButton
+    private lateinit var takServerStatusText: TextView
     private lateinit var darkModeSpinner: AutoCompleteTextView
     private lateinit var keepScreenAwakeSwitch: SwitchMaterial
     private lateinit var simulatePeersSwitch: SwitchMaterial
@@ -100,6 +101,24 @@ class SettingsActivity : BaseActivity() {
         )
     }
     private val REQUEST_CODE_BLUETOOTH_PERMISSIONS = 1002
+
+    private val takDataPackagePicker = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@registerForActivityResult
+        try {
+            contentResolver.openInputStream(uri)?.use { input ->
+                com.tak.lite.network.takserver.TakDataPackage.importZip(this, input)
+            }
+            Toast.makeText(this, getString(R.string.tak_data_package_imported), Toast.LENGTH_SHORT).show()
+            if (com.tak.lite.network.takserver.TakDataPackage.hasImportedPackage(this)) {
+                takServerStatusText.text = getString(R.string.tak_server_setup_hint)
+            }
+        } catch (e: Exception) {
+            Log.e("SettingsActivity", "TAK data package import failed", e)
+            Toast.makeText(this, getString(R.string.tak_data_package_import_failed) + ": ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
     
     // Activity result launchers
     private val compassCalibrationLauncher = registerForActivityResult(
@@ -255,8 +274,9 @@ class SettingsActivity : BaseActivity() {
         minLineSegmentDistEditText = findViewById(R.id.minLineSegmentDistEditText)
         bluetoothConnectButton = findViewById(R.id.bluetoothConnectButton)
         bluetoothStatusText = findViewById(R.id.bluetoothStatusText)
-        aidlConnectButton = findViewById(R.id.aidlConnectButton)
-        aidlStatusText = findViewById(R.id.aidlStatusText)
+        takServerConnectButton = findViewById(R.id.takServerConnectButton)
+        takServerImportButton = findViewById(R.id.takServerImportButton)
+        takServerStatusText = findViewById(R.id.takServerStatusText)
         darkModeSpinner = findViewById(R.id.darkModeSpinner)
         keepScreenAwakeSwitch = findViewById(R.id.keepScreenAwakeSwitch)
         simulatePeersSwitch = findViewById(R.id.simulatePeersSwitch)
@@ -373,22 +393,25 @@ class SettingsActivity : BaseActivity() {
             bluetoothStatusText.text = "Last connected: $savedDeviceName ($savedDeviceAddr)"
         }
 
-        // Setup AIDL connect button
-        aidlConnectButton.setOnClickListener {
+        // Setup TAK Server import + connect buttons
+        takServerImportButton.setOnClickListener {
+            takDataPackagePicker.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
+        }
+        takServerConnectButton.setOnClickListener {
             // Prevent rapid clicking by disabling the button temporarily
-            aidlConnectButton.isEnabled = false
+            takServerConnectButton.isEnabled = false
             
             // Use current protocol reference
             val protocol = currentProtocol
             val connectionState = protocol.connectionState.value
 
-            Log.d("SettingsActivity", "AIDL button clicked - protocol: ${protocol.javaClass.simpleName}, connectionState: $connectionState")
-            Log.d("SettingsActivity", "AIDL button clicked - currentProtocol reference: ${currentProtocol.javaClass.simpleName}")
+            Log.d("SettingsActivity", "TAK Server button clicked - protocol: ${protocol.javaClass.simpleName}, connectionState: $connectionState")
+            Log.d("SettingsActivity", "TAK Server button clicked - currentProtocol reference: ${currentProtocol.javaClass.simpleName}")
 
             // Verify we're using the correct protocol type
-            if (protocol !is com.tak.lite.network.MeshtasticAidlProtocol) {
-                Log.w("SettingsActivity", "AIDL button clicked but protocol is not MeshtasticAidlProtocol: ${protocol.javaClass.simpleName}")
-                aidlConnectButton.isEnabled = true
+            if (protocol !is com.tak.lite.network.MeshtasticTakServerProtocol) {
+                Log.w("SettingsActivity", "TAK Server button clicked but protocol is not MeshtasticTakServerProtocol: ${protocol.javaClass.simpleName}")
+                takServerConnectButton.isEnabled = true
                 return@setOnClickListener
             }
 
@@ -396,29 +419,29 @@ class SettingsActivity : BaseActivity() {
                 Log.d("SettingsActivity", "AIDL disconnect button clicked - disconnecting...")
                 protocol.disconnectFromDevice()
                 // Re-enable button after a short delay
-                aidlConnectButton.postDelayed({
-                    aidlConnectButton.isEnabled = true
+                takServerConnectButton.postDelayed({
+                    takServerConnectButton.isEnabled = true
                 }, 1000) // 1 second delay
             } else {
-                val status = protocol.checkMeshtasticAppStatus()
-                if (status.contains("not installed")) {
+                if (!protocol.isMeshtasticInstalled()) {
                     checkMeshtasticAppInstallation()
-                    aidlConnectButton.isEnabled = true
+                    takServerConnectButton.isEnabled = true
                     return@setOnClickListener
                 }
-                if (status.contains("service may not be running")) {
+                if (!com.tak.lite.network.takserver.TakDataPackage.hasImportedPackage(this)) {
                     android.app.AlertDialog.Builder(this)
-                        .setTitle(getString(R.string.meshtastic_app_not_running))
-                        .setMessage(getString(R.string.meshtastic_app_background_required))
+                        .setTitle(getString(R.string.meshtastic_app_required))
+                        .setMessage(getString(R.string.tak_server_setup_hint))
                         .setPositiveButton(getString(R.string.ok), null)
                         .show()
-                    aidlConnectButton.isEnabled = true
+                    takServerConnectButton.isEnabled = true
                     return@setOnClickListener
                 }
-                Log.d("SettingsActivity", "AIDL connect button clicked - connecting...")
-                protocol.connectToDevice(com.tak.lite.di.DeviceInfo.AidlDevice("Meshtastic App")) { _ ->
-                    // UI will update via state observer
-                    aidlConnectButton.isEnabled = true
+                Log.d("SettingsActivity", "TAK Server connect button clicked - connecting...")
+                protocol.connectToDevice(com.tak.lite.di.DeviceInfo.TakServerDevice()) { _ ->
+                    runOnUiThread {
+                        takServerConnectButton.isEnabled = true
+                    }
                 }
             }
         }
@@ -480,6 +503,10 @@ class SettingsActivity : BaseActivity() {
 
         // Get saved mesh type, defaulting to "Meshtastic"
         var savedMeshType = prefs.getString("mesh_network_type", null)
+        if (savedMeshType == "MeshtasticAidl") {
+            savedMeshType = "MeshtasticTakServer"
+            prefs.edit().putString("mesh_network_type", savedMeshType).apply()
+        }
         if (savedMeshType == null) {
             // First time setup - save "Meshtastic" as default
             savedMeshType = "Meshtastic"
@@ -490,9 +517,10 @@ class SettingsActivity : BaseActivity() {
         val displayToInternal = mapOf(
             "Layer 2" to "Layer2",
             "Meshtastic (Bluetooth)" to "Meshtastic",
-            "Meshtastic (App)" to "MeshtasticAidl"
+            "Meshtastic (App)" to "MeshtasticTakServer"
         )
-        val internalToDisplay = displayToInternal.entries.associate { it.value to it.key }
+        val internalToDisplay = displayToInternal.entries.associate { it.value to it.key } +
+            mapOf("MeshtasticAidl" to "Meshtastic (App)")
 
         // Convert internal value to display value
         val displayValue = internalToDisplay[savedMeshType] ?: "Meshtastic (Bluetooth)"
@@ -529,7 +557,7 @@ class SettingsActivity : BaseActivity() {
             updateConnectionUIForMeshType(internalType)
 
             // Check if Meshtastic app is installed when AIDL is selected
-            if (internalType == "MeshtasticAidl") {
+            if (internalType == "MeshtasticTakServer") {
                 checkMeshtasticAppInstallation()
             }
         }
@@ -1182,8 +1210,9 @@ class SettingsActivity : BaseActivity() {
             meshNetworkTypeLayout.visibility = View.GONE
             bluetoothConnectButton.visibility = View.GONE
             bluetoothStatusText.visibility = View.GONE
-            aidlConnectButton.visibility = View.GONE
-            aidlStatusText.visibility = View.GONE
+            takServerConnectButton.visibility = View.GONE
+            takServerImportButton.visibility = View.GONE
+            takServerStatusText.visibility = View.GONE
             unlockAppButton.visibility = View.VISIBLE
         }
     }
@@ -1836,22 +1865,25 @@ class SettingsActivity : BaseActivity() {
             "Meshtastic" -> {
                 bluetoothConnectButton.visibility = View.VISIBLE
                 bluetoothStatusText.visibility = View.VISIBLE
-                aidlConnectButton.visibility = View.GONE
-                aidlStatusText.visibility = View.GONE
-                Log.d("SettingsActivity", "Showing Bluetooth UI, hiding AIDL UI")
+                takServerConnectButton.visibility = View.GONE
+                takServerImportButton.visibility = View.GONE
+                takServerStatusText.visibility = View.GONE
+                Log.d("SettingsActivity", "Showing Bluetooth UI, hiding TAK Server UI")
             }
-            "MeshtasticAidl" -> {
+            "MeshtasticTakServer" -> {
                 bluetoothConnectButton.visibility = View.GONE
                 bluetoothStatusText.visibility = View.GONE
-                aidlConnectButton.visibility = View.VISIBLE
-                aidlStatusText.visibility = View.VISIBLE
-                Log.d("SettingsActivity", "Showing AIDL UI, hiding Bluetooth UI")
+                takServerImportButton.visibility = View.VISIBLE
+                takServerConnectButton.visibility = View.VISIBLE
+                takServerStatusText.visibility = View.VISIBLE
+                Log.d("SettingsActivity", "Showing TAK Server UI, hiding Bluetooth UI")
             }
             else -> {
                 bluetoothConnectButton.visibility = View.GONE
                 bluetoothStatusText.visibility = View.GONE
-                aidlConnectButton.visibility = View.GONE
-                aidlStatusText.visibility = View.GONE
+                takServerImportButton.visibility = View.GONE
+                takServerConnectButton.visibility = View.GONE
+                takServerStatusText.visibility = View.GONE
                 Log.d("SettingsActivity", "Hiding all connection UI")
             }
         }
@@ -1874,22 +1906,10 @@ class SettingsActivity : BaseActivity() {
                     bluetoothStatusText.text = "Connected: $deviceName"
                     updateBluetoothButtonState()
                     Log.d("SettingsActivity", "Updated Bluetooth status: Connected: $deviceName")
-                } else if (connectionType == "aidl" || currentMeshType == "MeshtasticAidl") {
-                    // For AIDL, try to get user information
-                    val userInfo = currentProtocol.getLocalUserInfo()
-                    
-                    Log.d("SettingsActivity", "AIDL connection - userInfo: $userInfo")
-                    
-                    val statusText = if (userInfo != null) {
-                        val (shortname, hwmodel) = userInfo
-                        "Connected: $deviceName ($shortname - $hwmodel)"
-                    } else {
-                        "Connected: $deviceName"
-                    }
-                    
-                    aidlStatusText.text = statusText
-                    updateAidlButtonState()
-                    Log.d("SettingsActivity", "Updated AIDL status: $statusText")
+                } else if (connectionType == "takserver" || currentMeshType == "MeshtasticTakServer") {
+                    takServerStatusText.text = getString(R.string.tak_server_connected_hint)
+                    updateTakServerButtonState()
+                    Log.d("SettingsActivity", "Updated TAK Server status: connected")
                 }
             }
             is MeshConnectionState.ServiceConnected -> {
@@ -1900,10 +1920,10 @@ class SettingsActivity : BaseActivity() {
                 
                 Log.d("SettingsActivity", "ServiceConnected state - deviceName: $deviceName, connectionType: $connectionType, currentMeshType: $currentMeshType")
                 
-                if (connectionType == "aidl" || currentMeshProtocol == "MeshtasticAidl") {
-                    aidlStatusText.text = "Meshtastic App Connected: No Device Attached"
-                    updateAidlButtonState()
-                    Log.d("SettingsActivity", "Updated AIDL status: Meshtastic App Connected: No Device Attached")
+                if (connectionType == "takserver" || currentMeshProtocol == "MeshtasticTakServer") {
+                    takServerStatusText.text = getString(R.string.meshtastic_app_connected_no_device)
+                    updateTakServerButtonState()
+                    Log.d("SettingsActivity", "Updated TAK Server status: service connected")
                 }
             }
             is MeshConnectionState.Disconnected -> {
@@ -1914,20 +1934,21 @@ class SettingsActivity : BaseActivity() {
                     bluetoothStatusText.text = "Not connected"
                     updateBluetoothButtonState()
                     Log.d("SettingsActivity", "Updated Bluetooth status: Not connected")
-                } else if (currentMeshType == "MeshtasticAidl") {
-                    aidlStatusText.text = "Not connected"
-                    updateAidlButtonState()
-                    Log.d("SettingsActivity", "Updated AIDL status: Not connected")
+                } else if (currentMeshType == "MeshtasticTakServer") {
+                    takServerStatusText.text = getString(R.string.tak_server_not_connected)
+                    updateTakServerButtonState()
+                    Log.d("SettingsActivity", "Updated TAK Server status: Not connected")
                 }
             }
             is MeshConnectionState.Error -> {
                 connectedDevice = null
-                val errorMessage = if (state.message.contains("Meshtastic")) {
-                    // Provide more helpful error messages for AIDL issues
+                val errorMessage = if (state.message.contains("Meshtastic") || currentMeshType == "MeshtasticTakServer") {
                     when {
-                        state.message.contains("not installed") -> "Please install Meshtastic app from Play Store"
-                        state.message.contains("service may not be running") -> "Please open Meshtastic app and keep it running"
-                        state.message.contains("service not found") -> "Meshtastic app version may not support AIDL"
+                        state.message.contains("not installed") -> getString(R.string.tak_server_error_not_installed)
+                        state.message.contains("service may not be running") ||
+                            state.message.contains("Local TAK") -> getString(R.string.tak_server_error_not_running)
+                        state.message.contains("Import the Meshtastic TAK") ||
+                            state.message.contains("data package") -> getString(R.string.tak_server_error_no_package)
                         else -> state.message
                     }
                 } else {
@@ -1940,10 +1961,10 @@ class SettingsActivity : BaseActivity() {
                     bluetoothStatusText.text = "Connection failed: $errorMessage"
                     updateBluetoothButtonState()
                     Log.d("SettingsActivity", "Updated Bluetooth status: Connection failed: $errorMessage")
-                } else if (currentMeshType == "MeshtasticAidl") {
-                    aidlStatusText.text = "Connection failed: $errorMessage"
-                    updateAidlButtonState()
-                    Log.d("SettingsActivity", "Updated AIDL status: Connection failed: $errorMessage")
+                } else if (currentMeshType == "MeshtasticTakServer") {
+                    takServerStatusText.text = "Connection failed: $errorMessage"
+                    updateTakServerButtonState()
+                    Log.d("SettingsActivity", "Updated TAK Server status: Connection failed: $errorMessage")
                 }
             }
             MeshConnectionState.Connecting -> {
@@ -1952,29 +1973,29 @@ class SettingsActivity : BaseActivity() {
                 if (currentMeshType == "Meshtastic") {
                     bluetoothStatusText.text = "Connecting..."
                     Log.d("SettingsActivity", "Updated Bluetooth status: Connecting...")
-                } else if (currentMeshType == "MeshtasticAidl") {
-                    aidlStatusText.text = "Connecting..."
-                    Log.d("SettingsActivity", "Updated AIDL status: Connecting...")
+                } else if (currentMeshType == "MeshtasticTakServer") {
+                    takServerStatusText.text = getString(R.string.tak_server_connecting)
+                    Log.d("SettingsActivity", "Updated TAK Server status: Connecting...")
                 }
             }
         }
     }
 
-    private fun updateAidlButtonState() {
+    private fun updateTakServerButtonState() {
         // Use current protocol reference
         val protocol = currentProtocol
         val isConnected = protocol.connectionState.value is MeshConnectionState.Connected || 
                          protocol.connectionState.value is MeshConnectionState.ServiceConnected
         val buttonText = if (isConnected) "Disconnect" else "Connect"
         
-        Log.d("SettingsActivity", "updateAidlButtonState - protocol: ${protocol.javaClass.simpleName}, isConnected: $isConnected, buttonText: $buttonText")
-        Log.d("SettingsActivity", "updateAidlButtonState - connectionState: ${protocol.connectionState.value}")
+        Log.d("SettingsActivity", "updateTakServerButtonState - protocol: ${protocol.javaClass.simpleName}, isConnected: $isConnected, buttonText: $buttonText")
+        Log.d("SettingsActivity", "updateTakServerButtonState - connectionState: ${protocol.connectionState.value}")
         
-        aidlConnectButton.text = buttonText
+        takServerConnectButton.text = buttonText
         // Ensure button is enabled when connection state changes
-        aidlConnectButton.isEnabled = true
+        takServerConnectButton.isEnabled = true
         
-        Log.d("SettingsActivity", "AIDL button updated - text: ${aidlConnectButton.text}, enabled: ${aidlConnectButton.isEnabled}")
+        Log.d("SettingsActivity", "TAK Server button updated - text: ${takServerConnectButton.text}, enabled: ${takServerConnectButton.isEnabled}")
     }
 
     private fun startProtocolObservers(protocol: MeshProtocol) {
@@ -2062,10 +2083,7 @@ class SettingsActivity : BaseActivity() {
 
     private fun checkMeshtasticAppInstallation() {
         val protocol = currentProtocol
-        if (protocol is com.tak.lite.network.MeshtasticAidlProtocol) {
-            val status = protocol.checkMeshtasticAppStatus()
-            Log.d("SettingsActivity", "Meshtastic app status: $status")
-            
+        if (protocol is com.tak.lite.network.MeshtasticTakServerProtocol) {
             val isMeshtasticInstalled = try {
                 packageManager.getPackageInfo("com.geeksville.mesh", 0)
                 true
@@ -2096,8 +2114,8 @@ class SettingsActivity : BaseActivity() {
                     .setNegativeButton(getString(R.string.cancel), null)
                     .show()
             } else {
-                // App is installed, show status
-                Log.i("SettingsActivity", "Meshtastic app is installed: $status")
+                // App is installed
+                Log.i("SettingsActivity", "Meshtastic app is installed")
             }
         }
     }

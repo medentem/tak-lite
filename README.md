@@ -17,9 +17,54 @@ A situational awareness Android application designed for use with mesh network d
   - View elevation chart for lines
 - Text messaging
 - Push-to-Talk (PTT) real-time VOIP audio communication (Layer 2 only, WebRTC-based)
-- Mesh network integration (meshtastic or doodle labs)
+- Mesh network integration (Meshtastic Bluetooth, Meshtastic App / Local TAK Server, or Doodle Labs)
 - Offline map tile support
 - Dark mode support
+
+## Connection modes
+
+TAK Lite can reach the mesh in different ways. Pick the mode in **Settings → Mesh network**.
+
+### Meshtastic (Bluetooth)
+
+TAK Lite owns the radio over BLE and speaks Meshtastic packets directly.
+
+| Feature | Support |
+|---------|---------|
+| Nearby node list | Yes — full node DB from the radio |
+| Channel list / manage | Yes |
+| Group / channel chat | Yes — per LoRa channel |
+| Direct messages | Yes — Meshtastic DMs (incl. PKC when available) |
+| Own / peer positions | Yes — radio node is you |
+| Map annotations | Yes — TAK Lite mesh payloads |
+| Status colors | Yes |
+| Ambient LED / audio | LED yes (when supported); audio no on Meshtastic |
+| Delivery ACKs | Yes (routing ACKs when available) |
+| Radio admin / config | Via Meshtastic app or BLE config flows |
+
+### Meshtastic (App) — Local TAK Server
+
+Meshtastic app owns the radio. TAK Lite connects like ATAK: **CoT XML over mTLS** to Meshtastic’s Local TAK Server (`127.0.0.1:8089`) using an imported TAK data package. This is a TAK map + chat room, not full radio remote control.
+
+| Feature | Support |
+|---------|---------|
+| Nearby node list | Partial — peers appear after Meshtastic shares their position (PLI); no full dump on connect |
+| Channel list / manage | No — one synthetic **Mesh** chat room; LoRa channels stay in Meshtastic |
+| Group chat | Yes — GeoChat to “All Chat Rooms” |
+| Direct messages | Partial — TAK GeoChat to a peer uid (not Meshtastic PKC DMs) |
+| Own / peer positions | Yes — phone GPS as TAK Lite PLI; radio PLI treated as you once learned |
+| Map annotations | Yes (best-effort) — dual CoT + `<taklite>`; rich shapes need firmware ≥ 2.8 |
+| Status colors | Yes |
+| Ambient LED / audio | No |
+| Delivery ACKs | No — send success only |
+| Radio admin / config | No — use the Meshtastic app |
+
+**Setup:** Enable Local TAK Server in Meshtastic → export data package → **Settings → Import TAK data package** → Connect. Matching your TAK Lite nickname to the Meshtastic long/short name helps bind “your radio is you” quickly.
+
+### Layer 2 (Doodle Labs)
+
+Local mesh over the Doodle Labs radio network (WebRTC PTT when supported). See [Mesh Rider Setup](#mesh-rider-setup) below.
+
 
 ## Example Screenshots
 
@@ -61,7 +106,7 @@ Settings to Configure Experience
 ## Requirements
 
 - Android Studio Arctic Fox or later
-- Android SDK 24 (Android 7.0) or later
+- Android SDK 30 (Android 11) or later
 - MapTiler API key (for satellite imagery)
 - Doodle Labs mesh network device or Meshtastic (no audio support w/ mtastic)
 
@@ -131,7 +176,8 @@ The application communicates over a local mesh network using Doodle Labs devices
 TAK Lite is designed to operate in environments with limited or no internet connectivity by leveraging a mesh networking approach:
 
 
-- **Meshtastic Devices**: The app connects to a Meshtastic device, which provides the network layer for peer discovery, sending annotations and telemetry.
+- **Meshtastic (Bluetooth)**: The app connects to a Meshtastic device over BLE and exchanges MeshPackets for peer discovery, chat, positions, and annotations.
+- **Meshtastic (App)**: The Meshtastic app holds the radio and exposes a Local TAK Server; TAK Lite joins as a CoT client (same door ATAK uses). See [Connection modes](#connection-modes).
 - **Data Synchronization**: Location, POI, and annotation data are shared directly between peers over the mesh, ensuring real-time situational awareness without a central server.
 - **Resilience**: The mesh network is resilient to node failures and adapts dynamically as devices join or leave the network.
 - **IN PROGRESS - Doodle Labs Mesh Devices**: The app connects to a Doodle Labs mesh radio, which provides a local, self-healing, peer-to-peer network for all connected devices.

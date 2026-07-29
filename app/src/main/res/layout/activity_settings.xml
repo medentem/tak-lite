@@ -89,7 +89,17 @@
                         android:layout_marginBottom="4dp" />
 
                     <com.google.android.material.button.MaterialButton
-                        android:id="@+id/aidlConnectButton"
+                        android:id="@+id/takServerImportButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/import_tak_data_package"
+                        android:layout_marginTop="8dp"
+                        android:layout_marginBottom="4dp"
+                        android:visibility="gone"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/takServerConnectButton"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="@string/connect"
@@ -117,7 +127,7 @@
                         android:paddingBottom="4dp" />
 
                     <TextView
-                        android:id="@+id/aidlStatusText"
+                        android:id="@+id/takServerStatusText"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="@string/not_connected"

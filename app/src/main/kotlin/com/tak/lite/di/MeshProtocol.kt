@@ -114,10 +114,10 @@ sealed class DeviceInfo {
         override val connectionType: String = "bluetooth"
     }
     
-    data class AidlDevice(val appName: String) : DeviceInfo() {
+    data class TakServerDevice(val appName: String = "Meshtastic TAK Server") : DeviceInfo() {
         override val name: String = appName
-        override val address: String = "aidl"
-        override val connectionType: String = "aidl"
+        override val address: String = "takserver"
+        override val connectionType: String = "takserver"
     }
     
     data class NetworkDevice(val ipAddress: String, val port: Int) : DeviceInfo() {

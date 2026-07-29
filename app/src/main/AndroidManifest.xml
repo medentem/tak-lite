@@ -20,8 +20,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="com.android.vending.BILLING" />
     
-    <!-- AIDL Service permissions -->
-    <uses-permission android:name="com.geeksville.mesh.permission.BIND_MESH_SERVICE" />
+    <!-- Local TAK Server (Meshtastic) binds on loopback; needed on newer Android -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
 
     <!-- Declare that we want to interact with Meshtastic app -->
     <queries>

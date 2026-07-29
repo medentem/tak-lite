@@ -1170,8 +1170,8 @@ class Layer2MeshNetworkProtocol @Inject constructor(
             is com.tak.lite.di.DeviceInfo.BluetoothDevice -> {
                 onConnected(false)
             }
-            is com.tak.lite.di.DeviceInfo.AidlDevice -> {
-                // Layer2 protocol doesn't support AIDL devices
+            is com.tak.lite.di.DeviceInfo.TakServerDevice -> {
+                // Layer2 protocol doesn't support TAK Server devices
                 onConnected(false)
             }
             is com.tak.lite.di.DeviceInfo.NetworkDevice -> {

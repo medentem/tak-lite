@@ -456,8 +456,8 @@ class MeshtasticBluetoothProtocol @Inject constructor(
             is com.tak.lite.di.DeviceInfo.BluetoothDevice -> {
                 deviceManager.connect(deviceInfo.device, onConnected)
             }
-            is com.tak.lite.di.DeviceInfo.AidlDevice -> {
-                // Bluetooth protocol doesn't support AIDL devices
+            is com.tak.lite.di.DeviceInfo.TakServerDevice -> {
+                Log.w(TAG, "TakServerDevice not supported by Bluetooth protocol")
                 onConnected(false)
             }
             is com.tak.lite.di.DeviceInfo.NetworkDevice -> {

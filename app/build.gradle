@@ -22,12 +22,12 @@ def owfApiKey = localProperties.getProperty("OPENWEATHERFORECAST_API_KEY", "")
 
 android {
     namespace "com.tak.lite"
-    compileSdk 35
+    compileSdk 36
 
     defaultConfig {
         applicationId "com.tak.lite"
-        minSdk 30       // <— modern key
-        targetSdk 35
+        minSdk 30
+        targetSdk 36
         versionCode 120
         versionName "1.4.2-beta.90"
 
@@ -60,7 +60,6 @@ android {
     buildFeatures {
         viewBinding true
         buildConfig true
-        aidl true
     }
 
     kapt {

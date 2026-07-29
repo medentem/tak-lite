@@ -224,10 +224,10 @@ class MeshForegroundService : Service() {
                     Log.w("MeshForegroundService", "Diagnostic info retrieval failed: ${e.message}")
                 }
 
-                if (protocol is com.tak.lite.network.MeshtasticAidlProtocol) {
+                if (protocol is com.tak.lite.network.MeshtasticTakServerProtocol) {
                     val isResponsive = protocol.isServiceResponsive()
                     if (!isResponsive) {
-                        Log.w("MeshForegroundService", "AIDL service not responsive, attempting to reconnect...")
+                        Log.w("MeshForegroundService", "TAK server connection not responsive, attempting to reconnect...")
                         protocol.forceReset()
                     }
                 }

@@ -376,7 +376,18 @@
     <string name="meshtastic_app_background_required">Please open the Meshtastic app and keep it running in the background.</string>
     <string name="no_compatible_devices_found">No compatible devices were found. Make sure your device is powered on and try again.</string>
     <string name="location_services_required">Location services are required to scan for Bluetooth devices. Please enable location.</string>
-    <string name="meshtastic_app_install_prompt">The Meshtastic AIDL protocol requires the Meshtastic app to be installed. Would you like to install it from the Play Store?</string>
+    <string name="meshtastic_app_install_prompt">Meshtastic (App) mode requires the Meshtastic app with Local TAK Server enabled. Install Meshtastic from the Play Store?</string>
+    <string name="meshtastic_app_connected_no_device">Meshtastic TAK Server connected</string>
+    <string name="import_tak_data_package">Import TAK data package</string>
+    <string name="tak_data_package_imported">TAK data package imported</string>
+    <string name="tak_data_package_import_failed">Failed to import TAK data package</string>
+    <string name="tak_server_setup_hint">Enable Local TAK Server in Meshtastic, export the data package, then import it here. Map shows mesh as TAK units; your radio is you. Channels and radio settings stay in the Meshtastic app.</string>
+    <string name="tak_server_connected_hint">Connected via Meshtastic TAK Server — mesh as TAK units; your radio is you.</string>
+    <string name="tak_server_not_connected">Not connected</string>
+    <string name="tak_server_connecting">Connecting…</string>
+    <string name="tak_server_error_not_installed">Please install Meshtastic app from Play Store</string>
+    <string name="tak_server_error_not_running">Please open Meshtastic app, enable Local TAK Server, and keep it running</string>
+    <string name="tak_server_error_no_package">Import the Meshtastic TAK data package first</string>
     <string name="delete_channel_confirmation">Are you sure you want to delete channel \'%1$s\'?</string>
     <string name="manage_channels_title">Manage Channels</string>
     <string name="restore_previous_annotations_title">Restore Previous Annotations?</string>
@@ -470,7 +481,6 @@
     <string name="bluetooth_enabled_connect">Bluetooth enabled. You can now connect.</string>
     <string name="bluetooth_must_be_enabled">Bluetooth must be enabled to connect.</string>
     <string name="connected_device">Connected: %1$s</string>
-    <string name="meshtastic_app_connected_no_device">Meshtastic App Connected: No Device Attached</string>
     <string name="connection_failed">Connection failed: %1$s</string>
     <string name="connecting">Connecting...</string>
     <string name="config_error">Error: %1$s</string>

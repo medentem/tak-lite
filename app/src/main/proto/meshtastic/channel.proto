@@ -1,5 +1,6 @@
 syntax = "proto3";
 
+/* trunk-ignore(buf-lint/PACKAGE_DIRECTORY_MATCH) */
 package meshtastic;
 
 option csharp_namespace = "Meshtastic.Protobufs";
@@ -98,10 +99,10 @@ message ModuleSettings {
   uint32 position_precision = 1;
 
   /*
-   * Controls whether or not the phone / clients should mute the current channel
+   * Controls whether or not the client / device should mute the current channel
    * Useful for noisy public channels you don't necessarily want to disable
    */
-  bool is_client_muted = 2;
+  bool is_muted = 2;
 }
 
 /*
