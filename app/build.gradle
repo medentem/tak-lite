@@ -28,8 +28,8 @@ android {
         applicationId "com.tak.lite"
         minSdk 30
         targetSdk 36
-        versionCode 120
-        versionName "1.4.2-beta.90"
+        versionCode 121
+        versionName "1.4.2-beta.91"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
   
@@ -150,8 +150,8 @@ dependencies {
 
     implementation 'com.github.PhilJay:MPAndroidChart:3.1.0'
     
-    // Google Play Billing Library
-    implementation 'com.android.billingclient:billing-ktx:7.0.0'
+    // Google Play Billing Library (Java artifact — ktx 8.x requires Kotlin 2.1)
+    implementation 'com.android.billingclient:billing:8.0.0'
 
     // Smart replies with local model
     implementation 'com.google.mlkit:smart-reply:17.0.4'
