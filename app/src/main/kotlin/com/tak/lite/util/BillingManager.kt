@@ -14,6 +14,7 @@ import com.android.billingclient.api.BillingFlowParams
 import com.android.billingclient.api.BillingResult
 import com.android.billingclient.api.ProductDetails
 import com.android.billingclient.api.Purchase
+import com.android.billingclient.api.PendingPurchasesParams
 import com.android.billingclient.api.PurchasesUpdatedListener
 import com.android.billingclient.api.QueryProductDetailsParams
 import com.android.billingclient.api.QueryPurchasesParams
@@ -83,7 +84,12 @@ class BillingManager @Inject constructor(
 
     private val billingClient = BillingClient.newBuilder(context)
         .setListener(purchasesUpdatedListener)
-        .enablePendingPurchases()
+        .enablePendingPurchases(
+            PendingPurchasesParams.newBuilder()
+                .enableOneTimeProducts()
+                .build()
+        )
+        .enableAutoServiceReconnection()
         .build()
 
     init {
@@ -356,11 +362,15 @@ class BillingManager @Inject constructor(
             .setProductList(productList)
             .build()
 
-        billingClient.queryProductDetailsAsync(params) { billingResult, productDetailsList ->
+        billingClient.queryProductDetailsAsync(params) { billingResult, result ->
             if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
+                val productDetailsList = result.productDetailsList
                 val detailsMap = productDetailsList.associateBy { it.productId }
                 _productDetails.value = detailsMap
                 Log.d(TAG, "Successfully loaded ${detailsMap.size} product details")
+                if (result.unfetchedProductList.isNotEmpty()) {
+                    Log.w(TAG, "Some product details were not fetched: ${result.unfetchedProductList.size}")
+                }
             } else {
                 Log.e(TAG, "Failed to query product details: ${billingResult.debugMessage}")
             }
@@ -493,7 +503,8 @@ class BillingManager @Inject constructor(
             .build()
 
         Log.d(TAG, "Querying product details for: $actualProductId")
-        billingClient.queryProductDetailsAsync(params) { billingResult, productDetailsList ->
+        billingClient.queryProductDetailsAsync(params) { billingResult, result ->
+            val productDetailsList = result.productDetailsList
             Log.d(TAG, "Product details query result: ${billingResult.responseCode}, found ${productDetailsList.size} products")
             if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
                 productDetailsList.firstOrNull()?.let { productDetails ->
