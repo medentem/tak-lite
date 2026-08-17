@@ -54,7 +54,17 @@ class SocketService(private val context: Context) {
     private var onTeamLeftCallback: ((String) -> Unit)? = null
     private var onErrorCallback: ((String) -> Unit)? = null
     private var onConnectedCallback: (() -> Unit)? = null
+    private var onMessageReceivedCallback: ((ServerChatMessage) -> Unit)? = null
     
+    data class ServerChatMessage(
+        val id: String,
+        val userId: String,
+        val teamId: String,
+        val content: String,
+        val userName: String,
+        val createdAtMillis: Long
+    )
+
     enum class SocketConnectionState {
         Disconnected,
         Connecting,
@@ -365,12 +375,23 @@ class SocketService(private val context: Context) {
                 val timestamp = data?.getLong("timestamp")
                 
                 if (userId != null && latitude != null && longitude != null && timestamp != null) {
+                    val statusName = data.optString("userStatus").ifBlank {
+                        data.optString("user_status")
+                    }
+                    val userStatus = statusName.takeIf { it.isNotBlank() }?.let {
+                        try {
+                            com.tak.lite.model.UserStatus.valueOf(it)
+                        } catch (e: Exception) {
+                            null
+                        }
+                    }
                     val locationEntry = PeerLocationEntry(
                         timestamp = timestamp,
                         latitude = latitude,
                         longitude = longitude,
                         altitude = if (!data.isNull("altitude")) data.optDouble("altitude").toInt() else null,
-                        gpsAccuracy = if (!data.isNull("accuracy")) data.optDouble("accuracy").toInt() else null
+                        gpsAccuracy = if (!data.isNull("accuracy")) data.optDouble("accuracy").toInt() else null,
+                        userStatus = userStatus
                     )
                     
                     // Update peer locations
@@ -481,6 +502,45 @@ class SocketService(private val context: Context) {
                 Log.e(TAG, "Error handling server error", e)
             }
         }
+
+        socket?.on("message:received") { args ->
+            try {
+                if (args.isEmpty()) {
+                    Log.w(TAG, "message:received with empty payload")
+                    return@on
+                }
+                val data = args[0] as? JSONObject
+                if (data == null) {
+                    Log.w(TAG, "message:received with unexpected payload")
+                    return@on
+                }
+                val id = data.optString("id")
+                val content = data.optString("content")
+                if (id.isBlank() || content.isBlank()) {
+                    Log.w(TAG, "Ignoring message:received missing id or content")
+                    return@on
+                }
+                val userId = data.optString("user_id").ifBlank { data.optString("userId") }
+                val teamId = data.optString("team_id").ifBlank { data.optString("teamId") }
+                val userName = data.optString("user_name").ifBlank {
+                    data.optString("userName").ifBlank { "Unknown" }
+                }
+                val createdAtMillis = parseServerTimestamp(data.opt("created_at") ?: data.opt("createdAt"))
+                onMessageReceivedCallback?.invoke(
+                    ServerChatMessage(
+                        id = id,
+                        userId = userId,
+                        teamId = teamId,
+                        content = content,
+                        userName = userName,
+                        createdAtMillis = createdAtMillis
+                    )
+                )
+                Log.d(TAG, "Received server message $id from $userName")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error handling message:received", e)
+            }
+        }
     }
     
     // Callback setters
@@ -506,6 +566,32 @@ class SocketService(private val context: Context) {
     
     fun setOnConnectedCallback(callback: () -> Unit) {
         onConnectedCallback = callback
+    }
+
+    fun setOnMessageReceivedCallback(callback: (ServerChatMessage) -> Unit) {
+        onMessageReceivedCallback = callback
+    }
+
+    private fun parseServerTimestamp(raw: Any?): Long {
+        return when (raw) {
+            is Number -> {
+                val value = raw.toLong()
+                if (value in 1 until 1_000_000_000_000L) value * 1000L else value
+            }
+            is String -> {
+                val asLong = raw.toLongOrNull()
+                if (asLong != null) {
+                    if (asLong in 1 until 1_000_000_000_000L) asLong * 1000L else asLong
+                } else {
+                    try {
+                        java.time.Instant.parse(raw).toEpochMilli()
+                    } catch (_: Exception) {
+                        System.currentTimeMillis()
+                    }
+                }
+            }
+            else -> System.currentTimeMillis()
+        }
     }
     
     /**
@@ -550,6 +636,7 @@ class SocketService(private val context: Context) {
         onTeamLeftCallback = null
         onErrorCallback = null
         onConnectedCallback = null
+        onMessageReceivedCallback = null
         
         // Clear stored credentials
         serverUrl = null

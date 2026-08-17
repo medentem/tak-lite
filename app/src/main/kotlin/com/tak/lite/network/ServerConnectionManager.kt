@@ -58,6 +58,9 @@ class ServerConnectionManager @Inject constructor(
                         if (token != null) {
                             Log.d(TAG, "Restoring socket connection to server: $serverUrl")
                             socketService.connect(serverUrl, token)
+
+                            // Cache server user id so web/server peers can be distinguished from self
+                            serverApiService.getUserInfo(serverUrl)
                             
                             // Restore team selection if available
                             restoreTeamSelection()

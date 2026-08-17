@@ -2,8 +2,11 @@ package com.tak.lite.network
 
 import android.content.Context
 import android.util.Log
+import com.tak.lite.data.model.ChannelMessage
+import com.tak.lite.data.model.MessageStatus
 import com.tak.lite.data.model.Team
 import com.tak.lite.data.model.ServerAnnotation
+import com.tak.lite.di.MeshConnectionState
 import com.tak.lite.di.MeshProtocol
 import com.tak.lite.model.DataSource
 import com.tak.lite.model.MapAnnotation
@@ -64,6 +67,8 @@ class HybridSyncManager(
     // Loop prevention: Track processed data to prevent infinite loops
     private val processedDataIds = ConcurrentHashMap<String, Long>() // dataId -> timestamp
     private val PROCESSED_DATA_TTL_MS = 5 * 60 * 1000L // 5 minutes
+    private val recentlySentMessageContents = ConcurrentHashMap<String, Long>()
+    private val RECENT_SEND_ECHO_WINDOW_MS = 30 * 1000L
     
     // Source tracking for conflict resolution
     private val dataSourceMap = ConcurrentHashMap<String, DataSource>() // dataId -> source
@@ -610,6 +615,7 @@ class HybridSyncManager(
         Log.d(TAG, "Sending message to mesh for channel: $channelId")
         currentProtocol.sendTextMessage(channelId, content)
         Log.d(TAG, "Message sent to mesh for channel: $channelId")
+        recentlySentMessageContents[content] = System.currentTimeMillis()
         
         // Send to server if enabled (global sync)
         if (_isServerSyncEnabled.value) {
@@ -662,6 +668,10 @@ class HybridSyncManager(
         
         socketService.setOnLocationUpdateCallback { userId, location ->
             handleIncomingLocation(userId, location, SyncSource.SERVER)
+        }
+
+        socketService.setOnMessageReceivedCallback { message ->
+            handleIncomingServerMessage(message)
         }
         
         socketService.setOnErrorCallback { error ->
@@ -777,6 +787,66 @@ class HybridSyncManager(
                 Log.d(TAG, "Processed location from $source for peer: $peerId")
             }
         }
+    }
+
+    private fun handleIncomingServerMessage(message: SocketService.ServerChatMessage) {
+        scope.launch {
+            val dataKey = "msg_${message.id}"
+            val now = System.currentTimeMillis()
+            if (processedDataIds.putIfAbsent(dataKey, now) != null) {
+                Log.d(TAG, "Skipping duplicate server message ${message.id}")
+                return@launch
+            }
+
+            val sentAt = recentlySentMessageContents[message.content]
+            if (sentAt != null && now - sentAt < RECENT_SEND_ECHO_WINDOW_MS) {
+                Log.d(TAG, "Skipping echo of locally sent message ${message.id}")
+                return@launch
+            }
+
+            val channelId = resolveBroadcastChannelId() ?: "server"
+            val channelMessage = ChannelMessage(
+                senderId = message.userId.ifBlank { message.id },
+                senderShortName = message.userName,
+                content = message.content,
+                timestamp = message.createdAtMillis,
+                requestId = message.id.hashCode(),
+                status = MessageStatus.RECEIVED,
+                channelId = channelId
+            )
+            currentProtocol.ingestExternalMessage(channelMessage)
+
+            if (isMeshReadyToRelay() && shouldRelayMessageToMesh(message.id)) {
+                val meshContent = "${message.userName}: ${message.content}"
+                Log.d(TAG, "Relaying server message ${message.id} to mesh on $channelId")
+                currentProtocol.relayTextToMesh(channelId, meshContent)
+            } else {
+                Log.d(TAG, "Not relaying server message ${message.id} to mesh")
+            }
+        }
+    }
+
+    private fun resolveBroadcastChannelId(): String? {
+        val channels = currentProtocol.channels.value
+        return channels.firstOrNull { it.isDefault && it.isSelectableForPrimaryTraffic }?.id
+            ?: channels.firstOrNull { it.isSelectableForPrimaryTraffic }?.id
+            ?: channels.firstOrNull { !it.id.startsWith("dm_") }?.id
+    }
+
+    private fun isMeshReadyToRelay(): Boolean {
+        return when (currentProtocol.connectionState.value) {
+            is MeshConnectionState.Connected -> true
+            is MeshConnectionState.ServiceConnected -> true
+            else -> false
+        }
+    }
+
+    private fun shouldRelayMessageToMesh(messageId: String): Boolean {
+        val clientId = getClientIdentifier()
+        val hash = kotlin.math.abs("${clientId}_${messageId}".hashCode())
+        val isLeader = hash % 2 == 0
+        Log.d(TAG, "Message relay election for $messageId: clientId=$clientId, isLeader=$isLeader")
+        return isLeader
     }
     
     private fun shouldRebroadcastToMesh(annotation: MapAnnotation, source: SyncSource): Boolean {
@@ -1012,6 +1082,11 @@ class HybridSyncManager(
                     processedDataIds.remove(key)
                     Log.d(TAG, "Cleaned up expired processed data: $key")
                 }
+
+                recentlySentMessageContents.entries
+                    .filter { (_, timestamp) -> now - timestamp > RECENT_SEND_ECHO_WINDOW_MS }
+                    .map { it.key }
+                    .forEach { recentlySentMessageContents.remove(it) }
                 
                 // Clean up expired mesh sync attempts
                 val expiredSyncAttempts = meshSyncAttempts.entries

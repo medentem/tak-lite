@@ -1223,6 +1223,53 @@ abstract class MeshtasticBaseProtocol(
         Log.d(TAG, "=== sendTextMessage Complete ===")
     }
 
+    override fun ingestExternalMessage(message: ChannelMessage) {
+        val channelId = message.channelId
+        val currentMessages = _channelMessages.value.toMutableMap()
+        val channelMessages = currentMessages[channelId]?.toMutableList() ?: mutableListOf()
+        val alreadyPresent = channelMessages.any {
+            it.requestId == message.requestId && it.content == message.content && it.senderId == message.senderId
+        }
+        if (alreadyPresent) {
+            Log.d(TAG, "Skipping duplicate external message ${message.requestId} on $channelId")
+            return
+        }
+        channelMessages.add(message)
+        currentMessages[channelId] = channelMessages
+        _channelMessages.value = currentMessages
+        channelLastMessages[channelId] = message
+
+        val currentChannels = _channels.value.toMutableList()
+        val currentChannelsIndex = currentChannels.indexOfFirst { it.id == channelId }
+        if (currentChannelsIndex != -1) {
+            val channel = currentChannels[currentChannelsIndex]
+            currentChannels[currentChannelsIndex] = when (channel) {
+                is MeshtasticChannel -> channel.copy(lastMessage = message)
+                is DirectMessageChannel -> channel.copy(lastMessage = message)
+                else -> channel
+            }
+            _channels.value = currentChannels
+        }
+        Log.d(TAG, "Ingested external message from ${message.senderShortName} into $channelId")
+    }
+
+    override fun relayTextToMesh(channelId: String, content: String) {
+        val channelIndex = channelId.split("_").firstOrNull()?.toIntOrNull() ?: selectedChannelIndex
+        Log.d(TAG, "Relaying server message to mesh channel index $channelIndex")
+        val textMessagePacketId = generatePacketId()
+        val packet = newMeshPacketTo().buildMeshPacket(
+            id = textMessagePacketId,
+            wantAck = true,
+            channel = channelIndex,
+            priority = MeshProtos.MeshPacket.Priority.RELIABLE
+        ) {
+            portnum = PortNum.TEXT_MESSAGE_APP
+            payload = ByteString.copyFromUtf8(content)
+            requestId = textMessagePacketId
+        }
+        queuePacket(packet)
+    }
+
     override fun getChannelName(channelId: String): String? {
         val channel = _channels.value.find { it.id == channelId }
         if (channel == null) {

@@ -115,6 +115,14 @@ class DisabledMeshProtocol(private val context: Context) : MeshProtocol {
         // No-op
     }
 
+    override fun ingestExternalMessage(message: ChannelMessage) {
+        val map = _channelMessages.value.toMutableMap()
+        val list = map[message.channelId]?.toMutableList() ?: mutableListOf()
+        list.add(message)
+        map[message.channelId] = list
+        _channelMessages.value = map
+    }
+
     override fun getChannelName(channelId: String): String? {
         // No-op
         return null

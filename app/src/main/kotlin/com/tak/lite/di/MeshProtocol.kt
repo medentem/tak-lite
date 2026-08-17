@@ -76,6 +76,8 @@ interface MeshProtocol {
     fun setUserLocationCallback(callback: (LatLng) -> Unit)
     fun sendBulkAnnotationDeletions(ids: List<String>)
     fun sendTextMessage(channelId: String, content: String)
+    fun ingestExternalMessage(message: ChannelMessage) {}
+    fun relayTextToMesh(channelId: String, content: String) {}
     fun getChannelName(channelId: String): String?
     fun requestPeerLocation(peerId: String, onPeerLocationReceived: (timeout: Boolean) -> Unit)
 

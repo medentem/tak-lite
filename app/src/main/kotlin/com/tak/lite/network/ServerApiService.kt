@@ -120,6 +120,7 @@ class ServerApiService(private val context: Context) {
                     val responseBody = response.body?.string()
                     if (responseBody != null) {
                         val userInfo = gson.fromJson(responseBody, UserInfo::class.java)
+                        storeUserId(userInfo.userId)
                         Result.success(userInfo)
                     } else {
                         Result.failure(Exception("Empty response body"))
@@ -304,6 +305,14 @@ class ServerApiService(private val context: Context) {
     
     fun getStoredServerUrl(): String? {
         return prefs.getString("server_url", null)
+    }
+    
+    fun getStoredUserId(): String? {
+        return prefs.getString("server_user_id", null)
+    }
+
+    private fun storeUserId(userId: String) {
+        prefs.edit().putString("server_user_id", userId).apply()
     }
     
     fun isLoggedIn(): Boolean {

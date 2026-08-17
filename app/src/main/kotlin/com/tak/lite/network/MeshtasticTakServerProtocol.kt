@@ -505,6 +505,25 @@ class MeshtasticTakServerProtocol(
         Log.d(TAG, "DM to $peerName ok=$ok")
     }
 
+    override fun ingestExternalMessage(message: ChannelMessage) {
+        appendMessage(message)
+    }
+
+    override fun relayTextToMesh(channelId: String, content: String) {
+        val uid = "GeoChat.$localUid.${UUID.randomUUID()}"
+        val xml = CotXml.buildGeoChat(
+            uid = uid,
+            senderUid = localUid,
+            senderCallsign = localNickname,
+            message = content,
+            chatroom = "All Chat Rooms",
+            lat = lastLat,
+            lon = lastLon
+        )
+        val ok = client?.send(xml) == true
+        Log.d(TAG, "Relayed server message to TAK Server ok=$ok")
+    }
+
     override fun setAnnotationCallback(callback: (MapAnnotation) -> Unit) {
         annotationCallback = callback
     }

@@ -30,6 +30,8 @@ class MeshNetworkService @Inject constructor(
     private val meshProtocolProvider: MeshProtocolProvider,
     private val peerLocationHistoryRepository: PeerLocationHistoryRepository,
     private val hybridSyncManager: HybridSyncManager,
+    private val socketService: SocketService,
+    private val serverApiService: ServerApiService,
     private val context: Context
 ) {
     private val scope = CoroutineScope(Dispatchers.Main)
@@ -157,8 +159,28 @@ class MeshNetworkService @Inject constructor(
         
         startSimulatedPeersMonitor()
         
+        // Merge server-synced peer locations (web users and other Android clients)
+        startServerPeerLocationObserver()
+        
         // Start periodic cleanup of old location entries
         startLocationHistoryCleanup()
+    }
+
+    private fun startServerPeerLocationObserver() {
+        scope.launch {
+            socketService.peerLocations.collect { serverLocations ->
+                val selfId = serverApiService.getStoredUserId()
+                if (serverLocations.isEmpty()) return@collect
+                val merged = _peerLocations.value.toMutableMap()
+                serverLocations.forEach { (peerId, entry) ->
+                    if (selfId == null || peerId != selfId) {
+                        merged[peerId] = entry
+                    }
+                }
+                _peerLocations.value = merged
+                Log.d("MeshNetworkService", "Merged ${serverLocations.size} server peer locations (self=$selfId)")
+            }
+        }
     }
 
     private fun setupPeerLocationCallback(protocol: MeshProtocol) {
